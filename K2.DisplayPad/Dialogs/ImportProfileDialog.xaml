@@ -1,0 +1,42 @@
+<Window x:Class="K2.DisplayPad.Dialogs.ImportProfileDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+        Title="{loc:Get imp_title}"
+        Height="240" Width="460"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Style="{StaticResource K2WindowStyle}">
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="{loc:Get imp_header}"
+                   FontSize="16" FontWeight="Bold" Margin="0,0,0,10"/>
+
+        <TextBlock x:Name="LblFile"   Grid.Row="1" TextWrapping="Wrap"/>
+        <TextBlock x:Name="LblName"   Grid.Row="2" Margin="0,4,0,0" FontStyle="Italic" Foreground="#9A9AA2"/>
+        <TextBlock x:Name="LblDevice" Grid.Row="3" Margin="0,4,0,8" Foreground="#9A9AA2"/>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" VerticalAlignment="Top">
+            <TextBlock Text="{loc:Get imp_slot}" VerticalAlignment="Center"/>
+            <ComboBox  x:Name="CbSlot" Width="60" Margin="10,0,0,0"/>
+            <CheckBox  x:Name="ChkSwitchTo"
+                       Content="{loc:Get imp_switch_now}"
+                       VerticalAlignment="Center" Margin="20,0,0,0" IsChecked="True"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="{loc:Get cancel}" Width="90" Padding="6,2" Click="BtnCancel_Click"/>
+            <Button Content="{loc:Get import}" Width="90" Padding="6,2" Margin="8,0,0,0"
+                    IsDefault="True" Click="BtnImport_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

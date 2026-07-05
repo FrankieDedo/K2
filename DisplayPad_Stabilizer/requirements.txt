@@ -1,0 +1,3 @@
+# Lo stabilizer usa solo standard library.
+# Per il build .exe:
+pyinstaller>=6.0

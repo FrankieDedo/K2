@@ -1,0 +1,42 @@
+{
+  // ============================================================
+  //  everest_rgb.json - parametri per-effetto della struct EffData
+  //  (tastiera Everest Max). Letto da K2.App AD OGNI "applica":
+  //  modifica un valore, ri-applica l'effetto in K2 -> nuovi byte
+  //  inviati SENZA ricompilare ne' riavviare.
+  //
+  //  Campi (vedi EverestRgbConfig.EffectDef):
+  //    byAll       1 = tutti i tasti. Base Camp usa 0 per i preset.
+  //    bySpeed     -1 = usa la UI; oppure valore fisso 0..100.
+  //                TUTTI gli effetti: range 0-100 (0=lento, 100=veloce).
+  //                La DLL trasforma internamente.
+  //                UI 5 pos: vel.1=0, vel.2=25, vel.3=50, vel.4=75, vel.5=100.
+  //    byDirection direzione. DI NORMA 255 (non direzionali).
+  //                Codici (da catture BC):
+  //                  WAVE   -> Destra=0, Giu'=2, Sinistra=4, Su=6
+  //                  TORNADO-> CW=9, CCW=10
+  //    byWidth     255 per i NON direzionali; 2 per Wave/Tornado
+  //                (con 255 venivano RIFIUTATI -> ChangeEffect False).
+  //    byRandColor 0 = colore/i scelti; (valori >0 = rainbow/random,
+  //                da confermare: nelle catture wave/tornado era 2).
+  //    colorCount  quanti colori inviare (gli altri = 0). Dalla lista
+  //                utente: Static1 Wave2 Tornado1 Breath2 Reactive2
+  //                Matrix2 Yeti2. Il 3deg colore non e' MAI usato.
+  //
+  //  Se bySpeed >= 0 il valore viene usato DIRETTAMENTE come bySpeed
+  //  nella struct, bypassando la UI. Con -1 usa la UI (scala 0-100).
+  // ============================================================
+  "effects": {
+    "Static":    { "byAll": 0, "bySpeed": 255, "byDirection": 255, "byWidth": 255, "byRandColor": 0, "colorCount": 1 },
+    "Breath":    { "byAll": 0, "bySpeed": -1,  "byDirection": 255, "byWidth": 255, "byRandColor": 0, "colorCount": 2 },
+    "Wave":      { "byAll": 0, "bySpeed": -1,  "byDirection": 0,   "byWidth": 2,   "byRandColor": 0, "colorCount": 255 },
+    "Tornado":   { "byAll": 0, "bySpeed": -1,  "byDirection": 9,   "byWidth": 2,   "byRandColor": 0, "colorCount": 1 },
+    "ReactiveA": { "byAll": 0, "bySpeed": -1,  "byDirection": 255, "byWidth": 255, "byRandColor": 0, "colorCount": 2 },
+    "ReactiveB": { "byAll": 0, "bySpeed": -1,  "byDirection": 255, "byWidth": 255, "byRandColor": 0, "colorCount": 2 },
+    "ReactiveC": { "byAll": 0, "bySpeed": -1,  "byDirection": 255, "byWidth": 255, "byRandColor": 0, "colorCount": 2 },
+    "Yeti":      { "byAll": 0, "bySpeed": -1,  "byDirection": 255, "byWidth": 255, "byRandColor": 0, "colorCount": 2 },
+    "Matrix":    { "byAll": 0, "bySpeed": -1,  "byDirection": 255, "byWidth": 255, "byRandColor": 0, "colorCount": 2 },
+    "Matrix2":   { "byAll": 0, "bySpeed": -1,  "byDirection": 255, "byWidth": 255, "byRandColor": 0, "colorCount": 2 },
+    "Off":       { "byAll": 0, "bySpeed": 255, "byDirection": 255, "byWidth": 255, "byRandColor": 0, "colorCount": 0 }
+  }
+}

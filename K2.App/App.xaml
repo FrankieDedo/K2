@@ -1,0 +1,15 @@
+<Application x:Class="K2.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <!-- Shared dark theme (K2.Core/Themes/K2Theme.xaml).
+             The window style is keyed: see MainWindow.xaml where it is
+             applied with Style="{StaticResource K2WindowStyle}". -->
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/K2.Core;component/Themes/K2Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

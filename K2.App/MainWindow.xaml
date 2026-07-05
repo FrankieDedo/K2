@@ -1,0 +1,1314 @@
+<Window x:Class="K2.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+        Title="{loc:Get app_title}"
+        Icon="Assets/K2_logo.png"
+        Height="897" Width="1426"
+        MinHeight="713" MinWidth="1196"
+        WindowStartupLocation="CenterScreen"
+        Style="{StaticResource K2WindowStyle}">
+
+    <Window.Resources>
+        <!-- BC-style key: same look for MacroPad and Everest.
+             Face: horizontal gradient #3A→#40→#3A (like BC keyboard.css span::before).
+             3D raise: dark platform below the face, face shifts down on press.
+             DataTriggers (HasAction / IsHighlighted) are for MacroPad bindings;
+             silently ignored on Everest buttons that have no matching DataContext. -->
+        <!-- ============================================================
+             KeyCapStyle — fedele replica del CSS di Base Camp:
+             .keyboard span  → background #404040, border #1d1d1d,
+             ::before         → gradiente laterale scuro,
+             box-shadow       → ombra scura sopra/sotto (effetto "mount").
+             Usato sia da MacroPad che da Everest.
+             ============================================================ -->
+        <!-- ============================================================
+             KeyCapStyle — replica fedele di BC keyboard.css .keyboard span (keyboard_v3 / MacroPad):
+               border: 7px solid #1d1d1d (tutti i lati)
+               border-bottom: 10px solid transparent  → gap sotto = il Mount scuro si vede
+               background: #404040
+               ::before: gradiente scuro sui lati, highlight basso (#676767)
+               hover: tutto #656565 + gradiente aggiornato
+               active: translate(0, 3px) → Margin shift
+             ============================================================ -->
+        <Style x:Key="KeyCapStyle" TargetType="Button">
+            <Setter Property="Background"       Value="#404040"/>
+            <Setter Property="Foreground"       Value="White"/>
+            <Setter Property="FontFamily"       Value="Segoe UI, system-ui"/>
+            <Setter Property="FontSize"         Value="8"/>
+            <Setter Property="FontWeight"       Value="Normal"/>
+            <Setter Property="Cursor"           Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="BorderBrush"      Value="#1D1D1D"/>
+            <!-- BC keyboard_v3: border 7px su tutti i lati; bottom gestito dal Margin della Face -->
+            <Setter Property="BorderThickness"  Value="7,7,7,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <!--
+                          Layers (bottom → top):
+                          1. Mount — sfondo scuro #090909 pieno, visibile nel gap sotto la Face
+                          2. Face  — tasto vero (bg #404040, bordi spessi come BC)
+                             2a. SideGrad — gradiente lati scuri (simula ::before)
+                             2b. Tint     — overlay hover/press
+                             2c. Content
+                        -->
+                        <Grid>
+                            <!-- 1. Mount: riempie tutto, visibile sotto la Face (10px) -->
+                            <Border x:Name="Mount"
+                                    Background="#090909"
+                                    CornerRadius="5"/>
+
+                            <!-- 2. Face: 10px gap in basso rivela il Mount (border-bottom: 10px transparent) -->
+                            <Border x:Name="Face"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="5"
+                                    Margin="0,0,0,10">
+                                <Grid>
+                                    <!-- 2a. SideGrad (::before): lati scuri #3a3a3a, centro trasparente -->
+                                    <Border x:Name="SideGrad" CornerRadius="3" IsHitTestVisible="False">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                                                <GradientStop Color="#553A3A3A" Offset="0"/>
+                                                <GradientStop Color="#003A3A3A" Offset="0.18"/>
+                                                <GradientStop Color="#003A3A3A" Offset="0.82"/>
+                                                <GradientStop Color="#553A3A3A" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                    </Border>
+                                    <!-- 2b. LedTint: colore LED realtime (sotto il testo) -->
+                                    <Border x:Name="LedTint" Background="Transparent" CornerRadius="3" IsHitTestVisible="False"/>
+                                    <!-- 2c. Tint overlay hover/press -->
+                                    <Border x:Name="Tint" Background="Transparent" CornerRadius="3" IsHitTestVisible="False"/>
+                                    <!-- 2c. Content -->
+                                    <ContentPresenter HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"
+                                                      Margin="2"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <ControlTemplate.Triggers>
+                            <!-- Hover: face + bordi → #656565, gradiente lati aggiornato -->
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Face"     Property="Background"  Value="#656565"/>
+                                <Setter TargetName="Face"     Property="BorderBrush" Value="#656565"/>
+                                <Setter TargetName="Mount"    Property="Background"  Value="#656565"/>
+                                <Setter TargetName="SideGrad" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                                            <GradientStop Color="#55585252" Offset="0"/>
+                                            <GradientStop Color="#00656565" Offset="0.18"/>
+                                            <GradientStop Color="#00656565" Offset="0.82"/>
+                                            <GradientStop Color="#556B6565" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <!-- Press: face scende 3px sul Mount (BC: translate(0,3px)) -->
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Face" Property="Margin"     Value="0,3,0,7"/>
+                                <Setter TargetName="Tint" Property="Background" Value="#33000000"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- MacroPad key: KeyCapStyle (7px/10px) + DataTriggers HasAction / IsHighlighted -->
+        <Style x:Key="MacroKeyStyle" TargetType="Button" BasedOn="{StaticResource KeyCapStyle}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasAction}" Value="True">
+                    <Setter Property="BorderBrush" Value="#4FB87A"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                    <Setter Property="Background" Value="#900000"/>
+                    <Setter Property="Foreground" Value="#10302F"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- ============================================================
+             EverestKeyStyle — BC .keyboard span base (Everest / Everest60):
+               border: 5px lati, 2px top, 6px transparent bottom
+               stesso Mount/gradiente di KeyCapStyle, valori più piccoli
+             ============================================================ -->
+        <Style x:Key="EverestKeyStyle" TargetType="Button" BasedOn="{StaticResource KeyCapStyle}">
+            <!-- Override bordi: 5px lati, 2px top, 0 bottom (gap gestito da Margin) -->
+            <Setter Property="BorderThickness" Value="5,2,5,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="Mount" Background="#090909" CornerRadius="4"/>
+                            <!-- Face: 6px gap in basso (border-bottom: 6px transparent) -->
+                            <Border x:Name="Face"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="3"
+                                    Margin="0,0,0,6">
+                                <Grid>
+                                    <Border x:Name="SideGrad" CornerRadius="3" IsHitTestVisible="False">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                                                <GradientStop Color="#553A3A3A" Offset="0"/>
+                                                <GradientStop Color="#003A3A3A" Offset="0.18"/>
+                                                <GradientStop Color="#003A3A3A" Offset="0.82"/>
+                                                <GradientStop Color="#553A3A3A" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                    </Border>
+                                    <Border x:Name="LedTint" Background="Transparent" CornerRadius="3" IsHitTestVisible="False"/>
+                                    <Border x:Name="Tint" Background="Transparent" CornerRadius="3" IsHitTestVisible="False"/>
+                                    <ContentPresenter HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"
+                                                      Margin="2"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Face"     Property="Background"  Value="#656565"/>
+                                <Setter TargetName="Face"     Property="BorderBrush" Value="#656565"/>
+                                <Setter TargetName="Mount"    Property="Background"  Value="#656565"/>
+                                <Setter TargetName="SideGrad" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                                            <GradientStop Color="#55585252" Offset="0"/>
+                                            <GradientStop Color="#00656565" Offset="0.18"/>
+                                            <GradientStop Color="#00656565" Offset="0.82"/>
+                                            <GradientStop Color="#556B6565" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <!-- Press: face scende 3px (bottom 6→3, top +3) -->
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Face" Property="Margin"     Value="0,3,0,3"/>
+                                <Setter TargetName="Tint" Property="Background" Value="#33000000"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ============================================================
+             DpKeyButtonStyle — replica fedele del tasto DisplayPad di Base Camp:
+             .imagebtn  → key_button.png come sfondo pieno (background-size: cover)
+             img        → icona utente 52×52 con CornerRadius 9 (border-radius 10px)
+             ::before   → overlay glossy: gradiente bianco + bordo grigio inset
+             Trigger hover → bordo teal; IsHighlighted → bordo bianco
+             ============================================================ -->
+        <Style x:Key="DpKeyButtonStyle" TargetType="Button">
+            <Setter Property="Width"             Value="60"/>
+            <Setter Property="Height"            Value="60"/>
+            <Setter Property="BorderThickness"   Value="0"/>
+            <Setter Property="FocusVisualStyle"  Value="{x:Null}"/>
+            <Setter Property="Cursor"            Value="Hand"/>
+            <Setter Property="Padding"           Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="Transparent">
+                            <!-- 1. key_button.png — sfondo pieno (come background-size:cover) -->
+                            <Image Source="pack://application:,,,/Assets/key_button.png"
+                                   Stretch="Fill" IsHitTestVisible="False"/>
+
+                            <!-- 2. Icona utente 52×52, angoli arrotondati (border-radius 10px) -->
+                            <Border Width="52" Height="52"
+                                    CornerRadius="9" ClipToBounds="True"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    IsHitTestVisible="False">
+                                <Image x:Name="ImgIcon" Source="{Binding Preview}" Stretch="UniformToFill"/>
+                            </Border>
+
+                            <!-- 3. Overlay glossy — simula ::before con inset box-shadow #727272 -->
+                            <Border Margin="4" CornerRadius="9"
+                                    BorderBrush="#60727272" BorderThickness="1"
+                                    IsHitTestVisible="False">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#28FFFFFF" Offset="0"/>
+                                        <GradientStop Color="#00FFFFFF" Offset="0.35"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+
+                            <!-- 4. Label (ContentPresenter = Button.Content = TextBlock passato dal code-behind) -->
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              IsHitTestVisible="False"/>
+
+                            <!-- 5. Warning triangle: image present but no action configured -->
+                            <Polygon x:Name="WarnTriangle"
+                                     Points="0,10 10,10 10,0"
+                                     Fill="#DDCC0000"
+                                     HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                     Margin="0,0,5,5"
+                                     Visibility="Collapsed"
+                                     IsHitTestVisible="False"/>
+
+                            <!-- 6. Bordo selezione/hover -->
+                            <Border x:Name="SelBorder"
+                                    CornerRadius="10"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="2"
+                                    IsHitTestVisible="False"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="SelBorder" Property="BorderBrush" Value="#900000"/>
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                <Setter TargetName="SelBorder" Property="BorderBrush"     Value="White"/>
+                                <Setter TargetName="SelBorder" Property="BorderThickness" Value="3"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding HasImageNoAction}" Value="True">
+                                <Setter TargetName="WarnTriangle" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Sidebar section navigation tab style -->
+        <Style x:Key="SectionTabStyle" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="#9A9AA2"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="10,9"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderThickness="3,0,0,0"
+                                BorderBrush="Transparent"
+                                CornerRadius="0,4,4,0"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Left"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1E1E26"/>
+                                <Setter Property="Foreground" Value="#DCDCE0"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#22222C"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#900000"/>
+                                <Setter Property="Foreground" Value="#900000"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ============================================================
+             Common right-side action panel (all devices): every button
+             and combo shown here uses the SAME Width/Height so the
+             vertical stack lines up regardless of device (Everest /
+             MacroPad / DisplayPad), grouped in coherent sections
+             (Profile / Import / Device).
+             ============================================================ -->
+        <Style x:Key="K2SideActionButton" TargetType="Button" BasedOn="{StaticResource K2IconButton}">
+            <Setter Property="Width" Value="190"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        </Style>
+        <Style x:Key="K2SideActionAccentButton" TargetType="Button" BasedOn="{StaticResource K2IconAccentButton}">
+            <Setter Property="Width" Value="190"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        </Style>
+        <Style x:Key="K2SideActionCombo" TargetType="ComboBox">
+            <Setter Property="Width" Value="190"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+        <Style x:Key="K2SideGroupHeader" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="#4A4A58"/>
+            <Setter Property="Margin" Value="2,0,0,6"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Outer grid: top tab strip + content panels -->
+        <Grid Grid.Row="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>  <!-- device tab strip -->
+                <RowDefinition Height="*"/>     <!-- content panels -->
+            </Grid.RowDefinitions>
+
+            <!-- Top-level device tab strip (Everest static; MacroPad/DP added dynamically) -->
+            <TabControl x:Name="TcDevices" Grid.Row="0"
+                        SelectionChanged="TcDevices_SelectionChanged">
+                <TabControl.Template>
+                    <ControlTemplate TargetType="TabControl">
+                        <Border BorderBrush="#2A2A32" BorderThickness="0,0,0,1">
+                            <TabPanel IsItemsHost="True" HorizontalAlignment="Left" Margin="2,0,0,0"/>
+                        </Border>
+                    </ControlTemplate>
+                </TabControl.Template>
+                <TabItem x:Name="TabSettings"  Tag="settings"  Header="{loc:Get tab_settings}"/>
+                <TabItem x:Name="TabEverest"   Tag="everest"   Header="{loc:Get tab_everest}"/>
+                <TabItem x:Name="TabMacroPad" Tag="macropad" Header="{loc:Get tab_macropad}"/>
+                <!-- DisplayPad tabs added dynamically by DpRefreshDevices -->
+            </TabControl>
+
+            <!-- Loading overlay — covers tab strip + content while AutoOpenDrivers runs.
+                 Collapsed by code once all drivers are open. -->
+            <Grid x:Name="PnlLoading" Grid.RowSpan="2" Panel.ZIndex="10" Background="#1A1A1E">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Image Source="Assets/K2_logo.png" Width="96" Height="96"
+                           HorizontalAlignment="Center" Margin="0,0,0,16"
+                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <TextBlock Text="{loc:Get loading_drivers}"
+                               FontSize="15" Foreground="#900000"
+                               HorizontalAlignment="Center" TextAlignment="Center"/>
+                    <ProgressBar IsIndeterminate="True" Width="280" Height="3"
+                                 Margin="0,14,0,0" Foreground="#900000" Background="#2A2A32"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Content panels: one visible at a time -->
+            <Grid Grid.Row="1">
+
+            <!-- ==================== Everest Max ==================== -->
+            <Grid x:Name="PnlEverest">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>  <!-- toolbar -->
+                        <RowDefinition Height="*"/>     <!-- 3-pane main -->
+                    </Grid.RowDefinitions>
+
+                    <!-- ── Toolbar ── -->
+                    <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                        <!-- Debug-only: open/close driver manually -->
+                        <Button x:Name="BtnEvOpen"    Content="{loc:Get open_driver}"   Click="BtnEvOpen_Click"
+                                Style="{StaticResource K2IconAccentButton}" Tag="&#xE768;" Visibility="Collapsed"/>
+                        <Button x:Name="BtnEvClose"   Content="{loc:Get close_driver}"  Margin="8,0,0,0" Click="BtnEvClose_Click"
+                                Style="{StaticResource K2IconButton}" Tag="&#xE711;" Visibility="Collapsed"/>
+                        <Button x:Name="BtnEvRefresh" Content="{loc:Get refresh}"       Margin="8,0,0,0" Click="BtnEvRefresh_Click"
+                                Style="{StaticResource K2IconButton}" Tag="&#xE72C;"/>
+                        <!-- Debug-only: AP controls -->
+                        <Separator x:Name="SepEvApDbg" Margin="10,0" Visibility="Collapsed"/>
+                        <Button x:Name="BtnEvApOn"  Content="AP ON"  Padding="10,4"
+                                Click="BtnEvApOn_Click"  Visibility="Collapsed"/>
+                        <Button x:Name="BtnEvApOff" Content="AP OFF" Padding="10,4" Margin="6,0,0,0"
+                                Click="BtnEvApOff_Click" Visibility="Collapsed"/>
+                        <Separator Margin="10,0"/>
+                        <TextBlock x:Name="LblEvSdk" Margin="16,6,0,0" FontStyle="Italic" Foreground="#9A9AA2"/>
+                    </WrapPanel>
+
+                    <!-- ── 3-pane: sidebar | device-image + bottom-panel ── -->
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="160"/>  <!-- sidebar -->
+                            <ColumnDefinition Width="*"/>    <!-- right side -->
+                            <ColumnDefinition Width="Auto"/> <!-- common actions (all devices) -->
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Left sidebar: section navigation -->
+                        <Border Grid.Column="0" Background="#111115" CornerRadius="6"
+                                Margin="0,0,8,0" Padding="4">
+                            <StackPanel>
+                                <TextBlock Text="SECTIONS" FontSize="9" Foreground="#4A4A58"
+                                           Margin="14,8,0,6" FontWeight="Bold"/>
+                                <RadioButton x:Name="RbSecKeyMapping"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get ev_mapped_keys}" GroupName="EvSections"
+                                             IsChecked="True" Checked="EvSection_Changed"/>
+                                <RadioButton x:Name="RbSecRgb"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="RGB &amp; Lighting" GroupName="EvSections"
+                                             Checked="EvSection_Changed"/>
+                                <RadioButton x:Name="RbSecDial"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="Display Dial" GroupName="EvSections"
+                                             Checked="EvSection_Changed"/>
+                                <RadioButton x:Name="RbSecDock"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="Dock Actions" GroupName="EvSections"
+                                             Checked="EvSection_Changed"/>
+                                <RadioButton x:Name="RbSecMacros"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get keyboard_macro}" GroupName="EvSections"
+                                             Checked="EvSection_Changed"/>
+                                <!-- Debug-only sections -->
+                                <Separator x:Name="SepSectionDbg" Margin="8,8" Visibility="Collapsed"/>
+                                <RadioButton x:Name="RbSecUsb"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get usb_recorder}" GroupName="EvSections"
+                                             Visibility="Collapsed" Checked="EvSection_Changed"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Right: device image (top) + settings panel (bottom) -->
+                        <Grid Grid.Column="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" MinHeight="160"/>  <!-- device -->
+                                <RowDefinition Height="Auto"/>               <!-- settings -->
+                            </Grid.RowDefinitions>
+
+                            <!-- Device image with interactive overlay -->
+                            <Border Grid.Row="0" Background="#18181C" CornerRadius="6" Padding="8">
+                                <DockPanel>
+                                <!-- Layout selector (top-right) -->
+                                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal"
+                                            HorizontalAlignment="Right" Margin="0,0,0,6">
+                                    <TextBlock Text="Layout" Foreground="#808088"
+                                               VerticalAlignment="Center" Margin="0,0,6,0" FontSize="11"/>
+                                    <ComboBox x:Name="CbEvKeyboardLayout" Width="130" FontSize="11"/>
+                                </StackPanel>
+                                <StackPanel x:Name="SpEvLayout" Orientation="Horizontal"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <!-- Left column: dock overlay + keyboard body -->
+                                        <Grid x:Name="GrdEvKeyColumn">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <Canvas x:Name="CvsEvKeyboard" Grid.Row="1"
+                                                    Width="642" Height="260" ClipToBounds="True">
+                                                <Canvas.Background>
+                                                    <ImageBrush ImageSource="Assets/keybg.png" Stretch="Fill"/>
+                                                </Canvas.Background>
+                                            </Canvas>
+                                            <Image x:Name="ImgEvDock" Grid.Row="0" Source="Assets/keytop.png"
+                                                   Width="200" Stretch="Uniform"
+                                                   HorizontalAlignment="Center"
+                                                   Margin="0,0,0,-32" Panel.ZIndex="1"
+                                                   Visibility="Collapsed"/>
+                                        </Grid>
+                                        <!-- Numpad + display keys -->
+                                        <Canvas x:Name="CvsEvNumpad" Width="166" Height="260"
+                                                ClipToBounds="True" Margin="6,0,0,0" VerticalAlignment="Bottom">
+                                            <Canvas.Background>
+                                                <ImageBrush ImageSource="Assets/board_right.png" Stretch="Fill"/>
+                                            </Canvas.Background>
+                                        </Canvas>
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+
+                            <!-- Bottom settings panel: sections switch here -->
+                            <Border Grid.Row="1" Background="#14141A"
+                                    BorderBrush="#2A2A32" BorderThickness="1"
+                                    CornerRadius="6" Padding="12,10" Margin="0,8,0,0">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>  <!-- active section content -->
+                                        <RowDefinition Height="Auto"/>  <!-- debug SDK log -->
+                                    </Grid.RowDefinitions>
+
+                                    <!-- ─── All section panels (one visible at a time) ─── -->
+                                    <Grid Grid.Row="0">
+
+                                        <!-- ── KEY MAPPING ── -->
+                                        <Grid x:Name="PnlSecKeyMapping">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="170"/>
+                                            </Grid.ColumnDefinitions>
+                                            <ListView Grid.Column="0" x:Name="LvEvKeys" MaxHeight="180" Margin="0,0,8,0">
+                                                <ListView.ItemContainerStyle>
+                                                    <Style TargetType="ListViewItem">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                                                <Setter Property="Background" Value="#900000"/>
+                                                                <Setter Property="Foreground" Value="#10302F"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </ListView.ItemContainerStyle>
+                                                <ListView.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding Display}" FontFamily="Consolas" Padding="2"/>
+                                                    </DataTemplate>
+                                                </ListView.ItemTemplate>
+                                            </ListView>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                                <Button x:Name="BtnEvCapture" Content="{loc:Get ev_capture_key}"
+                                                        Click="BtnEvCapture_Click"
+                                                        Style="{StaticResource K2IconButton}" Tag="&#xE765;"
+                                                        HorizontalAlignment="Stretch" Margin="0,0,0,4"/>
+                                                <Button x:Name="BtnEvMapKeys" Content="{loc:Get remap_keys}"
+                                                        Click="BtnEvMapKeys_Click"
+                                                        Style="{StaticResource K2IconButton}" Tag="&#xE8CB;"
+                                                        HorizontalAlignment="Stretch" Margin="0,0,0,10"
+                                                        Visibility="Collapsed"/>
+                                                <Separator x:Name="SepEvMapKeysDbg" Margin="0,0,0,10" Visibility="Collapsed"/>
+                                                <Button x:Name="BtnEvConfig" Content="{loc:Get ev_configure}"
+                                                        Padding="8,4" Click="BtnEvConfig_Click"
+                                                        HorizontalAlignment="Stretch" Margin="0,0,0,4"/>
+                                                <Button x:Name="BtnEvRemove" Content="{loc:Get ev_remove}"
+                                                        Padding="8,4" Click="BtnEvRemove_Click"
+                                                        HorizontalAlignment="Stretch"/>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <!-- ── RGB & LIGHTING ── -->
+                                        <ScrollViewer x:Name="PnlSecRgb" Visibility="Collapsed"
+                                                      MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                                            <StackPanel>
+                                                <!-- Preset effects row 1 -->
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                    <TextBlock Text="{loc:Get rgb_effect}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                    <ComboBox x:Name="CbEvEffect" Width="140" Margin="0,0,12,0"
+                                                              SelectionChanged="CbEvEffect_SelectionChanged"
+                                                              DropDownOpened="CbEvEffect_DropDownOpened"
+                                                              DropDownClosed="CbEvEffect_DropDownClosed"/>
+                                                    <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                    <ComboBox x:Name="CbEvSpeed" Width="80" Margin="0,0,12,0"
+                                                              SelectionChanged="CbEvEffectParam_Changed"/>
+                                                    <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                    <ComboBox x:Name="CbEvDirection" Width="100" Margin="0,0,12,0"
+                                                              SelectionChanged="CbEvEffectParam_Changed"/>
+                                                    <CheckBox x:Name="CkEvRainbow" Content="{loc:Get rgb_rainbow}" Margin="0,0,10,0"
+                                                              Click="CkEvRainbow_Click" ToolTip="{loc:Get rgb_rainbow_tip}"/>
+                                                    <CheckBox x:Name="CkEvSync" Content="{loc:Get rgb_sync_profiles}"
+                                                              Click="CkEvSync_Click"/>
+                                                </WrapPanel>
+                                                <!-- Preset effects row 2: colors + brightness + actions -->
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                    <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                    <Button x:Name="BtnEvColor1" Width="40" Height="22"
+                                                            Background="#900000" BorderThickness="2"
+                                                            BorderBrush="#3A3A40" Click="BtnEvColor_Click" Tag="1"
+                                                            Margin="0,0,10,0"/>
+                                                    <StackPanel x:Name="PnlEvColor2" Orientation="Horizontal" Margin="0,0,10,0">
+                                                        <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                        <Button x:Name="BtnEvColor2" Width="40" Height="22"
+                                                                Background="#1A1A1E" BorderThickness="2"
+                                                                BorderBrush="#3A3A40" Click="BtnEvColor_Click" Tag="2"/>
+                                                    </StackPanel>
+                                                    <StackPanel x:Name="PnlEvColor3" Orientation="Horizontal"
+                                                                Margin="0,0,10,0" Visibility="Collapsed">
+                                                        <TextBlock Text="{loc:Get rgb_tertiary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                        <Button x:Name="BtnEvColor3" Width="40" Height="22"
+                                                                Background="#1A1A1E" BorderThickness="2"
+                                                                BorderBrush="#3A3A40" Click="BtnEvColor_Click" Tag="3"/>
+                                                    </StackPanel>
+                                                    <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                    <Slider x:Name="SldEvBrightness" Minimum="0" Maximum="100" Value="100"
+                                                            Width="120" TickFrequency="25" IsSnapToTickEnabled="True"
+                                                            TickPlacement="BottomRight"
+                                                            ValueChanged="SldEvBrightness_ValueChanged"
+                                                            VerticalAlignment="Center"/>
+                                                    <TextBlock x:Name="LblEvBrightness" Text="100%"
+                                                               VerticalAlignment="Center" Margin="4,0,12,0" MinWidth="32"/>
+                                                    <Button x:Name="BtnEvLightOff"   Content="OFF"               Padding="6,2" Margin="0,0,4,0" Click="BtnEvLightOff_Click"/>
+                                                    <Button x:Name="BtnEvLightOn"    Content="ON"                Padding="6,2" Margin="0,0,4,0" Click="BtnEvLightOn_Click"/>
+                                                    <Button x:Name="BtnEvLightReset" Content="{loc:Get reset}"   Padding="6,2" Margin="0,0,4,0" Click="BtnEvLightReset_Click"/>
+                                                    <Button x:Name="BtnEvLightSave"  Content="{loc:Get save}"    Padding="6,2" Click="BtnEvLightSave_Click"
+                                                            ToolTip="Makes the applied effect permanent (survives unplug/restart)."/>
+                                                </WrapPanel>
+                                                <!-- Per-key custom lighting section -->
+                                                <Separator Margin="0,0,0,8"/>
+                                                <TextBlock Text="{loc:Get custom_lighting}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                                <TextBlock Text="{loc:Get custom_paint_hint}"
+                                                           Foreground="#9A9AA2" FontStyle="Italic"
+                                                           TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                    <CheckBox x:Name="CkCustomPaint" Content="{loc:Get custom_paint_mode}"
+                                                              Foreground="White" Margin="0,0,12,0"
+                                                              Checked="CkCustomPaint_Checked"
+                                                              Unchecked="CkCustomPaint_Checked"/>
+                                                    <TextBlock Text="{loc:Get custom_color}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                    <Button x:Name="BtnCustomBrushColor" Width="40" Height="22"
+                                                            Background="#900000" BorderThickness="2"
+                                                            BorderBrush="#3A3A40" Click="BtnCustomBrushColor_Click"/>
+                                                </WrapPanel>
+                                                <WrapPanel Orientation="Horizontal">
+                                                    <Button x:Name="BtnCustomApply"   Content="{loc:Get apply_to_device}"  Padding="8,2" Margin="0,0,4,0" Click="BtnCustomApply_Click"  Style="{StaticResource K2IconAccentButton}" Tag="&#xE73E;"/>
+                                                    <Button x:Name="BtnCustomRead"    Content="{loc:Get read_from_device}" Padding="8,2" Margin="0,0,4,0" Click="BtnCustomRead_Click"    Style="{StaticResource K2IconButton}"       Tag="&#xE72C;"/>
+                                                    <Button x:Name="BtnCustomFillAll" Content="{loc:Get custom_fill_all}" Padding="8,2" Margin="0,0,4,0" Click="BtnCustomFillAll_Click" Style="{StaticResource K2IconButton}"       Tag="&#xE771;"/>
+                                                    <Button x:Name="BtnCustomClear"   Content="{loc:Get custom_clear}"    Padding="8,2"                   Click="BtnCustomClear_Click"   Style="{StaticResource K2IconButton}"       Tag="&#xE74D;"/>
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </ScrollViewer>
+
+                                        <!-- ── DISPLAY DIAL ── -->
+                                        <StackPanel x:Name="PnlSecDial" Visibility="Collapsed">
+                                            <TextBlock Text="{loc:Get dial_pages_visible}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                            <WrapPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                <CheckBox x:Name="CkDialClock"    Content="{loc:Get dial_clock}"      Margin="0,0,12,0" Click="CkDial_Click"/>
+                                                <CheckBox x:Name="CkDialProfile"  Content="{loc:Get dial_profile}"    Margin="0,0,12,0" Click="CkDial_Click"/>
+                                                <CheckBox x:Name="CkDialVolume"   Content="{loc:Get dial_volume}"     Margin="0,0,12,0" Click="CkDial_Click"/>
+                                                <CheckBox x:Name="CkDialBright"   Content="{loc:Get dial_brightness}" Margin="0,0,12,0" Click="CkDial_Click"/>
+                                                <CheckBox x:Name="CkDialLighting" Content="{loc:Get dial_lighting}"   Margin="0,0,12,0" Click="CkDial_Click"/>
+                                                <CheckBox x:Name="CkDialPCInfo"   Content="{loc:Get dial_pcinfo}"     Margin="0,0,12,0" Click="CkDial_Click"/>
+                                                <CheckBox x:Name="CkDialAPM"      Content="{loc:Get dial_apm}"        Margin="0,0,12,0" Click="CkDial_Click"/>
+                                                <CheckBox x:Name="CkDialCustom"   Content="{loc:Get dial_custom}"     Click="CkDial_Click"/>
+                                            </WrapPanel>
+                                            <WrapPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                <TextBlock Text="{loc:Get dial_clock_label}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,6,0"/>
+                                                <ComboBox x:Name="CbDialClockType" Width="70" Margin="0,0,16,0"
+                                                          SelectionChanged="CbDialClockType_SelectionChanged"/>
+                                                <TextBlock Text="{loc:Get dial_screensaver}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <TextBox  x:Name="TxtDialScreenSaver" Width="50" Margin="0,0,6,0"
+                                                          TextChanged="TxtDialScreenSaver_TextChanged"/>
+                                                <TextBlock Text="{loc:Get dial_autooff}" VerticalAlignment="Center" Margin="8,0,6,0"/>
+                                                <TextBox  x:Name="TxtDialTurnOff" Width="50" Margin="0,0,6,0"
+                                                          TextChanged="TxtDialTurnOff_TextChanged"/>
+                                            </WrapPanel>
+                                            <WrapPanel Orientation="Horizontal">
+                                                <TextBlock Text="{loc:Get dial_menu_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <Button x:Name="BtnDialMenuColor" Width="40" Height="22"
+                                                        Background="#F3CC23" BorderThickness="2"
+                                                        BorderBrush="#3A3A40" Click="BtnDialMenuColor_Click"/>
+                                                <TextBlock Text="{loc:Get dial_pixel_shift}" VerticalAlignment="Center" Margin="16,0,6,0"/>
+                                                <TextBox  x:Name="TxtDialPixelShift" Width="40" Margin="0,0,16,0"
+                                                          TextChanged="TxtDialPixelShift_TextChanged"/>
+                                                <Button x:Name="BtnDialApply" Content="{loc:Get apply_to_device}"
+                                                        Padding="8,2" Click="BtnDialApply_Click"
+                                                        Style="{StaticResource K2IconAccentButton}" Tag="&#xE73E;"/>
+                                                <Button x:Name="BtnDialRead" Content="{loc:Get read_from_device}"
+                                                        Padding="8,2" Margin="8,0,0,0" Click="BtnDialRead_Click"
+                                                        Style="{StaticResource K2IconButton}" Tag="&#xE72C;"/>
+                                            </WrapPanel>
+                                        </StackPanel>
+
+                                        <!-- ── DOCK ACTIONS ── -->
+                                        <StackPanel x:Name="PnlSecDock" Visibility="Collapsed">
+                                            <TextBlock Text="{loc:Get dock_display_keys}" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                            <WrapPanel x:Name="WpNdkActions" Orientation="Horizontal" Margin="0,0,0,8"/>
+                                            <TextBlock Text="{loc:Get dock_media_keys}" FontWeight="SemiBold" Margin="0,4,0,4"/>
+                                            <WrapPanel x:Name="WpDockActions" Orientation="Horizontal" Margin="0,0,0,8"/>
+                                            <TextBlock Text="{loc:Get dock_dial}" FontWeight="SemiBold" Margin="0,4,0,4"/>
+                                            <WrapPanel x:Name="WpDialActions" Orientation="Horizontal" Margin="0,0,0,8"/>
+                                            <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                <Button x:Name="BtnCaptureHwKey" Content="{loc:Get dock_capture_hw}"
+                                                        Padding="8,2" Click="BtnCaptureHwKey_Click"
+                                                        Style="{StaticResource K2IconButton}" Tag="&#xE765;"/>
+                                                <TextBlock x:Name="LblCapturedKey" Text="" Margin="8,0,0,0"
+                                                           VerticalAlignment="Center" Foreground="#900000"/>
+                                            </WrapPanel>
+                                        </StackPanel>
+
+                                        <!-- ── MACROS ── -->
+                                        <Grid x:Name="PnlSecMacros" Visibility="Collapsed" MaxHeight="220">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <!-- List + CRUD + record -->
+                                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                                <ListBox x:Name="LbMacros" Height="120"
+                                                         Background="#1E1E20" Foreground="White"
+                                                         SelectionChanged="LbMacros_SelectionChanged"
+                                                         DisplayMemberPath="Name"/>
+                                                <WrapPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                                    <Button x:Name="BtnMacroNew"    Content="{loc:Get macro_new}"    Padding="8,2" Margin="0,0,4,0" Click="BtnMacroNew_Click"    Style="{StaticResource K2IconButton}" Tag="&#xE710;"/>
+                                                    <Button x:Name="BtnMacroDelete" Content="{loc:Get delete}"       Padding="8,2" Margin="0,0,4,0" Click="BtnMacroDelete_Click" Style="{StaticResource K2IconButton}" Tag="&#xE74D;"/>
+                                                    <Button x:Name="BtnMacroRecord" Content="{loc:Get macro_record}" Padding="8,2" Margin="0,0,4,0" Click="BtnMacroRecord_Click" Style="{StaticResource K2IconButton}" Tag="&#xE7C8;"/>
+                                                    <Button x:Name="BtnMacroPlay"   Content="{loc:Get macro_play}"   Padding="8,2" Margin="0,0,4,0" Click="BtnMacroPlay_Click"   Style="{StaticResource K2IconButton}" Tag="&#xE768;"/>
+                                                    <Button x:Name="BtnMacroStop"   Content="{loc:Get stop}"         Padding="8,2" Margin="0,0,4,0" Click="BtnMacroStop_Click"   Style="{StaticResource K2IconButton}" Tag="&#xE71A;"/>
+                                                </WrapPanel>
+                                                <Button x:Name="BtnMacroImportBC" Content="{loc:Get macro_import_bc}"
+                                                        Padding="8,2" Margin="0,6,0,0" Click="BtnMacroImportBC_Click"
+                                                        Style="{StaticResource K2IconButton}" Tag="&#xE8B5;"
+                                                        HorizontalAlignment="Left"/>
+                                            </StackPanel>
+                                            <!-- Macro settings -->
+                                            <StackPanel x:Name="SpMacroSettings" Grid.Column="1" Visibility="Collapsed">
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                    <TextBlock Text="{loc:Get macro_name}" VerticalAlignment="Center" Width="80"/>
+                                                    <TextBox x:Name="TxtMacroName" Width="160"
+                                                             Background="#2A2A2E" Foreground="White"
+                                                             TextChanged="TxtMacroName_TextChanged"/>
+                                                </WrapPanel>
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                    <TextBlock Text="{loc:Get macro_delay}" VerticalAlignment="Center" Width="80"/>
+                                                    <ComboBox x:Name="CbMacroDelay" Width="120"
+                                                              Background="#2A2A2E" Foreground="White"
+                                                              SelectionChanged="CbMacroDelay_SelectionChanged">
+                                                        <ComboBoxItem Content="{loc:Get macro_delay_recorded}"/>
+                                                        <ComboBoxItem Content="{loc:Get act_none}"/>
+                                                        <ComboBoxItem Content="{loc:Get dial_custom}"/>
+                                                    </ComboBox>
+                                                    <TextBox x:Name="TxtMacroCustomDelay" Width="60" Margin="4,0,0,0"
+                                                             Background="#2A2A2E" Foreground="White" Visibility="Collapsed"/>
+                                                    <TextBlock Text="ms" VerticalAlignment="Center" Margin="2,0,0,0"
+                                                               x:Name="TblMacroMs" Visibility="Collapsed"/>
+                                                </WrapPanel>
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                    <TextBlock Text="{loc:Get macro_playback}" VerticalAlignment="Center" Width="80"/>
+                                                    <ComboBox x:Name="CbMacroPlayback" Width="120"
+                                                              Background="#2A2A2E" Foreground="White"
+                                                              SelectionChanged="CbMacroPlayback_SelectionChanged">
+                                                        <ComboBoxItem Content="{loc:Get macro_playback_once}"/>
+                                                        <ComboBoxItem Content="{loc:Get macro_playback_repeat}"/>
+                                                        <ComboBoxItem Content="{loc:Get macro_playback_held}"/>
+                                                        <ComboBoxItem Content="{loc:Get macro_playback_toggle}"/>
+                                                    </ComboBox>
+                                                    <TextBox x:Name="TxtMacroRepeatN" Width="50" Margin="4,0,0,0"
+                                                             Background="#2A2A2E" Foreground="White" Visibility="Collapsed"/>
+                                                </WrapPanel>
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                    <CheckBox x:Name="CkMacroMouse" Content="{loc:Get macro_record_mouse}"
+                                                              Foreground="White" Margin="0,0,12,0"/>
+                                                    <TextBlock x:Name="TblMacroInputCount" Text="0 actions"
+                                                               VerticalAlignment="Center" Foreground="#808080"/>
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <!-- ── USB RECORDER (debug only) ── -->
+                                        <Grid x:Name="PnlSecUsb" Visibility="Collapsed">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+                                                <TextBlock Text="{loc:Get usb_interface}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <ComboBox x:Name="CbUsbInterface" Width="200" Margin="0,0,8,0"/>
+                                                <Button x:Name="BtnUsbRefresh" Content="{loc:Get usb_detect}" Padding="6,2"
+                                                        Margin="0,0,8,0" Click="BtnUsbRefresh_Click"
+                                                        Style="{StaticResource K2IconButton}" Tag="&#xE72C;"/>
+                                                <TextBlock Text="{loc:Get usb_label}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <TextBox x:Name="TxtUsbLabel" Width="120" Margin="0,0,8,0" Text="basecamp"/>
+                                                <Button x:Name="BtnUsbRecord" Content="Start" Padding="8,2"
+                                                        Click="BtnUsbRecord_Click"
+                                                        Style="{StaticResource K2IconAccentButton}" Tag="&#xE7C8;"/>
+                                            </WrapPanel>
+                                            <TextBlock Grid.Row="1" x:Name="LblUsbStatus" Margin="0,0,0,4"
+                                                       FontStyle="Italic" Foreground="#9A9AA2"
+                                                       Text="{loc:Get usb_ready}"/>
+                                            <Expander Grid.Row="2" Header="{loc:Get usb_results}" IsExpanded="False"
+                                                      x:Name="ExpUsbResults" Visibility="Collapsed">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="100"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+                                                    <TextBox Grid.Row="0" x:Name="TxtUsbResults"
+                                                             IsReadOnly="True" FontFamily="Consolas" FontSize="11"
+                                                             VerticalScrollBarVisibility="Auto"
+                                                             HorizontalScrollBarVisibility="Auto"
+                                                             TextWrapping="NoWrap" AcceptsReturn="True"/>
+                                                    <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,4,0,0">
+                                                        <Button x:Name="BtnUsbSave"       Content="{loc:Get usb_save_report}" Padding="6,2" Margin="0,0,6,0" Click="BtnUsbSave_Click"/>
+                                                        <Button x:Name="BtnUsbOpenFolder" Content="{loc:Get act_folder}"      Padding="6,2"                   Click="BtnUsbOpenFolder_Click"/>
+                                                    </WrapPanel>
+                                                </Grid>
+                                            </Expander>
+                                        </Grid>
+
+                                    </Grid><!-- end section panels grid -->
+
+                                    <!-- SDK Log: debug only, always at bottom of settings panel -->
+                                    <GroupBox Grid.Row="1" x:Name="GbEvLog" Header="{loc:Get ev_sdk_log}"
+                                              Visibility="Collapsed" Margin="0,10,0,0">
+                                        <TextBox x:Name="TxtEvLog"
+                                                 IsReadOnly="True" FontFamily="Consolas" FontSize="11"
+                                                 VerticalScrollBarVisibility="Auto"
+                                                 HorizontalScrollBarVisibility="Auto"
+                                                 TextWrapping="NoWrap" AcceptsReturn="True"
+                                                 MaxHeight="100"/>
+                                    </GroupBox>
+                                </Grid>
+                            </Border><!-- end settings panel -->
+
+                        </Grid><!-- end right column -->
+
+                        <!-- Common actions (same rule for all devices): uniform width/height,
+                             vertical stack, grouped Profile / Import / Device -->
+                        <Border Grid.Column="2" Background="#111115" CornerRadius="6"
+                                Margin="8,0,0,0" Padding="10" VerticalAlignment="Top">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Get profile}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <ComboBox x:Name="CbEvProfile" Style="{StaticResource K2SideActionCombo}"
+                                          SelectionChanged="CbEvProfile_SelectionChanged"/>
+                                <Button x:Name="BtnEvRenameProfile" Content="{loc:Get rename_profile}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
+                                        Click="BtnEvRenameProfile_Click"/>
+                                <Button x:Name="BtnEvDeleteProfile" Content="{loc:Get delete_profile}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE74D;"
+                                        Click="BtnEvDeleteProfile_Click"/>
+
+                                <Separator Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get import}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button x:Name="BtnEvImportXml" Content="{loc:Get dp_import_xml}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8E5;"
+                                        Click="BtnEvImportXml_Click"/>
+                                <Button x:Name="BtnEvImportBc" Content="{loc:Get import_bc}"
+                                        Style="{StaticResource K2SideActionAccentButton}" Tag="&#xE8B5;"
+                                        Click="BtnEvImportBc_Click"/>
+
+                                <Separator Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get export}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button x:Name="BtnEvExportBc" Content="{loc:Get dp_export_bc}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE896;"
+                                        Click="BtnEvExportBc_Click"/>
+                                <Button x:Name="BtnEvExportK2" Content="{loc:Get dp_export_k2}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE78C;"
+                                        Click="BtnEvExportK2_Click"/>
+
+                                <Separator Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get device}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button x:Name="BtnEvRename" Content="{loc:Get rename_device}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
+                                        Click="BtnEvRename_Click"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid><!-- end 3-pane -->
+                </Grid>
+            </Grid><!-- end PnlEverest -->
+
+            <!-- ==================== MacroPad ==================== -->
+            <Grid x:Name="PnlMacroPad" Visibility="Collapsed">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>  <!-- toolbar -->
+                        <RowDefinition Height="Auto"/>  <!-- LED expander -->
+                        <RowDefinition Height="*"/>     <!-- main area -->
+                    </Grid.RowDefinitions>
+
+                    <!-- Toolbar -->
+                    <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                        <!-- Debug-only: open/close driver manually -->
+                        <Button x:Name="BtnOpen"    Content="{loc:Get open_driver}"     Click="BtnOpen_Click"
+                                Style="{StaticResource K2IconAccentButton}" Tag="&#xE768;" Visibility="Collapsed"/>
+                        <Button x:Name="BtnClose"   Content="{loc:Get close_driver}"    Margin="8,0,0,0" Click="BtnClose_Click"
+                                Style="{StaticResource K2IconButton}" Tag="&#xE711;" Visibility="Collapsed"/>
+                        <Button x:Name="BtnRefresh" Content="{loc:Get refresh_devices}" Margin="8,0,0,0" Click="BtnRefresh_Click"
+                                Style="{StaticResource K2IconButton}" Tag="&#xE72C;"/>
+                        <Separator Margin="10,0"/>
+                        <TextBlock Text="{loc:Get orientation}" VerticalAlignment="Center"/>
+                        <ComboBox x:Name="CbMacroRotation" Width="140" Margin="6,0,0,0"
+                                  SelectionChanged="CbMacroRotation_SelectionChanged"/>
+                        <Separator Margin="10,0"/>
+                        <!-- Debug-only: AP controls -->
+                        <Button x:Name="BtnApOn"   Content="AP Enable ON"  Padding="10,4" Visibility="Collapsed" Click="BtnApOn_Click"/>
+                        <Button x:Name="BtnApOff"  Content="AP Enable OFF" Padding="10,4" Margin="6,0,0,0" Visibility="Collapsed" Click="BtnApOff_Click"/>
+                        <Separator x:Name="SepMpApDbg" Margin="10,0" Visibility="Collapsed"/>
+                        <!-- Debug-only: remap keys (see project rule) -->
+                        <Button x:Name="BtnMapKeys" Content="{loc:Get remap_keys}" Click="BtnMapKeys_Click"
+                                Style="{StaticResource K2IconButton}" Tag="&#xE765;" Visibility="Collapsed"/>
+                        <TextBlock x:Name="LblSdk" Margin="16,6,0,0" FontStyle="Italic" Foreground="#9A9AA2"/>
+                    </WrapPanel>
+
+                    <!-- LED Lighting -->
+                    <Expander Grid.Row="1" IsExpanded="True" Margin="0,0,0,8">
+                        <Expander.Header>
+                            <TextBlock Text="{loc:Get led_lighting}" FontWeight="SemiBold"/>
+                        </Expander.Header>
+                        <Border BorderBrush="#3A3A40" BorderThickness="1" Padding="10" CornerRadius="4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,0,16,6">
+                                    <TextBlock Text="{loc:Get rgb_effect}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ComboBox x:Name="CbMacroEffect" Width="140"
+                                              SelectionChanged="CbMacroEffect_SelectionChanged"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,0,16,6">
+                                    <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ComboBox x:Name="CbMacroSpeed" Width="90"
+                                              SelectionChanged="CbMacroEffectParam_Changed"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Margin="0,0,16,6">
+                                    <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ComboBox x:Name="CbMacroDirection" Width="110"
+                                              SelectionChanged="CbMacroEffectParam_Changed"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal" Margin="0,0,16,6">
+                                    <CheckBox x:Name="CkMacroSync" Content="{loc:Get led_sync_profiles}"
+                                              VerticalAlignment="Center" Click="CkMacroSync_Click"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="4" Orientation="Horizontal"
+                                            HorizontalAlignment="Right" Margin="0,0,0,6">
+                                    <Button x:Name="BtnMacroLightOff"   Content="{loc:Get led_backlight_off}"  Padding="8,3" Margin="0,0,6,0" Click="BtnMacroLightOff_Click"/>
+                                    <Button x:Name="BtnMacroLightOn"    Content="{loc:Get led_backlight_on}"   Padding="8,3" Margin="0,0,6,0" Click="BtnMacroLightOn_Click"/>
+                                    <Button x:Name="BtnMacroLightReset" Content="{loc:Get led_reset_effects}"  Padding="8,3" Margin="0,0,6,0" Click="BtnMacroLightReset_Click"/>
+                                    <Button x:Name="BtnMacroLightSave"  Content="{loc:Get led_save_flash}"     Padding="8,3" Click="BtnMacroLightSave_Click"
+                                            ToolTip="Makes the applied effect permanent (survives unplug/restart)."/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,4,16,0">
+                                    <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Button x:Name="BtnMacroColor1" Width="50" Height="26"
+                                            Background="#900000" BorderThickness="2"
+                                            BorderBrush="#3A3A40" Click="BtnMacroColor_Click" Tag="1"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,4,16,0">
+                                    <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Button x:Name="BtnMacroColor2" Width="50" Height="26"
+                                            Background="#1A1A1E" BorderThickness="2"
+                                            BorderBrush="#3A3A40" Click="BtnMacroColor_Click" Tag="2"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" Margin="0,4,16,0">
+                                    <TextBlock Text="{loc:Get rgb_tertiary}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Button x:Name="BtnMacroColor3" Width="50" Height="26"
+                                            Background="#1A1A1E" BorderThickness="2"
+                                            BorderBrush="#3A3A40" Click="BtnMacroColor_Click" Tag="3"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="3" Grid.ColumnSpan="2"
+                                            Orientation="Horizontal" Margin="0,4,0,0">
+                                    <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Slider x:Name="SldMacroBrightness" Minimum="0" Maximum="100" Value="100"
+                                            Width="200" TickFrequency="25" IsSnapToTickEnabled="True"
+                                            TickPlacement="BottomRight"
+                                            ValueChanged="SldMacroBrightness_ValueChanged"
+                                            VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="LblMacroBrightness" Text="100%"
+                                               VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="40"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Expander>
+
+                    <!-- Central area -->
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Background="#18181C" CornerRadius="6" Padding="8" Margin="0,0,8,0">
+                            <Canvas x:Name="CvsMacroKeys" Width="510" Height="370" ClipToBounds="True"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Canvas.Background>
+                                    <ImageBrush ImageSource="Assets/mkd_bg.png" Stretch="Fill"/>
+                                </Canvas.Background>
+                            </Canvas>
+                        </Border>
+
+                        <!-- Common actions (same rule for all devices): uniform width/height,
+                             vertical stack, grouped Profile / Import / Device -->
+                        <Border Grid.Column="1" Background="#111115" CornerRadius="6"
+                                Margin="0,0,8,0" Padding="10" VerticalAlignment="Top">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Get profile}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <ComboBox x:Name="CbProfile" Style="{StaticResource K2SideActionCombo}"
+                                          SelectionChanged="CbProfile_SelectionChanged"/>
+                                <Button x:Name="BtnMpRenameProfile" Content="{loc:Get rename_profile}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
+                                        Click="BtnMpRenameProfile_Click"/>
+                                <Button x:Name="BtnMpDeleteProfile" Content="{loc:Get delete_profile}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE74D;"
+                                        Click="BtnMpDeleteProfile_Click"/>
+
+                                <Separator Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get import}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button x:Name="BtnMpImportXml" Content="{loc:Get dp_import_xml}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8E5;"
+                                        Click="BtnMpImportXml_Click"/>
+                                <Button x:Name="BtnMpImportBc" Content="{loc:Get import_bc}"
+                                        Style="{StaticResource K2SideActionAccentButton}" Tag="&#xE8B5;"
+                                        Click="BtnMpImportBc_Click"/>
+
+                                <Separator Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get export}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button x:Name="BtnMpExportBc" Content="{loc:Get dp_export_bc}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE896;"
+                                        Click="BtnMpExportBc_Click"/>
+                                <Button x:Name="BtnMpExportK2" Content="{loc:Get dp_export_k2}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE78C;"
+                                        Click="BtnMpExportK2_Click"/>
+
+                                <Separator Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get device}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button x:Name="BtnMpRename" Content="{loc:Get rename_device}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
+                                        Click="BtnMpRename_Click"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Debug panel: visible only in debug mode -->
+                        <Grid x:Name="PnlMpDebugRight" Grid.Column="2" Width="380" Visibility="Collapsed" Margin="0,0,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <GroupBox x:Name="GbMpDevices" Grid.Row="0" Header="{loc:Get mp_connected_devices}">
+                                <ListView x:Name="LvDevices" Height="120">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Device"  Width="90"  DisplayMemberBinding="{Binding Label}"/>
+                                            <GridViewColumn Header="{loc:Get dp_fw}"    Width="55"  DisplayMemberBinding="{Binding FirmwareVersion}"/>
+                                            <GridViewColumn Header="VID"     Width="60"  DisplayMemberBinding="{Binding Vid}"/>
+                                            <GridViewColumn Header="PID"     Width="60"  DisplayMemberBinding="{Binding Pid}"/>
+                                            <GridViewColumn Header="Prof."   Width="45"  DisplayMemberBinding="{Binding CurrentProfile}"/>
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </GroupBox>
+                            <GroupBox x:Name="GbMpLog" Grid.Row="1" Header="{loc:Get mp_event_log}" Margin="0,8,0,0">
+                                <TextBox x:Name="TxtLog"
+                                         IsReadOnly="True" FontFamily="Consolas" FontSize="11"
+                                         VerticalScrollBarVisibility="Auto"
+                                         HorizontalScrollBarVisibility="Auto"
+                                         TextWrapping="NoWrap" AcceptsReturn="True"/>
+                            </GroupBox>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Grid><!-- end PnlMacroPad -->
+
+            <!-- ==================== DisplayPad ==================== -->
+            <Grid x:Name="PnlDisplayPad" Visibility="Collapsed">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>  <!-- toolbar -->
+                        <RowDefinition Height="*"/>     <!-- main area -->
+                    </Grid.RowDefinitions>
+
+                    <!-- Toolbar -->
+                    <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                        <!-- Debug-only: open/close driver manually -->
+                        <Button x:Name="BtnDpOpen"    Content="{loc:Get open_driver}"    Click="BtnDpOpen_Click"
+                                Style="{StaticResource K2IconAccentButton}" Tag="&#xE768;" Visibility="Collapsed"/>
+                        <Button x:Name="BtnDpClose"   Content="{loc:Get close_driver}"   Margin="8,0,0,0" Click="BtnDpClose_Click"
+                                Style="{StaticResource K2IconButton}" Tag="&#xE711;" Visibility="Collapsed"/>
+                        <Button x:Name="BtnDpRefresh" Content="{loc:Get refresh}"        Margin="8,0,0,0" Click="BtnDpRefresh_Click"
+                                Style="{StaticResource K2IconButton}" Tag="&#xE72C;"/>
+                        <Separator Margin="10,0"/>
+                        <!-- Folder navigation (visible only when inside a sub-page) -->
+                        <Button x:Name="BtnDpBack" Content="{loc:Get dp_back}"
+                                Margin="0,0,0,0" Style="{StaticResource K2IconButton}" Tag="&#xE72B;"
+                                Click="BtnDpBack_Click" Visibility="Collapsed"/>
+                        <TextBlock x:Name="LblDpBreadcrumb" Text="" VerticalAlignment="Center"
+                                   Margin="6,0,0,0" Foreground="#9A9AA2" FontStyle="Italic"/>
+                        <TextBlock Text="{loc:Get dp_rotation}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                        <ComboBox x:Name="CbDpRotation" Width="70" Margin="6,0,0,0"
+                                  SelectionChanged="CbDpRotation_SelectionChanged"/>
+                        <Button x:Name="BtnDpRotateCcw" Content="{loc:Get dp_rotate_icons_ccw}" Margin="6,0,0,0"
+                                Style="{StaticResource K2IconButton}" Tag="&#xE14A;"
+                                Click="BtnDpRotateCcw_Click"/>
+                        <Button x:Name="BtnDpRotateCw"  Content="{loc:Get dp_rotate_icons_cw}"  Margin="4,0,0,0"
+                                Style="{StaticResource K2IconButton}" Tag="&#xE14A;"
+                                Click="BtnDpRotateCw_Click"/>
+                        <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                        <Slider x:Name="SldDpBrightness" Minimum="0" Maximum="100" Value="100"
+                                Width="120" TickFrequency="25" IsSnapToTickEnabled="True"
+                                TickPlacement="BottomRight"
+                                ValueChanged="SldDpBrightness_ValueChanged"
+                                VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LblDpBrightness" Text="—" VerticalAlignment="Center"
+                                   Margin="4,0,0,0" MinWidth="40"/>
+                        <!-- Debug-only: remap/reset keys (see project rule) -->
+                        <Separator x:Name="SepDpMapKeysDbg" Margin="10,0" Visibility="Collapsed"/>
+                        <Button x:Name="BtnDpMapKeys"  Content="{loc:Get remap_keys}"    Click="BtnDpMapKeys_Click"
+                                Style="{StaticResource K2IconButton}" Tag="&#xE765;" Visibility="Collapsed"/>
+                        <Button x:Name="BtnDpResetAll" Content="{loc:Get dp_reset_keys}" Margin="8,0,0,0" Click="BtnDpResetAll_Click"
+                                Style="{StaticResource K2IconButton}" Tag="&#xE777;" Visibility="Collapsed"/>
+                        <TextBlock x:Name="LblDpSdk" Margin="16,6,0,0" FontStyle="Italic" Foreground="#9A9AA2"/>
+                    </WrapPanel>
+
+                    <!-- Central area -->
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Background="#18181C" CornerRadius="6" Padding="8" Margin="0,0,8,0">
+                            <Canvas x:Name="CvsDpKeys" Width="510" Height="370" ClipToBounds="True"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Canvas.Background>
+                                    <ImageBrush ImageSource="Assets/mkd_bg.png" Stretch="Fill"/>
+                                </Canvas.Background>
+                            </Canvas>
+                        </Border>
+
+                        <!-- Common actions (same rule for all devices): uniform width/height,
+                             vertical stack, grouped Profile / Import / Device -->
+                        <Border Grid.Column="1" Background="#111115" CornerRadius="6"
+                                Margin="0,0,8,0" Padding="10" VerticalAlignment="Top">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Get profile}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <ComboBox x:Name="CbDpProfile" Style="{StaticResource K2SideActionCombo}"
+                                          SelectionChanged="CbDpProfile_SelectionChanged"/>
+                                <Button x:Name="BtnDpRenameProfile" Content="{loc:Get rename_profile}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
+                                        Click="BtnDpRenameProfile_Click"/>
+                                <Button x:Name="BtnDpDeleteProfile" Content="{loc:Get delete_profile}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE74D;"
+                                        Click="BtnDpDeleteProfile_Click"/>
+
+                                <Separator Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get dp_fullscreen_group}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button x:Name="BtnDpFullscreen" Content="{loc:Get dp_fullscreen_set}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE91B;"
+                                        Click="BtnDpFullscreen_Click"/>
+                                <Button x:Name="BtnDpFullscreenClear" Content="{loc:Get dp_fullscreen_clear}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE74D;"
+                                        Click="BtnDpFullscreenClear_Click"/>
+
+                                <Separator Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get import}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button x:Name="BtnDpImportXml" Content="{loc:Get dp_import_xml}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8E5;"
+                                        Click="BtnDpImportXml_Click"/>
+                                <Button x:Name="BtnDpImportBc" Content="{loc:Get dp_import_bc}"
+                                        Style="{StaticResource K2SideActionAccentButton}" Tag="&#xE896;"
+                                        Click="BtnDpImportBc_Click"/>
+
+                                <Separator Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get export}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button x:Name="BtnDpExportBc" Content="{loc:Get dp_export_bc}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE896;"
+                                        Click="BtnDpExportBc_Click"/>
+                                <Button x:Name="BtnDpExportK2" Content="{loc:Get dp_export_k2}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE78C;"
+                                        Click="BtnDpExportK2_Click"/>
+
+                                <Separator Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get device}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button x:Name="BtnDpRename" Content="{loc:Get rename_device}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
+                                        Click="BtnDpRename_Click"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Debug panel: visible only in debug mode -->
+                        <Grid x:Name="PnlDpDebugRight" Grid.Column="2" Width="380" Visibility="Collapsed">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <GroupBox x:Name="GbDpDevices" Grid.Row="0" Header="{loc:Get dp_connected_devices}">
+                                <ListView x:Name="LvDpDevices" Height="120">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Device"         Width="100" DisplayMemberBinding="{Binding Label}"/>
+                                            <GridViewColumn Header="{loc:Get dp_fw}" Width="80"  DisplayMemberBinding="{Binding FirmwareVersion}"/>
+                                            <GridViewColumn Header="{loc:Get dp_lum}" Width="60" DisplayMemberBinding="{Binding Brightness}"/>
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </GroupBox>
+                            <GroupBox x:Name="GbDpLog" Grid.Row="1" Header="{loc:Get dp_log}" Margin="0,8,0,0">
+                                <TextBox x:Name="TxtDpLog"
+                                         IsReadOnly="True" FontFamily="Consolas" FontSize="11"
+                                         VerticalScrollBarVisibility="Auto"
+                                         HorizontalScrollBarVisibility="Auto"
+                                         TextWrapping="NoWrap" AcceptsReturn="True"/>
+                            </GroupBox>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Grid><!-- end PnlDisplayPad -->
+
+            <!-- ==================== General Settings ==================== -->
+            <Grid x:Name="PnlSettings" Visibility="Collapsed">
+                <StackPanel Margin="24" MaxWidth="480" HorizontalAlignment="Left">
+                    <TextBlock Text="{loc:Get tab_settings}" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
+
+                    <CheckBox x:Name="CkAppDebugMode" Content="{loc:Get settings_debug_mode}"
+                              Click="CkAppDebugMode_Click" FontSize="14"/>
+                    <TextBlock Text="{loc:Get settings_debug_mode_hint}" Foreground="#9A9AA2"
+                               TextWrapping="Wrap" Margin="20,4,0,20" FontSize="12"/>
+
+                    <GroupBox x:Name="GbAppLogLevel" Header="{loc:Get settings_log_level}" Margin="0,4,0,0">
+                        <StackPanel Margin="8">
+                            <RadioButton x:Name="RbLogOff"     Content="{loc:Get log_off}"
+                                         GroupName="AppLogLevel" Margin="0,4" Checked="RbLogLevel_Checked"/>
+                            <RadioButton x:Name="RbLogNormal"  Content="{loc:Get log_normal}"
+                                         GroupName="AppLogLevel" Margin="0,4" Checked="RbLogLevel_Checked"/>
+                            <RadioButton x:Name="RbLogVerbose" Content="{loc:Get log_verbose}"
+                                         GroupName="AppLogLevel" Margin="0,4" Checked="RbLogLevel_Checked"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <CheckBox x:Name="CkDpNativeEngine" Content="{loc:Get settings_dp_native}"
+                              Click="CkDpNativeEngine_Click" FontSize="14" Margin="0,20,0,0"/>
+                    <TextBlock Text="{loc:Get settings_dp_native_hint}" Foreground="#9A9AA2"
+                               TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+
+                    <CheckBox x:Name="CkEvNativeEngine" Content="{loc:Get settings_ev_native}"
+                              Click="CkEvNativeEngine_Click" FontSize="14" Margin="0,16,0,0"/>
+                    <TextBlock Text="{loc:Get settings_ev_native_hint}" Foreground="#9A9AA2"
+                               TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+
+                    <CheckBox x:Name="CkKillBcWorker" Content="{loc:Get settings_kill_bc_worker}"
+                              Click="CkKillBcWorker_Click" FontSize="14" Margin="0,16,0,0"/>
+                    <TextBlock Text="{loc:Get settings_kill_bc_worker_hint}" Foreground="#9A9AA2"
+                               TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+
+                    <CheckBox x:Name="CkBcAutostart" Content="{loc:Get settings_bc_autostart}"
+                              Click="CkBcAutostart_Click" FontSize="14" Margin="0,16,0,0"/>
+                    <TextBlock x:Name="TxtBcAutostartHint" Text="{loc:Get settings_bc_autostart_hint}"
+                               Foreground="#9A9AA2" TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                </StackPanel>
+            </Grid><!-- end PnlSettings -->
+
+            </Grid><!-- end content panels -->
+        </Grid><!-- end outer device Grid -->
+
+        <!-- Status bar -->
+        <StatusBar Grid.Row="1" Margin="0,8,0,0">
+            <StatusBar.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <DockPanel LastChildFill="True"/>
+                </ItemsPanelTemplate>
+            </StatusBar.ItemsPanel>
+            <StatusBarItem DockPanel.Dock="Right" Padding="0,0,4,0">
+                <Button x:Name="BtnLang" Click="BtnLang_Click"
+                        Background="Transparent" BorderThickness="0"
+                        Cursor="Hand" Padding="6,2" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x1F310; "/>
+                        <TextBlock x:Name="TxtLangLabel" Text="EN"/>
+                    </StackPanel>
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="English"    Tag="en" Click="MnuLang_Click"/>
+                            <MenuItem Header="Italiano"   Tag="it" Click="MnuLang_Click"/>
+                            <MenuItem Header="Español"    Tag="es" Click="MnuLang_Click"/>
+                            <MenuItem Header="Français"   Tag="fr" Click="MnuLang_Click"/>
+                            <MenuItem Header="Deutsch"    Tag="de" Click="MnuLang_Click"/>
+                            <MenuItem Header="Português"  Tag="pt" Click="MnuLang_Click"/>
+                            <MenuItem Header="Polski"     Tag="pl" Click="MnuLang_Click"/>
+                            <MenuItem Header="日本語"      Tag="ja" Click="MnuLang_Click"/>
+                            <MenuItem Header="中文"        Tag="zh" Click="MnuLang_Click"/>
+                            <MenuItem Header="한국어"      Tag="ko" Click="MnuLang_Click"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+            </StatusBarItem>
+            <StatusBarItem>
+                <TextBlock x:Name="LblStatus" Text="{loc:Get driver_not_opened}"/>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>

@@ -1,0 +1,138 @@
+<Window x:Class="K2.Core.ButtonActionDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core"
+        Title="{loc:Get dlg_title}"
+        Height="520" Width="580"
+        MinHeight="420" MinWidth="480"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="CanResize"
+        Style="{DynamicResource K2WindowStyle}">
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="LblHeader" Grid.Row="0"
+                   Text="{loc:Get dlg_button_label}"
+                   FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+
+        <TextBlock Grid.Row="1" Text="{loc:Get dlg_action_type}" Margin="0,0,0,4"/>
+        <ComboBox  Grid.Row="2" x:Name="CbType"
+                   SelectionChanged="CbType_SelectionChanged">
+            <ComboBoxItem Content="{loc:Get act_none}"                  Tag="none"/>
+            <ComboBoxItem Content="{loc:Get act_url}"              Tag="url"/>
+            <ComboBoxItem Content="{loc:Get act_exec}"   Tag="exec"/>
+            <ComboBoxItem Content="{loc:Get act_folder}"           Tag="folder"/>
+            <ComboBoxItem Content="{loc:Get act_browser}"          Tag="browser"/>
+            <ComboBoxItem Content="{loc:Get act_profile}"        Tag="profile"/>
+            <ComboBoxItem Content="{loc:Get act_oscmd}"        Tag="oscmd"/>
+            <ComboBoxItem Content="{loc:Get act_media}"             Tag="media"/>
+            <ComboBoxItem Content="{loc:Get act_mouse}"          Tag="mouse"/>
+            <ComboBoxItem Content="{loc:Get act_keys}"   Tag="keys"/>
+            <ComboBoxItem Content="{loc:Get act_command}"         Tag="command"/>
+            <ComboBoxItem Content="{loc:Get act_text}"            Tag="text"/>
+            <ComboBoxItem Content="{loc:Get act_pyscript}"         Tag="pyscript"/>
+        </ComboBox>
+
+        <!-- Content area: standard panel OR Python Script panel -->
+        <Grid Grid.Row="3" Margin="0,12,0,0">
+
+            <!-- Standard panel (all types except pyscript) -->
+            <Grid x:Name="StandardPanel">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="LblPayload" Grid.Row="0" Text="{loc:Get dlg_value}" Margin="0,0,0,4"/>
+                <TextBox   x:Name="TxtPayload" Grid.Row="1"
+                           AcceptsReturn="True"
+                           TextWrapping="Wrap"
+                           VerticalScrollBarVisibility="Auto"
+                           FontFamily="Consolas"
+                           MinHeight="60"/>
+            </Grid>
+
+            <!-- Python Script panel -->
+            <Grid x:Name="PyPanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                    <RadioButton x:Name="RbFile"   Content=".py File"
+                                 GroupName="PyMode" Margin="0,0,18,0"
+                                 Checked="PyMode_Changed"/>
+                    <RadioButton x:Name="RbInline" Content="{loc:Get py_inline}"
+                                 GroupName="PyMode"
+                                 Checked="PyMode_Changed"/>
+                </StackPanel>
+
+                <!-- File mode: path + Browse -->
+                <Grid x:Name="PathRow" Grid.Row="1" Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="TxtPath" Grid.Column="0"
+                             VerticalContentAlignment="Center"
+                             FontFamily="Consolas"/>
+                    <Button  x:Name="BtnBrowse" Grid.Column="1"
+                             Content="{loc:Get py_browse}" Padding="10,2" Margin="6,0,0,0"
+                             Click="BtnBrowse_Click"/>
+                </Grid>
+
+                <!-- Inline mode: code editor -->
+                <TextBox x:Name="TxtCode" Grid.Row="2"
+                         AcceptsReturn="True" AcceptsTab="True"
+                         TextWrapping="NoWrap"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Consolas" MinHeight="80"/>
+
+                <Grid Grid.Row="3" Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{loc:Get py_args}"
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBox   x:Name="TxtArgs" Grid.Column="1"
+                               FontFamily="Consolas"
+                               VerticalContentAlignment="Center"/>
+                </Grid>
+
+                <Grid Grid.Row="4" Margin="0,6,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{loc:Get py_timeout}"
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBox   x:Name="TxtTimeout" Grid.Column="1" Width="70"
+                               Text="60" VerticalContentAlignment="Center"/>
+                </Grid>
+
+                <TextBlock Grid.Row="5" Margin="0,8,0,0"
+                           TextWrapping="Wrap" Foreground="#9A9AA2"
+                           Text="{loc:Get py_hint}"/>
+            </Grid>
+        </Grid>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="{loc:Get cancel}" Width="90" Padding="6,2"  Click="BtnCancel_Click"/>
+            <Button Content="{loc:Get save}"   Width="90" Padding="6,2" Margin="8,0,0,0"
+                    IsDefault="True"  Click="BtnSave_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

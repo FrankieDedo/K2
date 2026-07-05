@@ -1,0 +1,717 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Microsoft.Data.Sqlite;
+
+namespace K2.App.Services;
+
+/// <summary>
+/// Reads profiles from BaseCamp.db and imports them into K2 stores.
+///
+/// Schema BaseCamp.db relevant tables:
+///   Profiles:                ProfileId, Id (1-5 slot), DeviceType, ProfileName,
+///                            IsSelected, DeviceId, DeviceGUID
+///   DisplayPadLayerBidings:  ProfileId (FK), KeyId (170-179,220,221 = M1-M12),
+///                            FunctionType, SubFunctionType, FunctionValue,
+///                            base64Image, IsKeyAssigned
+///   EverestKeyBidings:       ProfileId (FK), DLLMatrixIndex (= SDK wMatrix),
+///                            FunctionType, SubFunctionType, FunctionValue,
+///                            base64Image, IsKeyAssigned, IsTouchKey
+///                            Used for BOTH DeviceType="Everest" and "MacroPad".
+/// </summary>
+public sealed class BaseCampDbImporter
+{
+    // KeyId/DLLMatrixIndex → button index (0-11) for DisplayPad and MacroPad
+    internal static readonly Dictionary<int, int> KeyIdToIndex = new()
+    {
+        { 170, 0 }, { 171, 1 }, { 172, 2 }, { 173, 3 },
+        { 174, 4 }, { 175, 5 }, { 176, 6 }, { 177, 7 },
+        { 178, 8 }, { 179, 9 }, { 220, 10 }, { 221, 11 },
+    };
+
+    /// <summary>Trova il percorso di BaseCamp.db cercando nelle installazioni note.</summary>
+    public static string? FindBaseCampDb()
+    {
+        // 1. Variabile d'ambiente esplicita
+        var env = Environment.GetEnvironmentVariable("K2_BASECAMP_DB");
+        if (!string.IsNullOrEmpty(env) && File.Exists(env))
+            return env;
+
+        // 2. Base Camp installation folders (already discovered by NativeDependencyResolver)
+        foreach (var dir in NativeDependencyResolver.BaseCampDirectories())
+        {
+            // The DB is in resources/bin/ (Electron app)
+            var candidate = Path.Combine(dir, "resources", "bin", "BaseCamp.db");
+            if (File.Exists(candidate)) return candidate;
+            // Fallback: accanto all'exe
+            candidate = Path.Combine(dir, "BaseCamp.db");
+            if (File.Exists(candidate)) return candidate;
+        }
+
+        return null;
+    }
+
+    /// <summary>Profilo DisplayPad letto dal DB di Base Camp.</summary>
+    public sealed record BcProfile(
+        int ProfileId,
+        int Slot,           // Id in Profiles (1-5)
+        string Name,
+        int DeviceId,
+        string? DeviceGUID,
+        bool IsSelected);
+
+    /// <summary>Tasto di un profilo DisplayPad letto dal DB.</summary>
+    public sealed record BcButton(
+        int ButtonIndex,    // 0-11
+        string? FunctionType,
+        string? SubFunctionType,
+        string? FunctionValue,
+        string? Base64Image,
+        bool IsAssigned,
+        int ParentId = 0,           // 0 = root page; > 0 = folder sub-page ID
+        string? OptionalText = null); // JSON with {"Id":<pageId>,...} for "Create Folder" keys
+
+    /// <summary>
+    /// Legge tutti i profili DisplayPad dal database.
+    /// Raggruppa per DeviceId → lista profili.
+    /// </summary>
+    public static Dictionary<int, List<BcProfile>> ReadProfiles(string dbPath)
+    {
+        using var conn = OpenReadOnly(dbPath);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT ProfileId, Id, ProfileName, DeviceId, DeviceGUID, IsSelected
+            FROM Profiles
+            WHERE DeviceType = 'DisplayPad'
+            ORDER BY DeviceId, Id";
+
+        var result = new Dictionary<int, List<BcProfile>>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            var p = new BcProfile(
+                ProfileId:  r.GetInt32(0),
+                Slot:       r.GetInt32(1),
+                Name:       r.IsDBNull(2) ? "" : r.GetString(2),
+                DeviceId:   r.GetInt32(3),
+                DeviceGUID: r.IsDBNull(4) ? null : r.GetString(4),
+                IsSelected: r.GetInt32(5) != 0);
+
+            if (!result.TryGetValue(p.DeviceId, out var list))
+            {
+                list = new List<BcProfile>();
+                result[p.DeviceId] = list;
+            }
+            list.Add(p);
+        }
+        return result;
+    }
+
+    /// <summary>Legge i tasti di un profilo specifico (tutte le pagine, incluse le sottocartelle).</summary>
+    public static List<BcButton> ReadButtons(string dbPath, int profileId)
+    {
+        using var conn = OpenReadOnly(dbPath);
+        using var cmd = conn.CreateCommand();
+
+        // Check which optional columns exist
+        bool hasParentId    = ColumnExistsInDb(conn, "DisplayPadLayerBidings", "ParentId");
+        bool hasOptionalText = ColumnExistsInDb(conn, "DisplayPadLayerBidings", "OptionalText");
+
+        string extra = (hasParentId ? ", ParentId" : "") + (hasOptionalText ? ", OptionalText" : "");
+        cmd.CommandText = $@"
+            SELECT KeyId, FunctionType, SubFunctionType, FunctionValue,
+                   base64Image, IsKeyAssigned{extra}
+            FROM DisplayPadLayerBidings
+            WHERE ProfileId = $pid
+            ORDER BY {(hasParentId ? "ParentId, " : "")}KeyId";
+        cmd.Parameters.AddWithValue("$pid", profileId);
+
+        var result = new List<BcButton>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            int keyId = r.GetInt32(0);
+            if (!KeyIdToIndex.TryGetValue(keyId, out int idx)) continue;
+
+            int parentId = 0;
+            string? optText = null;
+            int col = 6;
+            if (hasParentId)    { parentId = r.IsDBNull(col) ? 0 : r.GetInt32(col);   col++; }
+            if (hasOptionalText){ optText   = r.IsDBNull(col) ? null : r.GetString(col); }
+
+            result.Add(new BcButton(
+                ButtonIndex:     idx,
+                FunctionType:    r.IsDBNull(1) ? null : r.GetString(1),
+                SubFunctionType: r.IsDBNull(2) ? null : r.GetString(2),
+                FunctionValue:   r.IsDBNull(3) ? null : r.GetString(3),
+                Base64Image:     r.IsDBNull(4) ? null : r.GetString(4),
+                IsAssigned:      r.GetInt32(5) != 0,
+                ParentId:        parentId,
+                OptionalText:    optText));
+        }
+        return result;
+    }
+
+    private static bool ColumnExistsInDb(SqliteConnection conn, string table, string column)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"PRAGMA table_info({table})";
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            if (r.GetString(1) == column) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Importa un profilo Base Camp nello store K2 per un device specifico.
+    /// Salva le immagini base64 su disco e le azioni tradotte.
+    /// Ritorna il numero di tasti importati.
+    /// </summary>
+    public static int ImportProfile(
+        string dbPath,
+        BcProfile profile,
+        int k2DeviceId,
+        DisplayPadStore store)
+    {
+        var buttons = ReadButtons(dbPath, profile.ProfileId);
+        int slot = profile.Slot;
+        int imported = 0;
+
+        // Directory per le immagini importate
+        string iconsDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "K2.DisplayPad", "imported_bc", $"dev{k2DeviceId}_slot{slot}_{profile.Name}");
+        Directory.CreateDirectory(iconsDir);
+
+        store.ClearProfile(k2DeviceId, slot);
+
+        foreach (var btn in buttons)
+        {
+            // Skip only if truly empty (no action AND no image)
+            if (!btn.IsAssigned && string.IsNullOrEmpty(btn.Base64Image)) continue;
+
+            int pageId = btn.ParentId; // 0 = root, >0 = folder sub-page
+
+            // Salva immagine
+            string? imagePath = null;
+            if (!string.IsNullOrEmpty(btn.Base64Image))
+            {
+                try
+                {
+                    var imgBytes = DecodeBase64Image(btn.Base64Image);
+                    if (imgBytes is not null)
+                    {
+                        string iconFile = pageId == 0
+                            ? Path.Combine(iconsDir, $"key_{btn.ButtonIndex}.png")
+                            : Path.Combine(iconsDir, $"key_p{pageId}_{btn.ButtonIndex}.png");
+                        File.WriteAllBytes(iconFile, imgBytes);
+                        imagePath = iconFile;
+                    }
+                    // else: BC internal path — no image available, skip silently
+                }
+                catch { /* immagine corrotta o encoding non valido, skip */ }
+            }
+
+            // Traduci azione (folder/back handled specially)
+            string? actionType, actionValue;
+            if (btn.FunctionType == "Create Folder")
+            {
+                int folderPageId = ParseFolderPageId(btn.OptionalText);
+                actionType  = "dp_folder";
+                actionValue = folderPageId > 0 ? folderPageId.ToString() : null;
+                if (folderPageId > 0 && !string.IsNullOrEmpty(btn.SubFunctionType))
+                    store.SetFolderName(folderPageId, btn.SubFunctionType);
+            }
+            else if (btn.FunctionType == "Back")
+            {
+                actionType  = "dp_back";
+                actionValue = null;
+            }
+            else
+            {
+                (actionType, actionValue) = TranslateAction(
+                    btn.FunctionType, btn.SubFunctionType, btn.FunctionValue);
+            }
+
+            store.SaveButton(k2DeviceId, slot, pageId, btn.ButtonIndex,
+                imagePath, actionType, actionValue);
+            imported++;
+        }
+
+        return imported;
+    }
+
+    /// <summary>Parses {"Id":2407,...} from OptionalText to extract the folder page ID.</summary>
+    internal static int ParseFolderPageId(string? optionalText)
+    {
+        if (string.IsNullOrEmpty(optionalText)) return 0;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(optionalText);
+            if (doc.RootElement.TryGetProperty("Id", out var el))
+                return el.GetInt32();
+        }
+        catch { /* malformed JSON */ }
+        return 0;
+    }
+
+    /// <summary>
+    /// Traduce FunctionType/SubFunctionType/FunctionValue di Base Camp
+    /// nei tipi di azione K2.Core (ActionType/ActionValue).
+    /// </summary>
+    public static (string? ActionType, string? ActionValue) TranslateAction(
+        string? funcType, string? subType, string? funcValue)
+    {
+        if (string.IsNullOrEmpty(funcType)) return (null, null);
+
+        return funcType switch
+        {
+            "Run Program" =>
+                ("exec", subType ?? funcValue),   // subType = path to exe
+
+            "Open Folder" =>
+                ("folder", subType),              // opens OS folder in Explorer
+
+            // DisplayPad sub-page navigation (page ID in ActionValue when known)
+            "Create Folder" =>
+                ("dp_folder", null),              // caller should use ParseFolderPageId for the page ID
+            "Back" =>
+                ("dp_back", null),
+
+            "Run browser" =>
+                funcValue switch
+                {
+                    null or "" or "Run browser" => ("browser", null),
+                    _ => ("url", funcValue)
+                },
+
+            "Profile" => subType switch
+            {
+                "Next Profile"     => ("profile", "next"),
+                "Previous Profile" => ("profile", "prev"),
+                _ when int.TryParse(subType, out var n) => ("profile", n.ToString()),
+                _ => (null, null)
+            },
+
+            "Key Shortcut" or "Shortcut Key" or "Keyboard Shortcuts" =>
+                ("keys", funcValue),
+
+            "Multi Key" =>
+                ("keys", funcValue),
+
+            "Macro" =>
+                ("macro", funcValue),
+
+            "Open Website" or "Open URL" =>
+                ("url", funcValue),
+
+            "Media" => subType switch
+            {
+                "Volume Up"    => ("media", "volume_up"),
+                "Volume Down"  => ("media", "volume_down"),
+                "Mute"         => ("media", "mute"),
+                "Play/Pause"   => ("media", "play_pause"),
+                "Next Track"   => ("media", "next_track"),
+                "Prev Track"   => ("media", "prev_track"),
+                "Stop"         => ("media", "stop"),
+                _ => ("media", subType?.ToLowerInvariant()?.Replace(" ", "_"))
+            },
+
+            "Text" =>
+                ("text", funcValue),
+
+            "Mouse Button" =>
+                ("mouse", subType?.ToLowerInvariant()),
+
+            "Disable" or "Disabled" =>
+                (null, null),
+
+            _ =>
+                // Tipo sconosciuto: preserva come generico
+                ($"bc:{funcType}", funcValue ?? subType)
+        };
+    }
+
+    // =========================================================
+    // Everest + MacroPad — EverestKeyBidings table
+    // =========================================================
+
+    /// <summary>
+    /// Key binding read from EverestKeyBidings.
+    /// Used for both DeviceType="Everest" and DeviceType="MacroPad".
+    /// <c>DLLMatrixIndex</c> equals the SDK wMatrix value:
+    ///   • Everest: arbitrary index (stored as KeyMatrix in EverestStore)
+    ///   • MacroPad: 170-179 / 220-221 → button index 0-11 via <see cref="KeyIdToIndex"/>
+    /// <c>IsTouchKey=true</c> on Everest = numpad display key (has LCD, has image).
+    /// </summary>
+    public sealed record BcKeyBinding(
+        int     DLLMatrixIndex,
+        string? FunctionType,
+        string? SubFunctionType,
+        string? FunctionValue,
+        string? Base64Image,
+        bool    IsAssigned,
+        bool    IsTouchKey);
+
+    /// <summary>Reads Everest profiles (DeviceType="Everest") grouped by DeviceId.</summary>
+    public static Dictionary<int, List<BcProfile>> ReadEverestProfiles(string dbPath)
+        => ReadProfilesByType(dbPath, "Everest");
+
+    /// <summary>Reads MacroPad profiles (DeviceType="MacroPad") grouped by DeviceId.</summary>
+    public static Dictionary<int, List<BcProfile>> ReadMacroPadProfiles(string dbPath)
+        => ReadProfilesByType(dbPath, "MacroPad");
+
+    private static Dictionary<int, List<BcProfile>> ReadProfilesByType(string dbPath, string deviceType)
+    {
+        using var conn = OpenReadOnly(dbPath);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT ProfileId, Id, ProfileName, DeviceId, DeviceGUID, IsSelected
+            FROM Profiles
+            WHERE DeviceType = $dt
+            ORDER BY DeviceId, Id";
+        cmd.Parameters.AddWithValue("$dt", deviceType);
+
+        var result = new Dictionary<int, List<BcProfile>>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            var p = new BcProfile(
+                ProfileId:  r.GetInt32(0),
+                Slot:       r.GetInt32(1),
+                Name:       r.IsDBNull(2) ? "" : r.GetString(2),
+                DeviceId:   r.GetInt32(3),
+                DeviceGUID: r.IsDBNull(4) ? null : r.GetString(4),
+                IsSelected: r.GetInt32(5) != 0);
+            if (!result.TryGetValue(p.DeviceId, out var list))
+                result[p.DeviceId] = list = new List<BcProfile>();
+            list.Add(p);
+        }
+        return result;
+    }
+
+    /// <summary>Reads all key bindings from EverestKeyBidings for a profile.</summary>
+    public static List<BcKeyBinding> ReadKeyBindings(string dbPath, int profileId)
+    {
+        using var conn = OpenReadOnly(dbPath);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT DLLMatrixIndex, FunctionType, SubFunctionType, FunctionValue,
+                   base64Image, IsKeyAssigned, IsTouchKey
+            FROM EverestKeyBidings
+            WHERE ProfileId = $pid
+            ORDER BY DLLMatrixIndex";
+        cmd.Parameters.AddWithValue("$pid", profileId);
+
+        var result = new List<BcKeyBinding>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            result.Add(new BcKeyBinding(
+                DLLMatrixIndex:  r.GetInt32(0),
+                FunctionType:    r.IsDBNull(1) ? null : r.GetString(1),
+                SubFunctionType: r.IsDBNull(2) ? null : r.GetString(2),
+                FunctionValue:   r.IsDBNull(3) ? null : r.GetString(3),
+                Base64Image:     r.IsDBNull(4) ? null : r.GetString(4),
+                IsAssigned:      r.GetInt32(5) != 0,
+                IsTouchKey:      r.GetInt32(6) != 0));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Imports an Everest profile into <see cref="EverestStore"/>.
+    /// Regular keys (IsTouchKey=false) → Keys table by DLLMatrixIndex.
+    /// Touch keys (IsTouchKey=true, LCD display keys) → image saved to disk, path+action
+    /// stored in Settings as <c>ndk.{i}.imagePath</c> / <c>ndk.{i}.actionType</c> etc.
+    /// Returns (regularKeys, touchKeys) counts.
+    /// </summary>
+    public static (int Regular, int Touch) ImportEverestProfile(
+        string dbPath, BcProfile profile, EverestStore store)
+    {
+        var bindings = ReadKeyBindings(dbPath, profile.ProfileId);
+        int slot = profile.Slot;
+        int regular = 0, touch = 0;
+
+        // Split: regular keys (actions) vs touch keys (LCD images)
+        var touchKeys = bindings.Where(b => b.IsTouchKey).OrderBy(b => b.DLLMatrixIndex).ToList();
+        var regularKeys = bindings.Where(b => !b.IsTouchKey && b.IsAssigned).ToList();
+
+        // ── Regular keys ──────────────────────────────────────
+        // Clear existing, then write new records
+        // (EverestStore has no ClearProfile: we just overwrite via SaveKey)
+        foreach (var b in regularKeys)
+        {
+            var (at, av) = TranslateAction(b.FunctionType, b.SubFunctionType, b.FunctionValue);
+            if (at is null) continue;
+            store.SaveKey(new EverestKeyRecord(slot, b.DLLMatrixIndex, null, at, av));
+            regular++;
+        }
+
+        // ── Touch / numpad display keys ────────────────────────
+        string? iconsDir = null;
+        for (int i = 0; i < touchKeys.Count && i < 4; i++)
+        {
+            var b = touchKeys[i];
+            string? imagePath = null;
+            if (!string.IsNullOrEmpty(b.Base64Image))
+            {
+                try
+                {
+                    iconsDir ??= Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "K2.App", "imported_bc_ev", $"slot{slot}_{profile.Name}");
+                    Directory.CreateDirectory(iconsDir);
+                    string iconFile = Path.Combine(iconsDir, $"ndk_{i}.png");
+                    var imgBytes = DecodeBase64Image(b.Base64Image);
+                    if (imgBytes is not null)
+                    {
+                        File.WriteAllBytes(iconFile, imgBytes);
+                        imagePath = iconFile;
+                    }
+                }
+                catch { /* corrupted image — skip */ }
+            }
+
+            string prefix = $"ndk.{i}";
+            if (imagePath is not null)
+                store.SetSetting($"{prefix}.imagePath", imagePath);
+
+            var (at, av) = TranslateAction(b.FunctionType, b.SubFunctionType, b.FunctionValue);
+            if (at is not null)
+            {
+                store.SetSetting($"{prefix}.actionType",  at);
+                store.SetSetting($"{prefix}.actionValue", av ?? "");
+            }
+            touch++;
+        }
+
+        return (regular, touch);
+    }
+
+    // =========================================================
+    // MacroPad — MakaluKeyBindings table (NOT EverestKeyBidings!)
+    //
+    // Reverse-engineered from the decompiled Base Camp "Makalu" module
+    // (K2/_reference/BaseCamp_Decompiled/Makalu/Makalu.cs). The MacroPad has its
+    // own DB entity, distinct from Everest/DisplayPad's "EverestKeyBidings":
+    //   MakaluKeyBinding: KeyId (1-12, plain button number — NOT 170-221!),
+    //   KeyName, IsKeyAssigned, FunctionType, FunctionValue (no SubFunctionType
+    //   column at all), FunctionEnteredValue, ONKeyPressRelease,
+    //   SyncAcrossProfilesKeyBinding, CustomURL. No per-key images.
+    //
+    // FunctionType vocabulary confirmed from Button_Function.Function_String:
+    //   "Mouse Wheel", "Mouse", "Keyboard Shortcuts", "Media", "Run Macro",
+    //   "Run Program", "Default", "Disable", "OS Commands",
+    //   "Battery level check", "Brightness cycle", "Effect cycle",
+    //   "DPI Cyclic Increase", "DPI Cyclic Decrease".
+    // Sub-vocabularies (single FunctionValue, no SubFunctionType):
+    //   Mouse       -> Mouse_Key_String: Left/Right/Middle button, Backward,
+    //                  Forward, Next Profile, Previous Profile, DPI Sniper,
+    //                  DPI +, DPI -, Battery level check, Brightness cycle,
+    //                  Effect cycle, DPI Cyclic Increase/Decrease.
+    //   Mouse Wheel -> Mouse_Wheel_String: Scroll Up, Scroll Down.
+    //   Media       -> Consumer_Key_String: Play/Pause, Stop, Previous track,
+    //                  Next track, Volume up, Volume down, Mute, Mic Mute,
+    //                  Run browser, Calculator.
+    //   OS Commands -> OS_Command_String: Run task manager, Run browser,
+    //                  Lock computer, "Shut down" (WITH a space — different
+    //                  from DisplayPad's "Shutdown"!), Sleep, Hibernate,
+    //                  Calculator. No "Run explorer" entry exists for MacroPad.
+    //
+    // NEVER VERIFIED against a real imported/exported MacroPad profile on
+    // hardware — only against decompiled source. See _PROJECT_MAP.md.
+    // =========================================================
+
+    /// <summary>Tasto MacroPad letto da MakaluKeyBindings.</summary>
+    public sealed record BcMakaluButton(
+        int ButtonIndex,     // 0-11 (KeyId - 1)
+        string? FunctionType,
+        string? FunctionValue,
+        string? FunctionEnteredValue,
+        bool IsAssigned);
+
+    /// <summary>Legge i tasti di un profilo MacroPad dalla vera tabella Base Camp
+    /// (MakaluKeyBindings), non da EverestKeyBidings.</summary>
+    public static List<BcMakaluButton> ReadMakaluBindings(string dbPath, int profileId)
+    {
+        using var conn = OpenReadOnly(dbPath);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT KeyId, FunctionType, FunctionValue, FunctionEnteredValue, IsKeyAssigned
+            FROM MakaluKeyBindings
+            WHERE ProfileId = $pid
+            ORDER BY KeyId";
+        cmd.Parameters.AddWithValue("$pid", profileId);
+
+        var result = new List<BcMakaluButton>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            int keyId = r.GetInt32(0);
+            if (keyId < 1 || keyId > 12) continue; // fuori dal layout fisico 12 tasti
+
+            result.Add(new BcMakaluButton(
+                ButtonIndex:          keyId - 1,
+                FunctionType:         r.IsDBNull(1) ? null : r.GetString(1),
+                FunctionValue:        r.IsDBNull(2) ? null : r.GetString(2),
+                FunctionEnteredValue: r.IsDBNull(3) ? null : r.GetString(3),
+                IsAssigned:           r.GetInt32(4) != 0));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Imports a MacroPad profile into <see cref="MacroPadStore"/>, reading the
+    /// real MakaluKeyBindings table. Returns the number of keys imported.
+    /// </summary>
+    public static int ImportMacroPadProfile(
+        string dbPath, BcProfile profile, int k2DeviceId, MacroPadStore store)
+    {
+        var bindings = ReadMakaluBindings(dbPath, profile.ProfileId);
+        int slot = profile.Slot;
+        int imported = 0;
+
+        foreach (var b in bindings)
+        {
+            if (!b.IsAssigned) continue;
+
+            var (at, av) = TranslateMakaluAction(b.FunctionType, b.FunctionValue);
+            if (at is null) continue;
+            store.SaveKey(new MacroKeyRecord(k2DeviceId, slot, b.ButtonIndex, at, av));
+            imported++;
+        }
+        return imported;
+    }
+
+    /// <summary>
+    /// Traduce FunctionType/FunctionValue di Base Camp (schema MakaluKeyBindings,
+    /// SENZA SubFunctionType) nei tipi di azione K2.Core. Le funzioni hardware-native
+    /// senza equivalente K2 (DPI, brightness/effect cycle, battery check, macro
+    /// nominate) diventano <c>("none", "[placeholder] valore")</c> — nessun crash,
+    /// ma nessuna esecuzione: preservate solo per non perdere l'informazione.
+    /// </summary>
+    public static (string? ActionType, string? ActionValue) TranslateMakaluAction(
+        string? functionType, string? functionValue)
+    {
+        var ft = (functionType ?? "").Trim();
+        var fv = (functionValue ?? "").Trim();
+        if (string.IsNullOrEmpty(ft)) return (null, null);
+
+        switch (ft)
+        {
+            case "Run Program":
+                return string.IsNullOrEmpty(fv) ? (null, null) : ("exec", fv);
+
+            case "Keyboard Shortcuts":
+                return string.IsNullOrEmpty(fv) ? (null, null) : ("keys", fv);
+
+            case "Media":
+                return fv switch
+                {
+                    "Play/Pause"      => ("media", "play_pause"),
+                    "Stop"            => ("media", "stop"),
+                    "Previous track"  => ("media", "prev_track"),
+                    "Next track"      => ("media", "next_track"),
+                    "Volume up"       => ("media", "volume_up"),
+                    "Volume down"     => ("media", "volume_down"),
+                    "Mute"            => ("media", "mute"),
+                    "Mic Mute"        => ("media", "mic_mute"),
+                    "Run browser"     => ("browser", null),
+                    "Calculator"      => ("oscmd", "calculator"),
+                    _ => ("none", $"[media] {fv}")
+                };
+
+            case "Mouse":
+                return fv switch
+                {
+                    "Left button"     => ("mouse", "left button"),
+                    "Right button"    => ("mouse", "right button"),
+                    "Middle button"   => ("mouse", "middle button"),
+                    "Backward"        => ("mouse", "backward"),
+                    "Forward"         => ("mouse", "forward"),
+                    "Next Profile"    => ("profile", "next"),
+                    "Previous Profile"=> ("profile", "prev"),
+                    _ => ("none", $"[mouse] {fv}") // DPI Sniper/+/-, battery/brightness/effect: no K2 equivalent
+                };
+
+            case "Mouse Wheel":
+                return fv switch
+                {
+                    "Scroll Up"   => ("mouse", "scroll up"),
+                    "Scroll Down" => ("mouse", "scroll down"),
+                    _ => (null, null)
+                };
+
+            case "OS Commands":
+                return fv switch
+                {
+                    "Run task manager" => ("oscmd", "run task manager"),
+                    "Run browser"      => ("browser", null),
+                    "Lock computer"    => ("oscmd", "lock computer"),
+                    "Shut down"        => ("oscmd", "shutdown"),
+                    "Sleep"            => ("oscmd", "sleep"),
+                    "Hibernate"        => ("oscmd", "hibernate"),
+                    "Calculator"       => ("oscmd", "calculator"),
+                    _ => (null, null)
+                };
+
+            case "Run Macro":
+                // K2 non ha (ancora) un motore macro: preserva il riferimento come
+                // placeholder inerte invece di eseguire qualcosa di sbagliato.
+                return ("none", $"[macro] {fv}");
+
+            case "Battery level check":
+            case "Brightness cycle":
+            case "Effect cycle":
+            case "DPI Cyclic Increase":
+            case "DPI Cyclic Decrease":
+                // Funzioni hardware-native della categoria "Mouse" del firmware
+                // condiviso Mountain, senza equivalente MacroPad in K2.
+                return ("none", $"[{ft.ToLowerInvariant()}]");
+
+            case "Disable":
+            case "Default":
+                return (null, null);
+
+            default:
+                return ($"bc:{ft}", fv);
+        }
+    }
+
+    // =========================================================
+
+    /// <summary>
+    /// Decodes a base64-encoded image string, stripping any data URI prefix
+    /// (e.g. <c>data:image/png;base64,</c>) that Base Camp stores in the DB.
+    /// Returns null when <paramref name="raw"/> is a BC internal resource path
+    /// (e.g. <c>/images/DKD/DPBack.png</c>) rather than actual base64 data.
+    /// </summary>
+    internal static byte[]? DecodeBase64Image(string raw)
+    {
+        // BC sometimes stores an internal asset path instead of base64 data.
+        // These paths can't be resolved outside Base Camp — skip them.
+        var trimmed = raw.TrimStart();
+        if (trimmed.StartsWith('/') || trimmed.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        int comma = raw.IndexOf(',');
+        string b64 = comma >= 0 ? raw[(comma + 1)..] : raw;
+
+        // XDocument may preserve whitespace (newlines, spaces) inside long text nodes.
+        // Convert.FromBase64String does NOT tolerate whitespace, so strip it first.
+        if (b64.IndexOfAny(['\r', '\n', ' ', '\t']) >= 0)
+            b64 = b64.Replace("\r", "").Replace("\n", "").Replace(" ", "").Replace("\t", "");
+
+        return Convert.FromBase64String(b64);
+    }
+
+    private static SqliteConnection OpenReadOnly(string dbPath)
+    {
+        // Open read-only to not interfere with Base Camp
+        var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadOnly");
+        conn.Open();
+        return conn;
+    }
+}

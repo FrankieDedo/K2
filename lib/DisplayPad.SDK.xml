@@ -1,0 +1,693 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>DisplayPad.SDK</name>
+    </assembly>
+    <members>
+        <!-- Badly formed XML comment ignored for member "E:DisplayPad.SDK.DisplayPadHelper.DisplayPadPlugCallBack" -->
+        <!-- Badly formed XML comment ignored for member "E:DisplayPad.SDK.DisplayPadHelper.DisplayPadProgressCallBack" -->
+        <!-- Badly formed XML comment ignored for member "E:DisplayPad.SDK.DisplayPadHelper.DisplayPadKeyCallBack" -->
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.#ctor">
+            <summary>
+            constructor of DisplayPadHelper class.
+            </summary>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.PlugCallback(System.Int32,System.Int32,System.Int32)">
+            <summary>
+            Raised when device status is changed like plug/unplug
+            </summary>
+            <param name="Message">Notification signal when device is inserted / removed</param>
+            <param name="LParam">0 for REMOVE, i for PLUG, 2 for SUSPEND</param>
+            <param name="WParam">the device ID</param>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.ProgressCallback(System.Int32,System.Int32,System.Int32)">
+            <summary>
+            
+            </summary>
+            <param name="Message">Notification signal when device's FW is  updating</param>
+            <param name="LParam">target device's ID</param>
+            <param name="WParam">if WParam == -1, Failed to update FW, if WParam is 0~ 100,  it is progress.</param>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.KeyCallback(System.Int32,System.Int32,System.Int32)">
+            <summary>
+            Returns key press status
+            </summary>
+            <param name="KeyMatrix">Key matrix id. See the matrix table</param>
+            <param name="iPressed">key is pressed or released. 1 for pressed and 0 for released.</param>
+            <param name="DeviceID">control the target, the vaule is not zero</param>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadDllVersion">
+            <summary>
+            Returns the dll version
+            </summary>
+            <returns>int : DLL's Version</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadGetDeviceInfo(System.Int32)">
+            <summary>
+            Get "DevInfo"，Get version-related information
+            </summary>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadIsDevicePlug(System.Int32)">
+            <summary>
+            Device plug status
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadOpenUSBDriver(System.String)">
+            <summary>
+            Initial the device and detect the plug/ unplug
+            </summary>
+            <param name="hNotifyhWnd">the handle for notification</param>
+            <returns>bool: true plugged in，false not plugged in</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadCloseUSBDriver">
+            <summary>
+            Close the device's control
+            </summary>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadIsUpdating(System.Int32)">
+            <summary>
+            Confirm whether the firmware is being updated.
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true is updated, false is not updated</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadStartFWUpdate(DisplayPad.SDK.DisplayPadSDK.FWBinUpdateInfo_byte,System.Int32)">
+            <summary>
+            Start FW update (open update thread)
+            </summary>
+            <param name="_FWBinUpdateInfo"></param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true is Success，false is Fail or wrong BIN File.</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadCalculateBMP(System.Int32)">
+            <summary>
+            Get the number of BMP spaces remaining in the FW
+            Note : call SetIconPic(UploadImage) to save image. If it is used, the fucntion will return the remaining valule.
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadResetPicture(System.Int32)">
+            <summary>
+            Reset the all buttons's pictures of the current profile.
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadEraseSectorMem(System.String,System.String,System.Int32)">
+            <summary>
+            Clear the specified sector's data( Clear to 0xFF)
+            </summary>
+            <param name="strStart">The Start Index</param>
+            <param name="strEnd">The End Index</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadSwitchProfile(System.String,System.Int32)">
+            <summary>
+            Switch the current profile and current effect.
+            </summary>
+            <param name="stringProfil0eNo">switch to the target profile</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadGetDevAppVer(System.Int32)">
+            <summary>
+            Get FW version number
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>FW Version number</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadGetFWInfo(System.Int32)">
+            <summary>
+            Get FWInfo Struct data
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>FWInfo Struct data</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadAPEnable(System.String,System.Int32)">
+            <summary>
+            Enable/Disale the SW's control.       
+            </summary>
+            <param name="byEnable">If true, all are controlled by SW, otherwise some functions are con controlled by FW</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>bool: true Success，false Fail</returns>
+            
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadSetTFTSleepTime(System.String,System.String,System.String,System.String,System.Int32)">
+            <summary>
+            Set the time for TFT-LCD to go to sleep
+            </summary>
+            <param name="strbyStatus">Sleep function switch. 0 is Off. 1 is On.</param>
+            <param name="strbyHH">hour: 0~24</param>
+            <param name="strbyMM">min: 0~59</param>
+            <param name="strbySS">sec: 0~59</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadSetMainBrightness(System.Int32,System.Int32)">
+            <summary>
+            Switch the Led's Brightness
+            </summary>
+            <param name="Brightness"> LCM Brightness 0 = 0%, 25 = 25%, 50 = 50%, 75 = 75%, 100 = 100%</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadEnableKeyFunc(System.String,System.Int32)">
+            <summary>
+            Enable/Disable the custom keys function for keyboard
+            </summary>
+            <param name="byOn">if true, the function is ON, else the function is  Off.</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadResetFlash(System.String,System.Int32)">
+            <summary>
+            Reset the profiles in Flash.
+            </summary>
+            <param name="byAll">if  0, reset the current profile, else reset the all profiles.</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadResetKeys(System.Int32)">
+            <summary>
+            Restore the key Assignment to default values.
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadChangeKey(System.String,System.String,System.Int32)">
+            <summary>
+            Change the key to other custom functions. 
+            </summary>
+            <param name="iSource">source keys</param>
+            <param name="iTarget">key function</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadChangeShortcutKey(System.String,System.String,System.String,System.Int32)">
+            <summary>
+            Change the key to other custom functions.
+            </summary>
+            <param name="iSource">source keys</param>
+            <param name="iTarget">Standard key function (0x01~0xFE see.Key Table)</param>
+            <param name="iControlKey">Enable is 1    bit[0] = Ctrl     bit[1] = Shift   bit[2] = Alt   bit[3] = GUI(Win) </param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadSetLaunchContent(DisplayPad.SDK.DisplayPadSDK.LaunchContent,System.Int32)">
+            <summary>
+            Change the key to the launch functions.
+            </summary>
+            <param name="structLacunch">Struct of LaunchContent</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadSetFullMacroData(DisplayPad.SDK.DisplayPadSDK.MacroInputContent_DisplayPad,System.Int32)">
+            <summary>
+            Change the key to the launch functions.
+            </summary>
+            <param name="structMacro">>Struct of MacroInputContent </param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadGetMacroContent(System.String,System.String,System.Int32)">
+            <summary>
+            Read the settings of the macro key. 
+            </summary>
+            <param name="ProfileIndex">source Profile</param>
+            <param name="SourceKey">source keys</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadSetSyncAcrossProfiles(System.String,System.Int32)">
+            <summary>
+            Set SyncAcross Profile's Status
+            </summary>
+            <param name="bEnable">bool bEnable :  0: Disable, 1:Eanble</param>
+            <returns>bool: true Success，false Fail</returns>
+        </member>
+        <!-- Badly formed XML comment ignored for member "M:DisplayPad.SDK.DisplayPadHelper.DisplayPadGetSyncAcrossProfiles(System.String,System.Int32)" -->
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadCheckBMPStorage(System.Int32)">
+            <summary>
+            Get the number of BMP spaces remaining in the FW
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>Returns the count of repaired BMPs</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadGetBtnBMPLength(System.String,System.String,System.String,System.Int32)">
+            <summary>
+            Get the count of BMP used by target's button in the target's profile in the FW
+            </summary>
+            <param name="strProfile">The target's profile</param>
+            <param name="strBtnIndex">The target's button</param>
+            <param name="strLength"></param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>Return the count of  BMP used by button..</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadGetMainBrightness(System.Int32)">
+            <summary>
+            Get the Led's Brightness
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>LCM Brightness 0 = 0%, 25 = 25%, 50 = 50%, 75 = 75%, 100 = 100%</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DisplayPadGetTFTSleepTime(System.Int32)">
+            <summary>
+            Get the time for TFT-LCD to go to sleep
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>TFT Sleep Time</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.UploadImage(System.Int32,System.String,System.Int32)">
+            <summary>
+            This method use to upload non animated image
+            </summary>
+            <param name="ID">Device ID</param>
+            <param name="strImagePath">image path</param>
+            <param name="ibtnIndex">button index</param>
+            <returns></returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.DrawBitmapWithBorder(System.Drawing.Bitmap)">
+            <summary>
+            this method use to reduced the button image and added border on it.
+            </summary>
+            <param name="bmp">image</param>
+            <returns></returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadHelper.UploadImageBySetIconPic(System.Int32,System.String,System.Int32,System.Boolean,System.Int32)">
+            <summary>
+            This method use to upload non animated image by SetIconPic
+            </summary>
+            <param name="ID">Device ID</param>
+            <param name="strImagePath">image path</param>
+            <param name="ibtnIndex">button index</param>
+            <param name="IsAPEnable">APEnable state</param>
+            <param name="iProfileIndex">Profile Index</param>
+            <returns></returns>
+        </member>
+        <member name="P:DisplayPad.SDK.Helper.Logger.LogPath">
+            <summary>
+            Folder path to save log files.
+            (If not passed then will save files inside application folder)
+            </summary>
+        </member>
+        <member name="M:DisplayPad.SDK.Helper.Logger.LogError(System.Exception,System.String)">
+            <summary>
+            Write exception details in log file
+            </summary>
+            <param name="ex"> exception to log</param>
+        </member>
+        <member name="M:DisplayPad.SDK.Helper.Logger.LogMessage(System.String,System.String)">
+            <summary>
+            Write any text in log file
+            </summary>
+            <param name="message"> message text to log</param>
+        </member>
+        <member name="M:DisplayPad.SDK.Helper.Logger.DeleteOldLogs(System.String)">
+            <summary>
+            Deletes the old files
+            </summary>
+            <param name="dirName"></param>
+        </member>
+        <member name="F:DisplayPad.SDK.DisplayPadSDK.lstDeviceID">
+            <summary>
+            contains connected device ids
+            </summary>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.GetDLLVersion">
+            <summary>
+            Get SDK Dll's Version
+            </summary>
+            <returns>DLL's Version</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.OpenUSBDriver(System.IntPtr)">
+            <summary>
+            Initial the device and detect the plug/ unplug
+            </summary>
+            <param name="handle">the handle for notification</param>
+            <returns>true plugged in，false not plugged in</returns>
+            When the device is inserted, removed or suspended, the SDK will send WM_DEVICE_PLUG to the hNotifyhWnd.
+            Please process suspend job within 3 seconds, when you receive the suspended notification.
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.CloseUSBDriver">
+            <summary>
+            Close the device's control
+            </summary>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.GetDevCount(System.Int32@)">
+            <summary>
+            Get the count of inserted DKDs.
+            </summary>
+            <param name="iDevCount">return the count.</param>
+            <returns>true is success, false is fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.IsUpdating(System.UInt32)">
+            <summary>
+            Confirm whether the firmware is being updated.
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true is updated, false is not updated</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.StartFWUpdate(System.UInt32,DisplayPad.SDK.DisplayPadSDK.FWBinUpdateInfo)">
+            <summary>
+            Start FW update (open update thread)
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <param name="fwInfo"></param>
+            <returns></returns>
+            Use hNotifyhWnd of “OpenUSBDriver” to PostMessage “WM_FW_PROGRESS
+            WParam value is the target's ID
+            LPARAM lParam : The percent of progress
+            If percent is -1 : Failed to update FW
+            IF percent value is 100 : Success to update FW
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.ResetDevice(System.UInt32)">
+            <summary>
+            Reboot the FW
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.GetDeviceInfo(DisplayPad.SDK.DisplayPadSDK.DevInfo@,System.UInt32)">
+            <summary>
+            Get version-related information
+            </summary>
+            <param name="devInfo">return the DeviceInfo</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.GetDevAppVer(System.UInt32)">
+            <summary>
+            Get FW version number
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>FW Version number</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.IsDevicePlug(System.UInt32)">
+            <summary>
+            Check if the device is plugged in
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true plugged in，false not plugged in</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.GetFWInfo(DisplayPad.SDK.DisplayPadSDK.FWInfo@,System.UInt32)">
+            <summary>
+            Get the FWInfo data
+            </summary>
+            <param name="fwInfo">the struct is saved about the current FW Info</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.APEnable(System.Boolean,System.UInt32)">
+            <summary>
+            Enable/Disale the SW's control
+            </summary>
+            <param name="bEnable">If true, all are controlled by SW, otherwise some functions are con controlled by FW</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.CalculateBMP(System.Byte@,System.UInt32)">
+            <summary>
+            Get the number of BMP spaces remaining in the FW
+            </summary>
+            <param name="bySurplusNum">return the number of BMP that can be used.</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.SetIconPacket(System.Byte,DisplayPad.SDK.DisplayPadSDK.PicPacketInfo@,System.UInt32)">
+            <summary>
+            Only Used when apenable is true. Sets the button image to display.
+            </summary>
+            <param name="byIconNumber">the index of button.</param>
+            <param name="pData">the data of picture (BGR888 format)</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.SetIconPic(DisplayPad.SDK.DisplayPadSDK.DisplayPicInfo,System.IntPtr,System.Int32,System.Boolean,System.UInt32)">
+            <summary>
+            Sets the button image to display.
+            </summary>
+            <param name="picInfo">Tell FW to refresh how to refresh the target image.</param>
+            <param name="pbyData">the data of picture (BGR888 format)</param>
+            <param name="iDataLen">the length of data</param>
+            <param name="bCopyBuffer">If the value is true, the function will create a new buffer for the pbyData in the function.</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+            if the BMP amount is not enough in FW, it will return false.
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.SetTFTSleepTime(System.Byte,System.Byte,System.Byte,System.Byte,System.UInt32)">
+            <summary>
+            Set the time for TFT-LCD to go to sleep
+            </summary>
+            <param name="byStatus">Sleep function switch. 0 is Off. 1 is On.</param>
+            <param name="byHH">hour, 0~24</param>
+            <param name="byMM">min, 0~59</param>
+            <param name="bySS">sec, 0~59</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.SetMainBrightness(System.Byte,System.UInt32)">
+            <summary>
+            Switch the Led's Brightness
+            </summary>
+            <param name="byBrightness">LCM Brightness 0 = 0%, 25 = 25%, 50 = 50%, 75 = 75%, 100 = 100%</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.EnableKeyFunc(System.Boolean,System.UInt32)">
+            <summary>
+            Enable/Disable the custom keys function for keyboard
+            </summary>
+            <param name="bOn">if true, the function is ON, else the function is  Off.</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.SetSyncAcrossProfiles(System.Boolean,System.UInt32)">
+            <summary>
+            Set SyncAcross Profile's Status
+            </summary>
+            <param name="bEnable">0: Disable, 1:Eanble</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.GetSyncAcrossProfiles(System.Boolean@,System.UInt32)">
+            <summary>
+            Get the SyncAcross Profile's Status
+            </summary>
+            <param name="bEnable">return value, 0: Disable, 1:Eanble</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.ResetFlash(System.Boolean,System.UInt32)">
+            <summary>
+            Reset the profiles in Flash.
+            </summary>
+            <param name="bAll">if  0, reset the current profile, else reset the all profiles.</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.ResetBtnPic(System.Byte,System.Byte,System.UInt32)">
+            <summary>
+            Reset the button of the current profile.
+            </summary>
+            <param name="byProfile">Target profile.</param>
+            <param name="byBtnIndex">Target button.</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.ResetPicture(System.UInt32)">
+            <summary>
+            Reset the all buttons's pictures of the current profile.
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.ResetKeys(System.UInt32)">
+            <summary>
+            Restore the key Assignment to default values.
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.EraseSectorMem(System.Int32,System.Int32,System.UInt32)">
+            <summary>
+            Clear the specified sector's data( Clear to 0xFF)
+            </summary>
+            <param name="iStart">The Start Index</param>
+            <param name="iEnd">The End Index</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.WriteSectorMem(System.Int32,System.Int32,System.Int32,System.IntPtr,System.UInt32)">
+            <summary>
+            Write data to the specified sector
+            Note - In most cases, the same address needs to be cleared before repeated writing.
+            </summary>
+            <param name="iSectorIndex">The sector Index</param>
+            <param name="iAddress">The address index in the sector</param>
+            <param name="iLength">The data length</param>
+            <param name="pData">The pointer of data contents</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns> 
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.ReadSectorMemory(System.Int32,System.Int32,System.Int32,System.IntPtr,System.Int32,System.UInt32)">
+            <summary>
+            Read data to the specified sector
+            </summary>
+            <param name="iSectorIndex">The sector Index</param>
+            <param name="iAddress">The address index in the sector</param>
+            <param name="iLength">The data length</param>
+            <param name="pData">pointer to the data contents of the returned data</param>
+            <param name="iInterval">FW packet transmission speed</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns> 
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.SwitchProfile(System.Int32,System.UInt32)">
+            <summary>
+            Switch the current profile and current effect.
+            </summary>
+            <param name="iProfileNo">switch to the target profile(Profile Index 1~5)</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns> 
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.ChangeKey(System.Int32,System.Int32,System.UInt32)">
+            <summary>
+            Change the key to other custom functions. 
+            </summary>
+            <param name="iSource">source keys</param>
+            <param name="iTarget">key function</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns> 
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.ChangeShortcutKey(System.Int32,System.Int32,System.Int32,System.UInt32)">
+            <summary>
+            Change the key to other custom functions. 
+            </summary>
+            <param name="iSource">source keys</param>
+            <param name="iTarget">Standard key function (0x01~0xFE see.Key Table)</param>
+            <param name="iControlKey"> Enable is 1
+            bit [0] = Ctrl
+            bit[1] = Shift
+            bit[2] = Alt
+            bit[3] = GUI(Win)</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns> 
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.SetLaunchContent(System.Int32,System.Int32,System.Byte[],System.UInt32)">
+            <summary>
+            Change the key to the launch functions. 
+            </summary>
+            <param name="iSource">source keys</param>
+            <param name="iDataLen">data's length</param>
+            <param name="pData">Save the SW information data to FW.</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns> 
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.SetFullMacroData(System.Int32,System.Int32,System.Int32,System.Int32,DisplayPad.SDK.DisplayPadSDK.KEYMAP_EVENT[],System.UInt32)">
+            <summary>
+            Change the key to the launch functions. 
+            </summary>
+            <param name="iSrc">source keys</param>
+            <param name="iType">data's length</param>
+            <param name="iTimes">Execution times.</param>
+            <param name="iEventLen">event counts</param>
+            <param name="pData">the contents array of event.</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns> 
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.GetMacroContent(System.Int32,System.Int32,DisplayPad.SDK.DisplayPadSDK.MacroContent@,System.Int32,System.UInt32)">
+            <summary>
+            Read the settings of the macro key.
+            </summary>
+            <param name="iFWProfile">source Profile</param>
+            <param name="iMacroIndex">source keys</param>
+            <param name="macroContent">MacroContent array, return the Macro's Contents</param>
+            <param name="iInterval"></param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns> 
+        </member>
+        <member name="T:DisplayPad.SDK.DisplayPadSDK.KEY_CALLBACK">
+            <summary>
+            KEY_CALLBACK
+            </summary>
+            <param name="wMatrix">matrix value</param>
+            <param name="bPressed">key is pressed or released.</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.SetKeyCallBack(DisplayPad.SDK.DisplayPadSDK.KEY_CALLBACK)">
+            <summary>
+            When the key of the keyboard is pressed, notify SW. 
+            </summary>
+            <param name="callback">callback Fucntion</param>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.CheckBMPStorage(System.Byte@,System.UInt32)">
+            <summary>
+            Get the number of BMP spaces remaining in the FW.
+            Note: When FW is saving bmp and the power is suddenly turned off, an error may occurs in the bmp storage.
+            </summary>
+            <param name="byRestoreCount">Returns the count of repaired BMPs</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns> 
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.GetBtnBMPLength(System.Byte,System.Byte,System.Byte@,System.UInt32)">
+            <summary>
+            Get the count of BMP used by target's button in the target's profile in the FW
+            </summary>
+            <param name="byProfile">The target's profile</param>
+            <param name="byBtnIndex">The target's button</param>
+            <param name="byLength">Return the count of  BMP used by button.</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns> 
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.GetMainBrightness(System.Byte@,System.UInt32)">
+            <summary>
+             Get the brightness of Led
+            </summary>
+            <param name="byBrightness">Profile 's Brightness 0=0%, 25=25%, 50=50%, 75=75%, 100=100%</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns> 
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.GetTFTSleepTime(System.Byte@,System.Byte@,System.Byte@,System.Byte@,System.UInt32)">
+            <summary>
+            Set the time for TFT-LCD to go to sleep
+            </summary>
+            <param name="byStatus">Sleep function switch. 0 is Off. 1 is On</param>
+            <param name="byHH"> hour, 0~24</param>
+            <param name="byMM">min, 0 ~ 59</param>
+            <param name="bySS">sec, 0 ~ 59</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns> 
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.DisplayLogo(System.Boolean,System.UInt32)">
+            <summary>
+            Show/Hide the logo
+            </summary>
+            <param name="bEnable">If true, show the logo. If false, hide the logo</param>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <returns>true Success，false Fail</returns> 
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.SetPanelImage(System.UInt32,System.IntPtr,System.UInt32,System.UInt32,System.UInt32,System.UInt32)">
+            <summary>
+            Sets the image to be displayed in the full screen panel.
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <param name="pbyData">the data of picture (BGR888 format)</param>
+            <param name="iLeft">Left border Position</param>
+            <param name="iTop">Top border Position</param>
+            <param name="iRight">Right border Position</param>
+            <param name="iBottom">Bottom border Position</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+        <member name="M:DisplayPad.SDK.DisplayPadSDK.SavePanelImage(System.UInt32,System.IntPtr)">
+            <summary>
+            Save the logo image to be displayed  in the full screen panel.
+            </summary>
+            <param name="ID">control the target, the vaule is not zero</param>
+            <param name="pbyData">the data of picture (BGR888 format), the size is (800 * 400 * 3)</param>
+            <returns>true Success，false Fail</returns>
+        </member>
+    </members>
+</doc>

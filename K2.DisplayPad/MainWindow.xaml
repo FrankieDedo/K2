@@ -1,0 +1,194 @@
+<Window x:Class="K2.DisplayPad.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+        Title="{loc:Get dpw_title}"
+        Height="700" Width="1180"
+        MinHeight="560" MinWidth="940"
+        WindowStartupLocation="CenterScreen"
+        Style="{StaticResource K2WindowStyle}">
+    <Window.Resources>
+        <!-- Stile per la singola cella tasto del DisplayPad -->
+        <Style x:Key="ButtonCellStyle" TargetType="Button">
+            <Setter Property="Background" Value="#26262C"/>
+            <Setter Property="BorderBrush" Value="#34343C"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="Foreground" Value="#DDD"/>
+            <Setter Property="Margin" Value="6"/>
+            <Setter Property="MinHeight" Value="120"/>
+            <Setter Property="MinWidth" Value="120"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="OuterBorder"
+                                CornerRadius="8"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <Grid>
+                                <Image Source="{Binding Preview}"
+                                       Stretch="UniformToFill"
+                                       Margin="4"/>
+                                <TextBlock Text="{Binding LabelWithMatrix}"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Top"
+                                           Margin="6,4,0,0"
+                                           Foreground="#FFF"
+                                           FontWeight="Bold"
+                                           FontSize="12">
+                                    <TextBlock.Effect>
+                                        <DropShadowEffect Color="Black" BlurRadius="4" ShadowDepth="0"/>
+                                    </TextBlock.Effect>
+                                </TextBlock>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="BorderBrush" Value="#900000"/>
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                <Setter TargetName="OuterBorder" Property="Background" Value="#900000"/>
+                                <Setter TargetName="OuterBorder" Property="BorderBrush" Value="#FFFFFF"/>
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="2*"/>
+            <ColumnDefinition Width="1*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Toolbar (WrapPanel: i controlli vanno a capo se non ci stanno).
+             Icone tramite glifi Segoe MDL2 Assets prima del testo del pulsante. -->
+        <WrapPanel Grid.Row="0" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button x:Name="BtnOpen" Padding="12,4" Click="BtnOpen_Click"
+                    Style="{StaticResource K2AccentButton}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE768;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,7,0"/>
+                    <TextBlock Text="Apri driver" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button x:Name="BtnRefresh" Padding="10,4" Margin="8,0,0,0" Click="BtnRefresh_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,7,0"/>
+                    <TextBlock Text="Aggiorna device" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button x:Name="BtnClose" Padding="10,4" Margin="8,0,0,0" Click="BtnClose_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,7,0"/>
+                    <TextBlock Text="Chiudi driver" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Separator Margin="10,0"/>
+            <TextBlock Text="{loc:Get device}" VerticalAlignment="Center"/>
+            <ComboBox x:Name="CbDevice" Width="90" Margin="6,0,0,0"
+                      SelectionChanged="CbDevice_SelectionChanged"/>
+            <TextBlock Text="Profilo:" VerticalAlignment="Center" Margin="14,0,4,0"/>
+            <ComboBox x:Name="CbProfile" Width="56"
+                      SelectionChanged="CbProfile_SelectionChanged"/>
+            <TextBlock Text="Rotazione:" VerticalAlignment="Center" Margin="14,0,4,0"/>
+            <ComboBox x:Name="CbRotation" Width="66"
+                      SelectionChanged="CbRotation_SelectionChanged"/>
+            <TextBlock Text="&#xE706;" FontFamily="Segoe MDL2 Assets" FontSize="15"
+                       VerticalAlignment="Center" Margin="16,0,6,0"
+                       Foreground="#9A9AA2" ToolTip="Luminosità"/>
+            <Slider x:Name="SldBrightness" Minimum="0" Maximum="100"
+                    TickFrequency="25" IsSnapToTickEnabled="True"
+                    SmallChange="25" LargeChange="25"
+                    Width="120" VerticalAlignment="Center"
+                    ValueChanged="SldBrightness_ValueChanged"/>
+            <TextBlock x:Name="LblBrightness" Text="—"
+                       VerticalAlignment="Center" Width="40" Margin="4,0,0,0"/>
+            <CheckBox x:Name="ChkApEnable" Content="AP Enable (SW control)"
+                      VerticalAlignment="Center" Margin="14,0,0,0"
+                      Checked="ChkApEnable_Toggled" Unchecked="ChkApEnable_Toggled"/>
+            <Button x:Name="BtnResetAll" Padding="10,4" Margin="14,0,0,0" Click="BtnResetAll_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE777;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,7,0"/>
+                    <TextBlock Text="Reset tasti" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button x:Name="BtnMapKeys" Padding="10,4" Margin="6,0,0,0" Click="BtnMapKeys_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE765;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,7,0"/>
+                    <!-- LblMapKeysText: testo aggiornato dal code-behind durante la
+                         mappatura ("Annulla" / "Rimappa tasti"). -->
+                    <TextBlock x:Name="LblMapKeysText" Text="Rimappa tasti"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button x:Name="BtnImportXml" Padding="10,4" Margin="6,0,0,0" Click="BtnImportXml_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE8E5;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,7,0"/>
+                    <TextBlock Text="Importa profilo XML…" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <TextBlock x:Name="LblSdk" Margin="20,6,0,0" FontStyle="Italic" Foreground="#9A9AA2"/>
+        </WrapPanel>
+
+        <!-- Griglia dei tasti (la disposizione viene impostata da LayoutGrid
+             in base alla rotazione: 2x6 nativo, 6x2 a 90/270). -->
+        <GroupBox Grid.Row="1" Grid.Column="0" Header="Tasti DisplayPad (clic per caricare un'immagine)">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                <UniformGrid x:Name="GridButtons" Rows="2" Columns="6" Margin="6"
+                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </ScrollViewer>
+        </GroupBox>
+
+        <!-- Colonna laterale: device + log -->
+        <Grid Grid.Row="1" Grid.Column="1" Margin="8,0,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <GroupBox Grid.Row="0" Header="Device collegati">
+                <ListView x:Name="LvDevices" Height="140">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="ID"          Width="50"  DisplayMemberBinding="{Binding Id}"/>
+                            <GridViewColumn Header="Plugged"     Width="70"  DisplayMemberBinding="{Binding Plugged}"/>
+                            <GridViewColumn Header="{loc:Get dp_fw}"          Width="80"  DisplayMemberBinding="{Binding FirmwareVersion}"/>
+                            <GridViewColumn Header="{loc:Get dial_brightness}"  Width="80"  DisplayMemberBinding="{Binding Brightness}"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </GroupBox>
+
+            <GroupBox Grid.Row="1" Header="Eventi" Margin="0,8,0,0">
+                <TextBox x:Name="TxtLog"
+                         IsReadOnly="True"
+                         FontFamily="Consolas"
+                         FontSize="12"
+                         VerticalScrollBarVisibility="Auto"
+                         TextWrapping="NoWrap"
+                         AcceptsReturn="True"/>
+            </GroupBox>
+        </Grid>
+
+        <!-- Status -->
+        <StatusBar Grid.Row="2" Grid.ColumnSpan="2" Margin="0,8,0,0">
+            <StatusBarItem>
+                <TextBlock x:Name="LblStatus" Text="Driver non aperto."/>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>

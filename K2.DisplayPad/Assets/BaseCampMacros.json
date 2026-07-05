@@ -1,0 +1,105 @@
+[
+  {
+    "name": "À",
+    "type": "text",
+    "value": "À",
+    "delay_ms": 1
+  },
+  {
+    "name": "È",
+    "type": "text",
+    "value": "È",
+    "delay_ms": 2
+  },
+  {
+    "name": "É",
+    "type": "text",
+    "value": "É",
+    "delay_ms": 2
+  },
+  {
+    "name": "Ì",
+    "type": "text",
+    "value": "Ì",
+    "delay_ms": 2
+  },
+  {
+    "name": "Ò",
+    "type": "text",
+    "value": "Ò",
+    "delay_ms": 2
+  },
+  {
+    "name": "Ù",
+    "type": "text",
+    "value": "Ù",
+    "delay_ms": 2
+  },
+  {
+    "name": "CHIUDI SPAZIO PREMIERE",
+    "type": "keys",
+    "value": "^+%z",
+    "delay_ms": 2
+  },
+  {
+    "name": "PROFILO MONTAGGIO PREMIERE",
+    "type": "keys",
+    "value": "+%1",
+    "delay_ms": 2
+  },
+  {
+    "name": "PROFILO SOTTOTITOLI PREMIERE",
+    "type": "keys",
+    "value": "+%2",
+    "delay_ms": 2
+  },
+  {
+    "name": "TEST",
+    "type": "raw",
+    "value": [
+      {
+        "type": "mousedown",
+        "button": 1,
+        "delay": 30
+      },
+      {
+        "type": "mousedown",
+        "button": 1,
+        "delay": 0
+      },
+      {
+        "type": "mousedown",
+        "button": 1,
+        "delay": 0
+      },
+      {
+        "type": "mouseup",
+        "button": 1,
+        "delay": 915
+      },
+      {
+        "type": "mouseup",
+        "button": 1,
+        "delay": 25
+      },
+      {
+        "type": "mouseup",
+        "button": 1,
+        "delay": 0
+      }
+    ],
+    "delay_ms": 2
+  },
+  {
+    "name": "GCD_SALA_GIOCHI",
+    "type": "keys",
+    "value": "+^%g",
+    "delay_ms": 2
+  },
+  {
+    "name": "DISCORD_MUTE_MIC",
+    "type": "keys",
+    "value": "^+%m",
+    "delay_ms": 2
+  }
+]

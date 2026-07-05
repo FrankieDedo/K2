@@ -1,0 +1,336 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  K2 localization strings.
+  To translate the app, copy this file (e.g. Strings.it.xml) and change the values.
+  Set the K2_LANG environment variable to the language code (e.g. "it") to load it.
+  The app looks for Strings.{lang}.xml next to the executable, then falls back to
+  the embedded default (English).
+-->
+<strings>
+  <!-- ═══════════════════════════════════════════════════════════════
+       COMMON / SHARED
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="app_title">K2 — Mountain Device Console</string>
+  <string name="driver_not_opened">Driver not opened.</string>
+  <string name="open_driver">Open driver</string>
+  <string name="close_driver">Close driver</string>
+  <string name="refresh">Refresh</string>
+  <string name="refresh_devices">Refresh devices</string>
+  <string name="profile">Profile:</string>
+  <string name="device">Device:</string>
+  <string name="orientation">Orientation:</string>
+  <string name="brightness">Brightness:</string>
+  <string name="save">Save</string>
+  <string name="cancel">Cancel</string>
+  <string name="ok">OK</string>
+  <string name="browse">Browse…</string>
+  <string name="crop_hint">Drag to reposition, scroll or use the slider to zoom.</string>
+  <string name="crop_title">Crop image ({0}×{1})</string>
+  <string name="crop_no_crop">Insert as-is (no crop/zoom)</string>
+  <string name="crop_show_grid">Show key outline</string>
+  <string name="error">Error</string>
+  <string name="copy">Copy</string>
+  <string name="open_log">Open log…</string>
+  <string name="import">Import</string>
+  <string name="delete">Delete</string>
+  <string name="stop">Stop</string>
+  <string name="remap_keys">Remap keys</string>
+  <string name="cancel_remap">Cancel remap</string>
+  <string name="mapping_cancelled">Mapping cancelled.</string>
+  <string name="apply_to_device">Apply to device</string>
+  <string name="read_from_device">Read from device</string>
+  <string name="reset">Reset</string>
+  <string name="new_profile">+ New profile</string>
+  <string name="profile_n">Profile {0}</string>
+  <string name="select_device_first">Select a device first.</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       BUTTON ACTION DIALOG (K2.Core)
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="dlg_title">Configure button action</string>
+  <string name="dlg_button_label">Button #?</string>
+  <string name="dlg_action_type">Action type:</string>
+  <string name="dlg_value">Value:</string>
+  <string name="act_none">None</string>
+  <string name="act_url">Open URL</string>
+  <string name="act_exec">Open program / file</string>
+  <string name="act_folder">Open folder</string>
+  <string name="act_browser">Open browser</string>
+  <string name="act_profile">Switch profile</string>
+  <string name="act_oscmd">System command</string>
+  <string name="act_media">Media key</string>
+  <string name="act_mouse">Mouse action</string>
+  <string name="act_keys">Keys (Ctrl+Shift+A)</string>
+  <string name="act_command">Shell command</string>
+  <string name="act_text">Paste text</string>
+  <string name="act_pyscript">Python Script</string>
+  <string name="py_file">File .py</string>
+  <string name="py_inline">Inline code</string>
+  <string name="py_browse">Browse…</string>
+  <string name="py_args">Arguments:</string>
+  <string name="py_timeout">Timeout (s, 0 = none):</string>
+  <string name="py_hint">In the script use 'import k2' to call K2 functions (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...). stdout/stderr go to the K2 log.</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       GENERAL SETTINGS TAB
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="tab_settings">Settings</string>
+  <string name="settings_debug_mode">Debug mode</string>
+  <string name="settings_debug_mode_hint">Enables debug tools (driver open/close, AP controls, event log) on every device.</string>
+  <string name="settings_log_level">Logging</string>
+  <string name="log_off">Off</string>
+  <string name="log_normal">Normal</string>
+  <string name="log_verbose">Verbose</string>
+  <string name="settings_dp_native">DisplayPad: native USB engine (experimental)</string>
+  <string name="settings_dp_native_hint">Drives the DisplayPad directly over USB instead of the Mountain SDK: confirmed transfers (no icon corruption), no satellite process. Profile persistence on the device is not available; images are re-uploaded from the K2 database. Takes effect after restarting K2.</string>
+  <string name="settings_ev_native">Everest Max: native USB engine (experimental, partial)</string>
+  <string name="settings_ev_native_hint">Drives the Everest Max's connection and the 4 numpad display buttons directly over USB instead of SDKDLL.dll — removes that DLL's chronic timer-thread crash for what it covers. RGB effects, numpad icons, Media Dock, and full-keyboard remap events still use SDKDLL.dll for now (not yet ported). Takes effect after restarting K2.</string>
+  <string name="settings_kill_bc_worker">Terminate Base Camp DisplayPad worker</string>
+  <string name="settings_kill_bc_worker_hint">MountainDisplayPadWorker runs in the background and writes to the DisplayPad at the same time as K2, corrupting icons. When enabled, K2 terminates it automatically (and keeps it closed while running).</string>
+  <string name="settings_bc_autostart">Start Base Camp services with Windows</string>
+  <string name="settings_bc_autostart_hint">Enables/disables the Windows autostart entries of Base Camp (same mechanism as Task Manager's Startup tab — reversible). Entries in HKLM may require running K2 as administrator.</string>
+  <string name="settings_bc_autostart_none">No Base Camp autostart entry found in the registry.</string>
+  <string name="settings_bc_autostart_done">Base Camp autostart: {0} entries updated.</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       EVEREST MAX TAB
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="tab_everest">Everest</string>
+  <string name="ev_open_driver">Open driver</string>
+  <string name="ev_close_driver">Close driver</string>
+  <string name="ev_driver_opened">Everest driver opened.</string>
+  <string name="ev_driver_open_failed">Everest driver open FAILED.</string>
+  <string name="ev_driver_closed">Everest driver closed.</string>
+  <string name="loading_drivers">Initializing drivers…</string>
+  <string name="ev_crash_recovering">Driver crashed — attempting auto-recovery in 3 s…</string>
+  <string name="ev_crash_recovered">Driver recovered — LED preview restarted.</string>
+  <string name="ev_crash_recovery_failed">Driver recovery failed — please restart K2.App.</string>
+  <string name="ev_capture_key">Capture key</string>
+  <string name="ev_cancel_capture">Cancel capture</string>
+  <string name="ev_capture_prompt">Capture: press the physical key to add…</string>
+  <string name="ev_capture_cancelled">Capture cancelled.</string>
+  <string name="ev_cancel_mapping">Cancel mapping</string>
+  <string name="ev_mapping_step">Mapping [{0}/{1}]: press the physical key «{2}»…</string>
+  <string name="ev_mapping_done">Mapping complete: {0} keys saved.</string>
+  <string name="ev_mapped_keys">Mapped keys</string>
+  <string name="ev_configure">Configure…</string>
+  <string name="ev_remove">Remove</string>
+  <string name="ev_sdk_log">SDK Log</string>
+
+  <!-- RGB Lighting -->
+  <string name="rgb_lighting">RGB Lighting</string>
+  <string name="rgb_effect">Effect:</string>
+  <string name="rgb_speed">Speed:</string>
+  <string name="rgb_direction">Direction:</string>
+  <string name="rgb_rainbow">Rainbow</string>
+  <string name="rgb_rainbow_tip">Rainbow colors (ignores color pickers).</string>
+  <string name="rgb_sync_profiles">Sync profiles</string>
+  <string name="rgb_primary">Primary:</string>
+  <string name="rgb_secondary">Secondary:</string>
+  <string name="rgb_tertiary">Tertiary:</string>
+  <string name="rgb_save">Save</string>
+  <string name="rgb_save_tip">Make the applied effect permanent (survives unplug/restart).</string>
+
+  <!-- Custom Lighting -->
+  <string name="custom_lighting">Custom Lighting (per-key)</string>
+  <string name="custom_paint_hint">Enable paint mode, pick a color and click keys on the keyboard above to color them.</string>
+  <string name="custom_paint_mode">Paint mode</string>
+  <string name="custom_color">Color:</string>
+  <string name="custom_fill_all">Fill all</string>
+  <string name="custom_clear">Clear</string>
+
+  <!-- Display Dial -->
+  <string name="display_dial">Display Dial</string>
+  <string name="dial_pages_visible">Visible dial pages:</string>
+  <string name="dial_clock">Clock</string>
+  <string name="dial_profile">Profile</string>
+  <string name="dial_volume">Volume</string>
+  <string name="dial_brightness">Brightness</string>
+  <string name="dial_lighting">Lighting</string>
+  <string name="dial_pcinfo">PC Info</string>
+  <string name="dial_apm">APM</string>
+  <string name="dial_custom">Custom</string>
+  <string name="dial_clock_label">Clock:</string>
+  <string name="dial_screensaver">Screensaver (sec):</string>
+  <string name="dial_autooff">Auto-off (sec):</string>
+  <string name="dial_menu_color">Menu color:</string>
+  <string name="dial_pixel_shift">Pixel shift (min):</string>
+  <string name="dial_cannot_read">Cannot read ExtendInfo from device.</string>
+
+  <!-- Dock Actions / Display Keys -->
+  <string name="dock_actions">Dock Actions / Display Keys</string>
+  <string name="dock_display_keys">Display Keys (numpad)</string>
+  <string name="dock_media_keys">Media Dock Keys</string>
+  <string name="dock_dial">Rotating Crown (Dial)</string>
+  <string name="dock_capture_hw">Capture HW key…</string>
+  <string name="dock_cancel_capture">Cancel capture</string>
+  <string name="dock_press_hw">Press an HW key (dock, display key, crown)…</string>
+  <string name="dock_press_for">Press the key for "{0}"…</string>
+  <string name="dock_action_none">none</string>
+  <string name="dock_capture_matrix">Capture matrixId…</string>
+  <string name="dock_configure_action">Configure action…</string>
+  <string name="dock_remove_action">Remove action</string>
+
+  <!-- Keyboard Macro -->
+  <string name="keyboard_macro">Keyboard Macro</string>
+  <string name="macro_new">New</string>
+  <string name="macro_delete">Delete</string>
+  <string name="macro_record">Record</string>
+  <string name="macro_record_stop">■ Stop</string>
+  <string name="macro_play">Play</string>
+  <string name="macro_name">Name:</string>
+  <string name="macro_delay">Delay:</string>
+  <string name="macro_delay_recorded">Recorded</string>
+  <string name="macro_delay_none">None</string>
+  <string name="macro_delay_custom">Custom</string>
+  <string name="macro_playback">Playback:</string>
+  <string name="macro_playback_once">Once</string>
+  <string name="macro_playback_repeat">Repeat N times</string>
+  <string name="macro_playback_held">While held</string>
+  <string name="macro_playback_toggle">Toggle</string>
+  <string name="macro_record_mouse">Record mouse</string>
+  <string name="macro_actions_count">{0} actions</string>
+  <string name="macro_import_bc">Import from BaseCamp.db</string>
+  <string name="macro_select_first">Select or create a macro before recording.</string>
+  <string name="macro_no_actions">The macro has no recorded actions.</string>
+  <string name="macro_none_in_bc">No macros found in the BaseCamp database.</string>
+  <string name="macro_import_confirm">Import {0} macros from BaseCamp.db?</string>
+  <string name="macro_imported">{0} macros imported.</string>
+  <string name="macro_import_error">Import error: {0}</string>
+
+  <!-- USB Recorder -->
+  <string name="usb_recorder">USB Recorder</string>
+  <string name="usb_interface">Interface:</string>
+  <string name="usb_label">Label:</string>
+  <string name="usb_detect">Detect</string>
+  <string name="usb_start">Start recording</string>
+  <string name="usb_stop">Stop recording</string>
+  <string name="usb_ready">Ready. Install Wireshark + USBPcap to use the recorder.</string>
+  <string name="usb_tshark_missing">tshark not found. Install Wireshark to use the recorder.</string>
+  <string name="usb_results">Capture results</string>
+  <string name="usb_save_report">Save report</string>
+  <string name="usb_open_folder">Open folder</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       MACROPAD TAB
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="tab_macropad">MacroPad</string>
+  <string name="mp_connected_devices">Connected MacroPad devices</string>
+  <string name="mp_event_log">Event log</string>
+  <string name="mp_cancel_mapping">Cancel mapping</string>
+
+  <!-- MacroPad LED Lighting -->
+  <string name="led_lighting">LED Lighting</string>
+  <string name="led_sync_profiles">Sync across profiles</string>
+  <string name="led_backlight_off">Backlight OFF</string>
+  <string name="led_backlight_on">Backlight ON</string>
+  <string name="led_reset_effects">Reset effects</string>
+  <string name="led_save_flash">Save to flash</string>
+  <string name="led_save_flash_tip">Make the applied effect permanent (survives unplug/restart).</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       DISPLAYPAD TAB
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="tab_displaypad">DisplayPad</string>
+  <string name="dp_open_driver">Open driver</string>
+  <string name="dp_driver_opened">DisplayPad driver opened.</string>
+  <string name="dp_driver_open_failed">DisplayPad driver open failed.</string>
+  <string name="dp_driver_closed">DisplayPad driver closed.</string>
+  <string name="dp_rotation">Rotation:</string>
+  <string name="dp_rotate_icons_ccw">Rotate icons ↺</string>
+  <string name="dp_rotate_icons_cw">Rotate icons ↻</string>
+  <string name="dp_reset_keys">Reset keys</string>
+  <string name="dp_import_xml">Import XML…</string>
+  <string name="dp_import_bc">Import from Base Camp</string>
+  <string name="dp_connected_devices">Connected DisplayPad devices</string>
+  <string name="dp_log">DisplayPad Log</string>
+  <string name="dp_fw">FW</string>
+  <string name="dp_lum">Bright.</string>
+  <string name="dp_satellite_failed">DisplayPad satellite: startup failed.</string>
+  <string name="dp_mapping_prompt">Mapping: press the physical key for cell #{0}…</string>
+  <string name="dp_mapping_done">DisplayPad mapping complete.</string>
+  <string name="dp_imported_xml">Profile '{0}' imported to slot {1}.</string>
+  <string name="dp_choose_image">Choose image for key #{0}</string>
+  <string name="dp_load_image">Load image…</string>
+  <string name="dp_rotate_image">Rotate image:</string>
+  <string name="dp_action_section">Action</string>
+  <string name="dp_configure_action">Configure action…</string>
+  <string name="dp_remove_action">Remove action</string>
+  <string name="dp_change_image">Change image…</string>
+  <string name="dp_remove_image">Remove image</string>
+  <string name="dp_open_bc_profile">Open BaseCamp profile</string>
+  <string name="dp_filter_bc_xml">BaseCamp profile (*.xml)|*.xml|All files|*.*</string>
+  <string name="dp_bc_db_not_found">BaseCamp.db not found. Set K2_BASECAMP_DB or install Base Camp.</string>
+  <string name="dp_no_profiles_in_bc">No DisplayPad profiles found in the Base Camp database.</string>
+  <string name="dp_no_matching_devices">No connected device matches the profiles in the DB.</string>
+  <string name="dp_import_confirm">Import {0} profiles to {1} devices?</string>
+  <string name="dp_imported">Imported {0} profiles ({1} keys) from Base Camp.</string>
+  <string name="import_bc">Import BC</string>
+  <!-- Export -->
+  <string name="export">Export</string>
+  <string name="dp_export_bc">Export (Base Camp)…</string>
+  <string name="dp_export_k2">Export (K2)…</string>
+  <string name="dp_save_bc_profile">Export profile as Base Camp XML</string>
+  <string name="dp_save_k2_profile">Export profile as K2 XML</string>
+  <string name="dp_exported_bc">Exported '{0}' as Base Camp XML: {1} actions written, {2} skipped (no Base Camp equivalent).</string>
+  <string name="dp_exported_k2">Exported '{0}' as K2 XML: {1} actions written.</string>
+  <string name="dp_export_no_profile">Select a profile first.</string>
+  <!-- Fullscreen -->
+  <string name="dp_fullscreen_group">Fullscreen</string>
+  <string name="dp_fullscreen_set">Set fullscreen image…</string>
+  <string name="dp_fullscreen_clear">Remove fullscreen</string>
+  <string name="dp_fullscreen_dialog_title">Fullscreen image</string>
+  <string name="dp_fullscreen_prompt">Pick an image or GIF to display across all 12 keys of this page:</string>
+  <string name="dp_fullscreen_rotation">Rotation</string>
+  <string name="dp_fullscreen_rotation_hint">Rotates the whole picture before it's fit to the panel. The preview above does not reflect this choice — it's applied when the image is shown on the device.</string>
+  <string name="dp_fullscreen_current">Current: {0}</string>
+  <string name="dp_fullscreen_none_set">No image selected.</string>
+  <string name="dp_fullscreen_set_ok">Fullscreen image set for this page.</string>
+  <string name="dp_fullscreen_cleared">Fullscreen image removed — per-key icons restored.</string>
+  <!-- Rename device -->
+  <string name="rename_device">Rename device</string>
+  <string name="rename_device_title">Rename device</string>
+  <string name="rename_device_prompt">Enter a name for this device:</string>
+  <!-- Rename / delete profile -->
+  <string name="rename_profile">Rename profile</string>
+  <string name="rename_profile_title">Rename profile</string>
+  <string name="rename_profile_prompt">Enter a name for this profile:</string>
+  <string name="delete_profile">Delete profile</string>
+  <string name="delete_profile_confirm">Delete profile '{0}'? All key bindings in this profile will be removed.</string>
+  <string name="delete_profile_last">Cannot delete the last profile.</string>
+  <!-- Everest import -->
+  <string name="ev_no_profiles_in_bc">No Everest profiles found in the Base Camp database.</string>
+  <string name="ev_imported_bc">Imported {0} Everest profiles ({1} keys) from Base Camp.</string>
+  <!-- MacroPad import -->
+  <string name="mp_no_profiles_in_bc">No MacroPad profiles found in the Base Camp database.</string>
+  <string name="mp_imported_bc">Imported {0} MacroPad profiles ({1} keys) from Base Camp.</string>
+  <string name="select_device_first">Select a device first.</string>
+  <!-- DisplayPad folder navigation -->
+  <string name="dp_back">Back</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       DISPLAYPAD STANDALONE (K2.DisplayPad)
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="dpw_title">K2 — DisplayPad Console</string>
+  <string name="dpw_open_driver">Open driver</string>
+  <string name="dpw_refresh_devices">Refresh devices</string>
+  <string name="dpw_close_driver">Close driver</string>
+
+  <!-- Error Dialog -->
+  <string name="err_title">K2 — Error</string>
+  <string name="err_message">An error occurred</string>
+
+  <!-- Import Profile Dialog -->
+  <string name="imp_title">Import BaseCamp profile</string>
+  <string name="imp_header">Import BaseCamp profile</string>
+  <string name="imp_slot">K2 profile slot (1..5):</string>
+  <string name="imp_switch_now">Switch to this slot immediately after import</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       GENERAL ERROR MESSAGES
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="unhandled_error_ui">Unhandled error (UI)</string>
+  <string name="unhandled_error_domain">Unhandled error (domain)</string>
+  <string name="veh_no_return">Frame-walk: no return address outside SDKDLL.dll found</string>
+  <string name="profile_switch_unsupported">profile: profile switching not yet supported on MacroPad</string>
+</strings>

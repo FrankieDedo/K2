@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- SHARED library between K2.DisplayPad (x64) and K2.App (x86).
+         A .NET assembly compiled with PlatformTarget x64 is marked
+         "64-bit required" and CANNOT be loaded by an x86 process
+         (and vice versa). That's why K2.Core supports both platforms:
+         each app, by referencing it, compiles its own copy with the
+         matching architecture. See the mapping in the two solutions. -->
+    <Platforms>x86;x64</Platforms>
+
+    <AssemblyName>K2.Core</AssemblyName>
+    <RootNamespace>K2.Core</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Localization: Strings.xml embedded as resource; override files
+       (Strings.{lang}.xml) are copied next to the executable at runtime.
+       See Loc.cs for the resolution logic. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Strings.xml" />
+    <!-- Language packs: copied to output so Loc.cs can find them at runtime -->
+    <Content Include="Strings.it.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Strings.es.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Strings.fr.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Strings.de.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Strings.pt.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Strings.pl.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Strings.ja.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Strings.zh.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Strings.ko.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!-- PyBridge: Python helpers copied to pybridge\ next to the executable.
+       Content from a referenced project flows into the referencing app's
+       output, so every app using K2.Core gets k2.py and k2_runner.py
+       automatically. The embeddable interpreter is NOT here: install it
+       with setup-python-embed. -->
+  <ItemGroup>
+    <Content Include="..\lib\pybridge\*.py">
+      <Link>pybridge\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

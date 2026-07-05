@@ -1,0 +1,130 @@
+<Window x:Class="K2.DisplayPad.Dialogs.CellConfigDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+        Title="Configure key"
+        Width="520" SizeToContent="Height"
+        MinWidth="440"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Style="{DynamicResource K2WindowStyle}">
+
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="14"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock x:Name="LblHeader" Grid.Row="0"
+                   FontSize="16" FontWeight="Bold"/>
+
+        <!-- Main content: left=image, right=action -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ─── Image section ─── -->
+            <StackPanel Grid.Column="0" Width="180">
+
+                <!-- Preview box -->
+                <Border Width="160" Height="160"
+                        Background="#222228"
+                        BorderBrush="#444" BorderThickness="1"
+                        CornerRadius="4"
+                        HorizontalAlignment="Center">
+                    <Grid>
+                        <TextBlock x:Name="LblNoImage"
+                                   Text="No image"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="#555" FontSize="12"/>
+                        <Image x:Name="ImgPreview"
+                               Stretch="Uniform"
+                               Margin="4">
+                            <Image.LayoutTransform>
+                                <RotateTransform x:Name="PreviewRotate" Angle="0"/>
+                            </Image.LayoutTransform>
+                        </Image>
+                    </Grid>
+                </Border>
+
+                <Button Content="{loc:Get dp_load_image}"
+                        Margin="0,10,0,0"
+                        Click="BtnLoadImage_Click"/>
+
+                <Button Content="{loc:Get dp_remove_image}"
+                        Margin="0,4,0,0"
+                        Click="BtnRemoveImage_Click"/>
+
+                <!-- Rotation selector -->
+                <TextBlock Text="{loc:Get dp_rotate_image}"
+                           Margin="0,10,0,4"
+                           Foreground="#AAA" FontSize="11"/>
+
+                <UniformGrid Columns="4">
+                    <RadioButton x:Name="Rb0"   Content="0°"   GroupName="ImgRot" Tag="0"
+                                 IsChecked="True" Checked="RotRadio_Checked"
+                                 Margin="0,0,4,0"/>
+                    <RadioButton x:Name="Rb90"  Content="90°"  GroupName="ImgRot" Tag="90"
+                                 Checked="RotRadio_Checked"
+                                 Margin="0,0,4,0"/>
+                    <RadioButton x:Name="Rb180" Content="180°" GroupName="ImgRot" Tag="180"
+                                 Checked="RotRadio_Checked"
+                                 Margin="0,0,4,0"/>
+                    <RadioButton x:Name="Rb270" Content="270°" GroupName="ImgRot" Tag="270"
+                                 Checked="RotRadio_Checked"/>
+                </UniformGrid>
+            </StackPanel>
+
+            <!-- ─── Action section ─── -->
+            <StackPanel Grid.Column="2" VerticalAlignment="Top">
+
+                <TextBlock Text="{loc:Get dp_action_section}"
+                           FontSize="13" FontWeight="SemiBold"
+                           Margin="0,0,0,8"/>
+
+                <Border Background="#1C1C22"
+                        BorderBrush="#333" BorderThickness="1"
+                        CornerRadius="3"
+                        Padding="8,6"
+                        Margin="0,0,0,10">
+                    <TextBlock x:Name="LblActionSummary"
+                               TextWrapping="Wrap"
+                               FontSize="12"
+                               Foreground="#CCC"/>
+                </Border>
+
+                <Button Content="{loc:Get dp_configure_action}"
+                        Click="BtnConfigureAction_Click"
+                        Margin="0,0,0,6"/>
+
+                <Button Content="{loc:Get dp_remove_action}"
+                        Click="BtnRemoveAction_Click"/>
+
+            </StackPanel>
+        </Grid>
+
+        <!-- OK / Cancel -->
+        <StackPanel Grid.Row="4"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right">
+            <Button Content="{loc:Get ok}"
+                    IsDefault="True"
+                    MinWidth="72"
+                    Style="{StaticResource K2IconAccentButton}"
+                    Click="BtnOk_Click"
+                    Margin="0,0,8,0"/>
+            <Button Content="{loc:Get cancel}"
+                    IsCancel="True"
+                    MinWidth="72"/>
+        </StackPanel>
+    </Grid>
+</Window>

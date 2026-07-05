@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>K2.DisplayPad</AssemblyName>
+    <RootNamespace>K2.DisplayPad</RootNamespace>
+    <ApplicationIcon />
+    <StartupObject />
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+  </ItemGroup>
+
+  <!-- Libreria condivisa: motore azioni dei tasti + ponte Python.
+       Porta con se' (Content transitivo) gli helper Python di pybridge\. -->
+  <ItemGroup>
+    <ProjectReference Include="..\K2.Core\K2.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Managed wrapper del DisplayPad SDK -->
+  <ItemGroup>
+    <Reference Include="DisplayPad.SDK">
+      <HintPath>..\lib\DisplayPad.SDK.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- DLL nativa C++ richiesta dal wrapper (P/Invoke). Deve trovarsi
+       affianco all'eseguibile. -->
+  <ItemGroup>
+    <Content Include="..\lib\DisplayPadSDK.dll">
+      <Link>DisplayPadSDK.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!-- Asset bundled (es. macro estratte da BaseCamp.db) -->
+  <ItemGroup>
+    <Content Include="Assets\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

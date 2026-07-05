@@ -1,0 +1,85 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <!-- ColorDialog nativo (System.Windows.Forms.ColorDialog) usato dal
+         pannello "Illuminazione RGB" del tab Everest Max: WPF non ne include
+         uno e introdurre una libreria NuGet sarebbe overkill. -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <!-- Le struct effetto firmware (EffData) sono dichiarate BLITTABILI con
+         buffer `fixed byte[]`: serve per passarle by-value via P/Invoke senza
+         marshalling (il path non-blittabile con ByValArray non copiava la
+         struct correttamente sullo stack x86 -> ChangeEffect non trasmetteva). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- MacroPadSDK.dll (e gli altri SDK dispositivi) sono binari NATIVI a
+         32 bit: il processo che li carica via P/Invoke DEVE essere x86,
+         altrimenti il primo DllImport fallisce con BadImageFormatException.
+         Per questo K2.App e' x86. K2.DisplayPad resta x64 perche' usa una
+         build a 64 bit dedicata di DisplayPadSDK.dll. -->
+    <Platforms>x86</Platforms>
+    <PlatformTarget>x86</PlatformTarget>
+
+    <AssemblyName>K2.App</AssemblyName>
+    <RootNamespace>K2.App</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Libreria condivisa: motore azioni dei tasti + ponte Python.
+       Porta con se' (Content transitivo) gli helper Python di pybridge\. -->
+  <ItemGroup>
+    <ProjectReference Include="..\K2.Core\K2.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Persistenza delle azioni assegnate ai tasti del MacroPad. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+  </ItemGroup>
+
+  <!-- MacroPadSDK.dll NON e' ridistribuibile: e' un componente interno
+       dell'app Base Camp, senza licenza di ridistribuzione. Quindi NON viene
+       impacchettato con K2.
+
+       In sviluppo: se esiste una copia di lavoro in _reference\native\, la si
+       copia accanto all'eseguibile (PreserveNewest) per comodita'.
+       In un pacchetto redistribuito _reference\ non c'e': la DLL viene allora
+       risolta a runtime da NativeDependencyResolver, che la cerca in una
+       installazione di Base Camp o accanto all'exe (vedi DISTRIBUTION.md). -->
+  <!-- Config esterna dei parametri RGB per-effetto: copiata accanto all'exe,
+       letta a runtime da EverestRgbConfig. PreserveNewest = se la copia in
+       bin\ e' piu' recente (l'hai editata per un test al volo) NON viene
+       sovrascritta dalla build. -->
+  <ItemGroup>
+    <Content Include="everest_rgb.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!-- Immagini dispositivi (sfondo tab + overlay tasti) -->
+  <ItemGroup>
+    <Resource Include="Assets\K2_logo.png" />
+    <Resource Include="Assets\setting_keyboard.png" />
+    <Resource Include="Assets\MKD_setting.png" />
+    <Resource Include="Assets\DKD_Setting.png" />
+    <Resource Include="Assets\mkd_bg.png" />
+    <Resource Include="Assets\key_button.png" />
+    <Resource Include="Assets\keybg.png" />
+    <Resource Include="Assets\board_right.png" />
+    <Resource Include="Assets\keytop.png" />
+    <Resource Include="Assets\keytop_binding.png" />
+    <Resource Include="Assets\dkd_bg.png" />
+    <Resource Include="Assets\dock_bg.png" />
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\..\_reference\native\MacroPadSDK.dll')">
+    <Content Include="..\_reference\native\MacroPadSDK.dll">
+      <Link>MacroPadSDK.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </Content>
+  </ItemGroup>
+
+</Project>
