@@ -52,6 +52,8 @@
   <string name="py_timeout">Délai (s, 0 = aucun) :</string>
   <string name="py_hint">Dans le script, utilisez 'import k2' pour appeler les fonctions K2 (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...). stdout/stderr vont dans le journal K2.</string>
   <string name="tab_everest">Everest</string>
+  <string name="tab_everest_max">Everest Max</string>
+  <string name="tab_everest_core">Everest Core</string>
   <string name="ev_open_driver">Ouvrir le pilote</string>
   <string name="ev_close_driver">Fermer le pilote</string>
   <string name="ev_driver_opened">Pilote Everest ouvert.</string>

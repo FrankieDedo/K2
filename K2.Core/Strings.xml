@@ -96,6 +96,8 @@
        EVEREST MAX TAB
        ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_everest">Everest</string>
+  <string name="tab_everest_max">Everest Max</string>
+  <string name="tab_everest_core">Everest Core</string>
   <string name="ev_open_driver">Open driver</string>
   <string name="ev_close_driver">Close driver</string>
   <string name="ev_driver_opened">Everest driver opened.</string>

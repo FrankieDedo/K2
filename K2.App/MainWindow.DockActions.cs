@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using K2.Core;
 
 namespace K2.App;
@@ -43,23 +44,29 @@ public partial class MainWindow
     private HwActionSlot? _hwCaptureTarget;
 
     /// <summary>
-    /// Hotspot geometry on the 200×64 CvsEvDock canvas (matches the knob centers
-    /// in Assets/keytop.png at its rendered size). Media buttons 1-4 sit on the
-    /// artwork; the crown buttons sit above it (negative Y) since the 5th knob
-    /// (the dial) has no push-button of its own — only its rotation is bindable.
+    /// Hotspot geometry on the 200×64 CvsEvDock canvas (Assets/keytop.png at its
+    /// rendered size, scale = 200/749). Knob centers/radii were measured directly
+    /// on the source PNG (pixel scan for the dark rim of each knob / the display
+    /// bezel), not eyeballed:
+    ///   knob 1-4 centers (orig. px): (119.5,120) (203,120) (287,120) (370,120), r≈32
+    ///   crown/display circle (orig. px): center (630,122), r≈114 — the "corona"
+    ///   is this big round display, not the small 5th knob next to it.
+    /// Media buttons sit right on top of the knob artwork; the crown buttons sit
+    /// above the display circle (negative Y — the circle's top edge is basically
+    /// at the artwork's own top edge, so there is no room for them underneath it).
     /// </summary>
     private static readonly (double X, double Y, double W, double H)[] DockHotspots =
     {
-        (30.7, 29.9, 22, 22),   // Dock Btn 1 — Prev track knob
-        (56.1, 29.9, 22, 22),   // Dock Btn 2 — Next track knob
-        (81.4, 29.9, 22, 22),   // Dock Btn 3 — Play/Pause knob
-        (105.5, 29.9, 22, 22),  // Dock Btn 4 — Mute knob
+        (31.9, 32.0, 20, 20),  // Dock Btn 1 — Prev track knob
+        (54.2, 32.0, 20, 20),  // Dock Btn 2 — Next track knob
+        (76.6, 32.0, 20, 20),  // Dock Btn 3 — Play/Pause knob
+        (98.8, 32.0, 20, 20),  // Dock Btn 4 — Mute knob
     };
 
     private static readonly (double X, double Y, double W, double H)[] CrownHotspots =
     {
-        (96.5, -16, 24, 14),  // Crown ← (counter-clockwise)
-        (122.5, -16, 24, 14), // Crown → (clockwise)
+        (156.2, -14, 22, 14), // Crown ← (counter-clockwise)
+        (180.2, -14, 22, 14), // Crown → (clockwise)
     };
 
     // ─────────────────────── Init ───────────────────────
@@ -100,9 +107,45 @@ public partial class MainWindow
         return slot;
     }
 
-    /// <summary>Creates a transparent hotspot button for a slot and places it on
-    /// the given canvas at the given geometry. <paramref name="glyph"/>, if set,
-    /// is shown as small centered text (used where the artwork has no icon).</summary>
+    /// <summary>Round-button template shared by every dock/crown hotspot: an
+    /// <see cref="Ellipse"/> (so it renders as a circle even though the default
+    /// app-wide Button template — see K2Theme.xaml — uses a rounded rectangle)
+    /// plus a centered glyph. Fill/Stroke are TemplateBindings so each button
+    /// instance can still set its own Background/BorderBrush.</summary>
+    private static ControlTemplate BuildRoundHotspotTemplate()
+    {
+        var ellipseFactory = new FrameworkElementFactory(typeof(Ellipse), "PART_Circle");
+        ellipseFactory.SetBinding(Shape.FillProperty, new System.Windows.Data.Binding("Background")
+        { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
+        ellipseFactory.SetBinding(Shape.StrokeProperty, new System.Windows.Data.Binding("BorderBrush")
+        { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
+        ellipseFactory.SetValue(Shape.StrokeThicknessProperty, 2.0);
+
+        var contentFactory = new FrameworkElementFactory(typeof(ContentPresenter));
+        contentFactory.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        contentFactory.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+
+        var gridFactory = new FrameworkElementFactory(typeof(Grid));
+        gridFactory.AppendChild(ellipseFactory);
+        gridFactory.AppendChild(contentFactory);
+
+        var template = new ControlTemplate(typeof(Button)) { VisualTree = gridFactory };
+        var hoverBrush = (Brush)Application.Current.FindResource("K2HoverBrush");
+        template.Triggers.Add(new Trigger
+        {
+            Property = Button.IsMouseOverProperty,
+            Value = true,
+            Setters = { new Setter(Shape.FillProperty, hoverBrush, "PART_Circle") },
+        });
+        return template;
+    }
+
+    private static readonly ControlTemplate RoundHotspotTemplate = BuildRoundHotspotTemplate();
+
+    /// <summary>Creates a round, mostly-transparent hotspot button for a slot and
+    /// places it on the given canvas at the given geometry. <paramref name="glyph"/>,
+    /// if set, is shown as small centered text (used where the artwork has no icon
+    /// of its own, e.g. the crown rotation buttons).</summary>
     private void PlaceHwOverlayButton(
         HwActionSlot slot, Canvas canvas, (double X, double Y, double W, double H) geo, string? glyph)
     {
@@ -110,11 +153,11 @@ public partial class MainWindow
         {
             Width = geo.W,
             Height = geo.H,
+            Template = RoundHotspotTemplate,
             Content = glyph,
             FontSize = 10,
             Foreground = Brushes.White,
             Background = Brushes.Transparent,
-            BorderThickness = new Thickness(slot.ActionType is null ? 1 : 2),
             BorderBrush = SlotBorderBrush(slot),
             Padding = new Thickness(0),
             Cursor = System.Windows.Input.Cursors.Hand,
@@ -132,7 +175,7 @@ public partial class MainWindow
 
     private static Brush SlotBorderBrush(HwActionSlot slot) =>
         slot.ActionType is not null
-            ? new SolidColorBrush(Color.FromRgb(0x5B, 0xBE, 0xC3)) // teal accent: action bound
+            ? (Brush)Application.Current.FindResource("K2AccentBrush") // action bound
             : Brushes.Transparent;
 
     private static string SlotTooltip(HwActionSlot slot) =>
@@ -141,7 +184,6 @@ public partial class MainWindow
     private void RefreshSlotButton(HwActionSlot slot)
     {
         if (slot.UiButton is null) return;
-        slot.UiButton.BorderThickness = new Thickness(slot.ActionType is null ? 1 : 2);
         slot.UiButton.BorderBrush = SlotBorderBrush(slot);
         slot.UiButton.ToolTip = SlotTooltip(slot);
     }

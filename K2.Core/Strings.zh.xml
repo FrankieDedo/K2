@@ -52,6 +52,8 @@
   <string name="py_timeout">超时时间 (秒，0 = 无限制):</string>
   <string name="py_hint">在脚本中使用 'import k2' 调用 K2 函数 (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...)。stdout/stderr 输出到 K2 日志。</string>
   <string name="tab_everest">Everest</string>
+  <string name="tab_everest_max">Everest Max</string>
+  <string name="tab_everest_core">Everest Core</string>
   <string name="ev_open_driver">打开驱动程序</string>
   <string name="ev_close_driver">关闭驱动程序</string>
   <string name="ev_driver_opened">Everest 驱动程序已打开。</string>

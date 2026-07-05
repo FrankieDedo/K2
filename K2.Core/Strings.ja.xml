@@ -52,6 +52,8 @@
   <string name="py_timeout">タイムアウト (秒、0 = なし):</string>
   <string name="py_hint">スクリプトで 'import k2' を使って K2 関数を呼び出せます (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...)。stdout/stderr は K2 ログに出力されます。</string>
   <string name="tab_everest">Everest</string>
+  <string name="tab_everest_max">Everest Max</string>
+  <string name="tab_everest_core">Everest Core</string>
   <string name="ev_open_driver">ドライバーを開く</string>
   <string name="ev_close_driver">ドライバーを閉じる</string>
   <string name="ev_driver_opened">Everest ドライバーが開きました。</string>

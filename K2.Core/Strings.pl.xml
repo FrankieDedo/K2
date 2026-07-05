@@ -52,6 +52,8 @@
   <string name="py_timeout">Limit czasu (s, 0 = brak):</string>
   <string name="py_hint">W skrypcie użyj 'import k2', aby wywołać funkcje K2 (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...). stdout/stderr trafiają do dziennika K2.</string>
   <string name="tab_everest">Everest</string>
+  <string name="tab_everest_max">Everest Max</string>
+  <string name="tab_everest_core">Everest Core</string>
   <string name="ev_open_driver">Otwórz sterownik</string>
   <string name="ev_close_driver">Zamknij sterownik</string>
   <string name="ev_driver_opened">Sterownik Everest otwarty.</string>

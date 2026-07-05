@@ -52,6 +52,8 @@
   <string name="py_timeout">시간 제한 (초, 0 = 없음):</string>
   <string name="py_hint">스크립트에서 'import k2'를 사용하여 K2 함수를 호출하세요 (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...). stdout/stderr는 K2 로그로 전송됩니다.</string>
   <string name="tab_everest">Everest</string>
+  <string name="tab_everest_max">Everest Max</string>
+  <string name="tab_everest_core">Everest Core</string>
   <string name="ev_open_driver">드라이버 열기</string>
   <string name="ev_close_driver">드라이버 닫기</string>
   <string name="ev_driver_opened">Everest 드라이버가 열렸습니다.</string>

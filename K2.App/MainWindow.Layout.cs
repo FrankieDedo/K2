@@ -6,9 +6,14 @@
 // Numpad: positioned to the left or right of the keyboard+dock column.
 //   byNumpadPlug: 0=hidden, 1=right, 2=left
 //   byMMDockPlug: 0=hidden, ≥1=connected
+//
+// Tab auto-naming: both accessories -> "Everest Max", neither -> "Everest
+// Core", only one -> plain "Everest". Skipped if the user manually renamed
+// the tab (device.name setting present) via BtnEvRename_Click.
 
 using System.Windows;
 using System.Windows.Controls;
+using K2.Core;
 
 namespace K2.App;
 
@@ -26,6 +31,8 @@ public partial class MainWindow
         byte numpadPos = _everest.NumpadPlugPosition();
 
         LogEverest($"[LAYOUT] dockPos={dockPos} numpadPos={numpadPos}");
+
+        UpdateEverestAutoName(dockPos != 0, numpadPos != 0);
 
         // ---- Dock (overlaid on the top edge of the keyboard) ----
         // GrdEvDock carries both the artwork (ImgEvDock) and the clickable
@@ -69,5 +76,23 @@ public partial class MainWindow
                 SpEvLayout.Children.Add(CvsEvNumpad);
             }
         }
+    }
+
+    /// <summary>
+    /// Auto-renames the Everest tab based on the connected accessories,
+    /// unless the user has already set a custom name via "Rename".
+    /// </summary>
+    private void UpdateEverestAutoName(bool dockConnected, bool numpadConnected)
+    {
+        if (!string.IsNullOrEmpty(_evStore.GetSetting("device.name"))) return;
+
+        string autoName = (dockConnected, numpadConnected) switch
+        {
+            (true, true)   => Loc.Get("tab_everest_max"),
+            (false, false) => Loc.Get("tab_everest_core"),
+            _              => Loc.Get("tab_everest"),
+        };
+
+        TabEverest.Header = autoName;
     }
 }

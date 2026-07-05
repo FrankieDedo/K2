@@ -9,7 +9,59 @@
 > mappa stabile in `_PROJECT_MAP.md`. Consultare qui solo per il contesto
 > di una modifica specifica passata (grep per parola chiave/data).
 
-> Last updated: 2026-07-05 (traduzione commenti IT→EN in tutto il codice K2):
+> Last updated: 2026-07-05 (Everest: auto-rinomina tab in base a numpad/media dock collegati):
+>   - **Richiesta utente**: rilevare se numpad e/o media dock sono collegati alla Everest
+>     e rinominare automaticamente il tab — "Everest Max" se entrambi collegati, "Everest
+>     Core" se entrambi scollegati, "Everest" se ne è collegato solo uno — ma solo finché
+>     l'utente non ha già rinominato manualmente il tab (pulsante "Rinomina" esistente,
+>     `BtnEvRename_Click` in `MainWindow.Everest.cs`, salva in `EverestStore` setting
+>     `device.name`).
+>   - **`MainWindow.Layout.cs`**: `UpdateKeyboardLayout()` già leggeva `dockPos`/`numpadPos`
+>     via `MMDockPlugPosition()`/`NumpadPlugPosition()` per il layout dock/numpad — non
+>     serviva un nuovo poll SDK. Aggiunta `UpdateEverestAutoName(dockConnected,
+>     numpadConnected)`: se `device.name` è vuoto (nessuna rinomina manuale) sceglie tra
+>     3 nuove chiavi loc (`tab_everest_max`/`tab_everest_core`/`tab_everest`, aggiunte
+>     a tutte le 10 `Strings.*.xml`, stesso valore in ogni lingua — nomi prodotto, come
+>     già per `tab_everest`) e imposta `TabEverest.Header`.
+>   - **Nota**: non c'è un evento hot-plug per numpad/dock (SDK Everest non manda
+>     messaggi Windows per questo, solo `IsDevicePlug()` per il device intero) — quindi
+>     il rename, come il layout, si aggiorna solo quando il driver viene aperto
+>     (`EvAutoOpen`/`BtnEvOpen_Click`), non in tempo reale se si collega/scollega a
+>     runtime. Verifica su hardware fisico: **pendente** (serve provare le 3 combinazioni
+>     di numpad/dock collegati/scollegati sulla Everest reale).
+>
+> Previous: 2026-07-05 (Key Binding: bottoni tondi + coordinate precise per media dock/corona):
+>   - **Richiesta utente** (follow-up alla feature "Key Binding" sotto): (1) rendere
+>     tondi i bottoni dei 4 tasti media dock; (2) posizionarli esattamente sopra ai
+>     primi 4 bottoni fisici nella grafica; (3) i due bottoni di rotazione della corona
+>     vanno spostati sopra al "tondo nero grande" (il display circolare), non sopra il
+>     5° knob più piccolo accanto ad esso — l'utente ha corretto l'identificazione della
+>     "corona" fatta nella sessione precedente.
+>   - **Coordinate ricavate per pixel-scan** (non più a occhio): script Python temporaneo
+>     (cancellato a fine sessione) ha cercato il bordo scuro (rim) di ogni knob in
+>     `Assets/keytop.png` scandendo righe/colonne in scala di grigi. Centri/raggi trovati
+>     (px originali, immagine 749×241): knob 1-4 a (119.5,120) (203,120) (287,120)
+>     (370,120) r≈32; il grande display circolare (= la "corona" secondo l'utente) a
+>     centro (630,122) r≈114 — il piccolo 5° knob a (456,120) r≈29 non è usato da nessun
+>     hotspot. Coordinate scalate al canvas 200×64 di `CvsEvDock` (fattore 200/749) e
+>     salvate come commento in cima a `MainWindow.DockActions.cs` per riferimento futuro.
+>   - **`MainWindow.DockActions.cs`**: aggiunto `BuildRoundHotspotTemplate()` — un
+>     `ControlTemplate` con `Ellipse` (Fill/Stroke da `Binding`+`RelativeSource.
+>     TemplatedParent`, dato che il tema globale usa un `Border` con `CornerRadius`
+>     fisso, non parametrizzabile) al posto del bottone rettangolare di default; trigger
+>     hover su `K2HoverBrush`. Bordo "azione assegnata" ora usa `K2AccentBrush` (era un
+>     teal hard-coded incoerente con la palette). `DockHotspots`/`CrownHotspots`
+>     aggiornati con le nuove coordinate; i 2 bottoni corona ora centrati sull'asse x del
+>     display grande (x≈168 sul canvas 200 di larghezza) invece che sul 5° knob (x≈122).
+>   - Verificato con `dotnet build`/`build-check.bat`: 0 errori/0 warning. App lanciata in
+>     locale (nessuna eccezione nel log), ma **non verificato visivamente**: i tool di
+>     screenshot disponibili in questa sessione non riescono ad affidabilmente catturare
+>     la finestra di K2.App (screenshot di test ha catturato contenuto di un'altra
+>     finestra/app sullo schermo, cancellato subito) — **l'utente deve controllare a
+>     schermo** che i cerchi cadano esattamente sui 4 knob e che i due bottoncini corona
+>     stiano sopra al display grande senza sovrapporsi al selettore "Layout".
+>
+> Previous: 2026-07-05 (traduzione commenti IT→EN in tutto il codice K2):
 >   - **Richiesta utente**: applicare la regola CLAUDE.md "commenti e riferimenti nel
 >     codice sempre in inglese" a tutto il progetto, traducendo i commenti italiani
 >     rimasti ovunque (non solo nei file appena toccati).
