@@ -28,19 +28,19 @@ public partial class App : Application
     {
         WriteLog("[DispatcherUnhandled] " + e.Exception);
         ShowError("Errore non gestito (UI)", e.Exception.ToString());
-        e.Handled = true; // mantieni viva la finestra
+        e.Handled = true; // keep the window alive
     }
 
     private void OnDomainUnhandled(object sender, UnhandledExceptionEventArgs e)
     {
         WriteLog($"[DomainUnhandled terminating={e.IsTerminating}] " + e.ExceptionObject);
-        // Se l'app sta terminando, prova comunque a mostrare il dialog
+        // If the app is terminating, still try to show the dialog
         try
         {
             Dispatcher.Invoke(() =>
                 ShowError("Errore non gestito (dominio)", e.ExceptionObject?.ToString() ?? "?"));
         }
-        catch { /* il dispatcher potrebbe essere gia' morto */ }
+        catch { /* the dispatcher might already be dead */ }
     }
 
     private void OnUnobservedTask(object? sender, UnobservedTaskExceptionEventArgs e)
@@ -59,7 +59,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             WriteLog("[ShowError] dialog itself threw: " + ex);
-            // Ultima spiaggia
+            // Last resort
             try
             {
                 MessageBox.Show($"{message}\n\n(log: {LogPath})", title,
@@ -69,7 +69,7 @@ public partial class App : Application
         }
     }
 
-    /// <summary>Append thread-safe a un file di log accanto all'eseguibile.</summary>
+    /// <summary>Thread-safe append to a log file next to the executable.</summary>
     public static void WriteLog(string text)
     {
         try
@@ -80,6 +80,6 @@ public partial class App : Application
                     $"[{DateTime.Now:HH:mm:ss.fff}] {text}{Environment.NewLine}");
             }
         }
-        catch { /* mai far esplodere il logger */ }
+        catch { /* never let the logger throw */ }
     }
 }

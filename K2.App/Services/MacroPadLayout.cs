@@ -3,57 +3,57 @@ namespace K2.App.Services;
 /// <summary>
 /// Physical orientation in which the MacroPad is mounted. The value indicates
 /// how many degrees CLOCKWISE the device is rotated relative to the
-/// nativa (2 righe × 6 colonne, tasti dritti).
+/// native layout (2 rows x 6 columns, keys upright).
 ///
 /// <para>As with the DisplayPad: 90° and 270° are supported, 180° is excluded
-/// per scelta (mounting mai capovolto).</para>
+/// by design (never mounted upside down).</para>
 /// </summary>
 public enum MacroPadRotation
 {
-    /// <summary>Posizione nativa: griglia 2 righe × 6 colonne.</summary>
+    /// <summary>Native position: 2-row x 6-column grid.</summary>
     None = 0,
-    /// <summary>Device montato ruotato di 90 gradi in senso orario.</summary>
+    /// <summary>Device mounted rotated 90 degrees clockwise.</summary>
     Cw90 = 90,
-    /// <summary>Device montato ruotato di 270 gradi in senso orario (= 90 antiorario).</summary>
+    /// <summary>Device mounted rotated 270 degrees clockwise (= 90 counter-clockwise).</summary>
     Cw270 = 270,
 }
 
 /// <summary>
-/// Geometria della griglia tasti del MacroPad e logica di rotazione.
+/// Geometry of the MacroPad's key grid and rotation logic.
 ///
-/// Layout FISICO nativo: 2 righe × 6 colonne, indici 0..11
+/// Native PHYSICAL layout: 2 rows x 6 columns, indices 0..11
 /// <code>
 ///     0  1  2  3  4  5
 ///     6  7  8  9 10 11
 /// </code>
 ///
-/// "Visual slot" = posizione della cella nella griglia a schermo di K2, che
-/// viene ri-orientata per rispecchiare il device montato ruotato.
+/// "Visual slot" = position of the cell in K2's on-screen grid, which is
+/// re-oriented to mirror the device as mounted (rotated).
 ///
-/// <para>A differenza del DisplayPad, il MacroPad NON ha schermi per-tasto:
-/// la rotazione tocca SOLO la disposizione delle celle a schermo, non serve
-/// alcuna pre-rotazione di icone. Il MODELLO interno
-/// (<see cref="Models.MacroPadKey"/>.Index, mappa matrice, persistenza) resta
+/// <para>Unlike the DisplayPad, the MacroPad does NOT have per-key screens:
+/// rotation only affects the arrangement of cells on screen, no icon
+/// pre-rotation is needed. The internal MODEL
+/// (<see cref="Models.MacroPadKey"/>.Index, matrix map, persistence) stays
 /// ALWAYS in PHYSICAL indices, so key handling and actions don't change.</para>
 /// </summary>
 public static class MacroPadLayout
 {
-    /// <summary>Righe della griglia fisica nativa.</summary>
+    /// <summary>Rows of the native physical grid.</summary>
     public const int PhysRows = 2;
-    /// <summary>Colonne della griglia fisica nativa.</summary>
+    /// <summary>Columns of the native physical grid.</summary>
     public const int PhysCols = 6;
-    /// <summary>Numero totale di tasti (FW_NUM_KEY).</summary>
+    /// <summary>Total number of keys (FW_NUM_KEY).</summary>
     public const int ButtonCount = PhysRows * PhysCols; // 12
 
-    /// <summary>Dimensione della griglia a schermo per la rotazione data.
-    /// A 90/270 la striscia 2×6 diventa 6×2.</summary>
+    /// <summary>On-screen grid size for the given rotation.
+    /// At 90/270 the 2x6 strip becomes 6x2.</summary>
     public static (int Rows, int Cols) VisualGrid(MacroPadRotation r) =>
         r == MacroPadRotation.None ? (PhysRows, PhysCols) : (PhysCols, PhysRows);
 
     /// <summary>
-    /// Tabella di permutazione: per ogni visual slot (0..11, in ordine di
-    /// lettura della griglia a schermo) restituisce l'indice FISICO del tasto
-    /// da mostrare in quella posizione.
+    /// Permutation table: for each visual slot (0..11, in reading order of
+    /// the on-screen grid) returns the PHYSICAL index of the key to display
+    /// in that position.
     /// </summary>
     public static int[] PhysicalForVisual(MacroPadRotation r)
     {
@@ -66,12 +66,12 @@ public static class MacroPadLayout
             int vr, vc;
             switch (r)
             {
-                // Device ruotato 90 CW: l'angolo fisico in alto-sx va in alto-dx.
+                // Device rotated 90 CW: the physical top-left corner goes to top-right.
                 case MacroPadRotation.Cw90:
                     vr = pc;
                     vc = PhysRows - 1 - pr;
                     break;
-                // Device ruotato 270 CW (= 90 CCW): in alto-sx va in basso-sx.
+                // Device rotated 270 CW (= 90 CCW): top-left goes to bottom-left.
                 case MacroPadRotation.Cw270:
                     vr = PhysCols - 1 - pc;
                     vc = pr;
@@ -86,7 +86,7 @@ public static class MacroPadLayout
         return map;
     }
 
-    /// <summary>Etichetta breve per la UI.</summary>
+    /// <summary>Short label for the UI.</summary>
     public static string Label(MacroPadRotation r) => r switch
     {
         MacroPadRotation.Cw90  => "90°",
@@ -94,7 +94,7 @@ public static class MacroPadLayout
         _                      => "0°",
     };
 
-    /// <summary>Converte il valore salvato ("0"/"90"/"270") in enum.</summary>
+    /// <summary>Converts the saved value ("0"/"90"/"270") to the enum.</summary>
     public static MacroPadRotation Parse(string? s) => s switch
     {
         "90"  => MacroPadRotation.Cw90,

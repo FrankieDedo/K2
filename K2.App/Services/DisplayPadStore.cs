@@ -6,10 +6,10 @@ using Microsoft.Data.Sqlite;
 namespace K2.App.Services;
 
 /// <summary>
-/// Persistenza azioni/immagini dei tasti DisplayPad nel processo K2.App (x86).
-/// Usa lo stesso schema di <c>K2.DisplayPad.Services.StateStore</c> ma su un
-/// database separato (<c>K2.DisplayPad.AppSide/state.db</c>) per evitare lock
-/// concorrenti tra i due processi.
+/// Persistence of DisplayPad key actions/images in the K2.App (x86) process.
+/// Uses the same schema as <c>K2.DisplayPad.Services.StateStore</c> but on a
+/// separate database (<c>K2.DisplayPad.AppSide/state.db</c>) to avoid
+/// concurrent locking between the two processes.
 /// </summary>
 public sealed class DisplayPadStore : IDisposable
 {
@@ -189,7 +189,7 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>Restituisce gli slot profilo che hanno almeno un tasto salvato per il device.</summary>
+    /// <summary>Returns the profile slots that have at least one saved key for the device.</summary>
     public List<int> GetExistingProfiles(int deviceId)
     {
         var result = new List<int>();

@@ -9,22 +9,22 @@ using System.Xml.Linq;
 namespace K2.App.Services;
 
 /// <summary>
-/// Esporta un profilo DisplayPad in due formati XML, entrambi basati sullo stesso
-/// schema reale di Base Camp (<c>DisplayPadLayerBidings</c>/<c>KeyId</c>/<c>ParentId</c>...,
-/// verificato sui profili originali in <c>Profili_BaseCamp/</c>):
+/// Exports a DisplayPad profile to two XML formats, both based on the same real
+/// Base Camp schema (<c>DisplayPadLayerBidings</c>/<c>KeyId</c>/<c>ParentId</c>...,
+/// verified against the original profiles in <c>Profili_BaseCamp/</c>):
 ///
 /// <list type="bullet">
-/// <item><b>Base Camp compatibile</b> (<see cref="ExportBaseCamp"/>): usa solo i
-/// <c>FunctionType</c> nativi realmente confermati (Run Program, Open Folder,
+/// <item><b>Base Camp compatible</b> (<see cref="ExportBaseCamp"/>): uses only the
+/// actually confirmed native <c>FunctionType</c>s (Run Program, Open Folder,
 /// Run browser, Profile, Keyboard Shortcuts, OS Commands, Media, Mouse,
-/// Create Folder, Back). Le azioni K2-only (pyscript, command, url con target
-/// custom, macro, testo multi-carattere, ...) NON vengono esportate: il tasto
-/// resta senza funzione (ma l'icona, se presente, viene comunque inclusa).</item>
-/// <item><b>Solo K2</b> (<see cref="ExportK2"/>): stesso schema XML (così resta
-/// leggibile anche da un umano/altro tool e riusa il parser BC-XML esistente),
-/// ma <c>FunctionType="K2Action"</c> è un sentinel che porta ActionType/ActionValue
-/// K2 letterali e senza perdita in SubFunctionType/FunctionValue — vedi il branch
-/// dedicato in MainWindow.DisplayPad.cs BtnDpImportXml_Click.</item>
+/// Create Folder, Back). K2-only actions (pyscript, command, url with a
+/// custom target, macro, multi-character text, ...) are NOT exported: the key
+/// stays without a function (but the icon, if present, is still included).</item>
+/// <item><b>K2 only</b> (<see cref="ExportK2"/>): same XML schema (so it stays
+/// readable by a human/other tool and reuses the existing BC-XML parser),
+/// but <c>FunctionType="K2Action"</c> is a sentinel that carries the literal
+/// K2 ActionType/ActionValue losslessly in SubFunctionType/FunctionValue — see
+/// the dedicated branch in MainWindow.DisplayPad.cs BtnDpImportXml_Click.</item>
 /// </list>
 /// </summary>
 public static class DpProfileExporter
@@ -32,7 +32,7 @@ public static class DpProfileExporter
     public sealed record ExportResult(int Exported, int SkippedActions, IReadOnlyList<string> SkipReasons);
 
     // Button index (0-11) -> (KeyId, KeyName, KeyNameFull, DLLMatrixIndex)
-    // Valori verificati sui profili originali Base Camp (Profili_BaseCamp/*.xml).
+    // Values verified against the original Base Camp profiles (Profili_BaseCamp/*.xml).
     private static readonly (int KeyId, string KeyName, string KeyNameFull, int DllMatrix)[] KeyMeta =
     {
         (170, "M1",  "SW1(M1)",   8),
@@ -49,14 +49,14 @@ public static class DpProfileExporter
         (221, "M12", "SW12(M12)",125),
     };
 
-    /// <summary>Esporta in formato compatibile Base Camp: solo azioni con un FunctionType
-    /// nativo confermato. Le azioni K2-only vengono omesse (tasto = nessuna funzione).</summary>
+    /// <summary>Exports in Base Camp compatible format: only actions with a confirmed
+    /// native FunctionType. K2-only actions are omitted (key = no function).</summary>
     public static ExportResult ExportBaseCamp(
         DisplayPadStore store, int deviceId, int slot, string profileName, string filePath)
         => Export(store, deviceId, slot, profileName, filePath, bcCompatible: true);
 
-    /// <summary>Esporta in formato K2 (nessuna perdita): stesso schema XML, ma le azioni
-    /// vengono portate 1:1 tramite il sentinel FunctionType="K2Action".</summary>
+    /// <summary>Exports in K2 format (lossless): same XML schema, but actions
+    /// are carried over 1:1 via the FunctionType="K2Action" sentinel.</summary>
     public static ExportResult ExportK2(
         DisplayPadStore store, int deviceId, int slot, string profileName, string filePath)
         => Export(store, deviceId, slot, profileName, filePath, bcCompatible: false);
@@ -106,21 +106,21 @@ public static class DpProfileExporter
                         else
                         {
                             skippedActions++;
-                            skipReasons.Add($"page {pageId} key #{i}: azione \"{rec.ActionType}\" non esiste in Base Camp — omessa");
+                            skipReasons.Add($"page {pageId} key #{i}: action \"{rec.ActionType}\" doesn't exist in Base Camp — omitted");
                         }
                     }
                     else
                     {
-                        // K2-only: passthrough letterale via sentinel FunctionType.
+                        // K2-only: literal passthrough via the sentinel FunctionType.
                         functionType = "K2Action";
                         subType      = rec.ActionType;
                         funcValue    = rec.ActionValue ?? "";
                         isAssigned   = true;
                         exported++;
 
-                        // Le sotto-pagine "dp_folder" portano comunque l'OptionalText con
-                        // l'Id pagina, così il round-trip K2->K2 ricostruisce la cartella
-                        // anche solo rileggendo lo stesso branch BC "Create Folder"-like.
+                        // "dp_folder" sub-pages still carry the OptionalText with
+                        // the page Id, so the K2->K2 round-trip reconstructs the folder
+                        // even by just re-reading the same BC "Create Folder"-like branch.
                         if (rec.ActionType == "dp_folder" && int.TryParse(rec.ActionValue, out var fid))
                             optionalText = BuildFolderOptionalText(fid, store.GetFolderName(fid) ?? "");
                     }
@@ -130,7 +130,7 @@ public static class DpProfileExporter
                 if (rec?.ImagePath is not null && File.Exists(rec.ImagePath))
                 {
                     try { imageB64 = "data:image/png;base64," + Convert.ToBase64String(File.ReadAllBytes(rec.ImagePath)); }
-                    catch { /* immagine illeggibile: esporta senza icona */ }
+                    catch { /* unreadable image: export without icon */ }
                 }
 
                 root.Add(new XElement("DisplayPadLayerBidings",
@@ -175,9 +175,9 @@ public static class DpProfileExporter
 
     private static string BuildFolderOptionalText(int folderPageId, string folderName)
     {
-        // Stesso set di campi visto nei profili Base Camp reali (Id è l'unico
-        // strettamente necessario per il round-trip, gli altri sono valori
-        // ragionevoli di default per la formattazione della label).
+        // Same set of fields seen in real Base Camp profiles (Id is the only one
+        // strictly necessary for the round-trip, the others are reasonable
+        // default values for label formatting).
         var obj = new
         {
             Id = folderPageId,
@@ -196,14 +196,14 @@ public static class DpProfileExporter
     }
 
     /// <summary>
-    /// Traduce un'azione K2 (ActionType/ActionValue) nel FunctionType/SubFunctionType/
-    /// FunctionValue/OptionalText nativi di Base Camp. Ritorna <c>null</c> se l'azione
-    /// non ha un equivalente reale confermato in Base Camp (in tal caso il chiamante
-    /// esporta il tasto come non assegnato, mantenendo comunque l'icona).
+    /// Translates a K2 action (ActionType/ActionValue) into Base Camp's native
+    /// FunctionType/SubFunctionType/FunctionValue/OptionalText. Returns <c>null</c>
+    /// if the action has no confirmed real equivalent in Base Camp (in that case
+    /// the caller exports the key as unassigned, still keeping the icon).
     ///
-    /// Il vocabolario (stringhe esatte "Run task manager", "Volume up", "Left button", ...)
-    /// è stato verificato sui profili Base Camp originali in Profili_BaseCamp/test/*.xml,
-    /// non dedotto — vedi _PROJECT_MAP.md.
+    /// The vocabulary (exact strings "Run task manager", "Volume up", "Left button", ...)
+    /// was verified against the original Base Camp profiles in Profili_BaseCamp/test/*.xml,
+    /// not inferred — see _PROJECT_MAP.md.
     /// </summary>
     private static (string FunctionType, string SubFunctionType, string FunctionValue, string? OptionalText)? MapActionToBc(
         string actionType, string? actionValue, DisplayPadStore store)
@@ -287,8 +287,8 @@ public static class DpProfileExporter
             }
 
             case "text":
-                // Base Camp (FunctionType "Default") gestisce un singolo carattere
-                // letterale per tasto: un testo multi-carattere non ha equivalente.
+                // Base Camp (FunctionType "Default") handles a single literal
+                // character per key: multi-character text has no equivalent.
                 return v.Length == 1 ? ("Default", v, v, null) : null;
 
             case "dp_folder":
@@ -301,8 +301,8 @@ public static class DpProfileExporter
             case "dp_back":
                 return ("Back", "", "", null);
 
-            // pyscript, command, url, macro, multi, createfolder, back (generico),
-            // pcinfo, clock, none: nessun equivalente Base Camp confermato -> omessi.
+            // pyscript, command, url, macro, multi, createfolder, back (generic),
+            // pcinfo, clock, none: no confirmed Base Camp equivalent -> omitted.
             default:
                 return null;
         }

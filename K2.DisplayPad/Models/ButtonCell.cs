@@ -7,20 +7,20 @@ using System.Windows.Media.Imaging;
 namespace K2.DisplayPad.Models;
 
 /// <summary>
-/// Stato bindabile di una singola cella della griglia tasti del DisplayPad.
+/// Bindable state of a single cell in the DisplayPad's button grid.
 /// </summary>
 public sealed class ButtonCell : INotifyPropertyChanged
 {
     public ButtonCell(int index) => Index = index;
 
-    /// <summary>Indice tasto (0..11).</summary>
+    /// <summary>Button index (0..11).</summary>
     public int Index { get; }
 
-    /// <summary>Etichetta visibile in alto a sinistra nella cella.</summary>
+    /// <summary>Label shown in the top-left corner of the cell.</summary>
     public string Label => $"#{Index}";
 
     private string? _imagePath;
-    /// <summary>Path locale dell'ultima immagine caricata su questo tasto.</summary>
+    /// <summary>Local path of the last image uploaded to this button.</summary>
     public string? ImagePath
     {
         get => _imagePath;
@@ -34,7 +34,7 @@ public sealed class ButtonCell : INotifyPropertyChanged
         }
     }
 
-    /// <summary>Anteprima dell'immagine — costruita on demand dal path.</summary>
+    /// <summary>Image preview — built on demand from the path.</summary>
     public ImageSource? Preview
     {
         get
@@ -62,7 +62,7 @@ public sealed class ButtonCell : INotifyPropertyChanged
     public bool HasImage => !string.IsNullOrEmpty(_imagePath);
 
     private bool _isHighlighted;
-    /// <summary>True quando il tasto fisico corrispondente e' tenuto premuto.</summary>
+    /// <summary>True while the corresponding physical button is held down.</summary>
     public bool IsHighlighted
     {
         get => _isHighlighted;
@@ -75,7 +75,7 @@ public sealed class ButtonCell : INotifyPropertyChanged
     }
 
     private int? _keyMatrix;
-    /// <summary>Codice matrix hardware (se gia' associato a questa cella).</summary>
+    /// <summary>Hardware matrix code (if already associated with this cell).</summary>
     public int? KeyMatrix
     {
         get => _keyMatrix;
@@ -88,12 +88,12 @@ public sealed class ButtonCell : INotifyPropertyChanged
         }
     }
 
-    /// <summary>Override del Label se conosciamo il matrix code.</summary>
+    /// <summary>Label override when we know the matrix code.</summary>
     public string LabelWithMatrix =>
         _keyMatrix is int m ? $"#{Index}  0x{m:X2}" : $"#{Index}";
 
     private string? _actionType;
-    /// <summary>Tipo di azione associato al tasto: "url", "keys", "command", "text", null.</summary>
+    /// <summary>Action type associated with the button: "url", "keys", "command", "text", null.</summary>
     public string? ActionType
     {
         get => _actionType;
@@ -101,7 +101,7 @@ public sealed class ButtonCell : INotifyPropertyChanged
     }
 
     private string? _actionValue;
-    /// <summary>Valore dell'azione (URL, comando, sequenza tasti, testo).</summary>
+    /// <summary>Action value (URL, command, key sequence, text).</summary>
     public string? ActionValue
     {
         get => _actionValue;

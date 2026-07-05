@@ -6,9 +6,9 @@ using Microsoft.Data.Sqlite;
 namespace K2.DisplayPad.Services;
 
 /// <summary>
-/// Stato persistente dell'app: per ogni (deviceId, profile, buttonIndex)
-/// memorizza l'immagine caricata e l'eventuale azione da eseguire alla pressione.
-/// Memorizza anche il profilo correntemente selezionato per ciascun device.
+/// Persistent app state: for each (deviceId, profile, buttonIndex)
+/// stores the uploaded image and any action to run on press.
+/// Also stores the currently selected profile for each device.
 /// </summary>
 public sealed class StateStore : IDisposable
 {
@@ -113,7 +113,7 @@ ON CONFLICT(DeviceId, Profile, ButtonIndex) DO UPDATE SET
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>Cancella TUTTI i tasti di un profilo (es. dopo Reset device).</summary>
+    /// <summary>Deletes ALL buttons of a profile (e.g. after a device Reset).</summary>
     public void ClearProfile(int deviceId, int profile)
     {
         using var cmd = _conn.CreateCommand();
@@ -140,7 +140,7 @@ ON CONFLICT(DeviceId, Profile, ButtonIndex) DO UPDATE SET
 
     private static string RotationKey(int deviceId) => $"device.{deviceId}.rotation";
 
-    /// <summary>Orientamento di montaggio del device (default: nativo).</summary>
+    /// <summary>Device mounting orientation (default: native).</summary>
     public DisplayRotation GetRotation(int deviceId) =>
         DisplayPadLayout.Parse(GetSetting(RotationKey(deviceId)));
 

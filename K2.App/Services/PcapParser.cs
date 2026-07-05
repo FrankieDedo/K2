@@ -6,13 +6,13 @@ using System.Text;
 namespace K2.App.Services;
 
 /// <summary>
-/// Parser pcap-ng minimale (link_type USBPcap = 249).
-/// Port C# di <c>K2/_reference/tools/parse_usb_pcap.py</c>.
-/// Filtra i pacchetti USB OUT (host -> device) e restituisce i payload.
+/// Minimal pcap-ng parser (link_type USBPcap = 249).
+/// C# port of <c>K2/_reference/tools/parse_usb_pcap.py</c>.
+/// Filters USB OUT packets (host -> device) and returns the payloads.
 /// </summary>
 internal static class PcapParser
 {
-    /// <summary>Singolo pacchetto USB OUT estratto dal pcapng.</summary>
+    /// <summary>Single USB OUT packet extracted from the pcapng.</summary>
     internal sealed record UsbPacket
     {
         public int    Index   { get; init; }
@@ -25,8 +25,8 @@ internal static class PcapParser
     }
 
     /// <summary>
-    /// Estrae tutti i pacchetti USB OUT (interrupt/bulk, payload non vuoto)
-    /// da un file pcap-ng catturato con USBPcap.
+    /// Extracts all USB OUT packets (interrupt/bulk, non-empty payload)
+    /// from a pcap-ng file captured with USBPcap.
     /// </summary>
     public static List<UsbPacket> ParseOutPackets(string pcapngPath)
     {
@@ -34,7 +34,7 @@ internal static class PcapParser
         var result = new List<UsbPacket>();
         int off = 0;
         int pktIdx = 0;
-        // ushort linkType = 0; // non usato dopo assignment
+        // ushort linkType = 0; // unused after assignment
 
         while (off + 8 <= data.Length)
         {
@@ -81,7 +81,7 @@ internal static class PcapParser
         byte   xfer = pkt[22];
         uint   dataLen = BitConverter.ToUInt32(pkt.Slice(23));
 
-        // Solo interrupt (1) o bulk (3), direzione OUT (bit 7 = 0), payload non vuoto
+        // Only interrupt (1) or bulk (3), OUT direction (bit 7 = 0), non-empty payload
         if (xfer != 1 && xfer != 3) return null;
         if ((ep & 0x80) != 0) return null; // IN, skip
         if (dataLen == 0) return null;
@@ -100,7 +100,7 @@ internal static class PcapParser
         };
     }
 
-    /// <summary>Formatta un pacchetto in hex dump leggibile.</summary>
+    /// <summary>Formats a packet as a readable hex dump.</summary>
     public static string FormatPacket(UsbPacket p, int maxPayload = 128)
     {
         var sb = new StringBuilder();
@@ -109,7 +109,7 @@ internal static class PcapParser
         return sb.ToString();
     }
 
-    /// <summary>Formatta tutti i pacchetti in un report testuale.</summary>
+    /// <summary>Formats all packets into a text report.</summary>
     public static string FormatAll(IReadOnlyList<UsbPacket> packets)
     {
         var sb = new StringBuilder();
@@ -117,7 +117,7 @@ internal static class PcapParser
         {
             sb.AppendLine(FormatPacket(p));
         }
-        sb.AppendLine($"# Totale pacchetti OUT: {packets.Count}");
+        sb.AppendLine($"# Total OUT packets: {packets.Count}");
         return sb.ToString();
     }
 

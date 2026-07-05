@@ -28,17 +28,20 @@ public partial class MainWindow
         LogEverest($"[LAYOUT] dockPos={dockPos} numpadPos={numpadPos}");
 
         // ---- Dock (overlaid on the top edge of the keyboard) ----
+        // GrdEvDock carries both the artwork (ImgEvDock) and the clickable
+        // hotspots (CvsEvDock: media buttons + crown rotation buttons), so they
+        // move together when the dock's physical side changes.
         if (dockPos != 0)
         {
-            ImgEvDock.Visibility = Visibility.Visible;
+            GrdEvDock.Visibility = Visibility.Visible;
             // Align to the side where it is physically connected: 1=right, 2=left
-            ImgEvDock.HorizontalAlignment = dockPos == 2
+            GrdEvDock.HorizontalAlignment = dockPos == 2
                 ? HorizontalAlignment.Left
                 : HorizontalAlignment.Right;
         }
         else
         {
-            ImgEvDock.Visibility = Visibility.Collapsed;
+            GrdEvDock.Visibility = Visibility.Collapsed;
         }
 
         // ---- Numpad (left or right of the keyboard column) ----

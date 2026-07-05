@@ -10,40 +10,40 @@ using Microsoft.Win32;
 namespace K2.App;
 
 /// <summary>
-/// Dialog unificato per configurare un tasto DisplayPad:
-/// caricamento immagine + crop/zoom + rotazione + azione — tutto nella STESSA finestra
-/// (2026-07-05: il crop/zoom, prima un popup separato via ImageCropDialog, è stato
-/// incorporato qui tramite <see cref="CropEditor"/>, così l'intero flusso di modifica
-/// dell'immagine resta in un'unica interfaccia).
+/// Unified dialog to configure a DisplayPad key:
+/// image loading + crop/zoom + rotation + action — all in the SAME window
+/// (2026-07-05: crop/zoom, previously a separate popup via ImageCropDialog, has been
+/// folded in here via <see cref="CropEditor"/>, so the whole image-editing flow stays
+/// in a single interface).
 ///
-/// Rotazione "utente" (questo dialog) e rotazione "device" (satellite) sono
-/// indipendenti: la rotazione utente si applica all'immagine salvata su disco,
-/// quella device si applica in fase di upload via <c>ResolveForUpload</c> nel
-/// satellite. Quindi l'utente può caricare un'immagine, ruotarla di 90° qui
-/// per aggiustarne l'orientamento, e il satellite poi applicherà la
-/// counter-rotation per il display montato ruotato.
+/// "User" rotation (this dialog) and "device" rotation (satellite) are
+/// independent: user rotation is applied to the image saved to disk,
+/// device rotation is applied at upload time via <c>ResolveForUpload</c> in the
+/// satellite. So the user can load an image, rotate it 90° here to adjust
+/// its orientation, and the satellite will then apply the
+/// counter-rotation for a display mounted rotated.
 /// </summary>
 public partial class DpKeyConfigDialog : Window
 {
     // ---- Outputs --------------------------------------------------------
-    /// <summary>Path finale dell'immagine (già ruotata se richiesto). Null = rimuovere.</summary>
+    /// <summary>Final image path (already rotated if requested). Null = remove.</summary>
     public string? NewImagePath { get; private set; }
-    /// <summary>True se l'immagine è cambiata (load / remove / rotazione).</summary>
+    /// <summary>True if the image changed (load / remove / rotation).</summary>
     public bool ImageChanged   { get; private set; }
-    /// <summary>Tipo azione risultante (null = nessuna).</summary>
+    /// <summary>Resulting action type (null = none).</summary>
     public string? ActionType  { get; private set; }
-    /// <summary>Valore azione risultante.</summary>
+    /// <summary>Resulting action value.</summary>
     public string? ActionValue { get; private set; }
 
     // ---- State ----------------------------------------------------------
     private readonly int _keyIndex;
-    /// <summary>Path immagine corrente nel dialog (non ancora croppata/ruotata su disco —
-    /// per le GIF resta il file originale, per le statiche è la sorgente caricata nel
-    /// CropEditor).</summary>
+    /// <summary>Current image path in the dialog (not yet cropped/rotated on disk —
+    /// for GIFs it stays the original file, for static images it's the source loaded
+    /// into the CropEditor).</summary>
     private string? _pendingPath;
-    /// <summary>Path immagine originale all'apertura (per rilevare se è cambiata).</summary>
+    /// <summary>Original image path when the dialog opened (to detect changes).</summary>
     private readonly string? _originalPath;
-    /// <summary>Gradi di rotazione utente selezionati (0 / 90 / 180 / 270).</summary>
+    /// <summary>Selected user rotation degrees (0 / 90 / 180 / 270).</summary>
     private int _rotation;
 
     // ---- Inline preview / crop (2026-07-05) -----------------------------
@@ -57,7 +57,7 @@ public partial class DpKeyConfigDialog : Window
         "K2.DisplayPad\\user_rotated";
 
     // =====================================================================
-    // Costruttore
+    // Constructor
     // =====================================================================
 
     public DpKeyConfigDialog(
@@ -123,7 +123,7 @@ public partial class DpKeyConfigDialog : Window
         if (sender is not RadioButton rb || rb.Tag is not string tag) return;
         if (!int.TryParse(tag, out int degrees)) return;
         _rotation = degrees;
-        _previewRotate.Angle = _rotation;    // ruota visualmente il preview (crop o GIF)
+        _previewRotate.Angle = _rotation;    // visually rotates the preview (crop or GIF)
     }
 
     /// <summary>
@@ -241,7 +241,7 @@ public partial class DpKeyConfigDialog : Window
         // that case already; this is just a defensive re-check on the FINAL path).
         bool isGif = DpGifAnimator.IsAnimatedGif(finalPath);
 
-        // Applica rotazione utente sull'immagine se necessaria
+        // Apply user rotation to the image if needed
         if (!isGif && !string.IsNullOrEmpty(finalPath) && File.Exists(finalPath) && _rotation != 0)
         {
             try
@@ -252,14 +252,14 @@ public partial class DpKeyConfigDialog : Window
             }
             catch
             {
-                // rotazione fallita: usa il risultato non ruotato
+                // rotation failed: use the unrotated result
                 NewImagePath = finalPath;
                 ImageChanged = finalPath != _originalPath;
             }
         }
         else
         {
-            NewImagePath = finalPath;   // null = rimuovere, stringa = invariata o nuova
+            NewImagePath = finalPath;   // null = remove, string = unchanged or new
             ImageChanged = finalPath != _originalPath;
         }
 
@@ -271,9 +271,9 @@ public partial class DpKeyConfigDialog : Window
     // =====================================================================
 
     /// <summary>
-    /// Ruota l'immagine sorgente e salva il risultato in una cache locale.
-    /// Usa <c>System.Drawing</c> (disponibile tramite UseWindowsForms del csproj).
-    /// Restituisce il path del file ruotato (dalla cache se già presente).
+    /// Rotates the source image and saves the result to a local cache.
+    /// Uses <c>System.Drawing</c> (available via the csproj's UseWindowsForms).
+    /// Returns the rotated file's path (from cache if already present).
     /// </summary>
     private static string ApplyUserRotation(string sourcePath, int degrees)
     {
@@ -282,8 +282,8 @@ public partial class DpKeyConfigDialog : Window
             CacheDir_UserRotated);
         Directory.CreateDirectory(cacheRoot);
 
-        // Chiave cache: path + mtime + grado rotazione (evita collisioni e si
-        // auto-invalida quando l'immagine sorgente viene aggiornata).
+        // Cache key: path + mtime + rotation degrees (avoids collisions and
+        // auto-invalidates when the source image is updated).
         long mtime = 0;
         try { mtime = File.GetLastWriteTimeUtc(sourcePath).Ticks; } catch { }
         byte[] hashBytes = System.Security.Cryptography.SHA1.HashData(
@@ -292,7 +292,7 @@ public partial class DpKeyConfigDialog : Window
         string dest = Path.Combine(cacheRoot, name);
         if (File.Exists(dest)) return dest;
 
-        // Legge in MemoryStream per non bloccare il file sorgente.
+        // Read into a MemoryStream so the source file isn't locked.
         byte[] bytes = File.ReadAllBytes(sourcePath);
         using var ms  = new MemoryStream(bytes);
         using var bmp = new System.Drawing.Bitmap(ms);

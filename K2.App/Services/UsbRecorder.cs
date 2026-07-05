@@ -8,20 +8,20 @@ using System.Text.RegularExpressions;
 namespace K2.App.Services;
 
 /// <summary>
-/// Registratore USB che orchestra tshark (Wireshark CLI) + USBPcap
-/// per catturare i pacchetti HID inviati alla tastiera Everest Max.
+/// USB recorder that orchestrates tshark (Wireshark CLI) + USBPcap
+/// to capture the HID packets sent to the Everest Max keyboard.
 ///
 /// Workflow:
-///   1. <see cref="FindTshark"/> — localizza tshark.exe
-///   2. <see cref="ListUsbInterfaces"/> — elenca le interfacce USBPcap
-///   3. <see cref="StartCapture"/> — avvia tshark in background
-///   4. (l'utente fa cose in Base Camp)
-///   5. <see cref="StopCapture"/> — ferma tshark e restituisce il path pcapng
-///   6. <see cref="ParseCapture"/> — analizza i pacchetti catturati
+///   1. <see cref="FindTshark"/> — locates tshark.exe
+///   2. <see cref="ListUsbInterfaces"/> — lists the USBPcap interfaces
+///   3. <see cref="StartCapture"/> — starts tshark in the background
+///   4. (the user does things in Base Camp)
+///   5. <see cref="StopCapture"/> — stops tshark and returns the pcapng path
+///   6. <see cref="ParseCapture"/> — analyzes the captured packets
 /// </summary>
 internal sealed class UsbRecorder : IDisposable
 {
-    // VID/PID della tastiera Everest Max
+    // VID/PID of the Everest Max keyboard
     private const ushort EverestVid = 0x3282;
     private const ushort EverestPid = 0x0001;
 
@@ -32,26 +32,26 @@ internal sealed class UsbRecorder : IDisposable
     public bool IsRecording => _tshark is { HasExited: false };
 
     // ================================================================
-    // 1. Localizzazione tshark
+    // 1. Locating tshark
     // ================================================================
 
     /// <summary>
-    /// Cerca tshark.exe nei percorsi tipici di installazione di Wireshark.
-    /// Restituisce il path o null se non trovato.
+    /// Searches for tshark.exe in the typical Wireshark install paths.
+    /// Returns the path or null if not found.
     /// </summary>
     public string? FindTshark()
     {
         if (_tsharkExe != null && File.Exists(_tsharkExe))
             return _tsharkExe;
 
-        // Percorsi comuni
+        // Common paths
         var candidates = new[]
         {
             @"C:\Program Files\Wireshark\tshark.exe",
             @"C:\Program Files (x86)\Wireshark\tshark.exe",
         };
 
-        // Aggiungi dal PATH di sistema
+        // Also check the system PATH
         var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
         foreach (var dir in pathEnv.Split(';', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -64,12 +64,12 @@ internal sealed class UsbRecorder : IDisposable
     }
 
     // ================================================================
-    // 2. Lista interfacce USBPcap
+    // 2. List USBPcap interfaces
     // ================================================================
 
     /// <summary>
-    /// Elenca le interfacce di cattura USBPcap disponibili.
-    /// Restituisce coppie (nome_interfaccia, descrizione).
+    /// Lists the available USBPcap capture interfaces.
+    /// Returns (interface_name, description) pairs.
     /// </summary>
     public List<(string Name, string Description)> ListUsbInterfaces()
     {
@@ -91,8 +91,8 @@ internal sealed class UsbRecorder : IDisposable
             var output = proc.StandardOutput.ReadToEnd();
             proc.WaitForExit(5000);
 
-            // Output formato: "1. \Device\USBPcap1 (USBPcap1)"
-            // oppure: "1. \\.\USBPcap1 (USB bus)"
+            // Output format: "1. \Device\USBPcap1 (USBPcap1)"
+            // or: "1. \\.\USBPcap1 (USB bus)"
             foreach (var line in output.Split('\n'))
             {
                 if (!line.Contains("USBPcap", StringComparison.OrdinalIgnoreCase))
@@ -107,23 +107,23 @@ internal sealed class UsbRecorder : IDisposable
                 }
             }
         }
-        catch { /* tshark non disponibile */ }
+        catch { /* tshark not available */ }
         return result;
     }
 
     // ================================================================
-    // 3. Avvio cattura
+    // 3. Starting the capture
     // ================================================================
 
     /// <summary>
-    /// Avvia la cattura USB su un'interfaccia USBPcap specificata.
-    /// Il pcapng viene salvato nella cartella <c>K2/_reference/usb_dumps/</c>.
+    /// Starts a USB capture on the specified USBPcap interface.
+    /// The pcapng is saved in the <c>K2/_reference/usb_dumps/</c> folder.
     /// </summary>
     /// <param name="interfaceName">
-    /// Nome dell'interfaccia USBPcap (es. <c>\\.\USBPcap1</c>).
+    /// USBPcap interface name (e.g. <c>\\.\USBPcap1</c>).
     /// </param>
     /// <param name="label">
-    /// Etichetta per il file (es. "basecamp_wave"). Se null, usa un timestamp.
+    /// Label for the file (e.g. "basecamp_wave"). If null, uses a timestamp.
     /// </param>
     /// <returns>Path of the pcapng file that will be written, or null on error.</returns>
     public string? StartCapture(string interfaceName, string? label = null)
@@ -132,7 +132,7 @@ internal sealed class UsbRecorder : IDisposable
         if (tshark == null) return null;
         if (IsRecording) return null;
 
-        // Crea cartella dump se non esiste
+        // Create the dump folder if it doesn't exist
         var dumpDir = GetDumpDirectory();
         Directory.CreateDirectory(dumpDir);
 
@@ -143,7 +143,7 @@ internal sealed class UsbRecorder : IDisposable
         _capturePath = Path.Combine(dumpDir, fileName);
 
         // tshark -i <interface> -w <file>
-        // Non filtriamo a livello di cattura: filtreremo dopo nel parser.
+        // We don't filter at capture time: filtering happens later in the parser.
         // This gives us the full dump in case extra analysis is needed.
         var args = $"-i \"{interfaceName}\" -w \"{_capturePath}\"";
 
@@ -166,11 +166,11 @@ internal sealed class UsbRecorder : IDisposable
     }
 
     // ================================================================
-    // 4. Stop cattura
+    // 4. Stopping the capture
     // ================================================================
 
     /// <summary>
-    /// Ferma la cattura e restituisce il path del pcapng.
+    /// Stops the capture and returns the pcapng path.
     /// </summary>
     public string? StopCapture()
     {
@@ -180,7 +180,7 @@ internal sealed class UsbRecorder : IDisposable
         {
             if (!_tshark.HasExited)
             {
-                // tshark si ferma con Ctrl+C; su Windows usiamo taskkill
+                // tshark stops via Ctrl+C; on Windows we use taskkill
                 // because we cannot send SIGINT from .NET easily.
                 var kill = new ProcessStartInfo("taskkill", $"/PID {_tshark.Id} /F")
                 {
@@ -204,11 +204,11 @@ internal sealed class UsbRecorder : IDisposable
     }
 
     // ================================================================
-    // 5. Analisi
+    // 5. Analysis
     // ================================================================
 
     /// <summary>
-    /// Parsa un file pcapng e restituisce i pacchetti OUT con hex dump.
+    /// Parses a pcapng file and returns the OUT packets with a hex dump.
     /// </summary>
     public static List<PcapParser.UsbPacket> ParseCapture(string pcapngPath)
     {
@@ -217,7 +217,7 @@ internal sealed class UsbRecorder : IDisposable
     }
 
     /// <summary>
-    /// Confronta due catture e restituisce un report delle differenze.
+    /// Compares two captures and returns a diff report.
     /// </summary>
     public static string CompareCaptures(string pcapA, string pcapB,
         string labelA = "Base Camp", string labelB = "K2")
@@ -226,24 +226,24 @@ internal sealed class UsbRecorder : IDisposable
         var b = ParseCapture(pcapB);
         var sb = new System.Text.StringBuilder();
 
-        sb.AppendLine($"=== {labelA}: {a.Count} pacchetti OUT ===");
+        sb.AppendLine($"=== {labelA}: {a.Count} OUT packets ===");
         sb.AppendLine(PcapParser.FormatAll(a));
-        sb.AppendLine($"=== {labelB}: {b.Count} pacchetti OUT ===");
+        sb.AppendLine($"=== {labelB}: {b.Count} OUT packets ===");
         sb.AppendLine(PcapParser.FormatAll(b));
 
-        sb.AppendLine("=== Differenze ===");
+        sb.AppendLine("=== Differences ===");
         int maxCount = Math.Max(a.Count, b.Count);
         if (a.Count != b.Count)
-            sb.AppendLine($"  Numero pacchetti diverso: {labelA}={a.Count}, {labelB}={b.Count}");
+            sb.AppendLine($"  Different packet count: {labelA}={a.Count}, {labelB}={b.Count}");
 
         for (int i = 0; i < Math.Min(a.Count, b.Count); i++)
         {
             if (!a[i].Payload.SequenceEqual(b[i].Payload))
             {
-                sb.AppendLine($"  Pacchetto #{i + 1}: payload diverso");
+                sb.AppendLine($"  Packet #{i + 1}: different payload");
                 sb.AppendLine($"    {labelA}: {BitConverter.ToString(a[i].Payload).Replace("-", " ")}");
                 sb.AppendLine($"    {labelB}: {BitConverter.ToString(b[i].Payload).Replace("-", " ")}");
-                // Evidenzia byte diversi
+                // Highlight differing bytes
                 var diff = new System.Text.StringBuilder("    Diff:  ");
                 for (int j = 0; j < Math.Max(a[i].Payload.Length, b[i].Payload.Length); j++)
                 {
@@ -263,12 +263,12 @@ internal sealed class UsbRecorder : IDisposable
 
     private static string GetDumpDirectory()
     {
-        // Cerca _reference/usb_dumps/ salendo dalla directory dell'exe
+        // Look for _reference/usb_dumps/ by walking up from the exe directory
         var exeDir = AppDomain.CurrentDomain.BaseDirectory;
         var refDir = Path.GetFullPath(Path.Combine(exeDir, "..", "..", "..", "..", "_reference", "usb_dumps"));
         if (Directory.Exists(Path.GetDirectoryName(refDir)))
             return refDir;
-        // Fallback: accanto all'exe
+        // Fallback: next to the exe
         return Path.Combine(exeDir, "usb_dumps");
     }
 

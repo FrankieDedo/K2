@@ -7,12 +7,12 @@ using Microsoft.Data.Sqlite;
 namespace K2.App.Services;
 
 /// <summary>
-/// Persistenza del modulo Everest. Per ogni (profilo, codice matrice tasto)
-/// memorizza il nome assegnato e l'azione.
+/// Persistence for the Everest module. For each (profile, key matrix code)
+/// stores the assigned name and action.
 ///
 /// The keyboard is single-device, so there is no deviceId; and a key's identity
 /// is directly its hardware matrix code — no separate lookup table
-/// mappatura separata come per il MacroPad.
+/// mapping like for the MacroPad.
 /// </summary>
 public sealed class EverestStore : IDisposable
 {
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS Settings (
         cmd.ExecuteNonQuery();
     }
 
-    // ---------- tasti ----------
+    // ---------- keys ----------
 
     public IReadOnlyList<EverestKeyRecord> LoadProfile(int profile)
     {
@@ -102,7 +102,7 @@ ON CONFLICT(Profile, KeyMatrix) DO UPDATE SET
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>Cancella tutte le azioni di un profilo (tasti e nome).</summary>
+    /// <summary>Deletes all actions of a profile (keys and name).</summary>
     public void ClearProfile(int profile)
     {
         using var cmd = _conn.CreateCommand();
@@ -113,7 +113,7 @@ ON CONFLICT(Profile, KeyMatrix) DO UPDATE SET
         SetSetting($"profile.{profile}.name", "");
     }
 
-    // ---------- impostazioni ----------
+    // ---------- settings ----------
 
     public string? GetSetting(string key)
     {
@@ -155,12 +155,12 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
     public void SetProfileName(int slot, string name) =>
         SetSetting($"profile.{slot}.name", name.Trim());
 
-    // ---------- mappa wMatrix → matrixId (rimappatura tastiera) ----------
+    // ---------- wMatrix → matrixId map (keyboard remapping) ----------
 
     /// <summary>
-    /// Mappa persistita <c>wMatrix SDK → matrixId layout</c>.
-    /// Permette di tradurre i codici riportati dalla callback KEY_CALLBACK
-    /// nei MatrixId usati dal layout visuale.
+    /// Persisted <c>wMatrix SDK → matrixId layout</c> map.
+    /// Allows translating the codes reported by the KEY_CALLBACK callback
+    /// into the MatrixIds used by the visual layout.
     /// </summary>
     public Dictionary<int, int> GetKeyMap()
     {

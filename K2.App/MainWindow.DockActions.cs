@@ -1,14 +1,20 @@
-// MainWindow.DockActions.cs — partial class: actions for display keys, dock buttons, and crown.
+// MainWindow.DockActions.cs — partial class: actions for the 4 physical media
+// dock buttons and the 2 rotation directions of the crown (dial).
 //
-// This panel manages action assignment for non-standard keys:
-//   - 4 numpad display keys (matrixId captured via SDK callback)
-//   - 4 physical media dock buttons (matrixId captured)
-//   - 2 directions of the rotating crown (matrixId captured)
+// These hotspots are drawn directly on the device graphic (CvsEvDock, overlaid
+// on Assets/keytop.png — see MainWindow.xaml, GrdEvDock/CvsEvDock) instead of a
+// separate list panel: left-click opens the action dialog, right-click opens a
+// context menu (capture matrixId / configure / remove / reset).
 //
-// MatrixIds are not known in advance: the user uses "Capture HW key" to
-// press the physical key and associate it with a slot.
+// MatrixIds are not known in advance: the user uses "Capture matrixId…" (or the
+// generic "Capture HW key" button in the Key Binding section) to press the
+// physical key and associate it with a slot.
 //
 // Persistence in EverestStore: keys "dockact.{slot}.matrixId/actionType/actionValue".
+//
+// Numpad display keys (also physically on the dock) have their own dedicated
+// image+action interface — see MainWindow.NumpadDisplayKeys.cs — and are not
+// part of this file.
 
 using System;
 using System.Collections.Generic;
@@ -36,76 +42,108 @@ public partial class MainWindow
     private bool _hwCapturing;
     private HwActionSlot? _hwCaptureTarget;
 
+    /// <summary>
+    /// Hotspot geometry on the 200×64 CvsEvDock canvas (matches the knob centers
+    /// in Assets/keytop.png at its rendered size). Media buttons 1-4 sit on the
+    /// artwork; the crown buttons sit above it (negative Y) since the 5th knob
+    /// (the dial) has no push-button of its own — only its rotation is bindable.
+    /// </summary>
+    private static readonly (double X, double Y, double W, double H)[] DockHotspots =
+    {
+        (30.7, 29.9, 22, 22),   // Dock Btn 1 — Prev track knob
+        (56.1, 29.9, 22, 22),   // Dock Btn 2 — Next track knob
+        (81.4, 29.9, 22, 22),   // Dock Btn 3 — Play/Pause knob
+        (105.5, 29.9, 22, 22),  // Dock Btn 4 — Mute knob
+    };
+
+    private static readonly (double X, double Y, double W, double H)[] CrownHotspots =
+    {
+        (96.5, -16, 24, 14),  // Crown ← (counter-clockwise)
+        (122.5, -16, 24, 14), // Crown → (clockwise)
+    };
+
     // ─────────────────────── Init ───────────────────────
 
     private void InitDockActionsPanel()
     {
-        // Define slots
-        string[] ndkNames = { "Display 1", "Display 2", "Display 3", "Display 4" };
         string[] dockNames = { "Dock Btn 1", "Dock Btn 2", "Dock Btn 3", "Dock Btn 4" };
         string[] dialNames = { "Crown ←", "Crown →" };
+        string[] dialGlyphs = { "↺", "↻" }; // ↺ ↻
 
-        foreach (var (names, prefix, panel) in new[]
-        {
-            (ndkNames,  "ndk",  WpNdkActions),
-            (dockNames, "dock", WpDockActions),
-            (dialNames, "dial", WpDialActions),
-        })
-        {
-            for (int i = 0; i < names.Length; i++)
-            {
-                var slot = new HwActionSlot
-                {
-                    Name = names[i],
-                    StoreKey = $"dockact.{prefix}{i}",
-                };
+        for (int i = 0; i < dockNames.Length; i++)
+            _hwSlots.Add(CreateHwSlot(dockNames[i], "dock", i));
+        for (int i = 0; i < dialNames.Length; i++)
+            _hwSlots.Add(CreateHwSlot(dialNames[i], "dial", i));
 
-                // Load from store
-                var mid = _evStore.GetSetting($"{slot.StoreKey}.matrixId");
-                if (int.TryParse(mid, out int m)) slot.MatrixId = m;
-                slot.ActionType = _evStore.GetSetting($"{slot.StoreKey}.actionType");
-                slot.ActionValue = _evStore.GetSetting($"{slot.StoreKey}.actionValue");
+        // Media dock buttons: transparent hotspots over the knobs already drawn
+        // in the artwork (no extra glyph needed, the icon is baked in the image).
+        for (int i = 0; i < 4; i++)
+            PlaceHwOverlayButton(_hwSlots[i], CvsEvDock, DockHotspots[i], glyph: null);
 
-                // Create UI button
-                var btn = new Button
-                {
-                    Content = FormatSlotLabel(slot),
-                    MinWidth = 100,
-                    Padding = new Thickness(6, 4, 6, 4),
-                    Margin = new Thickness(0, 0, 4, 4),
-                    Background = new SolidColorBrush(
-                        slot.MatrixId != 0 ? Color.FromRgb(0x2A, 0x4A, 0x4C) : Color.FromRgb(0x3A, 0x3A, 0x40)),
-                    Foreground = Brushes.White,
-                    BorderBrush = new SolidColorBrush(Color.FromRgb(0x5B, 0xBE, 0xC3)),
-                    BorderThickness = new Thickness(1),
-                    Cursor = System.Windows.Input.Cursors.Hand,
-                    Tag = slot,
-                    ToolTip = $"{slot.Name}\nmatrixId=0x{slot.MatrixId:X4}\nAction: {slot.ActionType ?? "none"}",
-                    ContextMenu = BuildHwSlotContextMenu(),
-                };
-                btn.Click += HwSlotButton_Click;
-                slot.UiButton = btn;
-
-                panel.Children.Add(btn);
-                _hwSlots.Add(slot);
-            }
-        }
+        // Crown rotation: no artwork above the dial, so show a small ↺ / ↻ glyph.
+        for (int i = 0; i < 2; i++)
+            PlaceHwOverlayButton(_hwSlots[4 + i], CvsEvDock, CrownHotspots[i], glyph: dialGlyphs[i]);
     }
 
-    private static string FormatSlotLabel(HwActionSlot slot)
+    private HwActionSlot CreateHwSlot(string name, string prefix, int index)
     {
-        string action = slot.ActionType ?? "—";
-        string mapped = slot.MatrixId != 0 ? $"0x{slot.MatrixId:X2}" : "?";
-        return $"{slot.Name}\n[{mapped}] {action}";
+        var slot = new HwActionSlot
+        {
+            Name = name,
+            StoreKey = $"dockact.{prefix}{index}",
+        };
+
+        var mid = _evStore.GetSetting($"{slot.StoreKey}.matrixId");
+        if (int.TryParse(mid, out int m)) slot.MatrixId = m;
+        slot.ActionType = _evStore.GetSetting($"{slot.StoreKey}.actionType");
+        slot.ActionValue = _evStore.GetSetting($"{slot.StoreKey}.actionValue");
+        return slot;
     }
+
+    /// <summary>Creates a transparent hotspot button for a slot and places it on
+    /// the given canvas at the given geometry. <paramref name="glyph"/>, if set,
+    /// is shown as small centered text (used where the artwork has no icon).</summary>
+    private void PlaceHwOverlayButton(
+        HwActionSlot slot, Canvas canvas, (double X, double Y, double W, double H) geo, string? glyph)
+    {
+        var btn = new Button
+        {
+            Width = geo.W,
+            Height = geo.H,
+            Content = glyph,
+            FontSize = 10,
+            Foreground = Brushes.White,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(slot.ActionType is null ? 1 : 2),
+            BorderBrush = SlotBorderBrush(slot),
+            Padding = new Thickness(0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Tag = slot,
+            ToolTip = SlotTooltip(slot),
+            ContextMenu = BuildHwSlotContextMenu(),
+        };
+        btn.Click += HwSlotButton_Click;
+        slot.UiButton = btn;
+
+        Canvas.SetLeft(btn, geo.X - geo.W / 2);
+        Canvas.SetTop(btn, geo.Y - geo.H / 2);
+        canvas.Children.Add(btn);
+    }
+
+    private static Brush SlotBorderBrush(HwActionSlot slot) =>
+        slot.ActionType is not null
+            ? new SolidColorBrush(Color.FromRgb(0x5B, 0xBE, 0xC3)) // teal accent: action bound
+            : Brushes.Transparent;
+
+    private static string SlotTooltip(HwActionSlot slot) =>
+        $"{slot.Name}\nmatrixId=0x{slot.MatrixId:X4}\nAction: {slot.ActionType ?? "none"}";
 
     private void RefreshSlotButton(HwActionSlot slot)
     {
         if (slot.UiButton is null) return;
-        slot.UiButton.Content = FormatSlotLabel(slot);
-        slot.UiButton.Background = new SolidColorBrush(
-            slot.MatrixId != 0 ? Color.FromRgb(0x2A, 0x4A, 0x4C) : Color.FromRgb(0x3A, 0x3A, 0x40));
-        slot.UiButton.ToolTip = $"{slot.Name}\nmatrixId=0x{slot.MatrixId:X4}\nAction: {slot.ActionType ?? "none"}";
+        slot.UiButton.BorderThickness = new Thickness(slot.ActionType is null ? 1 : 2);
+        slot.UiButton.BorderBrush = SlotBorderBrush(slot);
+        slot.UiButton.ToolTip = SlotTooltip(slot);
     }
 
     // ─────────────────────── Persistence ───────────────────────

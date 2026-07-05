@@ -10,24 +10,24 @@ namespace K2.DisplayPad;
 public partial class MainWindow
 {
     // ============================================================
-    // Esecuzione azione al press
+    // Action execution on press
     // ============================================================
 
     /// <summary>
-    /// Esegue l'azione configurata su un tasto. La logica vera vive nel
-    /// motore azioni condiviso <see cref="K2.Core.ButtonActionEngine"/>;
-    /// qui si passa solo tipo, valore e indice del tasto.
+    /// Executes the action configured on a button. The actual logic lives in
+    /// the shared action engine <see cref="K2.Core.ButtonActionEngine"/>;
+    /// here we just pass the type, value and index of the button.
     /// </summary>
     private void TryExecuteAction(ButtonCell cell)
         => _engine?.Execute(cell.ActionType, cell.ActionValue, cell.Index);
 
     /// <summary>
-    /// Cambio profilo del DisplayPad — operazione device-specific invocata dal
-    /// motore condiviso tramite <see cref="K2.Core.IActionHost.SwitchProfile"/>.
+    /// DisplayPad profile switch — device-specific operation invoked by the
+    /// shared engine via <see cref="K2.Core.IActionHost.SwitchProfile"/>.
     /// </summary>
     private void ExecuteProfileSwitch(string target)
     {
-        if (CbDevice.SelectedItem is not int id) { Log("[EXEC] profile: nessun device selezionato"); return; }
+        if (CbDevice.SelectedItem is not int id) { Log("[EXEC] profile: no device selected"); return; }
         int current = CurrentProfile();
         int next = current;
         var t = (target ?? "").Trim();
@@ -39,15 +39,15 @@ public partial class MainWindow
             next = current == 1 ? DisplayPadService.ProfileCount : current - 1;
         else if (int.TryParse(t, out var n) && n >= 1 && n <= DisplayPadService.ProfileCount)
             next = n;
-        else { Log($"[EXEC] profile: target \"{t}\" non risolto"); return; }
+        else { Log($"[EXEC] profile: target \"{t}\" not resolved"); return; }
 
-        if (next == current) { Log($"[EXEC] profile: gia' su {current}"); return; }
+        if (next == current) { Log($"[EXEC] profile: already on {current}"); return; }
         CbProfile.SelectedItem = next;
         Log($"[EXEC] profile -> {next}");
     }
 
     // ============================================================
-    // Mappa tasti
+    // Key mapping
     // ============================================================
 
     private void BtnMapKeys_Click(object sender, RoutedEventArgs e)
@@ -65,7 +65,7 @@ public partial class MainWindow
         _mapAwaitingIndex = 0;
         LblMapKeysText.Text = "Annulla";
         LblStatus.Text = "Mappatura: premi il tasto fisico per la cella #0…";
-        Log("[MAP ] avvio procedura di rimappatura tasti");
+        Log("[MAP ] starting key remapping procedure");
     }
 
     private void ApplyDefaultKeyMap()
@@ -79,12 +79,12 @@ public partial class MainWindow
     }
 
     // ============================================================
-    // Import profilo BaseCamp (XML)
+    // BaseCamp profile import (XML)
     // ============================================================
 
     private void BtnImportXml_Click(object sender, RoutedEventArgs e)
     {
-        if (CbDevice.SelectedItem is not int id) { Log("[WARN] Seleziona prima un device."); return; }
+        if (CbDevice.SelectedItem is not int id) { Log("[WARN] Select a device first."); return; }
 
         var dlgOpen = new OpenFileDialog
         {
@@ -101,7 +101,7 @@ public partial class MainWindow
                 && idFromXml >= 1 && idFromXml <= DisplayPadService.ProfileCount)
                 defaultSlot = idFromXml;
         }
-        catch (Exception ex) { Log($"[ERR ] lettura preliminare XML: {ex.Message}"); return; }
+        catch (Exception ex) { Log($"[ERR ] preliminary XML read: {ex.Message}"); return; }
 
         var picker = new ImportProfileDialog(dlgOpen.FileName, defaultSlot, DisplayPadService.ProfileCount) { Owner = this };
         if (picker.ShowDialog() != true) return;
@@ -110,13 +110,13 @@ public partial class MainWindow
         try
         {
             var importer = new BaseCampProfileImporter();
-            // Per scrivere nel profilo FW (SetIconPic) serve AP disabilitato:
-            // diciamo al firmware "stai per ricevere il tuo profilo aggiornato".
+            // Writing to the FW profile (SetIconPic) requires AP disabled:
+            // this tells the firmware "you're about to receive your updated profile".
             try { _service.APEnable(id, false); } catch { /* ignore */ }
 
             var result = importer.Import(dlgOpen.FileName, id, slot, _service, _store, _rotation);
             Log($"[IMP ] '{result.ProfileName}' -> device {id} slot {slot}: " +
-                $"{result.ImportedCells.Count} tasti, {result.Skipped.Count} skip, {result.Errors.Count} errori");
+                $"{result.ImportedCells.Count} buttons, {result.Skipped.Count} skip, {result.Errors.Count} errors");
             foreach (var s in result.Skipped) Log("[IMP ]   skip: " + s);
             foreach (var er in result.Errors) Log("[IMP ]   err : " + er);
 

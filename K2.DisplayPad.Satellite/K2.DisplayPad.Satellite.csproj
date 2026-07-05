@@ -13,6 +13,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <AssemblyName>K2.DisplayPad.Satellite</AssemblyName>
     <RootNamespace>K2.DisplayPad.Satellite</RootNamespace>
+    <ApplicationIcon>Assets\K2_icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <!-- Managed wrapper del DisplayPad SDK -->

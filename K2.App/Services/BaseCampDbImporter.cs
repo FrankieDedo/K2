@@ -30,10 +30,10 @@ public sealed class BaseCampDbImporter
         { 178, 8 }, { 179, 9 }, { 220, 10 }, { 221, 11 },
     };
 
-    /// <summary>Trova il percorso di BaseCamp.db cercando nelle installazioni note.</summary>
+    /// <summary>Finds the path to BaseCamp.db by searching known installations.</summary>
     public static string? FindBaseCampDb()
     {
-        // 1. Variabile d'ambiente esplicita
+        // 1. Explicit environment variable
         var env = Environment.GetEnvironmentVariable("K2_BASECAMP_DB");
         if (!string.IsNullOrEmpty(env) && File.Exists(env))
             return env;
@@ -44,7 +44,7 @@ public sealed class BaseCampDbImporter
             // The DB is in resources/bin/ (Electron app)
             var candidate = Path.Combine(dir, "resources", "bin", "BaseCamp.db");
             if (File.Exists(candidate)) return candidate;
-            // Fallback: accanto all'exe
+            // Fallback: next to the exe
             candidate = Path.Combine(dir, "BaseCamp.db");
             if (File.Exists(candidate)) return candidate;
         }
@@ -52,7 +52,7 @@ public sealed class BaseCampDbImporter
         return null;
     }
 
-    /// <summary>Profilo DisplayPad letto dal DB di Base Camp.</summary>
+    /// <summary>DisplayPad profile read from the Base Camp DB.</summary>
     public sealed record BcProfile(
         int ProfileId,
         int Slot,           // Id in Profiles (1-5)
@@ -61,7 +61,7 @@ public sealed class BaseCampDbImporter
         string? DeviceGUID,
         bool IsSelected);
 
-    /// <summary>Tasto di un profilo DisplayPad letto dal DB.</summary>
+    /// <summary>Key of a DisplayPad profile read from the DB.</summary>
     public sealed record BcButton(
         int ButtonIndex,    // 0-11
         string? FunctionType,
@@ -73,8 +73,8 @@ public sealed class BaseCampDbImporter
         string? OptionalText = null); // JSON with {"Id":<pageId>,...} for "Create Folder" keys
 
     /// <summary>
-    /// Legge tutti i profili DisplayPad dal database.
-    /// Raggruppa per DeviceId → lista profili.
+    /// Reads all DisplayPad profiles from the database.
+    /// Groups by DeviceId → list of profiles.
     /// </summary>
     public static Dictionary<int, List<BcProfile>> ReadProfiles(string dbPath)
     {
@@ -108,7 +108,7 @@ public sealed class BaseCampDbImporter
         return result;
     }
 
-    /// <summary>Legge i tasti di un profilo specifico (tutte le pagine, incluse le sottocartelle).</summary>
+    /// <summary>Reads the keys of a specific profile (all pages, including sub-folders).</summary>
     public static List<BcButton> ReadButtons(string dbPath, int profileId)
     {
         using var conn = OpenReadOnly(dbPath);
@@ -164,9 +164,9 @@ public sealed class BaseCampDbImporter
     }
 
     /// <summary>
-    /// Importa un profilo Base Camp nello store K2 per un device specifico.
-    /// Salva le immagini base64 su disco e le azioni tradotte.
-    /// Ritorna il numero di tasti importati.
+    /// Imports a Base Camp profile into the K2 store for a specific device.
+    /// Saves the base64 images to disk and the translated actions.
+    /// Returns the number of keys imported.
     /// </summary>
     public static int ImportProfile(
         string dbPath,
@@ -178,7 +178,7 @@ public sealed class BaseCampDbImporter
         int slot = profile.Slot;
         int imported = 0;
 
-        // Directory per le immagini importate
+        // Directory for the imported images
         string iconsDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "K2.DisplayPad", "imported_bc", $"dev{k2DeviceId}_slot{slot}_{profile.Name}");
@@ -193,7 +193,7 @@ public sealed class BaseCampDbImporter
 
             int pageId = btn.ParentId; // 0 = root, >0 = folder sub-page
 
-            // Salva immagine
+            // Save image
             string? imagePath = null;
             if (!string.IsNullOrEmpty(btn.Base64Image))
             {
@@ -210,10 +210,10 @@ public sealed class BaseCampDbImporter
                     }
                     // else: BC internal path — no image available, skip silently
                 }
-                catch { /* immagine corrotta o encoding non valido, skip */ }
+                catch { /* corrupted image or invalid encoding, skip */ }
             }
 
-            // Traduci azione (folder/back handled specially)
+            // Translate action (folder/back handled specially)
             string? actionType, actionValue;
             if (btn.FunctionType == "Create Folder")
             {
@@ -257,8 +257,8 @@ public sealed class BaseCampDbImporter
     }
 
     /// <summary>
-    /// Traduce FunctionType/SubFunctionType/FunctionValue di Base Camp
-    /// nei tipi di azione K2.Core (ActionType/ActionValue).
+    /// Translates Base Camp's FunctionType/SubFunctionType/FunctionValue
+    /// into K2.Core action types (ActionType/ActionValue).
     /// </summary>
     public static (string? ActionType, string? ActionValue) TranslateAction(
         string? funcType, string? subType, string? funcValue)
@@ -328,7 +328,7 @@ public sealed class BaseCampDbImporter
                 (null, null),
 
             _ =>
-                // Tipo sconosciuto: preserva come generico
+                // Unknown type: preserve it generically
                 ($"bc:{funcType}", funcValue ?? subType)
         };
     }
@@ -524,7 +524,7 @@ public sealed class BaseCampDbImporter
     // hardware — only against decompiled source. See _PROJECT_MAP.md.
     // =========================================================
 
-    /// <summary>Tasto MacroPad letto da MakaluKeyBindings.</summary>
+    /// <summary>MacroPad key read from MakaluKeyBindings.</summary>
     public sealed record BcMakaluButton(
         int ButtonIndex,     // 0-11 (KeyId - 1)
         string? FunctionType,
@@ -532,8 +532,8 @@ public sealed class BaseCampDbImporter
         string? FunctionEnteredValue,
         bool IsAssigned);
 
-    /// <summary>Legge i tasti di un profilo MacroPad dalla vera tabella Base Camp
-    /// (MakaluKeyBindings), non da EverestKeyBidings.</summary>
+    /// <summary>Reads the keys of a MacroPad profile from the real Base Camp table
+    /// (MakaluKeyBindings), not from EverestKeyBidings.</summary>
     public static List<BcMakaluButton> ReadMakaluBindings(string dbPath, int profileId)
     {
         using var conn = OpenReadOnly(dbPath);
@@ -550,7 +550,7 @@ public sealed class BaseCampDbImporter
         while (r.Read())
         {
             int keyId = r.GetInt32(0);
-            if (keyId < 1 || keyId > 12) continue; // fuori dal layout fisico 12 tasti
+            if (keyId < 1 || keyId > 12) continue; // outside the physical 12-key layout
 
             result.Add(new BcMakaluButton(
                 ButtonIndex:          keyId - 1,
@@ -586,11 +586,11 @@ public sealed class BaseCampDbImporter
     }
 
     /// <summary>
-    /// Traduce FunctionType/FunctionValue di Base Camp (schema MakaluKeyBindings,
-    /// SENZA SubFunctionType) nei tipi di azione K2.Core. Le funzioni hardware-native
-    /// senza equivalente K2 (DPI, brightness/effect cycle, battery check, macro
-    /// nominate) diventano <c>("none", "[placeholder] valore")</c> — nessun crash,
-    /// ma nessuna esecuzione: preservate solo per non perdere l'informazione.
+    /// Translates Base Camp's FunctionType/FunctionValue (MakaluKeyBindings schema,
+    /// WITHOUT SubFunctionType) into K2.Core action types. Hardware-native functions
+    /// with no K2 equivalent (DPI, brightness/effect cycle, battery check, named
+    /// macros) become <c>("none", "[placeholder] value")</c> — no crash,
+    /// but no execution: preserved only so the information isn't lost.
     /// </summary>
     public static (string? ActionType, string? ActionValue) TranslateMakaluAction(
         string? functionType, string? functionValue)
@@ -658,8 +658,8 @@ public sealed class BaseCampDbImporter
                 };
 
             case "Run Macro":
-                // K2 non ha (ancora) un motore macro: preserva il riferimento come
-                // placeholder inerte invece di eseguire qualcosa di sbagliato.
+                // K2 doesn't have a macro engine (yet): preserve the reference as an
+                // inert placeholder instead of executing something wrong.
                 return ("none", $"[macro] {fv}");
 
             case "Battery level check":
@@ -667,8 +667,8 @@ public sealed class BaseCampDbImporter
             case "Effect cycle":
             case "DPI Cyclic Increase":
             case "DPI Cyclic Decrease":
-                // Funzioni hardware-native della categoria "Mouse" del firmware
-                // condiviso Mountain, senza equivalente MacroPad in K2.
+                // Hardware-native functions from the "Mouse" category of the shared
+                // Mountain firmware, with no MacroPad equivalent in K2.
                 return ("none", $"[{ft.ToLowerInvariant()}]");
 
             case "Disable":

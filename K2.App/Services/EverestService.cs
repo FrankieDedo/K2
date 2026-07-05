@@ -6,69 +6,69 @@ using System.Threading.Tasks;
 namespace K2.App.Services;
 
 /// <summary>
-/// Facade applicativa sopra <see cref="EverestSdkNative"/>.
+/// Application facade over <see cref="EverestSdkNative"/>.
 ///
-/// Espone l'SDK nativo della tastiera Everest Max come una API .NET pulita:
-/// apertura/chiusura driver, info device/firmware, AP mode, cambio profilo ed
-/// evento tipizzato per i tasti.
+/// Exposes the Everest Max keyboard's native SDK as a clean .NET API:
+/// driver open/close, device/firmware info, AP mode, profile switching, and
+/// a typed event for keys.
 ///
 /// Mirrors the role of <c>MacroPadService</c>, but simpler: the Everest is
-/// single-device (niente enumerazione di slot) e non usa messaggi Windows per
-/// il plug — lo stato si interroga con <see cref="IsPlugged"/>.
+/// single-device (no slot enumeration) and doesn't use Windows messages for
+/// plug detection — state is queried via <see cref="IsPlugged"/>.
 ///
-/// <para>I tasti arrivano via callback su un thread interno dell'SDK: il
+/// <para>Keys arrive via callback on an internal SDK thread: the
 /// consumer of the <see cref="KeyEvent"/> event is responsible for marshalling
-/// verso il thread UI.</para>
+/// to the UI thread.</para>
 /// </summary>
 public sealed class EverestService : IDisposable
 {
-    // Il delegate va tenuto vivo in un campo: se lo raccogliesse il GC, l'SDK
+    // The delegate must be kept alive in a field: if the GC collected it, the SDK
     // would call a dangling function pointer -> native crash.
     private EverestSdkNative.KEY_CALLBACK? _keyCallback;
     private bool _opened;
 
-    // ---- Motore nativo (opt-in, AppSettings.EverestNativeEngine) ----------
-    // Fase 1: bypassa SDKDLL.dll SOLO per apertura/chiusura driver + init +
-    // i 4 tasti display del numpad (D1-D4). RGB/icone numpad/Media Dock e la
-    // matrice completa a 171 tasti (usata dal motore di remap di K2) restano
-    // su SDKDLL.dll finché non arrivano le fasi successive (layout wire non
-    // ancora confermato per queste — vedi EverestHidNative.cs). Con il flag
-    // attivo, quelle chiamate falliscono semplicemente (SDKDLL non è aperta)
-    // invece di crashare: sono già tutte in try/catch con log.
+    // ---- Native engine (opt-in, AppSettings.EverestNativeEngine) ----------
+    // Phase 1: bypasses SDKDLL.dll ONLY for driver open/close + init +
+    // the 4 numpad display keys (D1-D4). RGB/numpad icons/Media Dock and the
+    // full 171-key matrix (used by K2's remap engine) stay on SDKDLL.dll
+    // until later phases land (wire layout not yet confirmed for these —
+    // see EverestHidNative.cs). With the flag on, those calls simply
+    // fail (SDKDLL isn't open) instead of crashing: they're already all in
+    // try/catch with logging.
     private EverestHidNative.Pad? _nativePad;
     private bool UseNativeEngine => K2.Core.AppSettings.EverestNativeEngine;
 
-    /// <summary>Tasto display numpad (D1-D4) premuto/rilasciato — SOLO motore nativo.
-    /// Popolato solo quando <see cref="UseNativeEngine"/> è true (vedi Open()).</summary>
+    /// <summary>Numpad display key (D1-D4) pressed/released — NATIVE ENGINE ONLY.
+    /// Only populated when <see cref="UseNativeEngine"/> is true (see Open()).</summary>
     public event EventHandler<(int Button, bool Pressed)>? NumpadButtonEvent;
 
-    // Profilo corrente cachato dall'init: evitiamo di chiamare GetFWInfo
+    // Current profile cached from init: avoids calling GetFWInfo
     // repeatedly (each call is a HID packet that may collide with
-    // polling interno della DLL → crash nativo 0xC0000005 a +0x5133).
+    // the DLL's internal polling → native crash 0xC0000005 at +0x5133).
     private int _cachedProfile = 1;
 
-    // Lock globale per serializzare tutte le chiamate a SDKDLL.dll.
-    // The DLL is not thread-safe: the key callback arrives on a thread
-    // dell'SDK, le chiamate UI dal dispatcher WPF → accesso concorrente
-    // → access violation (crash nativo 0xC0000005 a SDKDLL.dll+0x5133).
+    // Global lock to serialize all calls to SDKDLL.dll.
+    // The DLL is not thread-safe: the key callback arrives on an SDK
+    // thread, UI calls come from the WPF dispatcher → concurrent access
+    // → access violation (native crash 0xC0000005 at SDKDLL.dll+0x5133).
     private readonly object _sdkLock = new();
 
     // SaveFlash DEBOUNCED: if the user changes effect/speed rapidly,
-    // annulla il SaveFlash precedente e ne programma uno nuovo. Evita di
-    // inondare la coda HID della DLL con comandi ravvicinati → crash.
+    // cancels the previous SaveFlash and schedules a new one. Avoids
+    // flooding the DLL's internal HID queue with back-to-back commands → crash.
     private CancellationTokenSource? _saveFlashCts;
 
-    /// <summary>Tasto della tastiera premuto o rilasciato.</summary>
+    /// <summary>Keyboard key pressed or released.</summary>
     public event EventHandler<EverestKeyEventArgs>? KeyEvent;
 
-    /// <summary>Profili memorizzati sulla tastiera.</summary>
+    /// <summary>Profiles stored on the keyboard.</summary>
     public const int ProfileCount = EverestSdkNative.FW_NUM_PROFILE;
 
     /// <summary>True if the USB driver was opened successfully and the DLL has not crashed.</summary>
     public bool IsOpen => _opened && !App.SdkCrashRecoveryNeeded;
 
     /// <summary>
-    /// Apre il driver USB della tastiera e registra il callback dei tasti.
+    /// Opens the keyboard's USB driver and registers the key callback.
     /// </summary>
     public bool Open()
     {
@@ -81,11 +81,11 @@ public sealed class EverestService : IDisposable
         try
         {
             EverestSdkNative.SetKeyCallBack(_keyCallback);
-            App.WriteLog("[Everest.Open] SetKeyCallBack registrato");
+            App.WriteLog("[Everest.Open] SetKeyCallBack registered");
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.Open] SetKeyCallBack ha lanciato: " + ex);
+            App.WriteLog("[Everest.Open] SetKeyCallBack threw: " + ex);
         }
 
         try
@@ -94,27 +94,27 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.Open] OpenUSBDriver ha lanciato: " + ex);
+            App.WriteLog("[Everest.Open] OpenUSBDriver threw: " + ex);
             return false;
         }
         App.WriteLog($"[Everest.Open] OpenUSBDriver -> {_opened}");
 
-        // Inizializzazione post-apertura: Base Camp chiama GetFWInfo,
-        // GetProfileEffectTable, GetExtendInfo, EnableKeyFunc subito dopo
-        // OpenUSBDriver. Queste letture hanno side-effect interni nella DLL
-        // che mettono lo stato in "pronto per effetti". Senza di esse,
-        // ChangeEffect/ChangeBlockEffect ritornano True ma NON emettono
-        // pacchetti 14 2C sul bus USB (confermato via USB sniff 2026-06-05:
-        // polling DLL mostra 0x1C senza init vs 0x2B con init di BC).
+        // Post-open initialization: Base Camp calls GetFWInfo,
+        // GetProfileEffectTable, GetExtendInfo, EnableKeyFunc right after
+        // OpenUSBDriver. These reads have internal side effects in the DLL
+        // that put the state into "ready for effects". Without them,
+        // ChangeEffect/ChangeBlockEffect return True but do NOT emit
+        // 14 2C packets on the USB bus (confirmed via USB sniff 2026-06-05:
+        // DLL polling shows 0x1C without init vs 0x2B with BC's init).
         if (_opened) InitDllState();
 
         return _opened;
     }
 
     /// <summary>
-    /// Apertura via motore nativo (Fase 1, vedi commento sul campo <see cref="_nativePad"/>).
-    /// SDKDLL.dll non viene MAI caricata in questo percorso: elimina alla radice il
-    /// crash del suo thread timer per tutto ciò che il motore nativo copre.
+    /// Opens via the native engine (Phase 1, see comment on the <see cref="_nativePad"/> field).
+    /// SDKDLL.dll is NEVER loaded on this path: it eliminates at the root the
+    /// crash from its timer thread for everything the native engine covers.
     /// </summary>
     private bool OpenNative()
     {
@@ -123,7 +123,7 @@ public sealed class EverestService : IDisposable
             string? path = EverestHidNative.FindCommandInterfacePath(App.WriteLog);
             if (path is null)
             {
-                App.WriteLog("[Everest.Open] (native) MI_03 non trovata — tastiera non collegata?");
+                App.WriteLog("[Everest.Open] (native) MI_03 not found — keyboard not connected?");
                 return false;
             }
             var pad = new EverestHidNative.Pad(path, App.WriteLog);
@@ -132,12 +132,12 @@ public sealed class EverestService : IDisposable
                 NumpadButtonEvent?.Invoke(this, (btn, pressed));
             _nativePad = pad;
             _opened = true;
-            App.WriteLog("[Everest.Open] (native) OK — SDKDLL.dll non caricata");
+            App.WriteLog("[Everest.Open] (native) OK — SDKDLL.dll not loaded");
             return true;
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.Open] (native) ha lanciato: " + ex);
+            App.WriteLog("[Everest.Open] (native) threw: " + ex);
             _nativePad?.Dispose();
             _nativePad = null;
             return false;
@@ -145,9 +145,9 @@ public sealed class EverestService : IDisposable
     }
 
     /// <summary>
-    /// Replica le chiamate di inizializzazione che Base Camp fa dopo
-    /// OpenUSBDriver. Anche se non usiamo i dati restituiti, i side-effect
-    /// interni della DLL preparano lo stato per ChangeEffect/ChangeBlockEffect.
+    /// Replicates the initialization calls that Base Camp makes after
+    /// OpenUSBDriver. Even though we don't use the returned data, the DLL's
+    /// internal side effects prepare the state for ChangeEffect/ChangeBlockEffect.
     /// </summary>
     private void InitDllState()
     {
@@ -162,7 +162,7 @@ public sealed class EverestService : IDisposable
                 $"effectMode={fwInfo.byEffectModeIndex} effectMenu={fwInfo.byEffectMenuIndex}" +
                 $" -> cachedProfile={_cachedProfile}");
         }
-        catch (Exception ex) { App.WriteLog("[Everest.Init] GetFWInfo ha lanciato: " + ex); }
+        catch (Exception ex) { App.WriteLog("[Everest.Init] GetFWInfo threw: " + ex); }
 
         try
         {
@@ -171,7 +171,7 @@ public sealed class EverestService : IDisposable
             App.WriteLog($"[Everest.Init] GetProfileEffectTable -> {em}  " +
                 $"profileSize={effectMenu.byProfileSize} effectSize={effectMenu.byEffectSize}");
         }
-        catch (Exception ex) { App.WriteLog("[Everest.Init] GetProfileEffectTable ha lanciato: " + ex); }
+        catch (Exception ex) { App.WriteLog("[Everest.Init] GetProfileEffectTable threw: " + ex); }
 
         try
         {
@@ -180,11 +180,11 @@ public sealed class EverestService : IDisposable
             App.WriteLog($"[Everest.Init] GetExtendInfo -> {ei}  " +
                 $"MMDockPlug={extInfo.byMMDockPlug} NumpadPlug={extInfo.byNumpadPlug}");
         }
-        catch (Exception ex) { App.WriteLog("[Everest.Init] GetExtendInfo ha lanciato: " + ex); }
+        catch (Exception ex) { App.WriteLog("[Everest.Init] GetExtendInfo threw: " + ex); }
 
-        // GetFWLayout (HID 11 12): BC la chiama 2 volte durante l'init.
+        // GetFWLayout (HID 11 12): BC calls it 2 times during init.
         // From reverse engineering SDKDLL.dll, this is the only function that produces
-        // il sub-command 0x12. Senza questa, GetColorData non funziona
+        // the 0x12 sub-command. Without this, GetColorData doesn't work
         // on a clean boot (without BC having already called it).
         try
         {
@@ -192,50 +192,50 @@ public sealed class EverestService : IDisposable
             bool fl = EverestSdkNative.GetFWLayout(ref layout);
             App.WriteLog($"[Everest.Init] GetFWLayout -> {fl}  layout={layout}");
         }
-        catch (Exception ex) { App.WriteLog("[Everest.Init] GetFWLayout ha lanciato: " + ex); }
+        catch (Exception ex) { App.WriteLog("[Everest.Init] GetFWLayout threw: " + ex); }
 
         try
         {
             bool ek = EverestSdkNative.EnableKeyFunc(true);
             App.WriteLog($"[Everest.Init] EnableKeyFunc(true) -> {ek}");
         }
-        catch (Exception ex) { App.WriteLog("[Everest.Init] EnableKeyFunc ha lanciato: " + ex); }
+        catch (Exception ex) { App.WriteLog("[Everest.Init] EnableKeyFunc threw: " + ex); }
 
-        // Forza il firmware fuori da AP mode (potrebbe essere rimasto in AP
+        // Forces the firmware out of AP mode (it may have been left in AP
         // from a previous K2/BC session). Without this, ChangeEffect may
-        // causare un flash arcobaleno transitorio prima dell'effetto.
+        // cause a transient rainbow flash before the effect.
         try
         {
             bool ap = EverestSdkNative.APEnable(false);
             _apEnabled = false;
             App.WriteLog($"[Everest.Init] APEnable(false) -> {ap}");
         }
-        catch (Exception ex) { App.WriteLog("[Everest.Init] APEnable(false) ha lanciato: " + ex); }
+        catch (Exception ex) { App.WriteLog("[Everest.Init] APEnable(false) threw: " + ex); }
     }
 
-    /// <summary>Chiude il driver USB.</summary>
+    /// <summary>Closes the USB driver.</summary>
     public void Close()
     {
         if (!_opened) return;
         if (_nativePad is not null)
         {
             try { _nativePad.Dispose(); }
-            catch (Exception ex) { App.WriteLog("[Everest.Close] (native) ha lanciato: " + ex); }
+            catch (Exception ex) { App.WriteLog("[Everest.Close] (native) threw: " + ex); }
             _nativePad = null;
             _opened = false;
-            App.WriteLog("[Everest.Close] (native) driver chiuso");
+            App.WriteLog("[Everest.Close] (native) driver closed");
             return;
         }
         try { EverestSdkNative.CloseUSBDriver(); }
-        catch (Exception ex) { App.WriteLog("[Everest.Close] ha lanciato: " + ex); }
+        catch (Exception ex) { App.WriteLog("[Everest.Close] threw: " + ex); }
         _opened = false;
-        // AP mode si perde quando il driver si chiude: la prossima Open
+        // AP mode is lost when the driver closes: the next Open
         // will need to re-enable it.
         _apEnabled = false;
-        App.WriteLog("[Everest.Close] driver chiuso");
+        App.WriteLog("[Everest.Close] driver closed");
     }
 
-    /// <summary>Versione della DLL nativa dell'SDK.</summary>
+    /// <summary>Version of the SDK's native DLL.</summary>
     public int SdkVersion()
     {
         if (_nativePad is not null) return -1; // native engine: SDKDLL.dll not loaded
@@ -243,7 +243,7 @@ public sealed class EverestService : IDisposable
         try { return EverestSdkNative.GetDLLVersion(); }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.SdkVersion] ha lanciato: " + ex);
+            App.WriteLog("[Everest.SdkVersion] threw: " + ex);
             return 0;
         }
     }
@@ -256,25 +256,25 @@ public sealed class EverestService : IDisposable
         try { return EverestSdkNative.IsDevicePlug(); }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.IsPlugged] ha lanciato: " + ex);
+            App.WriteLog("[Everest.IsPlugged] threw: " + ex);
             return false;
         }
     }
 
-    /// <summary>Versione applicativa del firmware.</summary>
+    /// <summary>Application firmware version.</summary>
     public ushort FirmwareVersion()
     {
         lock (_sdkLock)
         try { return EverestSdkNative.GetDevAppVer(); }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.FirmwareVersion] ha lanciato: " + ex);
+            App.WriteLog("[Everest.FirmwareVersion] threw: " + ex);
             return 0;
         }
     }
 
-    /// <summary>Legge VID/PID e versioni del device.
-    /// <c>internal</c>: espone un tipo del layer P/Invoke (anch'esso internal).</summary>
+    /// <summary>Reads VID/PID and device versions.
+    /// <c>internal</c>: exposes a P/Invoke layer type (also internal).</summary>
     internal bool TryGetDeviceInfo(out EverestSdkNative.DevInfo info)
     {
         info = default;
@@ -282,13 +282,13 @@ public sealed class EverestService : IDisposable
         try { return EverestSdkNative.GetDeviceInfo(ref info); }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.TryGetDeviceInfo] ha lanciato: " + ex);
+            App.WriteLog("[Everest.TryGetDeviceInfo] threw: " + ex);
             return false;
         }
     }
 
-    /// <summary>Legge lo stato firmware (profilo/effetto correnti).
-    /// <c>internal</c>: espone un tipo del layer P/Invoke (anch'esso internal).</summary>
+    /// <summary>Reads firmware state (current profile/effect).
+    /// <c>internal</c>: exposes a P/Invoke layer type (also internal).</summary>
     internal bool TryGetFirmwareInfo(out EverestSdkNative.FWInfo info)
     {
         info = default;
@@ -296,21 +296,21 @@ public sealed class EverestService : IDisposable
         try { return EverestSdkNative.GetFWInfo(ref info); }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.TryGetFirmwareInfo] ha lanciato: " + ex);
+            App.WriteLog("[Everest.TryGetFirmwareInfo] threw: " + ex);
             return false;
         }
     }
 
-    /// <summary>Profilo attualmente attivo sul firmware (1..ProfileCount), 0 se ignoto.</summary>
+    /// <summary>Currently active profile on the firmware (1..ProfileCount), 0 if unknown.</summary>
     public int CurrentProfile()
     {
         return TryGetFirmwareInfo(out var fw) ? fw.currentlyProfileIndex : 0;
     }
 
     /// <summary>
-    /// Abilita/disabilita il controllo software (AP mode). Aggiorna il
-    /// flag interno: una <see cref="EnsureApMode"/> successiva sa che deve
-    /// riemettere il comando se l'utente ha disabilitato AP manualmente.
+    /// Enables/disables software control (AP mode). Updates the
+    /// internal flag: a subsequent <see cref="EnsureApMode"/> knows it needs to
+    /// reissue the command if the user disabled AP manually.
     /// </summary>
     public bool APEnable(bool enable)
     {
@@ -324,27 +324,27 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.APEnable] ha lanciato: " + ex);
+            App.WriteLog("[Everest.APEnable] threw: " + ex);
             return false;
         }
     }
 
-    /// <summary>Reset del device.</summary>
+    /// <summary>Resets the device.</summary>
     public bool ResetDevice()
     {
         lock (_sdkLock)
         try { return EverestSdkNative.ResetDevice(); }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.ResetDevice] ha lanciato: " + ex);
+            App.WriteLog("[Everest.ResetDevice] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Cambia il profilo attivo della tastiera. Il secondo parametro nativo di
-    /// <c>SwitchProfile</c> is not confirmed by metadata: since the keyboard
-    /// single-device si passa 0. Da verificare su hardware.
+    /// Switches the keyboard's active profile. The second native parameter of
+    /// <c>SwitchProfile</c> is not confirmed by metadata: since the keyboard is
+    /// single-device we pass 0. To be verified on hardware.
     /// </summary>
     public bool SwitchProfile(int profile)
     {
@@ -357,7 +357,7 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.SwitchProfile] ha lanciato: " + ex);
+            App.WriteLog("[Everest.SwitchProfile] threw: " + ex);
             return false;
         }
     }
@@ -365,16 +365,16 @@ public sealed class EverestService : IDisposable
     // ---- AP / SW mode ------------------------------------------------------
 
     /// <summary>
-    /// True dopo la prima <see cref="EnsureApMode"/> riuscita: ricordiamo di
-    /// non riemettere il comando ogni volta (sarebbe innocuo ma rumoroso nei log).
+    /// True after the first successful <see cref="EnsureApMode"/>: we remember
+    /// not to reissue the command every time (harmless but noisy in the logs).
     /// </summary>
     private bool _apEnabled;
 
     /// <summary>
     /// Puts the keyboard in AP/SW mode (software control). Required
     /// because <c>ChangeEffect</c> and other lighting commands
-    /// "soft" applicati dal PC siano accettati dal firmware. <c>EnableKeyFunc(true)</c>
-    /// si chiama subito dopo per non perdere la funzione tasti durante AP.
+    /// applied "soft" by the PC are accepted by the firmware. <c>EnableKeyFunc(true)</c>
+    /// is called right after to avoid losing key function during AP.
     /// </summary>
     public bool EnsureApMode()
     {
@@ -383,11 +383,11 @@ public sealed class EverestService : IDisposable
         try
         {
             bool ap = EverestSdkNative.APEnable(true);
-            // EnableKeyFunc(true) replica il comportamento di Base Camp: senza
-            // Without this, in AP mode the keyboard may stop transmitting keys.
+            // EnableKeyFunc(true) replicates Base Camp's behavior:
+            // without this, in AP mode the keyboard may stop transmitting keys.
             bool keyFn = false;
             try { keyFn = EverestSdkNative.EnableKeyFunc(true); }
-            catch (Exception ex2) { App.WriteLog("[Everest.EnsureApMode] EnableKeyFunc ha lanciato: " + ex2); }
+            catch (Exception ex2) { App.WriteLog("[Everest.EnsureApMode] EnableKeyFunc threw: " + ex2); }
 
             App.WriteLog($"[Everest.EnsureApMode] APEnable={ap}  EnableKeyFunc={keyFn}");
             _apEnabled = ap;
@@ -395,14 +395,14 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.EnsureApMode] ha lanciato: " + ex);
+            App.WriteLog("[Everest.EnsureApMode] threw: " + ex);
             return false;
         }
     }
 
-    // ---- Illuminazione RGB (preset firmware) -------------------------------
+    // ---- RGB lighting (firmware presets) -------------------------------
 
-    /// <summary>Preset di illuminazione: alias degli enum nativi.</summary>
+    /// <summary>Lighting preset: alias of the native enums.</summary>
     public enum Effect : byte
     {
         Static    = (byte)EverestSdkNative.EffectIndex.Static,
@@ -415,33 +415,33 @@ public sealed class EverestService : IDisposable
         Tornado   = (byte)EverestSdkNative.EffectIndex.Tornado,
         Matrix    = (byte)EverestSdkNative.EffectIndex.Matrix,
         Off       = (byte)EverestSdkNative.EffectIndex.Off,
-        /// <summary>Variante Matrix: stesso firmware index (9) ma con
-        /// byRandColor=16 → linee verticali random del colore 2.</summary>
+        /// <summary>Matrix variant: same firmware index (9) but with
+        /// byRandColor=16 → random vertical lines of color 2.</summary>
         Matrix2   = 200,
     }
 
     /// <summary>Effect speed.</summary>
     public enum Speed : byte { Slow = 0, Normal = 1, Fast = 2 }
 
-    /// <summary>Senso di rotazione/scorrimento.</summary>
+    /// <summary>Rotation/scroll direction.</summary>
     public enum Direction : byte { ClockWise = 0, CounterClockWise = 1 }
 
     /// <summary>
-    /// Applica un preset di illuminazione alla tastiera.
-    /// <para>NOTA — i parametri <c>direction</c> e <c>width</c> sono stati
-    /// rimossi: il dump CIL di <c>MacroPadSDK::getChangeEffect</c> di Base Camp
-    /// mostra che <c>byDirection</c> e <c>byWidth</c> vengono sempre forzati a
+    /// Applies a lighting preset to the keyboard.
+    /// <para>NOTE — the <c>direction</c> and <c>width</c> parameters were
+    /// removed: the CIL dump of Base Camp's <c>MacroPadSDK::getChangeEffect</c>
+    /// shows that <c>byDirection</c> and <c>byWidth</c> are always forced to
     /// 255 and the CW/CCW direction is encoded in <c>EffMenuIndex</c> (see
     /// <see cref="EverestSdkNative.EffData.New"/>).</para>
     /// </summary>
-    /// <param name="effect">Preset di firmware (Wave/Breath/Static/...).</param>
-    /// <param name="primary">Colore principale (R,G,B).</param>
-    /// <param name="secondary">Colore secondario (opzionale, usato dai preset multicolor).</param>
-    /// <param name="tertiary">Terzo colore (opzionale).</param>
-    /// <param name="background">Colore di background (opzionale, default nero).</param>
+    /// <param name="effect">Firmware preset (Wave/Breath/Static/...).</param>
+    /// <param name="primary">Primary color (R,G,B).</param>
+    /// <param name="secondary">Secondary color (optional, used by multicolor presets).</param>
+    /// <param name="tertiary">Third color (optional).</param>
+    /// <param name="background">Background color (optional, default black).</param>
     /// <param name="speed">Animation speed.</param>
     /// <param name="brightness">Brightness 0..100 (mapped to firmware steps 0/25/50/75/100).</param>
-    /// <param name="randomColor">true per ignorare i colori e usare colori casuali.</param>
+    /// <param name="randomColor">true to ignore the colors and use random colors instead.</param>
     public bool SetEffect(Effect effect,
                           (byte r, byte g, byte b) primary,
                           (byte r, byte g, byte b)? secondary = null,
@@ -456,52 +456,52 @@ public sealed class EverestService : IDisposable
     {
       lock (_sdkLock)
       {
-        // 2026-05-29 — TEST IPOTESI: AP mode era SBAGLIATO. AP mode (= Software
-        // mode) e' solo per ChangeSWEffect / per-key streaming, dove l'host PC
-        // spedisce ogni frame i 171 colori al firmware. Per i preset firmware
-        // (ChangeEffect) il device DEVE essere in modalita' NORMALE: il
-        // firmware riceve un EffData, lo memorizza nello slot corrente e lo
-        // disegna lui dal suo runtime. Se entriamo in AP mode prima del
-        // ChangeEffect, il firmware "ascolta" il comando ma non lo applica
-        // perche' aspetta che noi pilotiamo i singoli LED.
+        // 2026-05-29 — HYPOTHESIS TEST: AP mode was WRONG. AP mode (= Software
+        // mode) is only for ChangeSWEffect / per-key streaming, where the host PC
+        // sends all 171 colors to the firmware every frame. For firmware presets
+        // (ChangeEffect) the device MUST be in NORMAL mode: the
+        // firmware receives an EffData, stores it in the current slot and
+        // renders it itself from its runtime. If we enter AP mode before the
+        // ChangeEffect, the firmware "listens" to the command but doesn't apply it
+        // because it's waiting for us to drive the individual LEDs.
         //
-        // Quindi: NIENTE AP mode attorno a ChangeEffect. Se il device era
-        // gia' in AP da una sessione precedente lo forziamo OFF prima.
+        // So: NO AP mode around ChangeEffect. If the device was
+        // already in AP from a previous session, we force it OFF first.
         if (_apEnabled)
         {
             try
             {
                 bool offOk = EverestSdkNative.APEnable(false);
-                App.WriteLog($"[Everest.SetEffect] forzo APEnable(false) prima del ChangeEffect -> {offOk}");
+                App.WriteLog($"[Everest.SetEffect] forcing APEnable(false) before ChangeEffect -> {offOk}");
                 _apEnabled = false;
             }
-            catch (Exception ex2) { App.WriteLog("[Everest.SetEffect] APEnable(false) prep ha lanciato: " + ex2); }
+            catch (Exception ex2) { App.WriteLog("[Everest.SetEffect] APEnable(false) prep threw: " + ex2); }
         }
 
         EverestSdkNative.FWColor C((byte, byte, byte) c) => new(c.Item1, c.Item2, c.Item3);
         var bright = QuantizeBrightness(brightness);
 
-        // Parametri per-effetto dalla config esterna (everest_rgb.json), riletta
-        // ad OGNI apply: si possono regolare byAll/bySpeed/byDirection/byWidth/
-        // numero colori e ri-applicare l'effetto SENZA ricompilare.
+        // Per-effect parameters from the external config (everest_rgb.json), re-read
+        // on EVERY apply: byAll/bySpeed/byDirection/byWidth/color count can be
+        // adjusted and the effect re-applied WITHOUT recompiling.
         var def = EverestRgbConfig.Load().For(effect.ToString());
         App.WriteLog($"[Everest.SetEffect] cfg {effect}: byAll={def.ByAll} bySpeed={def.BySpeed} " +
                      $"byDir={def.ByDirection} byWidth={def.ByWidth} rand={def.ByRandColor} colors={def.ColorCount}");
 
-        // La UI ha la precedenza (override >= 0); altrimenti si usa la config.
+        // The UI takes precedence (override >= 0); otherwise the config is used.
         int effSpeed = speedByte      >= 0 ? speedByte      : def.BySpeed;
         int effDir   = directionByte  >= 0 ? directionByte  : def.ByDirection;
         int effCount = colorCountOverride >= 0 ? colorCountOverride : def.ColorCount;
 
-        // Wave(4) e Tornado(7) sono "block effect": ChangeEffect li RIFIUTA
-        // (scoperto via USB sniff 2026-05-30). Vanno via ChangeBlockEffect,
-        // con struct BlockData (byBlockNum + colori FWBColor pos+rgb).
+        // Wave(4) and Tornado(7) are "block effects": ChangeEffect REJECTS them
+        // (discovered via USB sniff 2026-05-30). They go through ChangeBlockEffect,
+        // with the BlockData struct (byBlockNum + FWBColor colors pos+rgb).
         if (effect == Effect.Wave || effect == Effect.Tornado)
         {
             bool rainbowB = randomColor || def.ByRandColor != 0;
-            // bySpeed: scala 0..100 (0=lento, 100=veloce) sia per block sia non-block.
-            // La UI manda direttamente 0/25/50/75/100 (5 posizioni).
-            // Se il JSON ha bySpeed >= 0 lo usa come override.
+            // bySpeed: scale 0..100 (0=slow, 100=fast) for both block and non-block.
+            // The UI sends 0/25/50/75/100 directly (5 positions).
+            // If the JSON has bySpeed >= 0 it's used as an override.
             byte spdB = (byte)(effSpeed >= 0 ? Math.Clamp(effSpeed, 0, 100) : 50);
             byte dirB     = (byte)(effDir >= 0 ? effDir : 0);
             EverestSdkNative.FWColor? c2b = null;
@@ -517,32 +517,32 @@ public sealed class EverestService : IDisposable
                 rainbow:   rainbowB);
             try
             {
-                // Dump hex diagnostico della struct PRIMA dell'invio
+                // Diagnostic hex dump of the struct BEFORE sending
                 App.WriteLog("[Everest.SetEffect] DUMP BlockData(62B): " + DumpBlockData(block));
                 bool okB = EverestSdkNative.ChangeBlockEffect(block);
                 App.WriteLog($"[Everest.SetEffect] BLOCK eff={effect} dir={dirB} speed={spdB} " +
                              $"rainbow={rainbowB} -> {okB}  (P/Invoke by-value)");
                 if (!okB)
                 {
-                    App.WriteLog("[Everest.SetEffect] P/Invoke ha ritornato False, provo Raw...");
+                    App.WriteLog("[Everest.SetEffect] P/Invoke returned False, trying Raw...");
                     okB = EverestSdkNative.ChangeBlockEffectRaw(block);
                     App.WriteLog($"[Everest.SetEffect] ChangeBlockEffectRaw fallback -> {okB}");
                 }
-                // Piccolo delay per dare tempo alla coda HID interna della DLL
-                // di processare il comando prima che arrivi SaveFlash.
+                // Small delay to give the DLL's internal HID queue time
+                // to process the command before SaveFlash arrives.
                 Thread.Sleep(50);
                 DebouncedSaveFlash();
                 return okB;
             }
             catch (Exception exB)
             {
-                App.WriteLog("[Everest.SetEffect] ChangeBlockEffect ha lanciato: " + exB);
+                App.WriteLog("[Everest.SetEffect] ChangeBlockEffect threw: " + exB);
                 return false;
             }
         }
 
-        // Matrix2 (enum 200) → stesso firmware index di Matrix (9)
-        // ma con forceRandColor16 per la variante visiva.
+        // Matrix2 (enum 200) → same firmware index as Matrix (9)
+        // but with forceRandColor16 for the visual variant.
         bool isMatrix2 = effect == Effect.Matrix2;
         var fwIndex = isMatrix2
             ? EverestSdkNative.EffectIndex.Matrix
@@ -576,17 +576,17 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.SetEffect] ha lanciato: " + ex);
+            App.WriteLog("[Everest.SetEffect] threw: " + ex);
             return false;
         }
       } // lock (_sdkLock)
     }
 
     /// <summary>
-    /// Programma un SaveFlash con debounce: annulla l'eventuale timer
-    /// precedente e ne crea uno nuovo a 300ms. Se l'utente cambia effetto
+    /// Schedules a debounced SaveFlash: cancels any previous timer
+    /// and creates a new one at 300ms. If the user changes effect
     /// or speed rapidly, only one SaveFlash is sent at the end
-    /// della raffica — evita di sovraccaricare la coda HID della DLL.
+    /// of the burst — avoids overloading the DLL's HID queue.
     /// </summary>
     private void DebouncedSaveFlash()
     {
@@ -609,17 +609,17 @@ public sealed class EverestService : IDisposable
                     bool ok = EverestSdkNative.SaveFlash(profile);
                     App.WriteLog($"[Everest] SaveFlash({profile}) debounced -> {ok}");
 
-                    // (2026-06-09: rimossa ri-attivazione color stream post-SaveFlash
+                    // (2026-06-09: removed color stream re-activation post-SaveFlash
                     //  because it caused flickering. To investigate whether SaveFlash
-                    //  effettivamente interrompe il color stream.)
+                    //  actually interrupts the color stream.)
                 }
-                catch (Exception ex) { App.WriteLog("[Everest] SaveFlash ha lanciato: " + ex); }
+                catch (Exception ex) { App.WriteLog("[Everest] SaveFlash threw: " + ex); }
             }
         });
     }
 
 
-    /// <summary>Hex-dump dei 62 byte di BlockData (diagnostica).</summary>
+    /// <summary>Hex-dump of BlockData's 62 bytes (diagnostics).</summary>
     private static unsafe string DumpBlockData(EverestSdkNative.BlockData d)
     {
         int sz = sizeof(EverestSdkNative.BlockData);
@@ -634,7 +634,7 @@ public sealed class EverestService : IDisposable
         return sb.ToString();
     }
 
-    /// <summary>Hex-dump dei 62 byte della struct (diagnostica).</summary>
+    /// <summary>Hex-dump of the struct's 62 bytes (diagnostics).</summary>
     private static string DumpEffData(EverestSdkNative.EffData d)
     {
         int sz = Marshal.SizeOf<EverestSdkNative.EffData>();
@@ -649,7 +649,7 @@ public sealed class EverestService : IDisposable
         finally { Marshal.FreeHGlobal(p); }
     }
 
-    /// <summary>Resetta gli effetti al default firmware.</summary>
+    /// <summary>Resets the effects to the firmware default.</summary>
     public bool ResetEffects()
     {
         try
@@ -660,15 +660,15 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.ResetEffects] ha lanciato: " + ex);
+            App.WriteLog("[Everest.ResetEffects] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Attiva/disattiva la sincronizzazione dell'effetto su tutti i profili.
+    /// Enables/disables effect synchronization across all profiles.
     /// When active, applying an effect to one profile replicates it
-    /// sugli altri quattro.
+    /// to the other four.
     /// </summary>
     public bool SetSyncAcrossProfiles(bool enable)
     {
@@ -680,12 +680,12 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.SetSyncAcrossProfiles] ha lanciato: " + ex);
+            App.WriteLog("[Everest.SetSyncAcrossProfiles] threw: " + ex);
             return false;
         }
     }
 
-    /// <summary>Legge lo stato corrente del sync cross-profilo.</summary>
+    /// <summary>Reads the current cross-profile sync state.</summary>
     public bool GetSyncAcrossProfiles()
     {
         try
@@ -695,14 +695,14 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.GetSyncAcrossProfiles] ha lanciato: " + ex);
+            App.WriteLog("[Everest.GetSyncAcrossProfiles] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Imposta il sync effect (HID 12 [sync] 00 00 [brightness]).
-    /// Necessario per abilitare il color stream su boot pulito.
+    /// Sets the sync effect (HID 12 [sync] 00 00 [brightness]).
+    /// Required to enable the color stream on a clean boot.
     /// </summary>
     public bool SetSyncEffect(bool sync, int brightness)
     {
@@ -715,15 +715,15 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.SetSyncEffect] ha lanciato: " + ex);
+            App.WriteLog("[Everest.SetSyncEffect] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Salva sul flash della tastiera lo stato corrente (effetti/colori).
-    /// Profilo 1..5 oppure 6 = ALL_PROFILE. Senza una SaveFlash gli effetti
-    /// applicati via AP-mode si perdono al prossimo unplug.
+    /// Saves the current state (effects/colors) to the keyboard's flash.
+    /// Profile 1..5 or 6 = ALL_PROFILE. Without a SaveFlash, effects
+    /// applied via AP-mode are lost on the next unplug.
     /// </summary>
     public bool SaveFlash(int profile = 6)
     {
@@ -735,13 +735,13 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.SaveFlash] ha lanciato: " + ex);
+            App.WriteLog("[Everest.SaveFlash] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Legge i colori LED correnti dalla tastiera, con lock non-bloccante.
+    /// Reads the current LED colors from the keyboard, with a non-blocking lock.
     /// If the SDK lock is busy (another operation in progress), returns false
     /// without blocking — the poller can skip a tick with no visible impact.
     /// </summary>
@@ -758,7 +758,7 @@ public sealed class EverestService : IDisposable
     }
 
     /// <summary>
-    /// Variante raw (IntPtr) di GetColorData, con lock non-bloccante.
+    /// Raw (IntPtr) variant of GetColorData, with a non-blocking lock.
     /// </summary>
     public bool TryGetColorDataRaw(IntPtr rawBuf)
     {
@@ -773,8 +773,8 @@ public sealed class EverestService : IDisposable
     }
 
     /// <summary>
-    /// Abilita lo streaming dei report colore dal firmware (HID 0x11 0x83).
-    /// Chiamare con value=10 prima di GetColorData, come fa Base Camp.
+    /// Enables streaming of color reports from the firmware (HID 0x11 0x83).
+    /// Call with value=10 before GetColorData, as Base Camp does.
     /// </summary>
     public bool EnableColorStream(int value = 10)
     {
@@ -786,7 +786,7 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.EnableColorStream] ha lanciato: " + ex);
+            App.WriteLog("[Everest.EnableColorStream] threw: " + ex);
             return false;
         }
     }
@@ -802,14 +802,14 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.SetBacklight] ha lanciato: " + ex);
+            App.WriteLog("[Everest.SetBacklight] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
     /// Quantizes a percentage 0..100 to the 5 firmware brightness steps
-    /// (0/25/50/75/100) — il firmware accetta solo questi valori.
+    /// (0/25/50/75/100) — the firmware only accepts these values.
     /// </summary>
     private static EverestSdkNative.BrightT QuantizeBrightness(int pct)
     {
@@ -823,8 +823,8 @@ public sealed class EverestService : IDisposable
     // ==== Numpad Display Keys =================================================
 
     /// <summary>
-    /// Legge le informazioni estese dal firmware: stato plug del Media Dock e
-    /// of the Numpad, current menu, sub-device brightness, etc.
+    /// Reads extended info from the firmware: Media Dock and Numpad plug
+    /// state, current menu, sub-device brightness, etc.
     /// </summary>
     internal bool TryGetExtendInfo(out EverestSdkNative.FW_EXTEND_INFO info)
     {
@@ -833,7 +833,7 @@ public sealed class EverestService : IDisposable
         try { return EverestSdkNative.GetExtendInfo(ref info); }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.TryGetExtendInfo] ha lanciato: " + ex);
+            App.WriteLog("[Everest.TryGetExtendInfo] threw: " + ex);
             return false;
         }
     }
@@ -851,7 +851,7 @@ public sealed class EverestService : IDisposable
     }
 
     /// <summary>
-    /// Valore grezzo di byNumpadPlug (0=non collegato, 1=sinistra, 2=destra — ipotesi da verificare).
+    /// Raw value of byNumpadPlug (0=not connected, 1=left, 2=right — hypothesis to verify).
     /// </summary>
     public byte NumpadPlugPosition()
     {
@@ -859,7 +859,7 @@ public sealed class EverestService : IDisposable
     }
 
     /// <summary>
-    /// Valore grezzo di byMMDockPlug (0=non collegato, 1=sinistra, 2=destra — ipotesi da verificare).
+    /// Raw value of byMMDockPlug (0=not connected, 1=left, 2=right — hypothesis to verify).
     /// </summary>
     public byte MMDockPlugPosition()
     {
@@ -881,13 +881,13 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.GetDisplayKeyPic] ha lanciato: " + ex);
+            App.WriteLog("[Everest.GetDisplayKeyPic] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Imposta quale immagine mostrare su ciascuna delle 4 display key del numpad.
+    /// Sets which image to show on each of the 4 numpad display keys.
     /// </summary>
     public bool SetDisplayKeyPic(int d1, int d2, int d3, int d4)
     {
@@ -900,17 +900,17 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.SetDisplayKeyPic] ha lanciato: " + ex);
+            App.WriteLog("[Everest.SetDisplayKeyPic] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Carica un'immagine su una display key del numpad (formato quadrato 72×72).
+    /// Uploads an image to a numpad display key (square format 72×72).
     /// </summary>
-    /// <param name="imagePathOrBase64">Percorso o stringa base64.</param>
-    /// <param name="keyIndex">Indice della display key (0-3).</param>
-    /// <param name="picSlot">Slot immagine firmware (usato come byTargetPic).</param>
+    /// <param name="imagePathOrBase64">Path or base64 string.</param>
+    /// <param name="keyIndex">Display key index (0-3).</param>
+    /// <param name="picSlot">Firmware image slot (used as byTargetPic).</param>
     public bool UploadNumpadImage(string imagePathOrBase64, int keyIndex, byte picSlot = 0)
     {
         lock (_sdkLock)
@@ -926,14 +926,14 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.UploadNumpadImage] ha lanciato: " + ex);
+            App.WriteLog("[Everest.UploadNumpadImage] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Carica un'immagine su una display key del numpad (formato strip 128×32).
-    /// Tentativo alternativo — da verificare con USB capture quale formato
+    /// Uploads an image to a numpad display key (strip format 128×32).
+    /// Alternative attempt — needs USB capture verification of which format
     /// is the right one for your hardware.
     /// </summary>
     public bool UploadNumpadImageStrip(string imagePathOrBase64, int keyIndex, byte picSlot = 0)
@@ -951,12 +951,12 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.UploadNumpadImageStrip] ha lanciato: " + ex);
+            App.WriteLog("[Everest.UploadNumpadImageStrip] threw: " + ex);
             return false;
         }
     }
 
-    /// <summary>Reset completo del numpad (display keys + stato).</summary>
+    /// <summary>Full reset of the numpad (display keys + state).</summary>
     public bool ResetNumpad()
     {
         lock (_sdkLock)
@@ -968,7 +968,7 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.ResetNumpad] ha lanciato: " + ex);
+            App.WriteLog("[Everest.ResetNumpad] threw: " + ex);
             return false;
         }
     }
@@ -976,7 +976,7 @@ public sealed class EverestService : IDisposable
     // ==== Media Dock (MMDock) =================================================
 
     /// <summary>
-    /// Applica un effetto LED sulla barra luminosa del Media Dock.
+    /// Applies an LED effect to the Media Dock's light bar.
     /// </summary>
     internal bool SetBarEffect(EverestSdkNative.BarData data)
     {
@@ -989,13 +989,13 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.SetBarEffect] ha lanciato: " + ex);
+            App.WriteLog("[Everest.SetBarEffect] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Imposta colori custom statici sulla barra del Media Dock (126 LED).
+    /// Sets static custom colors on the Media Dock's bar (126 LEDs).
     /// </summary>
     internal bool SetBarCustomize(EverestSdkNative.CustomStatic data)
     {
@@ -1008,14 +1008,14 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.SetBarCustomize] ha lanciato: " + ex);
+            App.WriteLog("[Everest.SetBarCustomize] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Aggiorna l'orologio sul display del Media Dock con l'ora corrente.
-    /// Chiamare periodicamente (ogni secondo, come fa Base Camp).
+    /// Updates the clock on the Media Dock's display with the current time.
+    /// Call periodically (every second, as Base Camp does).
     /// </summary>
     public bool UpdateClock()
     {
@@ -1035,16 +1035,16 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.UpdateClock] ha lanciato: " + ex);
+            App.WriteLog("[Everest.UpdateClock] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Invia un dato di monitoraggio PC al Media Dock.
+    /// Sends a PC monitoring data point to the Media Dock.
     /// </summary>
     /// <param name="infoType">0=CPU, 1=GPU, 2=Disk, 3=Network, 4=RAM, 5=KeyPressCount.</param>
-    /// <param name="value">Valore (percentuale o conteggio).</param>
+    /// <param name="value">Value (percentage or count).</param>
     public bool SetPCInfo(int infoType, int value)
     {
         lock (_sdkLock)
@@ -1055,16 +1055,16 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog($"[Everest.SetPCInfo] type={infoType} ha lanciato: " + ex);
+            App.WriteLog($"[Everest.SetPCInfo] type={infoType} threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Invia il livello volume al Media Dock (0-100).
+    /// Sends the volume level to the Media Dock (0-100).
     /// NOTE: SetVolumeInfo is also used for EnableColorStream (value=10/0x0A
-    /// attiva lo streaming colori). Per il volume reale del dock, chiamare
-    /// quando <c>byMMDockMenuIndex == 65 ('A')</c>.
+    /// activates the color stream). For the dock's actual volume, call it
+    /// when <c>byMMDockMenuIndex == 65 ('A')</c>.
     /// </summary>
     public bool SetVolume(int volumePercent)
     {
@@ -1076,13 +1076,13 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.SetVolume] ha lanciato: " + ex);
+            App.WriteLog("[Everest.SetVolume] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Carica un'immagine screensaver sul display del Media Dock (240×204 px).
+    /// Uploads a screensaver image to the Media Dock's display (240×204 px).
     /// </summary>
     public bool UploadMMDockScreensaver(string imagePathOrBase64)
     {
@@ -1098,12 +1098,12 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.UploadMMDockScreensaver] ha lanciato: " + ex);
+            App.WriteLog("[Everest.UploadMMDockScreensaver] threw: " + ex);
             return false;
         }
     }
 
-    /// <summary>Reset completo del Media Dock.</summary>
+    /// <summary>Full reset of the Media Dock.</summary>
     public bool ResetMMDock()
     {
         lock (_sdkLock)
@@ -1115,13 +1115,13 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.ResetMMDock] ha lanciato: " + ex);
+            App.WriteLog("[Everest.ResetMMDock] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Scrive la configurazione estesa nel firmware (MMDock settings, brightness, etc.).
+    /// Writes the extended configuration to the firmware (MMDock settings, brightness, etc.).
     /// </summary>
     internal bool SetExtendInfo(EverestSdkNative.FW_EXTEND_INFO info)
     {
@@ -1134,7 +1134,7 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.SetExtendInfo] ha lanciato: " + ex);
+            App.WriteLog("[Everest.SetExtendInfo] threw: " + ex);
             return false;
         }
     }
@@ -1155,13 +1155,13 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.SwitchToCustomize] ha lanciato: " + ex);
+            App.WriteLog("[Everest.SwitchToCustomize] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Invia un effetto custom per-key al device.
+    /// Sends a custom per-key effect to the device.
     /// </summary>
     internal bool SetCustomEffect(int profile, int area, EverestSdkNative.CustomEffect data, bool save = true)
     {
@@ -1174,13 +1174,13 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.SetCustomEffect] ha lanciato: " + ex);
+            App.WriteLog("[Everest.SetCustomEffect] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
-    /// Legge l'effetto custom corrente dal device.
+    /// Reads the current custom effect from the device.
     /// </summary>
     internal bool TryGetCustomEffect(int profile, int area, out EverestSdkNative.CustomEffect data)
     {
@@ -1197,33 +1197,33 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[Everest.GetCustomEffect] ha lanciato: " + ex);
+            App.WriteLog("[Everest.GetCustomEffect] threw: " + ex);
             return false;
         }
     }
 
     public void Dispose() => Close();
 
-    // ---- callback nativo (thread dell'SDK) ---------------------------------
+    // ---- native callback (SDK thread) ---------------------------------
 
     private void OnKeyCallback(ushort wMatrix, bool bPressed, uint id)
     {
         try
         {
-            // L'evento lo emettiamo senza lock: i consumer potrebbero
-            // richiamare altri metodi di EverestService (deadlock).
-            // Log tasti rimosso — troppo rumoroso in uso normale.
+            // We emit the event without a lock: consumers might
+            // call back into other EverestService methods (deadlock).
+            // Key logging removed — too noisy in normal use.
             KeyEvent?.Invoke(this, new EverestKeyEventArgs(id, wMatrix, bPressed));
         }
         catch (Exception ex)
         {
-            // Mai propagare un'eccezione gestita verso codice nativo.
-            App.WriteLog("[Everest.OnKeyCallback] ha lanciato: " + ex);
+            // Never let a managed exception propagate into native code.
+            App.WriteLog("[Everest.OnKeyCallback] threw: " + ex);
         }
     }
 }
 
-/// <summary>Argomenti dell'evento <see cref="EverestService.KeyEvent"/>.</summary>
+/// <summary>Arguments for the <see cref="EverestService.KeyEvent"/> event.</summary>
 public sealed class EverestKeyEventArgs : EventArgs
 {
     public EverestKeyEventArgs(uint deviceId, ushort keyMatrix, bool pressed)
@@ -1233,12 +1233,12 @@ public sealed class EverestKeyEventArgs : EventArgs
         Pressed = pressed;
     }
 
-    /// <summary>Id del device riportato dall'SDK.</summary>
+    /// <summary>Device id reported by the SDK.</summary>
     public uint DeviceId { get; }
 
-    /// <summary>Indice di matrice del tasto (indice fisico del firmware).</summary>
+    /// <summary>Key matrix index (firmware's physical key index).</summary>
     public ushort KeyMatrix { get; }
 
-    /// <summary>True = premuto, false = rilasciato.</summary>
+    /// <summary>True = pressed, false = released.</summary>
     public bool Pressed { get; }
 }

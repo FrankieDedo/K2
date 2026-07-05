@@ -11,13 +11,13 @@ using System.Threading.Tasks;
 namespace K2.App.Services;
 
 /// <summary>
-/// Client IPC che comunica con il processo satellite DisplayPad (x64) via named pipe.
+/// IPC client that talks to the DisplayPad satellite process (x64) via named pipe.
 ///
-/// Il satellite viene avviato automaticamente alla prima connessione e
+/// The satellite is started automatically on first connection and
 /// terminated on close. The protocol is JSON line-delimited:
 ///   → { "id": N, "cmd": "...", ...params }
 ///   ← { "id": N, "ok": true/false, ...data }
-///   ← { "id": 0, "evt": "...", ...data }   (push asincrono)
+///   ← { "id": 0, "evt": "...", ...data }   (async push)
 /// </summary>
 public sealed class DisplayPadSatelliteClient : IDisplayPadClient
 {
@@ -32,7 +32,7 @@ public sealed class DisplayPadSatelliteClient : IDisplayPadClient
     private Thread? _readThread;
     private volatile bool _disposed;
 
-    // ---- eventi push dal satellite ----
+    // ---- push events from the satellite ----
 
     public event EventHandler<JsonElement>? PlugEvent;
     public event EventHandler<JsonElement>? KeyEvent;
@@ -49,29 +49,29 @@ public sealed class DisplayPadSatelliteClient : IDisplayPadClient
     // Lifecycle
     // ================================================================
 
-    /// <summary>Avvia il satellite e connette la pipe.</summary>
+    /// <summary>Starts the satellite and connects the pipe.</summary>
     public bool Connect(int timeoutMs = 8000)
     {
         if (_pipe is { IsConnected: true }) return true;
 
         string pipeName = $"K2_DP_{Environment.ProcessId}_{Environment.TickCount}";
 
-        // Cerca il satellite accanto a K2.App.exe o nella build x64
+        // Look for the satellite next to K2.App.exe or in the x64 build
         string? satPath = FindSatellite();
         if (satPath is null)
         {
-            RaiseLog("[SAT] K2.DisplayPad.Satellite.exe non trovato");
+            RaiseLog("[SAT] K2.DisplayPad.Satellite.exe not found");
             return false;
         }
 
-        RaiseLog($"[SAT] Avvio {satPath} pipe={pipeName}");
+        RaiseLog($"[SAT] Starting {satPath} pipe={pipeName}");
         _satellite = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 FileName = satPath,
                 // Arg 0 = pipe name, Arg 1 = parent PID.
-                // Il satellite monitora il parent e si auto-spegne se crasha.
+                // The satellite monitors the parent and shuts itself down if it crashes.
                 Arguments = $"{pipeName} {Environment.ProcessId}",
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -90,7 +90,7 @@ public sealed class DisplayPadSatelliteClient : IDisplayPadClient
         try { _pipe.Connect(timeoutMs); }
         catch (Exception ex)
         {
-            RaiseLog($"[SAT] Connessione pipe fallita: {ex.Message}");
+            RaiseLog($"[SAT] Pipe connection failed: {ex.Message}");
             KillSatellite();
             return false;
         }
@@ -99,7 +99,7 @@ public sealed class DisplayPadSatelliteClient : IDisplayPadClient
         _readThread = new Thread(ReadLoop) { IsBackground = true, Name = "DP-Pipe-Reader" };
         _readThread.Start();
 
-        RaiseLog("[SAT] Connesso.");
+        RaiseLog("[SAT] Connected.");
         return true;
     }
 
@@ -122,7 +122,7 @@ public sealed class DisplayPadSatelliteClient : IDisplayPadClient
     }
 
     // ================================================================
-    // Comandi pubblici (sincroni, bloccano fino alla risposta)
+    // Public commands (synchronous, block until the response arrives)
     // ================================================================
 
     public JsonElement? Open() => Send("open");
@@ -213,7 +213,7 @@ public sealed class DisplayPadSatelliteClient : IDisplayPadClient
 
                     if (id > 0)
                     {
-                        // Risposta a un comando
+                        // Response to a command
                         TaskCompletionSource<JsonElement>? tcs;
                         lock (_pending)
                         {
@@ -223,7 +223,7 @@ public sealed class DisplayPadSatelliteClient : IDisplayPadClient
                     }
                     else if (root.TryGetProperty("evt", out var evtProp))
                     {
-                        // Evento push
+                        // Push event
                         string? evt = evtProp.GetString();
                         var cloned = root.Clone();
                         switch (evt)
@@ -252,7 +252,7 @@ public sealed class DisplayPadSatelliteClient : IDisplayPadClient
 
     private static string? FindSatellite()
     {
-        // 1) Accanto a K2.App.exe
+        // 1) Next to K2.App.exe
         string? dir = Path.GetDirectoryName(Environment.ProcessPath);
         if (dir is not null)
         {
@@ -260,8 +260,8 @@ public sealed class DisplayPadSatelliteClient : IDisplayPadClient
             if (File.Exists(p)) return p;
         }
 
-        // 2) Build x64 relativa (per debug)
-        //    K2.App/bin/x86/Debug/net8.0-windows → 5 livelli su = K2/ (solution root)
+        // 2) Relative x64 build (for debugging)
+        //    K2.App/bin/x86/Debug/net8.0-windows → 5 levels up = K2/ (solution root)
         if (dir is not null)
         {
             string x64 = Path.Combine(dir, "..", "..", "..", "..", "..",
@@ -296,7 +296,7 @@ public sealed class DisplayPadSatelliteClient : IDisplayPadClient
     private void RaiseLog(string msg) => SatelliteLog?.Invoke(this, msg);
 }
 
-/// <summary>Extension per estrarre valori da JsonElement con fallback.</summary>
+/// <summary>Extension methods for extracting values from JsonElement with fallbacks.</summary>
 internal static class JsonElementExtensions
 {
     public static int Get(this JsonElement e, string prop) =>

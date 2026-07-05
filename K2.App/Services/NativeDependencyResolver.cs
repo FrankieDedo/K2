@@ -9,52 +9,52 @@ using Microsoft.Win32;
 namespace K2.App.Services;
 
 /// <summary>
-/// Risolve a runtime le DLL native che <b>non sono ridistribuibili</b> perche'
-/// componenti interni di Base Camp (oggi: <c>MacroPadSDK.dll</c>).
+/// Resolves at runtime the native DLLs that are <b>not redistributable</b> because
+/// they are internal Base Camp components (today: <c>MacroPadSDK.dll</c>).
 ///
 /// <para>
-/// K2 viene distribuito <b>senza</b> queste DLL. Per farle trovare al loader
-/// si registra un <see cref="DllImportResolver"/> sull'assembly di K2.App:
-/// quando il CLR deve caricare una di queste librerie, la cerca — in ordine —
+/// K2 is distributed <b>without</b> these DLLs. To make the loader find them,
+/// a <see cref="DllImportResolver"/> is registered on the K2.App assembly:
+/// when the CLR needs to load one of these libraries, it looks — in order —
 /// </para>
 /// <list type="number">
-///   <item>accanto a <c>K2.App.exe</c> (l'utente l'ha copiata li' a mano);</item>
-///   <item>nella cartella indicata dalla variabile d'ambiente
-///         <c>K2_BASECAMP_DIR</c> (override esplicito);</item>
-///   <item>in una installazione di Base Camp individuata da registro di
-///         sistema e percorsi d'installazione tipici.</item>
+///   <item>next to <c>K2.App.exe</c> (the user copied it there manually);</item>
+///   <item>in the folder indicated by the <c>K2_BASECAMP_DIR</c> environment
+///         variable (explicit override);</item>
+///   <item>in a Base Camp installation found via the system registry
+///         and typical install paths.</item>
 /// </list>
 ///
 /// <para>
-/// Cosi' K2 resta un pacchetto redistribuibile pulito: l'utente finale o copia
-/// la DLL accanto all'eseguibile, oppure tiene installato Base Camp (scaricabile
-/// liberamente) e K2 vi si "aggancia". Vedi <c>DISTRIBUTION.md</c>.
+/// This way K2 remains a clean redistributable package: the end user either copies
+/// the DLL next to the executable, or keeps Base Camp installed (freely
+/// downloadable) and K2 "hooks into" it. See <c>DISTRIBUTION.md</c>.
 /// </para>
 /// </summary>
 internal static class NativeDependencyResolver
 {
     /// <summary>
-    /// DLL native NON ridistribuibili da cercare in una installazione di Base
-    /// Camp.
+    /// Non-redistributable native DLLs to look for in a Base Camp
+    /// installation.
     /// <list type="bullet">
     ///   <item><c>MacroPadSDK.dll</c> — MacroPad</item>
-    ///   <item><c>SDKDLL.dll</c>      — tastiera Everest Max (wrapper
+    ///   <item><c>SDKDLL.dll</c>      — Everest Max keyboard (wrapper
     ///         <c>BaseCamp.Service.Helpers.Everest</c>)</item>
     /// </list>
-    /// <c>Everest360_USB.dll</c> (Everest 60) is <b>not</b> in the list: the module
-    /// Everest di K2 non lo usa, vedi commento in <see cref="EverestSdkNative"/>.
+    /// <c>Everest360_USB.dll</c> (Everest 60) is <b>not</b> in the list: K2's
+    /// Everest module doesn't use it, see comment in <see cref="EverestSdkNative"/>.
     /// </summary>
     public static readonly string[] BaseCampNativeDlls = { "MacroPadSDK.dll", "SDKDLL.dll" };
 
-    /// <summary>Variabile d'ambiente con cui forzare la cartella di Base Camp.</summary>
+    /// <summary>Environment variable used to force the Base Camp folder.</summary>
     public const string BaseCampDirEnvVar = "K2_BASECAMP_DIR";
 
     private static bool _installed;
     private static string[]? _baseCampDirsCache;
 
     /// <summary>
-    /// Registra il resolver. Va chiamato una sola volta, all'avvio dell'app,
-    /// prima di qualunque P/Invoke verso le DLL native di Base Camp.
+    /// Registers the resolver. Must be called exactly once, at app startup,
+    /// before any P/Invoke to Base Camp's native DLLs.
     /// </summary>
     public static void Install()
     {
@@ -63,18 +63,18 @@ internal static class NativeDependencyResolver
         try
         {
             NativeLibrary.SetDllImportResolver(typeof(MacroPadSdkNative).Assembly, Resolve);
-            App.WriteLog("[NativeResolver] DllImportResolver registrato");
+            App.WriteLog("[NativeResolver] DllImportResolver registered");
         }
         catch (Exception ex)
         {
-            // SetDllImportResolver lancia se gia' registrato: non e' fatale.
-            App.WriteLog("[NativeResolver] Install ha lanciato: " + ex.Message);
+            // SetDllImportResolver throws if already registered: not fatal.
+            App.WriteLog("[NativeResolver] Install threw: " + ex.Message);
         }
     }
 
     private static IntPtr Resolve(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
     {
-        // Gestiamo solo le DLL Base Camp; tutto il resto al loader standard.
+        // Only handle Base Camp DLLs; everything else goes to the standard loader.
         if (!IsBaseCampDll(libraryName))
             return IntPtr.Zero;
 
@@ -82,20 +82,20 @@ internal static class NativeDependencyResolver
         {
             if (File.Exists(candidate) && NativeLibrary.TryLoad(candidate, out var handle))
             {
-                App.WriteLog($"[NativeResolver] '{libraryName}' caricata da: {candidate}");
+                App.WriteLog($"[NativeResolver] '{libraryName}' loaded from: {candidate}");
                 return handle;
             }
         }
 
-        App.WriteLog($"[NativeResolver] '{libraryName}' NON trovata. Percorsi provati:" +
+        App.WriteLog($"[NativeResolver] '{libraryName}' NOT found. Paths tried:" +
                      Environment.NewLine + "  " +
                      string.Join(Environment.NewLine + "  ", CandidatePaths(libraryName)));
-        // IntPtr.Zero -> il CLR proseguira' e lancera' DllNotFoundException,
-        // gestita con un messaggio chiaro a monte (MainWindow/MacroPadService).
+        // IntPtr.Zero -> the CLR will proceed and throw DllNotFoundException,
+        // handled upstream with a clear message (MainWindow/MacroPadService).
         return IntPtr.Zero;
     }
 
-    /// <summary>True se il nome corrisponde a una DLL nativa di Base Camp.</summary>
+    /// <summary>True if the name matches a Base Camp native DLL.</summary>
     public static bool IsBaseCampDll(string libraryName) =>
         BaseCampNativeDlls.Any(d =>
             string.Equals(d, libraryName, StringComparison.OrdinalIgnoreCase) ||
@@ -103,45 +103,45 @@ internal static class NativeDependencyResolver
                           Path.GetFileNameWithoutExtension(libraryName),
                           StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>True se la DLL e' raggiungibile in almeno un percorso candidato.</summary>
+    /// <summary>True if the DLL is reachable at at least one candidate path.</summary>
     public static bool IsResolvable(string libraryName) =>
         CandidatePaths(libraryName).Any(File.Exists);
 
     /// <summary>
-    /// Percorsi in cui cercare <paramref name="dll"/>, in ordine di priorita'.
-    /// Esposto anche per diagnostica (vedi <see cref="DescribeSearch"/>).
+    /// Paths to search for <paramref name="dll"/>, in priority order.
+    /// Also exposed for diagnostics (see <see cref="DescribeSearch"/>).
     /// </summary>
     public static IEnumerable<string> CandidatePaths(string dll)
     {
-        // 1) accanto all'eseguibile
+        // 1) next to the executable
         yield return Path.Combine(AppContext.BaseDirectory, dll);
 
-        // 2) override esplicito via variabile d'ambiente
+        // 2) explicit override via environment variable
         var env = Environment.GetEnvironmentVariable(BaseCampDirEnvVar);
         if (!string.IsNullOrWhiteSpace(env))
             yield return Path.Combine(env.Trim(), dll);
 
-        // 3) installazioni di Base Camp individuate
+        // 3) detected Base Camp installations
         foreach (var dir in BaseCampDirectories())
             yield return Path.Combine(dir, dll);
     }
 
-    /// <summary>Diagnostica leggibile: dove e' stata cercata e se e' stata trovata.</summary>
+    /// <summary>Readable diagnostics: where it was searched and whether it was found.</summary>
     public static string DescribeSearch(string dll)
     {
-        var lines = new List<string> { $"Ricerca di '{dll}':" };
+        var lines = new List<string> { $"Searching for '{dll}':" };
         bool any = false;
         foreach (var p in CandidatePaths(dll))
         {
             bool ok = File.Exists(p);
             any |= ok;
-            lines.Add($"  [{(ok ? "TROVATA" : "assente")}] {p}");
+            lines.Add($"  [{(ok ? "FOUND" : "missing")}] {p}");
         }
-        lines.Add(any ? "Esito: risolvibile." : "Esito: NON risolvibile.");
+        lines.Add(any ? "Result: resolvable." : "Result: NOT resolvable.");
         return string.Join(Environment.NewLine, lines);
     }
 
-    /// <summary>Cartelle di installazione di Base Camp individuate (con cache).</summary>
+    /// <summary>Detected Base Camp installation folders (cached).</summary>
     public static string[] BaseCampDirectories()
     {
         if (_baseCampDirsCache != null) return _baseCampDirsCache;
@@ -155,7 +155,7 @@ internal static class NativeDependencyResolver
                 dirs.Add(d);
         }
 
-        // Percorsi d'installazione tipici (Base Camp e' un'app Electron).
+        // Typical installation paths (Base Camp is an Electron app).
         string?[] roots =
         {
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
@@ -171,14 +171,14 @@ internal static class NativeDependencyResolver
             Add(Path.Combine(root, "Programs", "base-camp"));
         }
 
-        // Registro: chiavi di disinstallazione con DisplayName "Base Camp".
+        // Registry: uninstall keys with DisplayName "Base Camp".
         foreach (var d in RegistryInstallLocations())
             Add(d);
 
         _baseCampDirsCache = dirs.ToArray();
-        App.WriteLog($"[NativeResolver] installazioni Base Camp trovate: " +
+        App.WriteLog($"[NativeResolver] Base Camp installations found: " +
                      (_baseCampDirsCache.Length == 0
-                         ? "nessuna"
+                         ? "none"
                          : string.Join(" | ", _baseCampDirsCache)));
         return _baseCampDirsCache;
     }
@@ -214,10 +214,10 @@ internal static class NativeDependencyResolver
                             !string.IsNullOrWhiteSpace(loc))
                             found.Add(loc);
                     }
-                    catch { /* chiave illeggibile: ignora */ }
+                    catch { /* unreadable key: ignore */ }
                 }
             }
-            catch { /* hive/vista non accessibile: ignora */ }
+            catch { /* hive/view not accessible: ignore */ }
         }
         return found;
     }

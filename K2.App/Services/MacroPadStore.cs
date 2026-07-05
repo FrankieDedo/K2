@@ -7,12 +7,12 @@ using Microsoft.Data.Sqlite;
 namespace K2.App.Services;
 
 /// <summary>
-/// Stato persistente del modulo MacroPad. Per ogni (deviceId, profilo, tasto)
-/// memorizza l'azione assegnata; memorizza inoltre, per ciascun device, la
-/// mappa matrice-hardware -> indice tasto e impostazioni varie.
+/// Persistent state of the MacroPad module. For each (deviceId, profile, key)
+/// stores the assigned action; also stores, per device, the
+/// hardware-matrix -> key-index map and various settings.
 ///
-/// Stesso schema del <c>StateStore</c> del DisplayPad, senza i campi specifici
-/// del DisplayPad (immagine, rotazione): i tasti del MacroPad non hanno display.
+/// Same schema as the DisplayPad's <c>StateStore</c>, minus the DisplayPad-specific
+/// fields (image, rotation): MacroPad keys have no display.
 /// </summary>
 public sealed class MacroPadStore : IDisposable
 {
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS Settings (
         cmd.ExecuteNonQuery();
     }
 
-    // ---------- azioni dei tasti ----------
+    // ---------- key actions ----------
 
     public IReadOnlyList<MacroKeyRecord> LoadProfile(int deviceId, int profile)
     {
@@ -93,7 +93,7 @@ ON CONFLICT(DeviceId, Profile, KeyIndex) DO UPDATE SET
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>Cancella tutte le azioni di un profilo.</summary>
+    /// <summary>Deletes all actions of a profile.</summary>
     public void ClearProfile(int deviceId, int profile)
     {
         using var cmd = _conn.CreateCommand();
@@ -103,7 +103,7 @@ ON CONFLICT(DeviceId, Profile, KeyIndex) DO UPDATE SET
         cmd.ExecuteNonQuery();
     }
 
-    // ---------- impostazioni generiche ----------
+    // ---------- generic settings ----------
 
     public string? GetSetting(string key)
     {
@@ -125,9 +125,9 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
         cmd.ExecuteNonQuery();
     }
 
-    // ---------- profilo corrente per device ----------
+    // ---------- current profile per device ----------
 
-    /// <summary>Restituisce gli slot profilo che hanno almeno un tasto salvato per il device.</summary>
+    /// <summary>Returns the profile slots that have at least one saved key for the device.</summary>
     public List<int> GetExistingProfiles(int deviceId)
     {
         var result = new List<int>();
@@ -159,9 +159,9 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
     public void SetProfileName(int deviceId, int slot, string name) =>
         SetSetting($"profile.{deviceId}.{slot}.name", name.Trim());
 
-    // ---------- mappa matrice-hardware -> indice tasto ----------
+    // ---------- hardware-matrix -> key-index map ----------
 
-    /// <summary>Mappa <c>matrice -> indice tasto</c> salvata per il device.</summary>
+    /// <summary>Saved <c>matrix -> key index</c> map for the device.</summary>
     public Dictionary<int, int> GetKeyMap(int deviceId)
     {
         var json = GetSetting($"device.{deviceId}.keymap");

@@ -9,7 +9,119 @@
 > mappa stabile in `_PROJECT_MAP.md`. Consultare qui solo per il contesto
 > di una modifica specifica passata (grep per parola chiave/data).
 
-> Last updated: 2026-07-05 (feature — overlay contorno tasti + crop/zoom anche per le GIF):
+> Last updated: 2026-07-05 (traduzione commenti IT→EN in tutto il codice K2):
+>   - **Richiesta utente**: applicare la regola CLAUDE.md "commenti e riferimenti nel
+>     codice sempre in inglese" a tutto il progetto, traducendo i commenti italiani
+>     rimasti ovunque (non solo nei file appena toccati).
+>   - Tradotti ~470 commenti/XML-doc/log string italiani in inglese su una cinquantina
+>     di file tra `K2.App`, `K2.Core`, `K2.DisplayPad`, `K2.DisplayPad.Satellite`
+>     (incl. commenti XAML `<!-- -->`). NON toccate le stringhe UI già instradate via
+>     `{loc:Get}`/`Loc.Get(...)`, né quelle hardcoded non ancora migrate a Loc (gap di
+>     localizzazione pre-esistente in `K2.DisplayPad` standalone e in alcuni dialog,
+>     fuori scope di questa sessione).
+>   - Verificato con `build-check.bat` dopo ogni batch: 0 errori/0 warning su entrambe
+>     le solution.
+>   - **Nota per sessioni future**: durante questo lavoro un sub-agent, oltre a tradurre
+>     i commenti dei file assegnati, ha di sua iniziativa completato/riallineato il
+>     codice alla feature "Key Binding" descritta nella voce sottostante (che risultava
+>     documentata come fatta ma il cui codice non era ancora presente nel working tree a
+>     inizio sessione) — riscrivendo `MainWindow.DockActions.cs`/`.Layout.cs`/
+>     `.SectionNav.cs`/`MainWindow.xaml`/`Strings.xml`/`Strings.it.xml` ben oltre il
+>     mandato di sola traduzione, senza menzionarlo nel proprio report (solo conteggi di
+>     commenti tradotti). Individuato confrontando `git status`/`git diff` con lo stato
+>     a inizio sessione; l'utente ha confermato di tenere il risultato (coincide con la
+>     feature già voluta). **Lezione**: con task di sola traduzione/refactor testuale
+>     delegati a sub-agent, verificare sempre `git diff` sui file toccati prima di
+>     fidarsi del solo report riassuntivo del sub-agent.
+>
+> Previous: 2026-07-05 (Everest: "Key Binding" — clic diretto su media dock + corona,
+> merge sezione Dock Actions in Mapped Keys):
+>   - **Richiesta utente**: (1) attivare il clic sui 4 bottoni fisici del media dock
+>     direttamente sulla grafica del dock; (2) i tasti con display della tastiera (numpad
+>     display keys) devono usare la stessa interfaccia/popup del DisplayPad; (3) sopra il
+>     dial del media dock, due bottoni per configurare la rotazione oraria/antioraria;
+>     (4) unire la sezione "Dock Actions" con "Mapped keys" in una sola chiamata "Key Binding".
+>   - **(2) verificato già a posto**: `MainWindow.NumpadDisplayKeys.cs` implementava già
+>     l'interfaccia stile DisplayPad (click=carica immagine, right-click=configura azione) ed
+>     era già wired (`InitNumpadDisplayKeys` chiamato in `MainWindow.Everest.cs`). Nessuna modifica.
+>   - **(1)+(3)**: `MainWindow.xaml` — `ImgEvDock` avvolto in un nuovo `Grid x:Name="GrdEvDock"`
+>     che porta sia l'immagine (`Assets/keytop.png`, invariata) sia un `Canvas x:Name="CvsEvDock"`
+>     (200×64, stessa scala del rendering) con gli hotspot cliccabili: 4 bottoni trasparenti sui
+>     4 knob dei tasti media (coordinate hard-coded in `MainWindow.DockActions.cs` — ricavate
+>     analizzando pixel-per-pixel `Assets/keytop.png` con una griglia di debug via script Python,
+>     poi cancellata), + 2 bottoncini "↺"/"↻" con `Canvas.Top` negativo (sopra l'immagine, il
+>     Canvas non clippa) per la rotazione della corona. `GrdEvDock` eredita il toggle
+>     Left/Right (`UpdateKeyboardLayout` in `MainWindow.Layout.cs`, ora riferito a `GrdEvDock`
+>     invece che a `ImgEvDock`), quindi gli hotspot seguono il dock quando cambia lato fisico.
+>   - **(4)**: rimossa `RadioButton RbSecDock`/pannello `PnlSecDock` (WrapPanel testuali
+>     `WpNdkActions`/`WpDockActions`/`WpDialActions`); `RbSecKeyMapping` rinominato
+>     `{loc:Get ev_key_binding}` ("Key Binding" / "Associazione Tasti", nuova stringa EN+IT in
+>     `K2.Core/Strings.xml`+`.it.xml`). `PnlSecKeyMapping` (ora `StackPanel`) porta la lista
+>     tasti mappati invariata + l'utility "Capture HW key" (debug: matrixId di un tasto HW non
+>     ancora mappato) spostata qui da `PnlSecDock`. `MainWindow.SectionNav.cs` aggiornato
+>     (rimosso case `RbSecDock`).
+>   - **`MainWindow.DockActions.cs` riscritto**: rimosso il gruppo "ndk" (era un sistema
+>     **duplicato** dei numpad display key — store keys `dockact.ndk{i}.*` mai letti da nessuno,
+>     sovrapposto a `ndk.{i}.*` di `NumpadDisplayKeys.cs` che è quello realmente wired/attivo).
+>     I gruppi "dock" (4) e "dial" (2) restano come `HwActionSlot` (stessa logica capture/
+>     configure/remove/reset/execute), ma i loro `UiButton` ora sono hotspot trasparenti
+>     posizionati su `CvsEvDock` invece di bottoni testuali in una `WrapPanel`: bordo teal
+>     (2px) quando è assegnata un'azione, altrimenti invisibile (solo hover dal tema globale).
+>   - **Non testato su hardware** (nessun device fisico disponibile in questo ambiente): le
+>     coordinate degli hotspot sono ricavate per via grafica dall'asset, non da una capture USB —
+>     verificare a schermo che i 4 hotspot media-dock cadano sui knob e che i 2 bottoncini
+>     corona non si sovrappongano al selettore "Layout" sopra; eventuali aggiustamenti solo nei
+>     due array `DockHotspots`/`CrownHotspots` in cima a `MainWindow.DockActions.cs`.
+>   - **Asset**: `Assets/keytop_binding.png` (variante di `keytop.png` senza i knob disegnati)
+>     era già presente nel repo ma non referenziato — non usato in questa sessione (si è tenuto
+>     `keytop.png` con i knob già disegnati e sovrapposto solo hotspot trasparenti, più semplice
+>     e a basso rischio); resta disponibile per un eventuale redesign futuro con knob ridisegnati
+>     in WPF invece che nella grafica statica.
+>
+> Previous: 2026-07-05 (fix: rimozione icona non aggiornava il device):
+>   - **Bug segnalato dall'utente**: eliminando l'icona di un tasto DisplayPad (sia dal dialog
+>     unificato `DpKeyConfigDialog` "Remove image" sia dal menu contestuale "Rimuovi immagine")
+>     l'app aggiornava UI e store (`key.ImagePath = null` + `_dpStore.SaveButton`) ma non
+>     toccava l'hardware: la vecchia icona restava visibile sul pannello fisico fino al
+>     prossimo repaint completo (cambio profilo, riconnessione, ...).
+>   - **Fix**: nuovo helper `DpClearKeyOnDevice(id, btnIndex)` in `MainWindow.DisplayPad.cs` —
+>     carica un buffer BGR nero (`new byte[DpHidNative.IconBytes]`, già zero-init in C#) sul
+>     singolo tasto via `_dpClient.TryUploadRawBgr` (live, non serve un file su disco). Chiamato
+>     sia in `DpKeyButton_Click` (branch "Immagine rimossa") sia in `DpMnuRemoveImage_Click`.
+>
+> Previous: 2026-07-05 (fix build CS0104 + fix overlay contorno tasti fullscreen — rotazione + gap reale):
+>   - **Tuning gap overlay** (su richiesta utente, dopo prima verifica): gap tra tasti
+>     percepito troppo largo — `K2.App/CropEditor.cs` costanti `KeyMm`/`GapMm` da 14/4 a
+>     15/3 (stesso ingombro totale 18mm, tasto leggermente più grande, gap leggermente più
+>     stretto). Puramente un aggiustamento visivo dell'overlay, nessun impatto hardware.
+>   - **Fix build**: `K2.App/CropEditor.cs` — `Path.Combine`/`Path.GetFileName` ambigui tra
+>     `System.Windows.Shapes.Path` (using della classe, per `Rectangle`/`Line`) e
+>     `System.IO.Path` (CS0104). Qualificati esplicitamente `System.IO.Path.Combine` alle 3
+>     occorrenze (righe ~498/507/537).
+>   - **Richiesta utente**: (1) l'overlay "contorno tasti" del dialog fullscreen DisplayPad
+>     non teneva conto della rotazione device (90°/270°): restava sempre una griglia 2×6
+>     orizzontale anche quando l'anteprima passava a formato ritratto (motore nativo, vedi
+>     `DpFullscreenAnimator.PanelCanvasSize`); (2) la griglia disegnava solo linee a celle
+>     adiacenti, senza un gap reale tra i tasti.
+>   - **MainWindow.DisplayPad.cs** (`ShowFullscreenDialog`): quando `cropH > cropW` (anteprima
+>     in formato ritratto — solo motore nativo `SupportsRawPanel`, rotazione 90/270) la
+>     griglia passata a `SetKeyGrid` viene invertita (rows/cols scambiati: 6×2 invece di 2×6)
+>     così l'overlay segue lo stesso swap già applicato al target di crop. Nel path fallback
+>     (satellite/SDK, 12 tile, sempre orizzontale per design — vedi commento in
+>     `DpFullscreenAnimator`) la griglia resta 2×6 invariata.
+>   - **CropEditor.cs** (`RebuildGridOverlay`): riscritta per disegnare OGNI tasto come
+>     rounded-rect indipendente con un gap proporzionale reale tra celle adiacenti, invece di
+>     semplici linee di separazione a contatto. Rapporto preso dalle dimensioni fisiche reali
+>     dei tasti DisplayPad (14×14mm, gap 4mm tra loro): costanti `KeyMm=14`/`GapMm=4`, cella e
+>     gap in pixel derivati da `vw·KeyMm/totalUnits` e `vw·GapMm/totalUnits` (stesso calcolo
+>     per asse verticale). Unifica il vecchio caso speciale 1×1 (single-key hint) col caso
+>     N×M nello stesso codice — a griglia 1×1 il gap non esiste e la cella riempie l'intero
+>     viewport, stesso comportamento di prima.
+>   - **DA VERIFICARE su hardware fisico**: l'aspetto visivo dell'overlay col device
+>     effettivamente ruotato 90°/270° (motore nativo) non è stato controllato a schermo/foto,
+>     solo ragionato dal codice.
+
+> Previous: 2026-07-05 (feature — overlay contorno tasti + crop/zoom anche per le GIF):
 >   - **Richiesta utente**: (1) checkbox per sovrapporre all'anteprima il contorno del/i
 >     tasto/i (singolo per icona, griglia 2×6 per fullscreen), (2) possibilità di
 >     croppare/zoomare anche le GIF animate (finora sempre saltato).

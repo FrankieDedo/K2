@@ -1,5 +1,5 @@
-// Services/MacroRecorder.cs — registra sequenze di tasti via hook globale
-// Usa SetWindowsHookEx(WH_KEYBOARD_LL) per catturare tutti i keydown/keyup.
+// Services/MacroRecorder.cs — records key sequences via a global hook
+// Uses SetWindowsHookEx(WH_KEYBOARD_LL) to capture all keydown/keyup events.
 // Mouse recording is optional (WH_MOUSE_LL) — enabled via RecordMouse.
 
 using System;

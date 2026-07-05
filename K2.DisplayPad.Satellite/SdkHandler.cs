@@ -16,8 +16,8 @@ using DisplayPad.SDK;
 namespace K2.DisplayPad.Satellite;
 
 /// <summary>
-/// Gestisce i comandi JSON provenienti dalla pipe e pilota l'SDK DisplayPad.
-/// Gli eventi SDK (plug, key, progress) vengono rilanciati come JSON via
+/// Handles the JSON commands coming from the pipe and drives the DisplayPad SDK.
+/// SDK events (plug, key, progress) are relayed as JSON via
 /// <see cref="EventRaised"/>.
 /// </summary>
 internal sealed class SdkHandler : IDisposable
@@ -42,7 +42,7 @@ internal sealed class SdkHandler : IDisposable
     public SdkHandler(Dispatcher dispatcher) => _dispatcher = dispatcher;
 
     // ================================================================
-    // Dispatch comandi
+    // Command dispatch
     // ================================================================
 
     public object Handle(string cmd, JsonElement root)
@@ -77,15 +77,15 @@ internal sealed class SdkHandler : IDisposable
     }
 
     // ================================================================
-    // Comandi specifici
+    // Specific commands
     // ================================================================
 
     private object CmdOpen(JsonElement root)
     {
         if (_opened) return new { ok = true, already = true };
 
-        // L'SDK ha bisogno di un HWND per postare WM_DEVICE_PLUG.
-        // Creiamo una finestra nascosta sul thread WPF.
+        // The SDK needs an HWND to post WM_DEVICE_PLUG.
+        // We create a hidden window on the WPF thread.
         IntPtr hwnd = IntPtr.Zero;
         _dispatcher.Invoke(() =>
         {
@@ -337,7 +337,7 @@ internal sealed class SdkHandler : IDisposable
     }
 
     // ================================================================
-    // Callback SDK → eventi JSON push
+    // SDK callbacks → push JSON events
     // ================================================================
 
     private void OnPlug(int a, int b) =>
@@ -361,7 +361,7 @@ internal sealed class SdkHandler : IDisposable
     }
 
     // ================================================================
-    // Rotazione icone (stessa logica di K2.DisplayPad IconRotator)
+    // Icon rotation (same logic as K2.DisplayPad IconRotator)
     // ================================================================
 
     private static readonly string CacheDir = Path.Combine(
@@ -398,7 +398,7 @@ internal sealed class SdkHandler : IDisposable
     }
 
     // ================================================================
-    // Reflection helpers (eventi statici dell'SDK)
+    // Reflection helpers (SDK static events)
     // ================================================================
 
     private void AttachStaticEvent(string eventName, string handlerName, out Delegate? created)

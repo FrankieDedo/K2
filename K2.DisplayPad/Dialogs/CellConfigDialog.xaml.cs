@@ -11,8 +11,8 @@ using Microsoft.Win32;
 namespace K2.DisplayPad.Dialogs;
 
 /// <summary>
-/// Dialog unificato per configurare una cella del DisplayPad standalone:
-/// caricamento immagine + rotazione + azione.
+/// Unified dialog to configure a standalone DisplayPad cell:
+/// image loading + rotation + action.
 /// </summary>
 public partial class CellConfigDialog : Window
 {

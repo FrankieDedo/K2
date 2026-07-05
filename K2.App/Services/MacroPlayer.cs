@@ -1,5 +1,5 @@
-// Services/MacroPlayer.cs — riproduce macro registrate
-// Usa SendInput (Win32) per simulare keydown/keyup e mouse events.
+// Services/MacroPlayer.cs — plays back recorded macros
+// Uses SendInput (Win32) to simulate keydown/keyup and mouse events.
 
 using System;
 using System.Collections.Generic;
@@ -123,7 +123,7 @@ public sealed class MacroPlayer
 
     private static void SendMouseMove(int x, int y)
     {
-        // Normalizza a coordinate assolute (0-65535)
+        // Normalize to absolute coordinates (0-65535)
         int screenW = GetSystemMetrics(SM_CXSCREEN);
         int screenH = GetSystemMetrics(SM_CYSCREEN);
         int normX = (int)((x * 65536.0) / screenW);
@@ -147,7 +147,7 @@ public sealed class MacroPlayer
         SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
     }
 
-    // ─────────────────────── Costanti & strutture ───────────────────────
+    // ─────────────────────── Constants & structures ───────────────────────
 
     private const uint INPUT_MOUSE    = 0;
     private const uint INPUT_KEYBOARD = 1;

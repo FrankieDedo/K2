@@ -12,19 +12,19 @@ using System.Windows;
 namespace K2.DisplayPad.Satellite;
 
 /// <summary>
-/// Processo satellite x64 per il DisplayPad.
+/// x64 satellite process for the DisplayPad.
 ///
 /// K2.App (x86) cannot load DisplayPadSDK.dll (x64) in its own process.
-/// Questo satellite wrappa l'SDK e comunica con K2.App via named pipe JSON.
+/// This satellite wraps the SDK and communicates with K2.App via a JSON named pipe.
 ///
-/// Protocollo:
+/// Protocol:
 ///   request  → { "id": N, "cmd": "...", ...params }
 ///   response ← { "id": N, "ok": true/false, ...data }
-///   event    ← { "id": 0, "evt": "...", ...data }       (push asincrono)
+///   event    ← { "id": 0, "evt": "...", ...data }       (asynchronous push)
 ///
-/// Avvio: K2.App lancia il satellite come processo figlio passando il nome
-///        della pipe come primo argomento. Il satellite esce quando la pipe
-///        si chiude o quando riceve il comando "exit".
+/// Startup: K2.App launches the satellite as a child process, passing the pipe
+///          name as the first argument. The satellite exits when the pipe
+///          closes or when it receives the "exit" command.
 /// </summary>
 internal static class Program
 {
@@ -39,17 +39,17 @@ internal static class Program
     {
         string pipeName  = args.Length > 0 ? args[0] : "K2_DisplayPad_Pipe";
         int    parentPid = args.Length > 1 && int.TryParse(args[1], out int p) ? p : -1;
-        Log($"Satellite avviato, pipe={pipeName}, PID={Environment.ProcessId}, parentPID={parentPid}");
+        Log($"Satellite started, pipe={pipeName}, PID={Environment.ProcessId}, parentPID={parentPid}");
 
-        // WPF Application necessaria per il message pump (l'SDK posta WM_* alla
-        // finestra nascosta per i callback plug/key/progress).
+        // WPF Application needed for the message pump (the SDK posts WM_* to the
+        // hidden window for plug/key/progress callbacks).
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         app.Startup += (_, _) =>
         {
             Task.Run(() => RunPipeServer(pipeName, app));
 
-            // Watchdog: se il parent muore (crash o kill), il satellite esce.
-            // Copre il caso in cui OnWindowClosed non viene mai chiamato.
+            // Watchdog: if the parent dies (crash or kill), the satellite exits.
+            // Covers the case where OnWindowClosed is never called.
             if (parentPid > 0)
                 Task.Run(() => MonitorParent(parentPid));
         };
@@ -58,22 +58,22 @@ internal static class Program
     }
 
     /// <summary>
-    /// Attende la morte del processo parent; quando esce (o non è trovabile),
-    /// termina il satellite con Environment.Exit — garantisce l'uscita anche
-    /// se il thread della pipe è bloccato in una chiamata SDK.
+    /// Waits for the parent process to die; when it exits (or can't be found),
+    /// terminates the satellite via Environment.Exit — guarantees exit even
+    /// if the pipe thread is blocked in an SDK call.
     /// </summary>
     private static void MonitorParent(int parentPid)
     {
         try
         {
             var parent = Process.GetProcessById(parentPid);
-            parent.WaitForExit(); // blocca finché il parent è vivo
-            Log($"Parent PID {parentPid} uscito — satellite in chiusura.");
+            parent.WaitForExit(); // blocks while the parent is alive
+            Log($"Parent PID {parentPid} exited — satellite shutting down.");
         }
         catch
         {
-            // Il parent non esiste già (PID invalido o già morto)
-            Log($"Parent PID {parentPid} non trovato — satellite in chiusura.");
+            // The parent doesn't exist already (invalid PID or already dead)
+            Log($"Parent PID {parentPid} not found — satellite shutting down.");
         }
         Environment.Exit(0);
     }
@@ -84,22 +84,22 @@ internal static class Program
         {
             using var pipe = new NamedPipeServerStream(pipeName,
                 PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-            Log("In attesa di connessione...");
+            Log("Waiting for connection...");
             pipe.WaitForConnection();
-            Log("Client connesso.");
+            Log("Client connected.");
 
             using var handler = new SdkHandler(app.Dispatcher);
             handler.EventRaised += (_, json) =>
             {
                 try { WriteLine(pipe, json); }
-                catch { /* pipe chiusa, ignora */ }
+                catch { /* pipe closed, ignore */ }
             };
 
             using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
             while (pipe.IsConnected)
             {
                 string? line = reader.ReadLine();
-                if (line is null) break; // pipe chiusa
+                if (line is null) break; // pipe closed
 
                 try
                 {
@@ -108,7 +108,7 @@ internal static class Program
                     long id = doc.RootElement.GetProperty("id").GetInt64();
 
                     var response = handler.Handle(cmd!, doc.RootElement);
-                    // Inietta l'id nella response
+                    // Inject the id into the response
                     var respObj = JsonSerializer.Deserialize<Dictionary<string, object?>>(
                         JsonSerializer.Serialize(response, JsonOpts), JsonOpts)
                         ?? new Dictionary<string, object?>();
@@ -126,7 +126,7 @@ internal static class Program
                 }
             }
 
-            Log("Pipe chiusa, uscita.");
+            Log("Pipe closed, exiting.");
         }
         catch (Exception ex)
         {

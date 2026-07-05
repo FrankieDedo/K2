@@ -1,5 +1,5 @@
-// Services/MacroStore.cs — persistenza macro nella tabella Macros del DB Everest
-// La tabella viene creata al primo uso (stesso pattern di EverestStore).
+// Services/MacroStore.cs — macro persistence in the Macros table of the Everest DB
+// The table is created on first use (same pattern as EverestStore).
 
 using System;
 using System.Collections.Generic;
@@ -21,7 +21,7 @@ public sealed class MacroStore : IDisposable
         EnsureTable();
     }
 
-    /// <summary>Apre una propria connessione al DB indicato.</summary>
+    /// <summary>Opens its own connection to the given DB.</summary>
     public MacroStore(string? dbPath = null)
     {
         dbPath ??= EverestStore.DefaultDbPath();
@@ -115,7 +115,7 @@ WHERE Id=$id";
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>Importa una lista di macro (sovrascrive tutto).</summary>
+    /// <summary>Imports a list of macros (overwrites everything).</summary>
     public int ImportAll(IEnumerable<MacroDefinition> macros)
     {
         int count = 0;
@@ -129,16 +129,16 @@ WHERE Id=$id";
         return count;
     }
 
-    // ─────────────────────── Import da BaseCamp.db ───────────────────────
+    // ─────────────────────── Import from BaseCamp.db ───────────────────────
 
-    /// <summary>Legge le macro dalla tabella Macros del DB di BaseCamp.</summary>
+    /// <summary>Reads macros from the Macros table of the BaseCamp DB.</summary>
     public static List<MacroDefinition> ReadFromBaseCampDb(string dbPath)
     {
         var list = new List<MacroDefinition>();
         using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadOnly");
         conn.Open();
 
-        // Verifica che la tabella esista
+        // Check that the table exists
         using var chk = conn.CreateCommand();
         chk.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='Macros'";
         if (chk.ExecuteScalar() is null) return list;
@@ -165,7 +165,7 @@ WHERE Id=$id";
         return list;
     }
 
-    // ─────────────────────── Helper ───────────────────────
+    // ─────────────────────── Helpers ───────────────────────
 
     private static MacroDefinition ReadRow(SqliteDataReader r)
     {

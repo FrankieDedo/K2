@@ -6,56 +6,56 @@ using System.Text.Json;
 namespace K2.App.Services;
 
 /// <summary>
-/// Configurazione ESTERNA dei parametri RGB per-effetto della tastiera Everest,
-/// caricata da <c>everest_rgb.json</c> (accanto all'eseguibile) <b>ad ogni
-/// applicazione</b> dell'effetto.
+/// EXTERNAL configuration of the Everest keyboard's per-effect RGB parameters,
+/// loaded from <c>everest_rgb.json</c> (next to the executable) <b>every time
+/// the effect is applied</b>.
 ///
-/// <para><b>Scopo.</b> Permette di regolare i campi della struct
-/// <see cref="EverestSdkNative.EffData"/> per ciascun preset (byAll, bySpeed,
-/// byDirection, byWidth, byRandColor, numero di colori) <b>senza ricompilare</b>:
-/// si modifica il JSON, si ri-applica l'effetto e i nuovi valori vengono usati
+/// <para><b>Purpose.</b> Lets you tweak the fields of the
+/// <see cref="EverestSdkNative.EffData"/> struct for each preset (byAll, bySpeed,
+/// byDirection, byWidth, byRandColor, color count) <b>without recompiling</b>:
+/// edit the JSON, re-apply the effect, and the new values are used
 /// immediately. Useful while we're reverse-engineering the firmware protocol
-/// confrontando i dump USB con Base Camp.</para>
+/// by comparing USB dumps against Base Camp.</para>
 ///
-/// <para><b>Dove sta il file.</b> Viene letto da
-/// <c>AppContext.BaseDirectory\everest_rgb.json</c> (la cartella dell'exe).
-/// È incluso nel progetto come Content <c>PreserveNewest</c>: la copia
-/// "canonica" sta in <c>K2.App\everest_rgb.json</c> e viene copiata in
-/// <c>bin\</c> alla build. Per un tuning lampo (niente rebuild) si edita la
-/// copia in <c>bin\</c>; per renderlo permanente si edita quella nel progetto.
+/// <para><b>Where the file lives.</b> Read from
+/// <c>AppContext.BaseDirectory\everest_rgb.json</c> (the exe's folder).
+/// It's included in the project as Content <c>PreserveNewest</c>: the
+/// "canonical" copy lives in <c>K2.App\everest_rgb.json</c> and gets copied
+/// to <c>bin\</c> on build. For quick tuning (no rebuild) edit the copy in
+/// <c>bin\</c>; to make it permanent, edit the one in the project.
 /// If the file is missing or unreadable, <see cref="Default"/> values are used.</para>
 /// </summary>
 public sealed class EverestRgbConfig
 {
-    /// <summary>Parametri della struct EffData per un singolo preset.</summary>
+    /// <summary>EffData struct parameters for a single preset.</summary>
     public sealed class EffectDef
     {
-        /// <summary>1 = applica a tutti i tasti. Base Camp usa 0 per alcuni preset.</summary>
+        /// <summary>1 = apply to all keys. Base Camp uses 0 for some presets.</summary>
         public int ByAll { get; set; } = 1;
 
         /// <summary>Speed: -1 = use the UI value; otherwise fixed value (0/1/2 or 255).</summary>
         public int BySpeed { get; set; } = -1;
 
-        /// <summary>Direzione: di norma 255 (il firmware la ignora qui).</summary>
+        /// <summary>Direction: normally 255 (the firmware ignores it here).</summary>
         public int ByDirection { get; set; } = 255;
 
-        /// <summary>Larghezza onda: di norma 255.</summary>
+        /// <summary>Wave width: normally 255.</summary>
         public int ByWidth { get; set; } = 255;
 
-        /// <summary>1 = colori casuali / rainbow.</summary>
+        /// <summary>1 = random / rainbow colors.</summary>
         public int ByRandColor { get; set; } = 0;
 
-        /// <summary>Quanti colori inviare (1/2/3). I rimanenti vengono azzerati.</summary>
+        /// <summary>How many colors to send (1/2/3). The rest are zeroed out.</summary>
         public int ColorCount { get; set; } = 3;
     }
 
-    /// <summary>Mappa nome-preset (come l'enum <c>EverestService.Effect</c>) → parametri.</summary>
+    /// <summary>Preset name (matching the <c>EverestService.Effect</c> enum) -> parameters map.</summary>
     public Dictionary<string, EffectDef> Effects { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     private static string FilePath =>
         Path.Combine(AppContext.BaseDirectory, "everest_rgb.json");
 
-    /// <summary>Legge il file (se presente e valido), altrimenti i default.</summary>
+    /// <summary>Reads the file (if present and valid), otherwise falls back to defaults.</summary>
     public static EverestRgbConfig Load()
     {
         try
@@ -72,7 +72,7 @@ public sealed class EverestRgbConfig
                     });
                 if (cfg?.Effects is { Count: > 0 })
                 {
-                    // Ricrea il dizionario case-insensitive (il deserializer ne crea uno ordinale).
+                    // Recreate the dictionary as case-insensitive (the deserializer creates an ordinal one).
                     var ci = new Dictionary<string, EffectDef>(cfg.Effects, StringComparer.OrdinalIgnoreCase);
                     return new EverestRgbConfig { Effects = ci };
                 }
@@ -80,26 +80,26 @@ public sealed class EverestRgbConfig
         }
         catch (Exception ex)
         {
-            App.WriteLog("[EverestRgbConfig] lettura everest_rgb.json fallita, uso i default: " + ex.Message);
+            App.WriteLog("[EverestRgbConfig] failed to read everest_rgb.json, using defaults: " + ex.Message);
         }
         return Default();
     }
 
-    /// <summary>Parametri per il preset indicato; se assente, valori neutri di default.</summary>
+    /// <summary>Parameters for the given preset; if absent, neutral default values.</summary>
     public EffectDef For(string effectName) =>
         Effects.TryGetValue(effectName, out var def) ? def : new EffectDef();
 
     /// <summary>
-    /// Default "di fabbrica" — ricavati dal confronto USB con Base Camp
-    /// (2026-05-30). Da affinare via JSON man mano che testiamo gli altri preset.
+    /// "Factory" defaults — derived from comparing USB dumps against Base Camp
+    /// (2026-05-30). To be refined via JSON as we test the other presets.
     /// </summary>
     public static EverestRgbConfig Default() => new()
     {
         Effects = new(StringComparer.OrdinalIgnoreCase)
         {
-            // Static: ChangeEffect lo rifiuta (probabile via software) — qui per completezza.
+            // Static: ChangeEffect rejects it (probably software-only) — listed here for completeness.
             ["Static"]    = new EffectDef { ByAll = 0, BySpeed = 255, ColorCount = 1 },
-            // Breath: confronto bc_breath vs k2_breath -> byAll=0, un colore (gli altri 0).
+            // Breath: comparing bc_breath vs k2_breath -> byAll=0, one color (the others 0).
             ["Breath"]    = new EffectDef { ByAll = 0, ColorCount = 2 },
             ["Wave"]      = new EffectDef { ByAll = 0, ColorCount = 3 },
             ["ReactiveA"] = new EffectDef { ByAll = 0, ColorCount = 1 },

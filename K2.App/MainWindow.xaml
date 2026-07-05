@@ -40,26 +40,26 @@
             <Setter Property="Cursor"           Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="BorderBrush"      Value="#1D1D1D"/>
-            <!-- BC keyboard_v3: border 7px su tutti i lati; bottom gestito dal Margin della Face -->
+            <!-- BC keyboard_v3: 7px border on all sides; bottom handled by the Face's Margin -->
             <Setter Property="BorderThickness"  Value="7,7,7,0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <!--
                           Layers (bottom → top):
-                          1. Mount — sfondo scuro #090909 pieno, visibile nel gap sotto la Face
-                          2. Face  — tasto vero (bg #404040, bordi spessi come BC)
-                             2a. SideGrad — gradiente lati scuri (simula ::before)
-                             2b. Tint     — overlay hover/press
+                          1. Mount — solid dark #090909 background, visible in the gap under the Face
+                          2. Face  — the actual key (bg #404040, thick borders like BC)
+                             2a. SideGrad — dark side gradient (simulates ::before)
+                             2b. Tint     — hover/press overlay
                              2c. Content
                         -->
                         <Grid>
-                            <!-- 1. Mount: riempie tutto, visibile sotto la Face (10px) -->
+                            <!-- 1. Mount: fills everything, visible under the Face (10px) -->
                             <Border x:Name="Mount"
                                     Background="#090909"
                                     CornerRadius="5"/>
 
-                            <!-- 2. Face: 10px gap in basso rivela il Mount (border-bottom: 10px transparent) -->
+                            <!-- 2. Face: 10px gap at the bottom reveals the Mount (border-bottom: 10px transparent) -->
                             <Border x:Name="Face"
                                     Background="{TemplateBinding Background}"
                                     BorderBrush="{TemplateBinding BorderBrush}"
@@ -67,7 +67,7 @@
                                     CornerRadius="5"
                                     Margin="0,0,0,10">
                                 <Grid>
-                                    <!-- 2a. SideGrad (::before): lati scuri #3a3a3a, centro trasparente -->
+                                    <!-- 2a. SideGrad (::before): dark sides #3a3a3a, transparent center -->
                                     <Border x:Name="SideGrad" CornerRadius="3" IsHitTestVisible="False">
                                         <Border.Background>
                                             <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
@@ -78,7 +78,7 @@
                                             </LinearGradientBrush>
                                         </Border.Background>
                                     </Border>
-                                    <!-- 2b. LedTint: colore LED realtime (sotto il testo) -->
+                                    <!-- 2b. LedTint: realtime LED color (under the text) -->
                                     <Border x:Name="LedTint" Background="Transparent" CornerRadius="3" IsHitTestVisible="False"/>
                                     <!-- 2c. Tint overlay hover/press -->
                                     <Border x:Name="Tint" Background="Transparent" CornerRadius="3" IsHitTestVisible="False"/>
@@ -91,7 +91,7 @@
                         </Grid>
 
                         <ControlTemplate.Triggers>
-                            <!-- Hover: face + bordi → #656565, gradiente lati aggiornato -->
+                            <!-- Hover: face + borders → #656565, side gradient updated -->
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Face"     Property="Background"  Value="#656565"/>
                                 <Setter TargetName="Face"     Property="BorderBrush" Value="#656565"/>
@@ -107,7 +107,7 @@
                                     </Setter.Value>
                                 </Setter>
                             </Trigger>
-                            <!-- Press: face scende 3px sul Mount (BC: translate(0,3px)) -->
+                            <!-- Press: face drops 3px onto the Mount (BC: translate(0,3px)) -->
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Face" Property="Margin"     Value="0,3,0,7"/>
                                 <Setter TargetName="Tint" Property="Background" Value="#33000000"/>
@@ -133,18 +133,18 @@
 
         <!-- ============================================================
              EverestKeyStyle — BC .keyboard span base (Everest / Everest60):
-               border: 5px lati, 2px top, 6px transparent bottom
-               stesso Mount/gradiente di KeyCapStyle, valori più piccoli
+               border: 5px sides, 2px top, 6px transparent bottom
+               same Mount/gradient as KeyCapStyle, smaller values
              ============================================================ -->
         <Style x:Key="EverestKeyStyle" TargetType="Button" BasedOn="{StaticResource KeyCapStyle}">
-            <!-- Override bordi: 5px lati, 2px top, 0 bottom (gap gestito da Margin) -->
+            <!-- Override borders: 5px sides, 2px top, 0 bottom (gap handled by Margin) -->
             <Setter Property="BorderThickness" Value="5,2,5,0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Grid>
                             <Border x:Name="Mount" Background="#090909" CornerRadius="4"/>
-                            <!-- Face: 6px gap in basso (border-bottom: 6px transparent) -->
+                            <!-- Face: 6px gap at the bottom (border-bottom: 6px transparent) -->
                             <Border x:Name="Face"
                                     Background="{TemplateBinding Background}"
                                     BorderBrush="{TemplateBinding BorderBrush}"
@@ -186,7 +186,7 @@
                                     </Setter.Value>
                                 </Setter>
                             </Trigger>
-                            <!-- Press: face scende 3px (bottom 6→3, top +3) -->
+                            <!-- Press: face drops 3px (bottom 6→3, top +3) -->
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Face" Property="Margin"     Value="0,3,0,3"/>
                                 <Setter TargetName="Tint" Property="Background" Value="#33000000"/>
@@ -198,11 +198,11 @@
         </Style>
 
         <!-- ============================================================
-             DpKeyButtonStyle — replica fedele del tasto DisplayPad di Base Camp:
-             .imagebtn  → key_button.png come sfondo pieno (background-size: cover)
-             img        → icona utente 52×52 con CornerRadius 9 (border-radius 10px)
-             ::before   → overlay glossy: gradiente bianco + bordo grigio inset
-             Trigger hover → bordo teal; IsHighlighted → bordo bianco
+             DpKeyButtonStyle — faithful replica of Base Camp's DisplayPad key:
+             .imagebtn  → key_button.png as a solid background (background-size: cover)
+             img        → 52×52 user icon with CornerRadius 9 (border-radius 10px)
+             ::before   → glossy overlay: white gradient + inset gray border
+             Trigger hover → teal border; IsHighlighted → white border
              ============================================================ -->
         <Style x:Key="DpKeyButtonStyle" TargetType="Button">
             <Setter Property="Width"             Value="60"/>
@@ -215,11 +215,11 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Grid Background="Transparent">
-                            <!-- 1. key_button.png — sfondo pieno (come background-size:cover) -->
+                            <!-- 1. key_button.png — solid background (like background-size:cover) -->
                             <Image Source="pack://application:,,,/Assets/key_button.png"
                                    Stretch="Fill" IsHitTestVisible="False"/>
 
-                            <!-- 2. Icona utente 52×52, angoli arrotondati (border-radius 10px) -->
+                            <!-- 2. 52×52 user icon, rounded corners (border-radius 10px) -->
                             <Border Width="52" Height="52"
                                     CornerRadius="9" ClipToBounds="True"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -227,7 +227,7 @@
                                 <Image x:Name="ImgIcon" Source="{Binding Preview}" Stretch="UniformToFill"/>
                             </Border>
 
-                            <!-- 3. Overlay glossy — simula ::before con inset box-shadow #727272 -->
+                            <!-- 3. Glossy overlay — simulates ::before with inset box-shadow #727272 -->
                             <Border Margin="4" CornerRadius="9"
                                     BorderBrush="#60727272" BorderThickness="1"
                                     IsHitTestVisible="False">
@@ -239,7 +239,7 @@
                                 </Border.Background>
                             </Border>
 
-                            <!-- 4. Label (ContentPresenter = Button.Content = TextBlock passato dal code-behind) -->
+                            <!-- 4. Label (ContentPresenter = Button.Content = TextBlock passed in from code-behind) -->
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
                                               IsHitTestVisible="False"/>
@@ -253,7 +253,7 @@
                                      Visibility="Collapsed"
                                      IsHitTestVisible="False"/>
 
-                            <!-- 6. Bordo selezione/hover -->
+                            <!-- 6. Selection/hover border -->
                             <Border x:Name="SelBorder"
                                     CornerRadius="10"
                                     BorderBrush="Transparent"
@@ -440,7 +440,7 @@
                                            Margin="14,8,0,6" FontWeight="Bold"/>
                                 <RadioButton x:Name="RbSecKeyMapping"
                                              Style="{StaticResource SectionTabStyle}"
-                                             Content="{loc:Get ev_mapped_keys}" GroupName="EvSections"
+                                             Content="{loc:Get ev_key_binding}" GroupName="EvSections"
                                              IsChecked="True" Checked="EvSection_Changed"/>
                                 <RadioButton x:Name="RbSecRgb"
                                              Style="{StaticResource SectionTabStyle}"
@@ -449,10 +449,6 @@
                                 <RadioButton x:Name="RbSecDial"
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="Display Dial" GroupName="EvSections"
-                                             Checked="EvSection_Changed"/>
-                                <RadioButton x:Name="RbSecDock"
-                                             Style="{StaticResource SectionTabStyle}"
-                                             Content="Dock Actions" GroupName="EvSections"
                                              Checked="EvSection_Changed"/>
                                 <RadioButton x:Name="RbSecMacros"
                                              Style="{StaticResource SectionTabStyle}"
@@ -498,11 +494,18 @@
                                                     <ImageBrush ImageSource="Assets/keybg.png" Stretch="Fill"/>
                                                 </Canvas.Background>
                                             </Canvas>
-                                            <Image x:Name="ImgEvDock" Grid.Row="0" Source="Assets/keytop.png"
-                                                   Width="200" Stretch="Uniform"
-                                                   HorizontalAlignment="Center"
-                                                   Margin="0,0,0,-32" Panel.ZIndex="1"
-                                                   Visibility="Collapsed"/>
+                                            <!-- Dock overlay: keytop art + a transparent Canvas holding the
+                                                 clickable hotspots (4 media buttons + 2 crown rotation buttons,
+                                                 the latter positioned above the artwork via negative Canvas.Top).
+                                                 GrdEvDock keeps the Left/Right alignment toggle previously on
+                                                 ImgEvDock (see UpdateKeyboardLayout), so the hotspots follow it. -->
+                                            <Grid x:Name="GrdEvDock" Grid.Row="0" Width="200"
+                                                  HorizontalAlignment="Center"
+                                                  Margin="0,0,0,-32" Panel.ZIndex="1"
+                                                  Visibility="Collapsed">
+                                                <Image x:Name="ImgEvDock" Source="Assets/keytop.png" Stretch="Uniform"/>
+                                                <Canvas x:Name="CvsEvDock" Width="200" Height="64"/>
+                                            </Grid>
                                         </Grid>
                                         <!-- Numpad + display keys -->
                                         <Canvas x:Name="CvsEvNumpad" Width="166" Height="260"
@@ -528,48 +531,60 @@
                                     <!-- ─── All section panels (one visible at a time) ─── -->
                                     <Grid Grid.Row="0">
 
-                                        <!-- ── KEY MAPPING ── -->
-                                        <Grid x:Name="PnlSecKeyMapping">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="170"/>
-                                            </Grid.ColumnDefinitions>
-                                            <ListView Grid.Column="0" x:Name="LvEvKeys" MaxHeight="180" Margin="0,0,8,0">
-                                                <ListView.ItemContainerStyle>
-                                                    <Style TargetType="ListViewItem">
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
-                                                                <Setter Property="Background" Value="#900000"/>
-                                                                <Setter Property="Foreground" Value="#10302F"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </ListView.ItemContainerStyle>
-                                                <ListView.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <TextBlock Text="{Binding Display}" FontFamily="Consolas" Padding="2"/>
-                                                    </DataTemplate>
-                                                </ListView.ItemTemplate>
-                                            </ListView>
-                                            <StackPanel Grid.Column="1" VerticalAlignment="Top">
-                                                <Button x:Name="BtnEvCapture" Content="{loc:Get ev_capture_key}"
-                                                        Click="BtnEvCapture_Click"
-                                                        Style="{StaticResource K2IconButton}" Tag="&#xE765;"
-                                                        HorizontalAlignment="Stretch" Margin="0,0,0,4"/>
-                                                <Button x:Name="BtnEvMapKeys" Content="{loc:Get remap_keys}"
-                                                        Click="BtnEvMapKeys_Click"
-                                                        Style="{StaticResource K2IconButton}" Tag="&#xE8CB;"
-                                                        HorizontalAlignment="Stretch" Margin="0,0,0,10"
-                                                        Visibility="Collapsed"/>
-                                                <Separator x:Name="SepEvMapKeysDbg" Margin="0,0,0,10" Visibility="Collapsed"/>
-                                                <Button x:Name="BtnEvConfig" Content="{loc:Get ev_configure}"
-                                                        Padding="8,4" Click="BtnEvConfig_Click"
-                                                        HorizontalAlignment="Stretch" Margin="0,0,0,4"/>
-                                                <Button x:Name="BtnEvRemove" Content="{loc:Get ev_remove}"
-                                                        Padding="8,4" Click="BtnEvRemove_Click"
-                                                        HorizontalAlignment="Stretch"/>
-                                            </StackPanel>
-                                        </Grid>
+                                        <!-- ── KEY BINDING (mapped keys + HW capture utility for the
+                                             media dock / crown / display-key hotspots drawn on the
+                                             device graphic above) ── -->
+                                        <StackPanel x:Name="PnlSecKeyMapping">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="170"/>
+                                                </Grid.ColumnDefinitions>
+                                                <ListView Grid.Column="0" x:Name="LvEvKeys" MaxHeight="180" Margin="0,0,8,0">
+                                                    <ListView.ItemContainerStyle>
+                                                        <Style TargetType="ListViewItem">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                                                    <Setter Property="Background" Value="#900000"/>
+                                                                    <Setter Property="Foreground" Value="#10302F"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </ListView.ItemContainerStyle>
+                                                    <ListView.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding Display}" FontFamily="Consolas" Padding="2"/>
+                                                        </DataTemplate>
+                                                    </ListView.ItemTemplate>
+                                                </ListView>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                                    <Button x:Name="BtnEvCapture" Content="{loc:Get ev_capture_key}"
+                                                            Click="BtnEvCapture_Click"
+                                                            Style="{StaticResource K2IconButton}" Tag="&#xE765;"
+                                                            HorizontalAlignment="Stretch" Margin="0,0,0,4"/>
+                                                    <Button x:Name="BtnEvMapKeys" Content="{loc:Get remap_keys}"
+                                                            Click="BtnEvMapKeys_Click"
+                                                            Style="{StaticResource K2IconButton}" Tag="&#xE8CB;"
+                                                            HorizontalAlignment="Stretch" Margin="0,0,0,10"
+                                                            Visibility="Collapsed"/>
+                                                    <Separator x:Name="SepEvMapKeysDbg" Margin="0,0,0,10" Visibility="Collapsed"/>
+                                                    <Button x:Name="BtnEvConfig" Content="{loc:Get ev_configure}"
+                                                            Padding="8,4" Click="BtnEvConfig_Click"
+                                                            HorizontalAlignment="Stretch" Margin="0,0,0,4"/>
+                                                    <Button x:Name="BtnEvRemove" Content="{loc:Get ev_remove}"
+                                                            Padding="8,4" Click="BtnEvRemove_Click"
+                                                            HorizontalAlignment="Stretch"/>
+                                                </StackPanel>
+                                            </Grid>
+                                            <Separator Margin="0,10,0,8"/>
+                                            <WrapPanel Orientation="Horizontal">
+                                                <Button x:Name="BtnCaptureHwKey" Content="{loc:Get dock_capture_hw}"
+                                                        Padding="8,2" Click="BtnCaptureHwKey_Click"
+                                                        Style="{StaticResource K2IconButton}" Tag="&#xE765;"/>
+                                                <TextBlock x:Name="LblCapturedKey" Text="" Margin="8,0,0,0"
+                                                           VerticalAlignment="Center" Foreground="#900000"/>
+                                            </WrapPanel>
+                                        </StackPanel>
 
                                         <!-- ── RGB & LIGHTING ── -->
                                         <ScrollViewer x:Name="PnlSecRgb" Visibility="Collapsed"
@@ -690,23 +705,6 @@
                                                 <Button x:Name="BtnDialRead" Content="{loc:Get read_from_device}"
                                                         Padding="8,2" Margin="8,0,0,0" Click="BtnDialRead_Click"
                                                         Style="{StaticResource K2IconButton}" Tag="&#xE72C;"/>
-                                            </WrapPanel>
-                                        </StackPanel>
-
-                                        <!-- ── DOCK ACTIONS ── -->
-                                        <StackPanel x:Name="PnlSecDock" Visibility="Collapsed">
-                                            <TextBlock Text="{loc:Get dock_display_keys}" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                                            <WrapPanel x:Name="WpNdkActions" Orientation="Horizontal" Margin="0,0,0,8"/>
-                                            <TextBlock Text="{loc:Get dock_media_keys}" FontWeight="SemiBold" Margin="0,4,0,4"/>
-                                            <WrapPanel x:Name="WpDockActions" Orientation="Horizontal" Margin="0,0,0,8"/>
-                                            <TextBlock Text="{loc:Get dock_dial}" FontWeight="SemiBold" Margin="0,4,0,4"/>
-                                            <WrapPanel x:Name="WpDialActions" Orientation="Horizontal" Margin="0,0,0,8"/>
-                                            <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                                <Button x:Name="BtnCaptureHwKey" Content="{loc:Get dock_capture_hw}"
-                                                        Padding="8,2" Click="BtnCaptureHwKey_Click"
-                                                        Style="{StaticResource K2IconButton}" Tag="&#xE765;"/>
-                                                <TextBlock x:Name="LblCapturedKey" Text="" Margin="8,0,0,0"
-                                                           VerticalAlignment="Center" Foreground="#900000"/>
                                             </WrapPanel>
                                         </StackPanel>
 

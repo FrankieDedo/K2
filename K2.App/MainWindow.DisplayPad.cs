@@ -79,9 +79,9 @@ public partial class MainWindow
     {
         // Create the 12 overlay buttons using DpKeyButtonStyle (defined in MainWindow.xaml).
         // The style contains the full ControlTemplate: key_button.png background, rounded
-        // icon clip, glossy overlay, hover/selection border — fedele replica di Base Camp.
-        // Button.Content = solo il TextBlock (label), così il counter-rotate per la rotazione
-        // opera direttamente su di esso senza dover navigare nel visual tree.
+        // icon clip, glossy overlay, hover/selection border — a faithful replica of Base Camp.
+        // Button.Content = only the TextBlock (label), so the counter-rotate for rotation
+        // operates directly on it without having to walk the visual tree.
         var dpKeyStyle = (Style)FindResource("DpKeyButtonStyle");
 
         for (int i = 0; i < 12; i++)
@@ -166,7 +166,7 @@ public partial class MainWindow
             ? Transform.Identity
             : new RotateTransform(_dpRotation);
 
-        // Counter-rotate la label dentro ogni tasto (Button.Content = TextBlock diretto)
+        // Counter-rotate the label inside each key (Button.Content = TextBlock directly)
         var labelTransform = _dpRotation == 0
             ? Transform.Identity
             : new RotateTransform(-_dpRotation);
@@ -175,13 +175,13 @@ public partial class MainWindow
             if (btn.Content is TextBlock lbl)
                 lbl.LayoutTransform = labelTransform;
 
-            // Counter-rotate anche l'icona utente: il device riceve i pixel già
-            // counter-ruotati (vedi DpHidNative/DisplayPadNativeClient.LoadBgr), quindi
-            // per farla apparire in K2 come apparirà fisicamente sul pad ruotato serve
-            // annullare qui la stessa LayoutTransform applicata al Canvas. Prima non
-            // veniva applicata alcuna transform all'icona (solo alla label) → in UI
-            // l'icona restava a 0° rispetto all'immagine sorgente invece di rispecchiare
-            // la controrotazione già effettiva sul device.
+            // Counter-rotate the user icon too: the device receives pixels that are
+            // already counter-rotated (see DpHidNative/DisplayPadNativeClient.LoadBgr), so
+            // for it to appear in K2 the way it will physically look on the rotated pad,
+            // the same LayoutTransform applied to the Canvas needs to be undone here. Before,
+            // no transform was applied to the icon (only to the label) → in the UI the icon
+            // stayed at 0° relative to the source image instead of mirroring the
+            // counter-rotation already in effect on the device.
             btn.ApplyTemplate();
             if (btn.Template?.FindName("ImgIcon", btn) is Image icon)
                 icon.LayoutTransform = labelTransform;
@@ -252,9 +252,9 @@ public partial class MainWindow
     private void BtnDpRotateCw_Click(object sender, RoutedEventArgs e)  => DpRotateAllIcons(90);
 
     /// <summary>
-    /// Ruota tutte le icone del profilo corrente di <paramref name="degrees"/> gradi (90 = CW, 270 = CCW).
-    /// Salva le immagini ruotate nella stessa cache di DpKeyConfigDialog (per-content-hash),
-    /// aggiorna il DB e ri-uploada sul device.
+    /// Rotates all icons of the current profile by <paramref name="degrees"/> degrees (90 = CW, 270 = CCW).
+    /// Saves the rotated images to the same cache as DpKeyConfigDialog (per-content-hash),
+    /// updates the DB and re-uploads to the device.
     /// </summary>
     private void DpRotateAllIcons(int degrees)
     {
@@ -293,7 +293,7 @@ public partial class MainWindow
 
             try
             {
-                // Content-hash cache: evita di ruotare due volte la stessa sorgente
+                // Content-hash cache: avoids rotating the same source twice
                 long mtime = File.GetLastWriteTimeUtc(key.ImagePath).Ticks;
                 byte[] hashBytes = System.Security.Cryptography.SHA1.HashData(
                     System.Text.Encoding.UTF8.GetBytes($"{key.ImagePath}|{mtime}|r{degrees}"));
@@ -309,7 +309,7 @@ public partial class MainWindow
                     bmp.Save(dest, System.Drawing.Imaging.ImageFormat.Png);
                 }
 
-                // Aggiorna modello + DB + upload
+                // Update model + DB + upload
                 key.ImagePath = dest;
                 _dpStore.SaveButton(devId, profile, _currentDpPageId, i, dest,
                     key.ActionType, key.ActionValue);
@@ -454,7 +454,13 @@ public partial class MainWindow
         var cropEditor = new CropEditor(cropW, cropH, animateGifs: true);
         cropEditor.ViewportBorder.Margin = new Thickness(12, 0, 12, 4);
         cropEditor.ControlsPanel.Margin = new Thickness(12, 0, 12, 8);
-        cropEditor.SetKeyGrid(DpFullscreenAnimator.Rows, DpFullscreenAnimator.Cols);
+        // cropW/cropH already flip to portrait for a 90°/270° device rotation (see
+        // PanelCanvasSize above) — the key-outline grid must follow the same swap,
+        // otherwise the overlay keeps showing a 2×6 landscape grid on a portrait preview.
+        bool portrait = cropH > cropW;
+        cropEditor.SetKeyGrid(
+            portrait ? DpFullscreenAnimator.Cols : DpFullscreenAnimator.Rows,
+            portrait ? DpFullscreenAnimator.Rows : DpFullscreenAnimator.Cols);
 
         void RefreshPreview()
         {
@@ -872,15 +878,15 @@ public partial class MainWindow
                 string? actionType, actionValue;
                 if (funcType == "K2Action")
                 {
-                    // Sentinel scritto da DpProfileExporter.ExportK2: SubFunctionType/
-                    // FunctionValue portano ActionType/ActionValue K2 letterali, senza
-                    // passare dalla traduzione BC (round-trip K2 senza perdite, incluso
-                    // testo multi-carattere, pyscript, command, url, ecc.).
+                    // Sentinel written by DpProfileExporter.ExportK2: SubFunctionType/
+                    // FunctionValue carry the literal K2 ActionType/ActionValue, without
+                    // going through BC translation (lossless K2 round-trip, including
+                    // multi-character text, pyscript, command, url, etc.).
                     actionType  = subType;
                     actionValue = string.IsNullOrEmpty(funcValue) ? null : funcValue;
 
-                    // dp_folder porta comunque il nome cartella in OptionalText
-                    // (DpProfileExporter.BuildFolderOptionalText) — ripristinalo.
+                    // dp_folder still carries the folder name in OptionalText
+                    // (DpProfileExporter.BuildFolderOptionalText) — restore it.
                     if (actionType == "dp_folder" && int.TryParse(actionValue, out var k2FolderId))
                     {
                         string? optText = b.Element("OptionalText")?.Value;
@@ -893,7 +899,7 @@ public partial class MainWindow
                                     tt.GetString() is { Length: > 0 } title)
                                     _dpStore.SetFolderName(k2FolderId, title);
                             }
-                            catch { /* OptionalText malformato: ignora, la cartella resta senza nome */ }
+                            catch { /* Malformed OptionalText: ignore, the folder stays unnamed */ }
                         }
                     }
                 }
@@ -1143,15 +1149,15 @@ public partial class MainWindow
             return;
         }
 
-        // Dialog unificato: immagine + azione
+        // Unified dialog: image + action
         var dlg = new DpKeyConfigDialog(key.Index, key.ImagePath, key.ActionType, key.ActionValue) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
-        // Aggiorna azione
+        // Update action
         key.ActionType  = dlg.ActionType;
         key.ActionValue = dlg.ActionValue;
 
-        // Aggiorna immagine (upload + persist) solo se è cambiata
+        // Update image (upload + persist) only if it changed
         if (dlg.ImageChanged)
         {
             if (!string.IsNullOrEmpty(dlg.NewImagePath) && File.Exists(dlg.NewImagePath))
@@ -1160,16 +1166,17 @@ public partial class MainWindow
             }
             else if (dlg.NewImagePath is null)
             {
-                // Immagine rimossa
+                // Image removed
                 DpGifAnimator.Stop(id, key.Index);
                 key.ImagePath = null;
                 _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, null, key.ActionType, key.ActionValue);
+                DpClearKeyOnDevice(id, key.Index);
                 DpLog($"[ACT] key #{key.Index} image removed");
             }
         }
         else
         {
-            // Solo azione cambiata — aggiorna store senza re-upload immagine
+            // Only the action changed — update store without re-uploading the image
             _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, key.ImagePath, key.ActionType, key.ActionValue);
             DpLog($"[ACT] key #{key.Index} <- {key.ActionType ?? "none"}");
         }
@@ -1283,10 +1290,20 @@ public partial class MainWindow
         DpGifAnimator.Stop(id, key.Index);
         key.ImagePath = null;
         _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, null, key.ActionType, key.ActionValue);
+        DpClearKeyOnDevice(id, key.Index);
     }
 
+    /// <summary>
+    /// Blanks a single key's icon on the physical panel (a solid-black BGR buffer —
+    /// C# zero-initializes the array, so no pixel loop is needed). Removing an image
+    /// only updates the UI/store above; without this the old icon stays on-screen
+    /// until the next full repaint (profile switch, reconnect, ...).
+    /// </summary>
+    private void DpClearKeyOnDevice(int id, int btnIndex) =>
+        _dpClient.TryUploadRawBgr(id, new byte[DpHidNative.IconBytes], btnIndex);
+
     // ================================================================
-    // Refresh / Persistenza
+    // Refresh / Persistence
     // ================================================================
 
     private void DpRefreshDevices()
@@ -1561,7 +1578,7 @@ public partial class MainWindow
     private void BtnDpBack_Click(object sender, RoutedEventArgs e) => DpNavigateBack();
 
     // ================================================================
-    // Eventi dal satellite
+    // Events from the satellite
     // ================================================================
 
     private void OnDpPlug(object? sender, JsonElement e) =>

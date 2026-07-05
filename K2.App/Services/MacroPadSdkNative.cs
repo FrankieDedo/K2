@@ -4,31 +4,31 @@ using System.Runtime.InteropServices;
 namespace K2.App.Services;
 
 /// <summary>
-/// Layer P/Invoke "raw" sopra <c>MacroPadSDK.dll</c> (la nativa C++ del MacroPad).
+/// "Raw" P/Invoke layer over <c>MacroPadSDK.dll</c> (the native C++ library for the MacroPad).
 ///
-/// A differenza del DisplayPad — che dispone di un wrapper managed
-/// (<c>DisplayPad.SDK.dll</c>) — il MacroPad espone solo la DLL nativa, quindi
-/// qui dichiariamo direttamente le funzioni esportate.
+/// Unlike the DisplayPad — which has a managed wrapper
+/// (<c>DisplayPad.SDK.dll</c>) — the MacroPad only exposes the native DLL, so
+/// here we declare the exported functions directly.
 ///
 /// <para>
-/// Le firme NON sono state indovinate: sono state estratte dai metadati
-/// ECMA-335 di <c>BaseCamp.Service.exe</c> (classe interna
-/// <c>BaseCamp.Service.Helpers.MacroPadSDK</c>), che e' il binario originale
-/// di Base Camp che pilota il MacroPad. Risultato della verifica:
+/// The signatures were NOT guessed: they were extracted from the ECMA-335
+/// metadata of <c>BaseCamp.Service.exe</c> (internal class
+/// <c>BaseCamp.Service.Helpers.MacroPadSDK</c>), which is the original Base
+/// Camp binary that drives the MacroPad. Verification results:
 /// </para>
 /// <list type="bullet">
-///   <item>tutte le funzioni esportate usano la convenzione <c>__cdecl</c>;</item>
-///   <item>il callback dei tasti (<see cref="KEY_CALLBACK"/>) usa <c>__stdcall</c>
-///         — l'attributo <c>UnmanagedFunctionPointer</c> nel binario originale
-///         vale 3 = StdCall;</item>
-///   <item><c>DevInfo</c> e <c>FWInfo</c> sono <c>Sequential</c> con <c>Pack=1</c>.</item>
+///   <item>all exported functions use the <c>__cdecl</c> convention;</item>
+///   <item>the key callback (<see cref="KEY_CALLBACK"/>) uses <c>__stdcall</c>
+///         — the <c>UnmanagedFunctionPointer</c> attribute in the original
+///         binary is 3 = StdCall;</item>
+///   <item><c>DevInfo</c> and <c>FWInfo</c> are <c>Sequential</c> with <c>Pack=1</c>.</item>
 /// </list>
 ///
 /// <para>
-/// <b>IMPORTANTE — bitness.</b> <c>MacroPadSDK.dll</c> e' un binario a 32 bit:
-/// il processo che la carica DEVE essere x86 (<c>K2.App.csproj</c> imposta
-/// <c>PlatformTarget=x86</c>). In un processo a 64 bit il primo P/Invoke
-/// fallirebbe con <c>BadImageFormatException</c>.
+/// <b>IMPORTANT — bitness.</b> <c>MacroPadSDK.dll</c> is a 32-bit binary:
+/// the process loading it MUST be x86 (<c>K2.App.csproj</c> sets
+/// <c>PlatformTarget=x86</c>). In a 64-bit process the first P/Invoke
+/// would fail with <c>BadImageFormatException</c>.
 /// </para>
 /// </summary>
 internal static class MacroPadSdkNative
@@ -36,30 +36,30 @@ internal static class MacroPadSdkNative
     private const string Dll = "MacroPadSDK.dll";
     private const CallingConvention Cdecl = CallingConvention.Cdecl;
 
-    // ---- Costanti del firmware ---------------------------------------------
-    // (valori const della classe MacroPadSDK in BaseCamp.Service.exe)
+    // ---- Firmware constants ---------------------------------------------
+    // (const values from the MacroPadSDK class in BaseCamp.Service.exe)
 
-    /// <summary>Slot massimi che l'SDK puo' indirizzare.</summary>
+    /// <summary>Maximum slots the SDK can address.</summary>
     public const int MAX_DEV_COUNT = 10;
 
-    /// <summary>Profili memorizzati su ciascun MacroPad.</summary>
+    /// <summary>Profiles stored on each MacroPad.</summary>
     public const int FW_NUM_PROFILE = 5;
 
-    /// <summary>Tasti fisici del MacroPad.</summary>
+    /// <summary>Physical keys on the MacroPad.</summary>
     public const int FW_NUM_KEY = 12;
 
-    /// <summary>Messaggio Windows postato sull'HWND a ogni plug/unplug device.</summary>
+    /// <summary>Windows message posted to the HWND on every device plug/unplug.</summary>
     public const int WM_DEVICE_PLUG = 21505;
 
-    /// <summary>Messaggio Windows di avanzamento update firmware.</summary>
+    /// <summary>Windows message for firmware update progress.</summary>
     public const int WM_FW_PROGRESS = 21506;
 
-    /// <summary>Messaggio Windows di stato tasto (i tasti arrivano anche via callback).</summary>
+    /// <summary>Windows message for key status (keys also arrive via callback).</summary>
     public const int WM_KEY_STATUS = 25600;
 
-    // ---- Struct hardware ----------------------------------------------------
+    // ---- Hardware structs ----------------------------------------------------
 
-    /// <summary>Identificativi USB e versioni del device.</summary>
+    /// <summary>USB identifiers and versions of the device.</summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct DevInfo
     {
@@ -69,7 +69,7 @@ internal static class MacroPadSdkNative
         public ushort bootloadVer;
     }
 
-    /// <summary>Stato firmware: versione, profili, indici effetto correnti.</summary>
+    /// <summary>Firmware state: version, profiles, current effect indices.</summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct FWInfo
     {
@@ -81,116 +81,116 @@ internal static class MacroPadSdkNative
         public byte byEffectMenuIndex;
     }
 
-    // ---- Callback dei tasti -------------------------------------------------
+    // ---- Key callbacks -------------------------------------------------------
 
     /// <summary>
-    /// Delegate invocato dall'SDK a ogni pressione/rilascio di un tasto.
-    /// Convenzione <c>__stdcall</c>. Parametri: matrice tasto, premuto/rilasciato,
-    /// id del device. Viene chiamato su un thread interno dell'SDK: il
-    /// consumer deve effettuare il marshalling verso il thread UI.
+    /// Delegate invoked by the SDK on every key press/release.
+    /// <c>__stdcall</c> convention. Parameters: key matrix, pressed/released,
+    /// device id. Called on an SDK internal thread: the
+    /// consumer must marshal to the UI thread.
     /// </summary>
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     public delegate void KEY_CALLBACK(ushort wMatrix, bool bPressed, uint ID);
 
-    // ---- Funzioni esportate (__cdecl) --------------------------------------
+    // ---- Exported functions (__cdecl) --------------------------------------
 
-    /// <summary>Versione della DLL nativa dell'SDK.</summary>
+    /// <summary>Native SDK DLL version.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     public static extern int GetDLLVersion();
 
     /// <summary>
-    /// Apre il driver USB. <paramref name="handle"/> e' l'HWND della finestra
-    /// che ricevera' i messaggi <see cref="WM_DEVICE_PLUG"/> /
-    /// <see cref="WM_FW_PROGRESS"/>.
+    /// Opens the USB driver. <paramref name="handle"/> is the HWND of the window
+    /// that will receive the <see cref="WM_DEVICE_PLUG"/> /
+    /// <see cref="WM_FW_PROGRESS"/> messages.
     /// </summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     public static extern bool OpenUSBDriver(IntPtr handle);
 
-    /// <summary>Chiude il driver USB.</summary>
+    /// <summary>Closes the USB driver.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     public static extern void CloseUSBDriver();
 
-    /// <summary>Numero di device attualmente noti all'SDK.</summary>
+    /// <summary>Number of devices currently known to the SDK.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     public static extern bool GetDevCount(ref int iDevCount);
 
     /// <summary>
-    /// True se sullo slot <paramref name="ID"/> c'e' un device collegato.
-    /// Marshalling esplicito <c>I1</c>: questa funzione, nella famiglia di SDK
-    /// Mountain, restituisce un <c>bool</c> C++ a 1 byte (verificato sul
-    /// codice originale del worker DisplayPad).
+    /// True if a device is connected in slot <paramref name="ID"/>.
+    /// Explicit <c>I1</c> marshalling: this function, in the Mountain SDK
+    /// family, returns a 1-byte C++ <c>bool</c> (verified against
+    /// the original DisplayPad worker code).
     /// </summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool IsDevicePlug(uint ID);
 
-    /// <summary>Versione applicativa del firmware del device.</summary>
+    /// <summary>Firmware application version of the device.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     public static extern ushort GetDevAppVer(uint ID);
 
-    /// <summary>Legge VID/PID e versioni del device nello slot indicato.</summary>
+    /// <summary>Reads VID/PID and versions of the device in the given slot.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     public static extern bool GetDeviceInfo(ref DevInfo devInfo, uint ID);
 
-    /// <summary>Legge lo stato firmware (profilo corrente, indici effetto).</summary>
+    /// <summary>Reads the firmware state (current profile, effect indices).</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     public static extern bool GetFWInfo(ref FWInfo fwInfo, uint ID);
 
     /// <summary>
-    /// Legge il layout del firmware (HID <c>11 12</c>).
-    /// Necessaria per abilitare il color streaming (GetColorData).
+    /// Reads the firmware layout (HID <c>11 12</c>).
+    /// Required to enable color streaming (GetColorData).
     /// </summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool GetFWLayout(ref int layout, uint ID);
 
-    /// <summary>True se il device sta aggiornando il firmware.</summary>
+    /// <summary>True if the device is updating its firmware.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     public static extern bool IsUpdating(uint ID);
 
     /// <summary>
-    /// Abilita/disabilita il controllo software (AP mode) del device.
-    /// Con AP abilitato l'host gestisce effetti e tasti in tempo reale.
+    /// Enables/disables software control (AP mode) of the device.
+    /// With AP enabled, the host manages effects and keys in real time.
     /// </summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     public static extern bool APEnable(bool bEnable, uint ID);
 
-    /// <summary>Reset del device.</summary>
+    /// <summary>Resets the device.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     public static extern bool ResetDevice(uint ID);
 
     /// <summary>
-    /// Registra il callback globale per gli eventi dei tasti. Va passato un
-    /// delegate mantenuto vivo dal chiamante (vedi <see cref="MacroPadService"/>),
-    /// altrimenti il GC lo libera e l'SDK chiama un puntatore non valido.
+    /// Registers the global callback for key events. A delegate kept
+    /// alive by the caller must be passed (see <see cref="MacroPadService"/>),
+    /// otherwise the GC frees it and the SDK calls an invalid pointer.
     /// </summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     public static extern void SetKeyCallBack(KEY_CALLBACK callback);
 
     // =======================================================================
-    // Illuminazione LED (preset firmware)
+    // LED lighting (firmware presets)
     // =======================================================================
     //
-    // Le firme NON sono indovinate: estratte dai metadati ECMA-335 di
-    // BaseCamp.Service.exe (classe BaseCamp.Service.Helpers.MacroPadSDK), dump
-    // P/Invoke via _reference/tools/dotnet_pinvoke_dump.py + signature decoder
-    // (2026-05-29). Risultato chiave:
+    // The signatures are NOT guessed: extracted from ECMA-335 metadata of
+    // BaseCamp.Service.exe (class BaseCamp.Service.Helpers.MacroPadSDK), P/Invoke
+    // dump via _reference/tools/dotnet_pinvoke_dump.py + signature decoder
+    // (2026-05-29). Key result:
     //
-    //   DIFFERENZA col wrapper Everest (SDKDLL.dll, single-device): ogni
-    //   funzione del MacroPad prende un ULTIMO parametro `uint ID` = lo slot
-    //   del device (1..MAX_DEV_COUNT), perche' il MacroPad e' multi-device.
-    //   Es. SwitchProfile(int,int,uint) ha 3 parametri (non 2).
+    //   DIFFERENCE from the Everest wrapper (SDKDLL.dll, single-device): every
+    //   MacroPad function takes a LAST parameter `uint ID` = the device slot
+    //   (1..MAX_DEV_COUNT), because the MacroPad is multi-device.
+    //   E.g. SwitchProfile(int,int,uint) has 3 parameters (not 2).
     //
-    // La struct EffData e' la STESSA famiglia firmware Mountain dell'Everest:
-    // verificata byte-per-byte identica (Pack=1, 62B, colorLv ByValArray[3],
+    // The EffData struct is the SAME Mountain firmware family as the Everest's:
+    // verified byte-for-byte identical (Pack=1, 62B, colorLv ByValArray[3],
     // byData ByValArray[43]) via dotnet_struct_dump.py + dotnet_marshalas.py.
-    // Le costanti di EffData.New derivano dal dump CIL di
-    // MacroPadSDK::getChangeEffect (byWidth=255, byDirection=255 sempre;
-    // bySpeed=valore enum; byAll=1; byData=43 zeri).
+    // The EffData.New constants come from the CIL dump of
+    // MacroPadSDK::getChangeEffect (byWidth=255, byDirection=255 always;
+    // bySpeed=enum value; byAll=1; byData=43 zeros).
     // -----------------------------------------------------------------------
 
-    /// <summary>Indice numerico del preset di illuminazione (enum EFF_INDEX
-    /// di Base Camp, condiviso tra tutti i device Mountain).</summary>
+    /// <summary>Numeric index of the lighting preset (Base Camp's EFF_INDEX
+    /// enum, shared across all Mountain devices).</summary>
     public enum EffectIndex : byte
     {
         Static    = 0,
@@ -209,13 +209,13 @@ internal static class MacroPadSdkNative
     /// <summary>Speed (firmware SPEED_T enum).</summary>
     public enum SpeedT : byte { Slow = 0, Normal = 1, Fast = 2 }
 
-    /// <summary>Senso di rotazione (enum DIRECTION_T del firmware).</summary>
+    /// <summary>Rotation direction (firmware DIRECTION_T enum).</summary>
     public enum DirectionT : byte { ClockWise = 0, CounterClockWise = 1 }
 
     /// <summary>Brightness (firmware BRIGHT_T enum: 0/25/50/75/100).</summary>
     public enum BrightT : byte { B0 = 0, B25 = 25, B50 = 50, B75 = 75, B100 = 100 }
 
-    /// <summary>Terna RGB del firmware (3 byte, Pack=1).</summary>
+    /// <summary>Firmware RGB triplet (3 bytes, Pack=1).</summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct FWColor
     {
@@ -223,43 +223,43 @@ internal static class MacroPadSdkNative
 
         public FWColor(byte r, byte g, byte b) { this.r = r; this.g = g; this.b = b; }
 
-        /// <summary>Costruisce da intero 0xRRGGBB (es. <c>0x900000</c>).</summary>
+        /// <summary>Builds from a 0xRRGGBB integer (e.g. <c>0x900000</c>).</summary>
         public static FWColor FromRgb(int rgb) =>
             new((byte)((rgb >> 16) & 0xFF), (byte)((rgb >> 8) & 0xFF), (byte)(rgb & 0xFF));
     }
 
     /// <summary>
-    /// Payload "ChangeEffect" per i preset principali. Pack=1, 62 byte totali.
-    /// Identica alla struct EffData dell'Everest (stessa famiglia firmware).
+    /// "ChangeEffect" payload for the main presets. Pack=1, 62 bytes total.
+    /// Identical to the Everest's EffData struct (same firmware family).
     /// </summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct EffData
     {
         public byte byEffectIndex;   // EffectIndex
-        public byte byAll;            // 1 = applica a tutti i tasti
+        public byte byAll;            // 1 = applies to all keys
         public byte bySpeed;          // SpeedT
         public byte byLightness;      // BrightT
-        public byte byRandColor;      // 1 = colori casuali
-        public byte byDirection;      // DirectionT (forzato 255: vedi getChangeEffect)
-        public byte byWidth;          // larghezza onda (forzato 255: vedi getChangeEffect)
+        public byte byRandColor;      // 1 = random colors
+        public byte byDirection;      // DirectionT (forced to 255: see getChangeEffect)
+        public byte byWidth;          // wave width (forced to 255: see getChangeEffect)
 
-        /// <summary>Colori principali dell'effetto (max 3).</summary>
+        /// <summary>Main effect colors (max 3).</summary>
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 3)]
         public FWColor[] colorLv;
 
-        /// <summary>Colore di background dell'effetto.</summary>
+        /// <summary>Effect background color.</summary>
         public FWColor bkColor;
 
-        /// <summary>Coda parametri del comando firmware (43 byte, zeri per i preset).</summary>
+        /// <summary>Firmware command parameter tail (43 bytes, zeros for presets).</summary>
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 43)]
         public byte[] byData;
 
         /// <summary>
-        /// Crea un <see cref="EffData"/> replicando esattamente
-        /// <c>MacroPadSDK::getChangeEffect</c> di Base Camp (dump CIL):
-        /// <c>byWidth=255</c> e <c>byDirection=255</c> sempre, <c>bySpeed</c>
-        /// = valore enum (0/1/2), <c>byAll=1</c>, <c>byData</c> = 43 zeri.
-        /// Per <see cref="EffectIndex.Off"/>: colori e background a zero.
+        /// Creates an <see cref="EffData"/> exactly replicating Base Camp's
+        /// <c>MacroPadSDK::getChangeEffect</c> (CIL dump):
+        /// <c>byWidth=255</c> and <c>byDirection=255</c> always, <c>bySpeed</c>
+        /// = enum value (0/1/2), <c>byAll=1</c>, <c>byData</c> = 43 zeros.
+        /// For <see cref="EffectIndex.Off"/>: colors and background at zero.
         /// </summary>
         public static EffData New(EffectIndex eff,
                                    FWColor c1, FWColor? c2 = null, FWColor? c3 = null,
@@ -299,23 +299,23 @@ internal static class MacroPadSdkNative
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SwitchProfile(int profile, int reserved, uint ID);
 
-    /// <summary>Applica un preset di illuminazione allo slot device indicato.</summary>
+    /// <summary>Applies a lighting preset to the given device slot.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool ChangeEffect(EffData data, uint ID);
 
-    /// <summary>Resetta gli effetti correnti al default firmware.</summary>
+    /// <summary>Resets the current effects to the firmware default.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool ResetEffects(uint ID);
 
-    /// <summary>Sincronizza l'effetto del profilo indicato (firma <c>(bool,int,uint)</c>).</summary>
+    /// <summary>Syncs the effect of the given profile (signature <c>(bool,int,uint)</c>).</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SetSyncEffect(
         [MarshalAs(UnmanagedType.I1)] bool enable, int profile, uint ID);
 
-    /// <summary>Abilita la sincronizzazione dell'effetto su tutti i profili.</summary>
+    /// <summary>Enables effect synchronization across all profiles.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SetSyncAcrossProfiles(
@@ -333,25 +333,25 @@ internal static class MacroPadSdkNative
     public static extern bool SetMainBrightness(
         [MarshalAs(UnmanagedType.I1)] bool enable, uint ID);
 
-    /// <summary>Mantiene la funzione tasti durante AP mode (true = i tasti digitano).</summary>
+    /// <summary>Keeps key functionality during AP mode (true = keys keep typing).</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool EnableKeyFunc(
         [MarshalAs(UnmanagedType.I1)] bool enable, uint ID);
 
-    /// <summary>Salva sul flash lo stato corrente. Profilo 1..5 o 6 = ALL_PROFILE.</summary>
+    /// <summary>Saves the current state to flash. Profile 1..5 or 6 = ALL_PROFILE.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SaveFlash(int profile, uint ID);
 
     // =====================================================================
-    // Lettura colori LED live (per preview real-time)
+    // Live LED color read (for real-time preview)
     // =====================================================================
 
-    /// <summary>Numero di LED nel buffer colori MacroPad (indici 0..125).</summary>
+    /// <summary>Number of LEDs in the MacroPad color buffer (indices 0..125).</summary>
     public const int COLOR_LED_COUNT = 126;
 
-    /// <summary>Buffer colori LED correnti del MacroPad (126 terne RGB).</summary>
+    /// <summary>Current MacroPad LED color buffer (126 RGB triplets).</summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct MACROPAD_COLOR
     {
@@ -359,7 +359,7 @@ internal static class MacroPadSdkNative
         public FWColor[] color;
     }
 
-    /// <summary>Legge i colori LED correnti del MacroPad.</summary>
+    /// <summary>Reads the current MacroPad LED colors.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool GetColorData(ref MACROPAD_COLOR colorData, uint ID);

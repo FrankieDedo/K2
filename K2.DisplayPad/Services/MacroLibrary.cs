@@ -6,9 +6,9 @@ using System.Text.Json;
 namespace K2.DisplayPad.Services;
 
 /// <summary>
-/// Carica la libreria di macro nominate esportate dal DB di Mountain
-/// BaseCamp (<c>Assets/BaseCampMacros.json</c>) e fornisce lookup per nome.
-/// Ogni entry e' una delle forme:
+/// Loads the library of named macros exported from Mountain BaseCamp's DB
+/// (<c>Assets/BaseCampMacros.json</c>) and provides lookup by name.
+/// Each entry has one of these shapes:
 ///   { "name": "À",                       "type": "text", "value": "À" }
 ///   { "name": "DISCORD_MUTE_MIC",        "type": "keys", "value": "^+%m" }
 ///   { "name": "TEST",                    "type": "raw",  "value": [ {...}, ... ] }
@@ -21,7 +21,7 @@ public sealed class MacroLibrary
     public IReadOnlyDictionary<string, MacroDefinition> ByName => _byName;
     public int Count => _byName.Count;
 
-    /// <summary>Carica dal path indicato o, se null, dal default
+    /// <summary>Loads from the given path or, if null, from the default
     /// <c>BaseDirectory/Assets/BaseCampMacros.json</c>.</summary>
     public static MacroLibrary Load(string? path = null)
     {
@@ -29,7 +29,7 @@ public sealed class MacroLibrary
         path ??= Path.Combine(AppContext.BaseDirectory, "Assets", "BaseCampMacros.json");
         if (!File.Exists(path))
         {
-            App.WriteLog($"[MacroLibrary] file non trovato: {path}");
+            App.WriteLog($"[MacroLibrary] file not found: {path}");
             return lib;
         }
         try
@@ -46,11 +46,11 @@ public sealed class MacroLibrary
                 if (string.IsNullOrEmpty(name)) continue;
                 lib._byName[name] = new MacroDefinition(name, type, value);
             }
-            App.WriteLog($"[MacroLibrary] caricate {lib._byName.Count} macro");
+            App.WriteLog($"[MacroLibrary] loaded {lib._byName.Count} macros");
         }
         catch (Exception ex)
         {
-            App.WriteLog($"[MacroLibrary] errore caricamento: {ex.Message}");
+            App.WriteLog($"[MacroLibrary] load error: {ex.Message}");
         }
         return lib;
     }

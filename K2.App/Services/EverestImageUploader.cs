@@ -7,31 +7,32 @@ using System.Runtime.InteropServices;
 namespace K2.App.Services;
 
 /// <summary>
-/// Helper per convertire e caricare immagini sui sub-device della tastiera
-/// Everest Max (numpad display keys, Media Dock screensaver).
+/// Helper for converting and uploading images to the sub-devices of the
+/// Everest Max keyboard (numpad display keys, Media Dock screensaver).
 ///
 /// <para>
-/// Le immagini vengono ridimensionate alla risoluzione del target e convertite
-/// in formato RGB565 (R5 G6 B5, little-endian) come fa <c>UploadImageInHw</c>
-/// di Base Camp. La conversione replica esattamente il codice IL decompilato:
-/// <c>R >> 3 &lt;&lt; 11 | G >> 2 &lt;&lt; 5 | B >> 3</c>, serializzato come
+/// Images are resized to the target resolution and converted to
+/// RGB565 format (R5 G6 B5, little-endian), the way Base Camp's
+/// <c>UploadImageInHw</c> does. The conversion exactly replicates the
+/// decompiled IL code:
+/// <c>R >> 3 &lt;&lt; 11 | G >> 2 &lt;&lt; 5 | B >> 3</c>, serialized as
 /// LoByte/HiByte (little-endian).
 /// </para>
 /// </summary>
 internal static class EverestImageUploader
 {
-    /// <summary>Target per l'upload di un'immagine.</summary>
+    /// <summary>Target for an image upload.</summary>
     public enum PicTarget
     {
-        /// <summary>Screensaver del Media Dock: 240×204 px, targetDev=0 targetPic=1.</summary>
+        /// <summary>Media Dock screensaver: 240x204 px, targetDev=0 targetPic=1.</summary>
         MMDockScreensaver,
-        /// <summary>Numpad display key (strip): 128×32 px, targetDev=0 targetPic=2+.</summary>
+        /// <summary>Numpad display key (strip): 128x32 px, targetDev=0 targetPic=2+.</summary>
         NumpadStrip,
-        /// <summary>Numpad display key (quadrato): 72×72 px, targetDev=1.</summary>
+        /// <summary>Numpad display key (square): 72x72 px, targetDev=1.</summary>
         NumpadSquare,
     }
 
-    /// <summary>Dimensioni per ciascun target.</summary>
+    /// <summary>Dimensions for each target.</summary>
     public static (int w, int h) GetTargetSize(PicTarget target) => target switch
     {
         PicTarget.MMDockScreensaver => (240, 204),
@@ -41,16 +42,16 @@ internal static class EverestImageUploader
     };
 
     /// <summary>
-    /// Carica un'immagine da file o base64 su un sub-device.
+    /// Loads an image from a file or base64 onto a sub-device.
     /// </summary>
-    /// <param name="imagePathOrBase64">Percorso file PNG/JPG o stringa base64 (con o senza prefisso data:image).</param>
-    /// <param name="target">Tipo di target (determina risoluzione).</param>
-    /// <param name="picSlot">Slot immagine sul target (es. 0-3 per le 4 display key).</param>
-    /// <param name="subItem">Sub-item (usato per numpad display key: indice 0-3).</param>
-    /// <returns>true se l'SDK ha accettato l'upload.</returns>
+    /// <param name="imagePathOrBase64">PNG/JPG file path or base64 string (with or without the data:image prefix).</param>
+    /// <param name="target">Target type (determines resolution).</param>
+    /// <param name="picSlot">Image slot on the target (e.g. 0-3 for the 4 display keys).</param>
+    /// <param name="subItem">Sub-item (used for numpad display keys: index 0-3).</param>
+    /// <returns>true if the SDK accepted the upload.</returns>
     public static bool UploadImage(string imagePathOrBase64, PicTarget target, byte picSlot, byte subItem = 0)
     {
-        // --- 1. Decodifica immagine sorgente ---
+        // --- 1. Decode source image ---
         byte[] rawBytes;
         if (imagePathOrBase64.Contains("data:image"))
         {
@@ -66,14 +67,14 @@ internal static class EverestImageUploader
         using var ms = new MemoryStream(rawBytes);
         using var srcBitmap = new Bitmap(ms);
 
-        // --- 2. Ridimensiona alla risoluzione target ---
+        // --- 2. Resize to the target resolution ---
         var (w, h) = GetTargetSize(target);
         using var resized = ResizeImage(srcBitmap, w, h);
 
-        // --- 3. Converti in RGB565 ---
+        // --- 3. Convert to RGB565 ---
         byte[] rgb565 = BitmapToRgb565(resized);
 
-        // --- 4. Prepara PicUpdateInfo ---
+        // --- 4. Prepare PicUpdateInfo ---
         byte targetDev, targetPic;
         switch (target)
         {
@@ -125,10 +126,10 @@ internal static class EverestImageUploader
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// Converte un Bitmap in un array di byte RGB565 (little-endian).
-    /// Replica esattamente il loop di <c>Everest.UploadImageInHw</c>:
-    /// per ogni pixel BGR24, calcola <c>B>>3 | (G>>2 &lt;&lt; 5) | (R>>3 &lt;&lt; 11)</c>
-    /// e scrive 2 byte little-endian.
+    /// Converts a Bitmap into an RGB565 (little-endian) byte array.
+    /// Exactly replicates the loop in <c>Everest.UploadImageInHw</c>:
+    /// for each BGR24 pixel, computes <c>B>>3 | (G>>2 &lt;&lt; 5) | (R>>3 &lt;&lt; 11)</c>
+    /// and writes 2 little-endian bytes.
     /// </summary>
     internal static byte[] BitmapToRgb565(Bitmap bmp)
     {
@@ -136,8 +137,8 @@ internal static class EverestImageUploader
         int pixelCount = w * h;
         byte[] result = new byte[pixelCount * 2];
 
-        // Leggiamo i pixel come BGR24 (Format24bppRgb)
-        // Per efficienza usiamo LockBits
+        // Read pixels as BGR24 (Format24bppRgb)
+        // For efficiency we use LockBits
         var rect = new Rectangle(0, 0, w, h);
         var bmpData = bmp.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
         try
@@ -178,10 +179,10 @@ internal static class EverestImageUploader
         return result;
     }
 
-    /// <summary>Ridimensiona un'immagine alla dimensione target.</summary>
+    /// <summary>Resizes an image to the target size.</summary>
     internal static Bitmap ResizeImage(Bitmap source, int targetW, int targetH)
     {
-        // Usa Format32bppPArgb (0x00E09B) come BC usa PixelFormat 137224 = 0x00021808
+        // Uses Format32bppPArgb (0x00E09B) since BC uses PixelFormat 137224 = 0x00021808
         // which is Format16bppRgb565 for the intermediate bitmap. We use 32bpp for
         // resize quality, then convert to RGB565 in the next step.
         var result = new Bitmap(targetW, targetH, PixelFormat.Format32bppPArgb);
@@ -195,7 +196,7 @@ internal static class EverestImageUploader
 
     /// <summary>
     /// Sends already-prepared RGB565 data to the SDK via <see cref="EverestSdkNative.StartPicUpdate"/>.
-    /// Alloca e libera la memoria nativa automaticamente.
+    /// Allocates and frees the native memory automatically.
     /// </summary>
     private static bool UploadRgb565(byte[] rgb565, byte targetDev, byte targetPic, byte subItem)
     {

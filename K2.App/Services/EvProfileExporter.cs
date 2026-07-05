@@ -8,28 +8,28 @@ using System.Xml.Linq;
 namespace K2.App.Services;
 
 /// <summary>
-/// Esporta un profilo Everest in XML, sullo stesso schema reale confermato per il
-/// DisplayPad (tabella Base Camp <c>EverestKeyBidings</c>, classe decompilata
-/// <c>KeyboardBinding</c> — struttura identica a <c>DisplayPadLayerBidings</c> ma
-/// SENZA <c>ParentId</c>/pagine, dato che l'Everest non ha cartelle). Il vocabolario
-/// FunctionType/SubFunctionType/FunctionValue è lo stesso già verificato per il
-/// DisplayPad (<see cref="DpProfileExporter"/>), condiviso nel codice Base Camp
-/// reale tramite <c>BaseCampDbImporter.TranslateAction</c>.
+/// Exports an Everest profile to XML, on the same real schema confirmed for the
+/// DisplayPad (Base Camp table <c>EverestKeyBidings</c>, decompiled class
+/// <c>KeyboardBinding</c> — structure identical to <c>DisplayPadLayerBidings</c> but
+/// WITHOUT <c>ParentId</c>/pages, since the Everest has no folders). The
+/// FunctionType/SubFunctionType/FunctionValue vocabulary is the same one already
+/// confirmed for the DisplayPad (<see cref="DpProfileExporter"/>), shared in the
+/// real Base Camp code via <c>BaseCampDbImporter.TranslateAction</c>.
 ///
-/// Include sia i tasti regolari (KeyMatrix salvato in <see cref="EverestStore"/>)
-/// sia i 4 tasti LCD numpad (NDK). Nota: in K2 le immagini/azioni NDK sono
-/// impostazioni GLOBALI del device (non per-profilo — vedi
-/// <c>EverestStore</c>/<c>ndk.{i}.*</c>), quindi ogni profilo esportato mostrerà lo
-/// stesso contenuto NDK: è una semplificazione del modello dati K2 attuale, non
-/// un limite di Base Camp. I 4 KeyId sintetici usati per gli NDK (9001-9004) sono
-/// un'invenzione K2 (nessun DLLMatrixIndex reale noto) — per questo gli NDK
-/// vengono esportati SOLO in modalità K2 (mai in modalità Base Camp compatibile).
+/// Includes both the regular keys (KeyMatrix stored in <see cref="EverestStore"/>)
+/// and the 4 numpad LCD keys (NDK). Note: in K2, NDK images/actions are
+/// GLOBAL device settings (not per-profile — see
+/// <c>EverestStore</c>/<c>ndk.{i}.*</c>), so every exported profile will show the
+/// same NDK content: this is a simplification of K2's current data model, not
+/// a Base Camp limitation. The 4 synthetic KeyIds used for the NDKs (9001-9004) are
+/// a K2 invention (no real DLLMatrixIndex known) — that's why the NDKs are
+/// exported ONLY in K2 mode (never in Base Camp compatible mode).
 /// </summary>
 public static class EvProfileExporter
 {
     public sealed record ExportResult(int Exported, int SkippedActions, IReadOnlyList<string> SkipReasons);
 
-    // KeyId sintetici per i 4 tasti LCD numpad (nessun DLLMatrixIndex reale noto).
+    // Synthetic KeyIds for the 4 numpad LCD keys (no real DLLMatrixIndex known).
     private const int NdkKeyIdBase = 9001;
 
     public static ExportResult ExportBaseCamp(EverestStore store, int slot, string profileName, string filePath)
@@ -51,7 +51,7 @@ public static class EvProfileExporter
             new XElement("ProfileName", profileName),
             new XElement("OrderNo", slot));
 
-        // ---- Tasti regolari ----
+        // ---- Regular keys ----
         foreach (var k in store.LoadProfile(slot))
         {
             if (string.IsNullOrEmpty(k.ActionType)) continue;
@@ -71,8 +71,8 @@ public static class EvProfileExporter
                 else
                 {
                     skipped++;
-                    reasons.Add($"key matrix {k.KeyMatrix}: azione \"{k.ActionType}\" non esiste in Base Camp — omessa");
-                    continue; // niente immagine/altro da preservare per un tasto regolare senza icona
+                    reasons.Add($"key matrix {k.KeyMatrix}: action \"{k.ActionType}\" doesn't exist in Base Camp — omitted");
+                    continue; // nothing else (image, etc.) to preserve for a regular key with no icon
                 }
             }
             else
@@ -88,7 +88,7 @@ public static class EvProfileExporter
                 isAssigned, isTouchKey: false, functionType, subType, funcValue, imageB64: null));
         }
 
-        // ---- Tasti LCD numpad (NDK), 0-3 — device-globali in K2 ----
+        // ---- Numpad LCD keys (NDK), 0-3 — device-global in K2 ----
         for (int i = 0; i < 4; i++)
         {
             string? imagePath = store.GetSetting($"ndk.{i}.imagePath");
@@ -102,7 +102,7 @@ public static class EvProfileExporter
             if (hasImage)
             {
                 try { imageB64 = "data:image/png;base64," + Convert.ToBase64String(File.ReadAllBytes(imagePath!)); }
-                catch { /* immagine illeggibile: esporta senza icona */ }
+                catch { /* unreadable image: export without icon */ }
             }
 
             int keyId = NdkKeyIdBase + i;
@@ -113,11 +113,11 @@ public static class EvProfileExporter
             {
                 if (bcCompatible)
                 {
-                    // Nessun KeyId/DLLMatrixIndex reale noto per gli NDK: non possiamo
-                    // garantire che Base Camp accetti questo tasto -> lo omettiamo sempre
-                    // in modalità compatibile, mantenendo comunque l'icona se presente.
+                    // No real KeyId/DLLMatrixIndex known for the NDKs: we can't
+                    // guarantee that Base Camp will accept this key -> always omit it
+                    // in compatible mode, still keeping the icon if present.
                     skipped++;
-                    reasons.Add($"ndk #{i}: tasto LCD numpad non esportabile in modalità Base Camp (nessun KeyId reale noto)");
+                    reasons.Add($"ndk #{i}: numpad LCD key not exportable in Base Camp mode (no real KeyId known)");
                 }
                 else
                 {
@@ -146,9 +146,9 @@ public static class EvProfileExporter
         int keyId, int dllMatrixIndex, string keyName, bool isAssigned, bool isTouchKey,
         string? functionType, string? subType, string? funcValue, string? imageB64)
     {
-        // Tag "EverestKeyBidings" = nome della tabella reale Base Camp (stessa
-        // assunzione già fatta per il DisplayPad — MAI verificato su un export
-        // reale di un profilo Everest, vedi _PROJECT_MAP.md).
+        // Tag "EverestKeyBidings" = real Base Camp table name (same assumption
+        // already made for the DisplayPad — NEVER verified against a real
+        // export of an Everest profile, see _PROJECT_MAP.md).
         return new XElement("EverestKeyBidings",
             new XElement("ProfileId", 0),
             new XElement("KeyId", keyId),
@@ -172,9 +172,9 @@ public static class EvProfileExporter
             new XElement("OptionalText", ""));
     }
 
-    /// <summary>Stesso vocabolario confermato di <see cref="DpProfileExporter"/> (le
-    /// stringhe FunctionType/SubFunctionType native sono condivise da Base Camp fra
-    /// Everest e DisplayPad tramite <c>BaseCampDbImporter.TranslateAction</c>).</summary>
+    /// <summary>Same confirmed vocabulary as <see cref="DpProfileExporter"/> (the
+    /// native FunctionType/SubFunctionType strings are shared by Base Camp between
+    /// Everest and DisplayPad via <c>BaseCampDbImporter.TranslateAction</c>).</summary>
     private static (string FunctionType, string SubFunctionType, string FunctionValue)? MapActionToBc(
         string actionType, string? actionValue)
     {
@@ -259,9 +259,9 @@ public static class EvProfileExporter
             case "text":
                 return v.Length == 1 ? ("Default", v, v) : null;
 
-            // dp_folder/dp_back: concetti DisplayPad-only, non applicabili
-            // all'Everest. pyscript/command/url/macro/multi/pcinfo/clock/none:
-            // nessun equivalente Base Camp confermato -> omessi.
+            // dp_folder/dp_back: DisplayPad-only concepts, not applicable
+            // to the Everest. pyscript/command/url/macro/multi/pcinfo/clock/none:
+            // no confirmed Base Camp equivalent -> omitted.
             default:
                 return null;
         }

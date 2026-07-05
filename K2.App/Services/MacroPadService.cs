@@ -5,74 +5,74 @@ using System.Runtime.InteropServices;
 namespace K2.App.Services;
 
 /// <summary>
-/// Facade applicativa sopra <see cref="MacroPadSdkNative"/>.
+/// Application facade over <see cref="MacroPadSdkNative"/>.
 ///
-/// Espone l'SDK nativo del MacroPad come una API .NET pulita: apertura/chiusura
-/// driver, enumerazione device, lettura info firmware ed eventi tipizzati
-/// (.NET <see cref="EventHandler{TEventArgs}"/>) per tasti, plug/unplug e
-/// avanzamento update firmware.
+/// Exposes the native MacroPad SDK as a clean .NET API: driver open/close,
+/// device enumeration, firmware info reads, and typed events
+/// (.NET <see cref="EventHandler{TEventArgs}"/>) for keys, plug/unplug and
+/// firmware update progress.
 ///
-/// Replica il ruolo che <c>DisplayPadService</c> ha nel modulo DisplayPad,
-/// cosi' che il guscio unificato K2.App tratti ogni device allo stesso modo.
+/// Mirrors the role that <c>DisplayPadService</c> plays in the DisplayPad
+/// module, so the unified K2.App shell treats every device the same way.
 ///
 /// <para>
-/// <b>Eventi.</b> I tasti arrivano via callback su un thread interno
-/// dell'SDK; plug e progress arrivano come messaggi Windows sull'HWND passato
-/// a <see cref="Open"/>. Il consumer deve inoltrare i messaggi della finestra
-/// a <see cref="HandleWindowMessage"/> (tipicamente da un hook WndProc).
-/// Tutti gli eventi possono quindi essere sollevati su un thread diverso da
-/// quello UI: il gestore e' responsabile del marshalling.
+/// <b>Events.</b> Key events arrive via a callback on an internal SDK
+/// thread; plug and progress arrive as Windows messages on the HWND passed
+/// to <see cref="Open"/>. The consumer must forward the window messages
+/// to <see cref="HandleWindowMessage"/> (typically from a WndProc hook).
+/// All events may therefore be raised on a thread other than the UI
+/// thread: the handler is responsible for marshalling.
 /// </para>
 /// </summary>
 public sealed class MacroPadService : IDisposable
 {
-    // Il delegate va tenuto in un campo: se lo raccogliesse il GC, l'SDK
-    // chiamerebbe un puntatore a funzione non piu' valido -> crash nativo.
+    // The delegate must be kept in a field: if the GC collected it, the SDK
+    // would call a no-longer-valid function pointer -> native crash.
     private MacroPadSdkNative.KEY_CALLBACK? _keyCallback;
     private bool _opened;
 
-    /// <summary>Tasto del MacroPad premuto o rilasciato.</summary>
+    /// <summary>MacroPad key pressed or released.</summary>
     public event EventHandler<MacroPadKeyEventArgs>? KeyEvent;
 
-    /// <summary>Device collegato / scollegato (messaggio <c>WM_DEVICE_PLUG</c>).</summary>
+    /// <summary>Device plugged / unplugged (<c>WM_DEVICE_PLUG</c> message).</summary>
     public event EventHandler<MacroPadPlugEventArgs>? DevicePlug;
 
-    /// <summary>Avanzamento update firmware (messaggio <c>WM_FW_PROGRESS</c>).</summary>
+    /// <summary>Firmware update progress (<c>WM_FW_PROGRESS</c> message).</summary>
     public event EventHandler<MacroPadProgressEventArgs>? FirmwareProgress;
 
-    /// <summary>Slot massimi indirizzabili dall'SDK.</summary>
+    /// <summary>Max slots addressable by the SDK.</summary>
     public const int MaxDeviceCount = MacroPadSdkNative.MAX_DEV_COUNT;
 
-    /// <summary>Tasti fisici del MacroPad.</summary>
+    /// <summary>Physical keys on the MacroPad.</summary>
     public const int ButtonCount = MacroPadSdkNative.FW_NUM_KEY;
 
-    /// <summary>Profili memorizzati su ciascun device.</summary>
+    /// <summary>Profiles stored on each device.</summary>
     public const int ProfileCount = MacroPadSdkNative.FW_NUM_PROFILE;
 
-    /// <summary>True se il driver USB e' stato aperto con successo.</summary>
+    /// <summary>True if the USB driver was opened successfully.</summary>
     public bool IsOpen => _opened;
 
     /// <summary>
-    /// Apre il driver USB del MacroPad. <paramref name="hWnd"/> e' l'HWND della
-    /// finestra che ricevera' i messaggi di plug/progress: deve essere lo
-    /// stesso HWND il cui WndProc inoltra a <see cref="HandleWindowMessage"/>.
-    /// Registra inoltre il callback dei tasti.
+    /// Opens the MacroPad USB driver. <paramref name="hWnd"/> is the HWND of
+    /// the window that will receive plug/progress messages: it must be the
+    /// same HWND whose WndProc forwards to <see cref="HandleWindowMessage"/>.
+    /// Also registers the key callback.
     /// </summary>
     public bool Open(IntPtr hWnd)
     {
         if (_opened) return true;
 
-        // Il callback dei tasti e' globale (una sola registrazione per processo):
-        // lo agganciamo prima di aprire il driver, come fa il worker originale.
+        // The key callback is global (one registration per process):
+        // we hook it before opening the driver, as the original worker does.
         _keyCallback = OnKeyCallback;
         try
         {
             MacroPadSdkNative.SetKeyCallBack(_keyCallback);
-            App.WriteLog("[MacroPad.Open] SetKeyCallBack registrato");
+            App.WriteLog("[MacroPad.Open] SetKeyCallBack registered");
         }
         catch (Exception ex)
         {
-            App.WriteLog("[MacroPad.Open] SetKeyCallBack ha lanciato: " + ex);
+            App.WriteLog("[MacroPad.Open] SetKeyCallBack threw: " + ex);
         }
 
         App.WriteLog($"[MacroPad.Open] OpenUSBDriver(0x{hWnd.ToInt64():X})");
@@ -83,7 +83,7 @@ public sealed class MacroPadService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[MacroPad.Open] OpenUSBDriver ha lanciato: " + ex);
+            App.WriteLog("[MacroPad.Open] OpenUSBDriver threw: " + ex);
             return false;
         }
         App.WriteLog($"[MacroPad.Open] -> {ok}");
@@ -91,19 +91,19 @@ public sealed class MacroPadService : IDisposable
         return ok;
     }
 
-    /// <summary>Chiude il driver USB.</summary>
+    /// <summary>Closes the USB driver.</summary>
     public void Close()
     {
         if (!_opened) return;
         try { MacroPadSdkNative.CloseUSBDriver(); }
-        catch (Exception ex) { App.WriteLog("[MacroPad.Close] ha lanciato: " + ex); }
+        catch (Exception ex) { App.WriteLog("[MacroPad.Close] threw: " + ex); }
         _opened = false;
-        // _keyCallback resta referenziato finche' il service e' vivo: l'SDK
-        // potrebbe ancora avere il puntatore registrato.
-        App.WriteLog("[MacroPad.Close] driver chiuso");
+        // _keyCallback stays referenced as long as the service is alive: the SDK
+        // might still have the pointer registered.
+        App.WriteLog("[MacroPad.Close] driver closed");
     }
 
-    /// <summary>Cambia il profilo attivo del MacroPad. Chiama il native SwitchProfile(profile, 0, id).</summary>
+    /// <summary>Switches the MacroPad's active profile. Calls native SwitchProfile(profile, 0, id).</summary>
     public bool SwitchProfile(uint deviceId, int profile)
     {
         try
@@ -114,23 +114,23 @@ public sealed class MacroPadService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[MacroPad.SwitchProfile] ha lanciato: " + ex);
+            App.WriteLog("[MacroPad.SwitchProfile] threw: " + ex);
             return false;
         }
     }
 
-    /// <summary>Versione della DLL nativa dell'SDK.</summary>
+    /// <summary>Version of the SDK's native DLL.</summary>
     public int SdkVersion()
     {
         try { return MacroPadSdkNative.GetDLLVersion(); }
         catch (Exception ex)
         {
-            App.WriteLog("[MacroPad.SdkVersion] ha lanciato: " + ex);
+            App.WriteLog("[MacroPad.SdkVersion] threw: " + ex);
             return 0;
         }
     }
 
-    /// <summary>Numero di device riportato da <c>GetDevCount</c> (-1 se errore).</summary>
+    /// <summary>Device count reported by <c>GetDevCount</c> (-1 on error).</summary>
     public int DeviceCount()
     {
         int n = 0;
@@ -141,16 +141,16 @@ public sealed class MacroPadService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[MacroPad.DeviceCount] ha lanciato: " + ex);
+            App.WriteLog("[MacroPad.DeviceCount] threw: " + ex);
             return -1;
         }
         return n;
     }
 
     /// <summary>
-    /// Slot dei device realmente collegati. Sonda gli slot 1..<see cref="MaxDeviceCount"/>
-    /// con <c>IsDevicePlug</c>. In questo primo step nessun filtro "phantom":
-    /// il log riporta tutto cosi' da osservare il comportamento reale.
+    /// Slots with devices actually plugged in. Probes slots 1..<see cref="MaxDeviceCount"/>
+    /// with <c>IsDevicePlug</c>. In this first step there's no "phantom" filtering:
+    /// the log reports everything so we can observe the real behavior.
     /// </summary>
     public IReadOnlyList<uint> DeviceIds()
     {
@@ -164,73 +164,73 @@ public sealed class MacroPadService : IDisposable
             }
             catch (Exception ex)
             {
-                App.WriteLog($"[MacroPad.DeviceIds] IsDevicePlug({id}) ha lanciato: {ex.Message}");
+                App.WriteLog($"[MacroPad.DeviceIds] IsDevicePlug({id}) threw: {ex.Message}");
             }
         }
-        App.WriteLog($"[MacroPad.DeviceIds] device collegati -> [{string.Join(", ", found)}]");
+        App.WriteLog($"[MacroPad.DeviceIds] devices plugged in -> [{string.Join(", ", found)}]");
         return found;
     }
 
-    /// <summary>True se sullo slot indicato c'e' un device.</summary>
+    /// <summary>True if there's a device on the given slot.</summary>
     public bool IsPlugged(uint id)
     {
         try { return MacroPadSdkNative.IsDevicePlug(id); }
         catch (Exception ex)
         {
-            App.WriteLog($"[MacroPad.IsPlugged] id={id} ha lanciato: {ex.Message}");
+            App.WriteLog($"[MacroPad.IsPlugged] id={id} threw: {ex.Message}");
             return false;
         }
     }
 
-    /// <summary>Versione applicativa del firmware del device.</summary>
+    /// <summary>Application firmware version of the device.</summary>
     public ushort FirmwareVersion(uint id)
     {
         try { return MacroPadSdkNative.GetDevAppVer(id); }
         catch (Exception ex)
         {
-            App.WriteLog($"[MacroPad.FirmwareVersion] id={id} ha lanciato: {ex.Message}");
+            App.WriteLog($"[MacroPad.FirmwareVersion] id={id} threw: {ex.Message}");
             return 0;
         }
     }
 
-    /// <summary>True se l'aggiornamento firmware e' in corso sul device.</summary>
+    /// <summary>True if a firmware update is in progress on the device.</summary>
     public bool IsUpdating(uint id)
     {
         try { return MacroPadSdkNative.IsUpdating(id); }
         catch (Exception ex)
         {
-            App.WriteLog($"[MacroPad.IsUpdating] id={id} ha lanciato: {ex.Message}");
+            App.WriteLog($"[MacroPad.IsUpdating] id={id} threw: {ex.Message}");
             return false;
         }
     }
 
-    /// <summary>Legge <see cref="MacroPadSdkNative.DevInfo"/> (VID/PID/versioni).
-    /// <c>internal</c>: espone un tipo del layer P/Invoke (anch'esso internal).</summary>
+    /// <summary>Reads <see cref="MacroPadSdkNative.DevInfo"/> (VID/PID/versions).
+    /// <c>internal</c>: exposes a P/Invoke layer type (also internal).</summary>
     internal bool TryGetDeviceInfo(uint id, out MacroPadSdkNative.DevInfo info)
     {
         info = default;
         try { return MacroPadSdkNative.GetDeviceInfo(ref info, id); }
         catch (Exception ex)
         {
-            App.WriteLog($"[MacroPad.TryGetDeviceInfo] id={id} ha lanciato: {ex.Message}");
+            App.WriteLog($"[MacroPad.TryGetDeviceInfo] id={id} threw: {ex.Message}");
             return false;
         }
     }
 
-    /// <summary>Legge <see cref="MacroPadSdkNative.FWInfo"/> (profilo/effetto correnti).
-    /// <c>internal</c>: espone un tipo del layer P/Invoke (anch'esso internal).</summary>
+    /// <summary>Reads <see cref="MacroPadSdkNative.FWInfo"/> (current profile/effect).
+    /// <c>internal</c>: exposes a P/Invoke layer type (also internal).</summary>
     internal bool TryGetFirmwareInfo(uint id, out MacroPadSdkNative.FWInfo info)
     {
         info = default;
         try { return MacroPadSdkNative.GetFWInfo(ref info, id); }
         catch (Exception ex)
         {
-            App.WriteLog($"[MacroPad.TryGetFirmwareInfo] id={id} ha lanciato: {ex.Message}");
+            App.WriteLog($"[MacroPad.TryGetFirmwareInfo] id={id} threw: {ex.Message}");
             return false;
         }
     }
 
-    /// <summary>Abilita/disabilita il controllo software (AP mode) del device.</summary>
+    /// <summary>Enables/disables software control (AP mode) on the device.</summary>
     public bool APEnable(uint id, bool enable)
     {
         try
@@ -241,19 +241,19 @@ public sealed class MacroPadService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog($"[MacroPad.APEnable] id={id} ha lanciato: {ex.Message}");
+            App.WriteLog($"[MacroPad.APEnable] id={id} threw: {ex.Message}");
             return false;
         }
     }
 
     // =======================================================================
-    // Illuminazione LED (preset firmware)
+    // LED lighting (firmware presets)
     //
-    // Replica la logica provata del modulo Everest, ma ogni chiamata nativa del
-    // MacroPad prende un ultimo parametro `uint ID` = lo slot del device.
+    // Mirrors the proven logic from the Everest module, but every native
+    // MacroPad call takes a trailing `uint ID` parameter = the device slot.
     // =======================================================================
 
-    /// <summary>Preset di illuminazione: alias degli indici nativi firmware.</summary>
+    /// <summary>Lighting preset: aliases for the native firmware indices.</summary>
     public enum Effect : byte
     {
         Static    = (byte)MacroPadSdkNative.EffectIndex.Static,
@@ -271,14 +271,14 @@ public sealed class MacroPadService : IDisposable
     /// <summary>Effect speed.</summary>
     public enum Speed : byte { Slow = 0, Normal = 1, Fast = 2 }
 
-    /// <summary>Senso di rotazione/scorrimento.</summary>
+    /// <summary>Rotation/scroll direction.</summary>
     public enum Direction : byte { ClockWise = 0, CounterClockWise = 1 }
 
     /// <summary>
-    /// Applica un preset di illuminazione allo slot device indicato.
+    /// Applies a lighting preset to the given device slot.
     /// <para>As with the Everest: <c>ChangeEffect</c> requires the device to be in
-    /// NORMALE (non AP), quindi si forza <c>APEnable(false)</c> prima; dopo si
-    /// fa <c>SaveFlash</c> per rendere il preset persistente sullo slot.</para>
+    /// NORMAL (non-AP) mode, so <c>APEnable(false)</c> is forced first; afterwards
+    /// <c>SaveFlash</c> is called to make the preset persistent on the slot.</para>
     /// </summary>
     public bool SetEffect(uint id, Effect effect,
                           (byte r, byte g, byte b) primary,
@@ -289,15 +289,15 @@ public sealed class MacroPadService : IDisposable
                           int brightness = 100,
                           bool randomColor = false)
     {
-        // ChangeEffect e' un preset firmware: il device lo memorizza e lo
-        // disegna dal proprio runtime. AP mode (SW mode) e' solo per lo
-        // streaming per-key, quindi va spento prima del comando.
+        // ChangeEffect is a firmware preset: the device stores it and renders it
+        // from its own runtime. AP mode (SW mode) is only for per-key
+        // streaming, so it must be turned off before the command.
         try
         {
             bool offOk = MacroPadSdkNative.APEnable(false, id);
             App.WriteLog($"[MacroPad.SetEffect] APEnable(false,id={id}) prep -> {offOk}");
         }
-        catch (Exception ex2) { App.WriteLog("[MacroPad.SetEffect] APEnable(false) prep ha lanciato: " + ex2); }
+        catch (Exception ex2) { App.WriteLog("[MacroPad.SetEffect] APEnable(false) prep threw: " + ex2); }
 
         MacroPadSdkNative.FWColor C((byte, byte, byte) c) => new(c.Item1, c.Item2, c.Item3);
         var bright = QuantizeBrightness(brightness);
@@ -321,18 +321,18 @@ public sealed class MacroPadService : IDisposable
                 bool flashOk = MacroPadSdkNative.SaveFlash(6, id); // 6 = ALL_PROFILE
                 App.WriteLog($"[MacroPad.SetEffect] SaveFlash(ALL,id={id}) (commit) -> {flashOk}");
             }
-            catch (Exception ex2) { App.WriteLog("[MacroPad.SetEffect] SaveFlash ha lanciato: " + ex2); }
+            catch (Exception ex2) { App.WriteLog("[MacroPad.SetEffect] SaveFlash threw: " + ex2); }
 
             return ok;
         }
         catch (Exception ex)
         {
-            App.WriteLog("[MacroPad.SetEffect] ha lanciato: " + ex);
+            App.WriteLog("[MacroPad.SetEffect] threw: " + ex);
             return false;
         }
     }
 
-    /// <summary>Hex-dump dei 62 byte della struct (diagnostica).</summary>
+    /// <summary>Hex-dump of the struct's 62 bytes (diagnostics).</summary>
     private static string DumpEffData(MacroPadSdkNative.EffData d)
     {
         int sz = Marshal.SizeOf<MacroPadSdkNative.EffData>();
@@ -347,7 +347,7 @@ public sealed class MacroPadService : IDisposable
         finally { Marshal.FreeHGlobal(p); }
     }
 
-    /// <summary>Resetta gli effetti dello slot al default firmware.</summary>
+    /// <summary>Resets the slot's effects to the firmware default.</summary>
     public bool ResetEffects(uint id)
     {
         try
@@ -358,12 +358,12 @@ public sealed class MacroPadService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[MacroPad.ResetEffects] ha lanciato: " + ex);
+            App.WriteLog("[MacroPad.ResetEffects] threw: " + ex);
             return false;
         }
     }
 
-    /// <summary>Attiva/disattiva la sincronizzazione dell'effetto su tutti i profili.</summary>
+    /// <summary>Enables/disables syncing the effect across all profiles.</summary>
     public bool SetSyncAcrossProfiles(uint id, bool enable)
     {
         try
@@ -374,12 +374,12 @@ public sealed class MacroPadService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[MacroPad.SetSyncAcrossProfiles] ha lanciato: " + ex);
+            App.WriteLog("[MacroPad.SetSyncAcrossProfiles] threw: " + ex);
             return false;
         }
     }
 
-    /// <summary>Legge lo stato corrente del sync cross-profilo dello slot.</summary>
+    /// <summary>Reads the slot's current cross-profile sync state.</summary>
     public bool GetSyncAcrossProfiles(uint id)
     {
         try
@@ -389,12 +389,12 @@ public sealed class MacroPadService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[MacroPad.GetSyncAcrossProfiles] ha lanciato: " + ex);
+            App.WriteLog("[MacroPad.GetSyncAcrossProfiles] threw: " + ex);
             return false;
         }
     }
 
-    /// <summary>Salva sul flash lo stato corrente. Profilo 1..5 o 6 = ALL_PROFILE.</summary>
+    /// <summary>Saves the current state to flash. Profile 1..5 or 6 = ALL_PROFILE.</summary>
     public bool SaveFlash(uint id, int profile = 6)
     {
         try
@@ -405,7 +405,7 @@ public sealed class MacroPadService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[MacroPad.SaveFlash] ha lanciato: " + ex);
+            App.WriteLog("[MacroPad.SaveFlash] threw: " + ex);
             return false;
         }
     }
@@ -421,14 +421,14 @@ public sealed class MacroPadService : IDisposable
         }
         catch (Exception ex)
         {
-            App.WriteLog("[MacroPad.SetBacklight] ha lanciato: " + ex);
+            App.WriteLog("[MacroPad.SetBacklight] threw: " + ex);
             return false;
         }
     }
 
     /// <summary>
     /// Quantizes 0..100 to the 5 firmware brightness steps (0/25/50/75/100):
-    /// il firmware accetta solo questi valori.
+    /// the firmware only accepts these values.
     /// </summary>
     private static MacroPadSdkNative.BrightT QuantizeBrightness(int pct)
     {
@@ -440,9 +440,9 @@ public sealed class MacroPadService : IDisposable
     }
 
     /// <summary>
-    /// Va invocata dal WndProc della finestra che ha passato il proprio HWND a
-    /// <see cref="Open"/>. Traduce i messaggi <c>WM_DEVICE_PLUG</c> e
-    /// <c>WM_FW_PROGRESS</c> negli eventi .NET corrispondenti.
+    /// Must be invoked from the WndProc of the window that passed its own HWND to
+    /// <see cref="Open"/>. Translates the <c>WM_DEVICE_PLUG</c> and
+    /// <c>WM_FW_PROGRESS</c> messages into the corresponding .NET events.
     /// </summary>
     public void HandleWindowMessage(int msg, IntPtr wParam, IntPtr lParam)
     {
@@ -468,7 +468,7 @@ public sealed class MacroPadService : IDisposable
 
     public void Dispose() => Close();
 
-    // ---- callback nativo (thread dell'SDK) ----------------------------------
+    // ---- native callback (SDK thread) ----------------------------------
 
     private void OnKeyCallback(ushort wMatrix, bool bPressed, uint id)
     {
@@ -479,13 +479,13 @@ public sealed class MacroPadService : IDisposable
         }
         catch (Exception ex)
         {
-            // Mai propagare un'eccezione gestita verso codice nativo.
-            App.WriteLog("[MacroPad.OnKeyCallback] ha lanciato: " + ex);
+            // Never let a managed exception propagate into native code.
+            App.WriteLog("[MacroPad.OnKeyCallback] threw: " + ex);
         }
     }
 }
 
-/// <summary>Argomenti dell'evento <see cref="MacroPadService.KeyEvent"/>.</summary>
+/// <summary>Arguments for the <see cref="MacroPadService.KeyEvent"/> event.</summary>
 public sealed class MacroPadKeyEventArgs : EventArgs
 {
     public MacroPadKeyEventArgs(uint deviceId, ushort keyMatrix, bool pressed)
@@ -495,17 +495,17 @@ public sealed class MacroPadKeyEventArgs : EventArgs
         Pressed = pressed;
     }
 
-    /// <summary>Slot del device che ha generato l'evento.</summary>
+    /// <summary>Slot of the device that raised the event.</summary>
     public uint DeviceId { get; }
 
-    /// <summary>Indice di matrice del tasto (indice fisico del firmware).</summary>
+    /// <summary>Key matrix index (firmware's physical index).</summary>
     public ushort KeyMatrix { get; }
 
-    /// <summary>True = premuto, false = rilasciato.</summary>
+    /// <summary>True = pressed, false = released.</summary>
     public bool Pressed { get; }
 }
 
-/// <summary>Argomenti dell'evento <see cref="MacroPadService.DevicePlug"/>.</summary>
+/// <summary>Arguments for the <see cref="MacroPadService.DevicePlug"/> event.</summary>
 public sealed class MacroPadPlugEventArgs : EventArgs
 {
     public MacroPadPlugEventArgs(int wParam, int lParam)
@@ -514,21 +514,21 @@ public sealed class MacroPadPlugEventArgs : EventArgs
         LParam = lParam;
     }
 
-    /// <summary>wParam grezzo del messaggio <c>WM_DEVICE_PLUG</c>.</summary>
+    /// <summary>Raw wParam of the <c>WM_DEVICE_PLUG</c> message.</summary>
     public int WParam { get; }
 
-    /// <summary>lParam grezzo del messaggio <c>WM_DEVICE_PLUG</c>.</summary>
+    /// <summary>Raw lParam of the <c>WM_DEVICE_PLUG</c> message.</summary>
     public int LParam { get; }
 }
 
-/// <summary>Argomenti dell'evento <see cref="MacroPadService.FirmwareProgress"/>.</summary>
+/// <summary>Arguments for the <see cref="MacroPadService.FirmwareProgress"/> event.</summary>
 public sealed class MacroPadProgressEventArgs : EventArgs
 {
     public MacroPadProgressEventArgs(int percent) => Percent = percent;
 
-    /// <summary>Percentuale di avanzamento update firmware (-1 = fallito).</summary>
+    /// <summary>Firmware update progress percentage (-1 = failed).</summary>
     public int Percent { get; }
 
-    /// <summary>True se l'update e' fallito.</summary>
+    /// <summary>True if the update failed.</summary>
     public bool Failed => Percent == -1;
 }

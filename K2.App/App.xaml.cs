@@ -102,7 +102,7 @@ public partial class App : Application
     private const uint MEM_COMMIT_RESERVE = 0x3000;
     private const uint PAGE_EXECUTE_READWRITE = 0x40;
 
-    // EXCEPTION_RECORD x86 layout (per leggere ExceptionCode e ExceptionAddress)
+    // EXCEPTION_RECORD x86 layout (to read ExceptionCode and ExceptionAddress)
     private const uint EXCEPTION_ACCESS_VIOLATION = 0xC0000005;
     private const int  EXCEPTION_CONTINUE_SEARCH    = 0;
     private const int  EXCEPTION_CONTINUE_EXECUTION = -1;
@@ -416,7 +416,7 @@ public partial class App : Application
                 var ib = new System.Text.StringBuilder(64);
                 for (int i = 0; i < 16; i++)
                     ib.Append(Marshal.ReadByte(addr, i).ToString("X2")).Append(' ');
-                WriteLog($"[VEH] istruzione a +0x{rva:X}: {ib}");
+                WriteLog($"[VEH] instruction at +0x{rva:X}: {ib}");
             }
             catch { }
 
@@ -633,7 +633,7 @@ public partial class App : Application
     private static void SdkStackWatchdogLoop()
     {
         uint tid = _sdkWatchdogTid;
-        WriteLog($"[Watchdog] avviato — monitoro ESP del thread timer SDKDLL.dll (tid={tid}) ogni {WATCHDOG_INTERVAL_MS / 1000}s");
+        WriteLog($"[Watchdog] started — monitoring ESP of SDKDLL.dll timer thread (tid={tid}) every {WATCHDOG_INTERVAL_MS / 1000}s");
 
         IntPtr ctxBuf = Marshal.AllocHGlobal(1024);
         nint baselineEsp = 0;
@@ -649,8 +649,8 @@ public partial class App : Application
                 IntPtr hThread = OpenThread(THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME, false, tid);
                 if (hThread == IntPtr.Zero)
                 {
-                    WriteLog($"[Watchdog] OpenThread fallito (tid={tid}, err={Marshal.GetLastWin32Error()}) — " +
-                             "il thread è probabilmente terminato, fermo il watchdog");
+                    WriteLog($"[Watchdog] OpenThread failed (tid={tid}, err={Marshal.GetLastWin32Error()}) — " +
+                             "the thread has probably exited, stopping the watchdog");
                     return;
                 }
 
@@ -659,7 +659,7 @@ public partial class App : Application
                     uint suspendCount = SuspendThread(hThread);
                     if (suspendCount == 0xFFFFFFFF)
                     {
-                        WriteLog("[Watchdog] SuspendThread fallito, salto questo giro");
+                        WriteLog("[Watchdog] SuspendThread failed, skipping this round");
                         continue;
                     }
 
@@ -670,7 +670,7 @@ public partial class App : Application
                         bool ok = GetThreadContext(hThread, ctxBuf);
                         if (!ok)
                         {
-                            WriteLog($"[Watchdog] GetThreadContext fallito err={Marshal.GetLastWin32Error()}");
+                            WriteLog($"[Watchdog] GetThreadContext failed err={Marshal.GetLastWin32Error()}");
                             continue;
                         }
 
@@ -690,7 +690,7 @@ public partial class App : Application
                             long fromBaseline = (long)baselineEsp - (long)esp;
                             string sLast = fromLast >= 0 ? $"+{fromLast}" : fromLast.ToString();
                             string sBase = fromBaseline >= 0 ? $"+{fromBaseline}" : fromBaseline.ToString();
-                            WriteLog($"[Watchdog] ESP=0x{esp:X8}  Δultimo={sLast}B  Δbaseline={sBase}B  " +
+                            WriteLog($"[Watchdog] ESP=0x{esp:X8}  Δlast={sLast}B  Δbaseline={sBase}B  " +
                                      $"[cum VirtualAlloc={System.Threading.Interlocked.Read(ref _sdkStackGrownBytes)}B]");
                             lastEsp = esp;
                         }
@@ -708,7 +708,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            try { WriteLog($"[Watchdog] loop terminato per eccezione: {ex.Message}"); } catch { }
+            try { WriteLog($"[Watchdog] loop terminated by exception: {ex.Message}"); } catch { }
         }
         finally
         {

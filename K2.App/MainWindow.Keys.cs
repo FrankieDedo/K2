@@ -212,8 +212,8 @@ public partial class MainWindow
             ? Transform.Identity
             : new RotateTransform((int)_rotation);
 
-        // Counter-rotate each button so bordi e mount restano orientati correttamente.
-        // Il TextBlock dentro il bottone ruota con esso → nessun transform aggiuntivo.
+        // Counter-rotate each button so its border and label stay correctly oriented.
+        // The TextBlock inside the button rotates along with it -> no extra transform needed.
         var counterTransform = _rotation == MacroPadRotation.None
             ? Transform.Identity
             : new RotateTransform(-(int)_rotation);
@@ -221,7 +221,7 @@ public partial class MainWindow
         {
             btn.LayoutTransform = counterTransform;
             if (btn.Content is TextBlock lbl)
-                lbl.LayoutTransform = Transform.Identity; // il bottone gestisce già la rotazione
+                lbl.LayoutTransform = Transform.Identity; // the button already handles the rotation
         }
     }
 
@@ -531,10 +531,10 @@ public partial class MainWindow
                 string? actionType, actionValue;
                 if (funcType == "K2Action")
                 {
-                    // Sentinel scritto da MpProfileExporter.ExportK2: FunctionEnteredValue/
-                    // FunctionValue portano ActionType/ActionValue K2 letterali (lo schema
-                    // MakaluKeyBindings non ha SubFunctionType, quindi si riusa
-                    // FunctionEnteredValue per il round-trip senza perdite).
+                    // Sentinel written by MpProfileExporter.ExportK2: FunctionEnteredValue/
+                    // FunctionValue carry the literal K2 ActionType/ActionValue (the
+                    // MakaluKeyBindings schema has no SubFunctionType, so
+                    // FunctionEnteredValue is reused for lossless round-tripping).
                     actionType  = funcEntered;
                     actionValue = string.IsNullOrEmpty(funcValue) ? null : funcValue;
                 }

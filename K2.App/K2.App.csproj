@@ -26,6 +26,7 @@
 
     <AssemblyName>K2.App</AssemblyName>
     <RootNamespace>K2.App</RootNamespace>
+    <ApplicationIcon>Assets\K2_icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <!-- Libreria condivisa: motore azioni dei tasti + ponte Python.

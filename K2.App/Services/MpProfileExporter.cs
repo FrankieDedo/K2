@@ -5,22 +5,22 @@ using System.Xml.Linq;
 namespace K2.App.Services;
 
 /// <summary>
-/// Esporta un profilo MacroPad in XML, sullo stesso schema (mai verificato su un
-/// export reale, solo sul codice decompilato "Makalu") della tabella Base Camp
-/// <c>MakaluKeyBindings</c> — vedi <see cref="BaseCampDbImporter.TranslateMakaluAction"/>
-/// per il vocabolario FunctionType/FunctionValue confermato.
+/// Exports a MacroPad profile to XML, on the same schema (never verified against a
+/// real export, only against the decompiled "Makalu" code) as the Base Camp table
+/// <c>MakaluKeyBindings</c> — see <see cref="BaseCampDbImporter.TranslateMakaluAction"/>
+/// for the confirmed FunctionType/FunctionValue vocabulary.
 ///
-/// A differenza del DisplayPad, questo schema NON ha <c>SubFunctionType</c> né
-/// immagini per tasto: solo KeyId (1-12), FunctionType, FunctionValue,
+/// Unlike the DisplayPad, this schema has NO <c>SubFunctionType</c> or
+/// per-key images: just KeyId (1-12), FunctionType, FunctionValue,
 /// FunctionEnteredValue, ONKeyPressRelease, SyncAcrossProfilesKeyBinding, CustomURL.
 ///
 /// <list type="bullet">
-/// <item><b>Base Camp compatibile</b> (<see cref="ExportBaseCamp"/>): solo azioni
-/// con FunctionType/FunctionValue nativi MacroPad confermati. Le altre vengono
-/// omesse (tasto = nessuna funzione).</item>
-/// <item><b>Solo K2</b> (<see cref="ExportK2"/>): <c>FunctionType="K2Action"</c>,
-/// <c>FunctionEnteredValue</c> = ActionType K2 letterale, <c>FunctionValue</c> =
-/// ActionValue K2 letterale (round-trip senza perdite).</item>
+/// <item><b>Base Camp compatible</b> (<see cref="ExportBaseCamp"/>): only actions
+/// with a confirmed native MacroPad FunctionType/FunctionValue. The others are
+/// omitted (key = no function).</item>
+/// <item><b>K2 only</b> (<see cref="ExportK2"/>): <c>FunctionType="K2Action"</c>,
+/// <c>FunctionEnteredValue</c> = literal K2 ActionType, <c>FunctionValue</c> =
+/// literal K2 ActionValue (lossless round-trip).</item>
 /// </list>
 /// </summary>
 public static class MpProfileExporter
@@ -72,7 +72,7 @@ public static class MpProfileExporter
                     else
                     {
                         skipped++;
-                        reasons.Add($"key #{i}: azione \"{rec.ActionType}\" non esiste sul MacroPad Base Camp — omessa");
+                        reasons.Add($"key #{i}: action \"{rec.ActionType}\" doesn't exist on the Base Camp MacroPad — omitted");
                     }
                 }
                 else
@@ -85,9 +85,9 @@ public static class MpProfileExporter
                 }
             }
 
-            // Tag "MakaluKeyBindings" = nome della tabella reale Base Camp (per coerenza
-            // con l'assunzione già fatta per DisplayPadLayerBidings/EverestKeyBidings —
-            // MAI verificato su un export reale, vedi _PROJECT_MAP.md).
+            // Tag "MakaluKeyBindings" = real Base Camp table name (for consistency
+            // with the assumption already made for DisplayPadLayerBidings/EverestKeyBidings —
+            // NEVER verified against a real export, see _PROJECT_MAP.md).
             root.Add(new XElement("MakaluKeyBindings",
                 new XElement("ProfileId", 0),
                 new XElement("KeyId", i + 1),
@@ -108,9 +108,9 @@ public static class MpProfileExporter
     }
 
     /// <summary>
-    /// Traduzione inversa di <see cref="BaseCampDbImporter.TranslateMakaluAction"/>:
-    /// K2 ActionType/ActionValue -> FunctionType/FunctionValue MacroPad nativi.
-    /// Ritorna <c>null</c> se non c'è un equivalente MacroPad confermato.
+    /// Reverse translation of <see cref="BaseCampDbImporter.TranslateMakaluAction"/>:
+    /// K2 ActionType/ActionValue -> native MacroPad FunctionType/FunctionValue.
+    /// Returns <c>null</c> if there's no confirmed MacroPad equivalent.
     /// </summary>
     private static (string FunctionType, string FunctionValue)? MapActionToMakalu(string actionType, string? actionValue)
     {
@@ -151,8 +151,8 @@ public static class MpProfileExporter
                     "forward"       => ("Mouse", "Forward"),
                     "scroll up"     => ("Mouse Wheel", "Scroll Up"),
                     "scroll down"   => ("Mouse Wheel", "Scroll Down"),
-                    // "scroll left"/"scroll right": il MacroPad ha solo una rotellina
-                    // verticale (Mouse_Wheel_String ha solo Up/Down) — nessun equivalente.
+                    // "scroll left"/"scroll right": the MacroPad only has a single
+                    // vertical wheel (Mouse_Wheel_String only has Up/Down) — no equivalent.
                     _ => ((string, string)?)null
                 };
 
@@ -161,8 +161,8 @@ public static class MpProfileExporter
                 {
                     "next" or "next profile" => ("Mouse", "Next Profile"),
                     "previous" or "previous profile" or "prev" => ("Mouse", "Previous Profile"),
-                    // Il passaggio diretto a uno slot numerico non ha un codice
-                    // firmware MacroPad noto (solo Next/Previous ciclici).
+                    // Jumping directly to a numeric slot has no known
+                    // MacroPad firmware code (only cyclic Next/Previous).
                     _ => ((string, string)?)null
                 };
 
@@ -175,13 +175,13 @@ public static class MpProfileExporter
                     "sleep" => ("OS Commands", "Sleep"),
                     "hibernate" => ("OS Commands", "Hibernate"),
                     "calculator" or "calc" => ("OS Commands", "Calculator"),
-                    // "run explorer"/"explorer": nessuna voce OS_Command_String per il MacroPad.
+                    // "run explorer"/"explorer": no OS_Command_String entry for the MacroPad.
                     _ => ((string, string)?)null
                 };
 
             // folder, url, text, command, pyscript, dp_folder, dp_back, pcinfo,
-            // clock, multi, createfolder, back, none: nessun equivalente MacroPad
-            // Base Camp confermato -> omessi.
+            // clock, multi, createfolder, back, none: no confirmed Base Camp
+            // MacroPad equivalent -> omitted.
             default:
                 return null;
         }

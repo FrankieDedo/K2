@@ -18,7 +18,7 @@ public partial class ErrorDialog : Window
         _logPath = logPath;
         LblHint.Text = $"Dettaglio anche in: {logPath}";
 
-        // Selezione automatica del testo per facilitare il Ctrl+C
+        // Automatically select the text to make Ctrl+C easier
         Loaded += (_, _) =>
         {
             TxtMessage.Focus();
@@ -26,7 +26,7 @@ public partial class ErrorDialog : Window
         };
     }
 
-    /// <summary>Helper per chiamare il dialog senza preoccuparsi del thread UI.</summary>
+    /// <summary>Helper to call the dialog without worrying about the UI thread.</summary>
     public static void Show(string title, string message, string logPath, Window? owner = null)
     {
         var d = new ErrorDialog(title, message, logPath);

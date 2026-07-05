@@ -4,20 +4,20 @@ using System.Runtime.CompilerServices;
 namespace K2.App.Models;
 
 /// <summary>
-/// Stato bindabile di un tasto del MacroPad nella griglia di configurazione.
-/// A differenza del DisplayPad i tasti del MacroPad non hanno un display,
-/// quindi qui non c'e' immagine: solo l'azione assegnata e la mappatura
-/// hardware.
+/// Bindable state of a MacroPad key in the configuration grid.
+/// Unlike the DisplayPad, MacroPad keys don't have a display,
+/// so there's no image here: only the assigned action and the hardware
+/// mapping.
 /// </summary>
 public sealed class MacroPadKey : INotifyPropertyChanged
 {
     public MacroPadKey(int index) => Index = index;
 
-    /// <summary>Indice logico del tasto (0..11).</summary>
+    /// <summary>Logical key index (0..11).</summary>
     public int Index { get; }
 
     private int? _keyMatrix;
-    /// <summary>Codice matrice hardware associato (null se non ancora mappato).</summary>
+    /// <summary>Associated hardware matrix code (null if not yet mapped).</summary>
     public int? KeyMatrix
     {
         get => _keyMatrix;
@@ -31,7 +31,7 @@ public sealed class MacroPadKey : INotifyPropertyChanged
     }
 
     private string? _actionType;
-    /// <summary>Tipo di azione assegnata (url, keys, pyscript, ... ; null = nessuna).</summary>
+    /// <summary>Type of assigned action (url, keys, pyscript, ... ; null = none).</summary>
     public string? ActionType
     {
         get => _actionType;
@@ -46,7 +46,7 @@ public sealed class MacroPadKey : INotifyPropertyChanged
     }
 
     private string? _actionValue;
-    /// <summary>Valore/payload dell'azione.</summary>
+    /// <summary>Value/payload of the action.</summary>
     public string? ActionValue
     {
         get => _actionValue;
@@ -54,7 +54,7 @@ public sealed class MacroPadKey : INotifyPropertyChanged
     }
 
     private bool _isHighlighted;
-    /// <summary>True mentre il tasto fisico corrispondente e' tenuto premuto.</summary>
+    /// <summary>True while the corresponding physical key is held down.</summary>
     public bool IsHighlighted
     {
         get => _isHighlighted;
@@ -63,7 +63,7 @@ public sealed class MacroPadKey : INotifyPropertyChanged
 
     public bool HasAction => !string.IsNullOrEmpty(_actionType);
 
-    /// <summary>Testo mostrato sul pulsante della griglia.</summary>
+    /// <summary>Text shown on the grid button.</summary>
     public string Display
     {
         get

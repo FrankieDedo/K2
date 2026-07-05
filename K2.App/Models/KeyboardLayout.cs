@@ -62,19 +62,19 @@ public static class EverestKeyboardLayout
     private const double PL = 27;   // padding left
     private const double PT = 47;   // padding top
 
-    // Larghezze riga bottom — calcolate per stare entro navStart
+    // Bottom-row widths — sized to fit within navStart
     // (7 modifier × 38px) + Space(196) + 7 gap(2) = 266+196+14 = 476
-    private const double ModW   = 38;  // tasto modificatore bottom row
-    private const double SpaceW = 196; // barra spaziatrice
+    private const double ModW   = 38;  // bottom row modifier key
+    private const double SpaceW = 196; // spacebar
 
-    /// <summary>Tasti del board_right (tastierino numerico, 166×260).
-    /// Identico per tutti i layout.</summary>
+    /// <summary>Keys of board_right (numpad, 166×260).
+    /// Identical for all layouts.</summary>
     public static readonly KeyDef[] BoardRight = BuildBoardRight();
 
-    // ---- Cache layout (lazy) ----
+    // ---- Layout cache (lazy) ----
     private static readonly Dictionary<KeyboardLayoutType, KeyDef[]> _cache = new();
 
-    /// <summary>Restituisce i tasti del board_left per il layout richiesto.</summary>
+    /// <summary>Returns the board_left keys for the requested layout.</summary>
     public static KeyDef[] GetBoardLeft(KeyboardLayoutType layout)
     {
         if (_cache.TryGetValue(layout, out var cached)) return cached;
@@ -95,30 +95,30 @@ public static class EverestKeyboardLayout
         return built;
     }
 
-    /// <summary>Rileva il layout tastiera dal locale Windows corrente.</summary>
+    /// <summary>Detects the keyboard layout from the current Windows locale.</summary>
     public static KeyboardLayoutType DetectLayout()
     {
         try
         {
-            // GetKeyboardLayout(0) restituisce l'HKL del thread foreground.
-            // I 16 bit bassi sono il Language ID (LANGID).
+            // GetKeyboardLayout(0) returns the foreground thread's HKL.
+            // The low 16 bits are the Language ID (LANGID).
             nint hkl = GetKeyboardLayout(0);
             int langId = (int)(hkl.ToInt64() & 0xFFFF);
 
             // LANGID: primary language (bits 0-9) + sublanguage (bits 10-15)
-            // Italiano = primary 0x10 → LANGID 0x0410 (it-IT)
+            // Italian = primary 0x10 → LANGID 0x0410 (it-IT)
             int primary = langId & 0x3FF;
             int sub     = (langId >> 10) & 0x3F;
             return primary switch
             {
-                0x10 => KeyboardLayoutType.IsoIt,                 // Italiano
-                0x07 => KeyboardLayoutType.IsoDe,                 // Tedesco (QWERTZ)
-                0x0C => KeyboardLayoutType.IsoFr,                 // Francese (AZERTY)
-                0x0A => KeyboardLayoutType.IsoEs,                 // Spagnolo
-                0x14 => KeyboardLayoutType.IsoNordic,            // Norvegese
-                0x16 => KeyboardLayoutType.IsoPt,                 // Portoghese
-                0x09 => sub == 0x02 ? KeyboardLayoutType.IsoUk   // Inglese UK
-                                    : KeyboardLayoutType.AnsiUs, // Inglese (altri) → US
+                0x10 => KeyboardLayoutType.IsoIt,                 // Italian
+                0x07 => KeyboardLayoutType.IsoDe,                 // German (QWERTZ)
+                0x0C => KeyboardLayoutType.IsoFr,                 // French (AZERTY)
+                0x0A => KeyboardLayoutType.IsoEs,                 // Spanish
+                0x14 => KeyboardLayoutType.IsoNordic,            // Norwegian
+                0x16 => KeyboardLayoutType.IsoPt,                 // Portuguese
+                0x09 => sub == 0x02 ? KeyboardLayoutType.IsoUk   // English UK
+                                    : KeyboardLayoutType.AnsiUs, // English (other) → US
                 _ => KeyboardLayoutType.AnsiUs,
             };
         }
@@ -132,7 +132,7 @@ public static class EverestKeyboardLayout
     private static extern nint GetKeyboardLayout(uint idThread);
 
     // ======================================================================
-    // Helper per costruire righe
+    // Helper to build rows
     // ======================================================================
 
     private static void Row(List<KeyDef> list, double x0, double y,
@@ -146,7 +146,7 @@ public static class EverestKeyboardLayout
         }
     }
 
-    /// <summary>Aggiunge un tasto con altezza custom (es. Enter ISO tall).</summary>
+    /// <summary>Adds a key with a custom height (e.g. tall ISO Enter).</summary>
     private static void Key(List<KeyDef> list, int id, string label,
                             double x, double y, double w, double h)
     {
@@ -154,23 +154,23 @@ public static class EverestKeyboardLayout
     }
 
     // ======================================================================
-    // VK code constants — Windows Virtual Key codes usati dall'SDK
+    // VK code constants — Windows Virtual Key codes used by the SDK
     // ======================================================================
     //
-    // Lettere: VK_A=65 .. VK_Z=90 (coincidono con ASCII maiuscolo)
-    // Numeri:  VK_0=48 .. VK_9=57 (coincidono con ASCII '0'..'9')
+    // Letters: VK_A=65 .. VK_Z=90 (match uppercase ASCII)
+    // Numbers: VK_0=48 .. VK_9=57 (match ASCII '0'..'9')
     // F-keys:  VK_F1=112 .. VK_F12=123
-    // Modifier (left/right specifici): LShift=160, RShift=161,
+    // Modifier (left/right specific): LShift=160, RShift=161,
     //   LCtrl=162, RCtrl=163, LAlt=164, RAlt=165
     // Nav:     Ins=96*, Home=103*, PgUp=105*, Del=110*, End=97*, PgDn=99*
-    //   (*coincidono con VK_NUMPAD*; la SDK non distingue nav da numpad)
+    //   (*match VK_NUMPAD*; the SDK doesn't distinguish nav from numpad)
     // Numpad:  VK_NUMPAD0=96 .. VK_NUMPAD9=105, +=107, -=109, *=106,
     //   /=111, .=110, NumLock=144
     // OEM:     `=192, -=189, ==187, [=219, ]=221, \=220, ;=186,
     //   '=222, ,=188, .=190, /=191, ISO <>=226
     // Misc:    Esc=27, Tab=9, Backspace=8, CapsLock=20, Enter=13,
     //   Space=32, PrtSc=44, ScrLk=145, Pause=19, LWin=91, RWin=92
-    //   FN=261 (codice custom Mountain, non standard Windows)
+    //   FN=261 (custom Mountain code, not a standard Windows one)
 
     // ======================================================================
     // Rows common to all layouts

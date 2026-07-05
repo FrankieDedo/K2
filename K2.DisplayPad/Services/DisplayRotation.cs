@@ -8,56 +8,56 @@ using System.Text;
 namespace K2.DisplayPad.Services;
 
 /// <summary>
-/// Orientamento fisico col quale il DisplayPad e' montato.
-/// Il valore indica di quanti gradi IN SENSO ORARIO il device e' ruotato
-/// rispetto alla posizione nativa (striscia orizzontale, icone dritte).
+/// Physical orientation in which the DisplayPad is mounted.
+/// The value indicates how many degrees CLOCKWISE the device is rotated
+/// relative to its native position (horizontal strip, icons upright).
 /// </summary>
 public enum DisplayRotation
 {
-    /// <summary>Posizione nativa: griglia 2 righe x 6 colonne.</summary>
+    /// <summary>Native position: 2-row x 6-column grid.</summary>
     None = 0,
-    /// <summary>Device montato ruotato di 90 gradi in senso orario.</summary>
+    /// <summary>Device mounted rotated 90 degrees clockwise.</summary>
     Cw90 = 90,
-    /// <summary>Device montato ruotato di 270 gradi in senso orario (= 90 antiorario).</summary>
+    /// <summary>Device mounted rotated 270 degrees clockwise (= 90 counter-clockwise).</summary>
     Cw270 = 270,
 }
 
 /// <summary>
-/// Geometria della griglia tasti del DisplayPad e logica di rotazione.
+/// Geometry of the DisplayPad button grid and rotation logic.
 ///
-/// Layout FISICO nativo: 2 righe x 6 colonne, indici 0..11
+/// Native PHYSICAL layout: 2 rows x 6 columns, indices 0..11
 /// <code>
 ///     0  1  2  3  4  5
 ///     6  7  8  9 10 11
 /// </code>
 ///
-/// "Visual slot" = posizione della cella nella griglia a schermo di K2,
-/// che viene ri-orientata per rispecchiare il device montato ruotato.
+/// "Visual slot" = position of the cell in K2's on-screen grid,
+/// which is re-oriented to mirror the device as it is mounted rotated.
 ///
-/// Il MODELLO interno (<see cref="Models.ButtonCell"/>.Index, mappa matrix,
-/// <see cref="StateStore"/>) resta SEMPRE in indici FISICI: la rotazione
-/// tocca solo (a) la disposizione delle celle a schermo e (b) i pixel
-/// dell'icona caricata sul firmware. Cosi' la gestione tasti, le azioni e
-/// la persistenza non vanno toccate.
+/// The internal MODEL (<see cref="Models.ButtonCell"/>.Index, matrix map,
+/// <see cref="StateStore"/>) ALWAYS stays in PHYSICAL indices: rotation
+/// only affects (a) how cells are arranged on screen and (b) the pixels
+/// of the icon uploaded to the firmware. This way button handling, actions
+/// and persistence don't need to be touched.
 /// </summary>
 public static class DisplayPadLayout
 {
-    /// <summary>Righe della griglia fisica nativa.</summary>
+    /// <summary>Rows of the native physical grid.</summary>
     public const int PhysRows = 2;
-    /// <summary>Colonne della griglia fisica nativa.</summary>
+    /// <summary>Columns of the native physical grid.</summary>
     public const int PhysCols = 6;
-    /// <summary>Numero totale di tasti (FW_NUM_KEY).</summary>
+    /// <summary>Total number of buttons (FW_NUM_KEY).</summary>
     public const int ButtonCount = PhysRows * PhysCols; // 12
 
-    /// <summary>Dimensione della griglia a schermo per la rotazione data.
-    /// A 90/270 la striscia 2x6 diventa 6x2.</summary>
+    /// <summary>On-screen grid size for the given rotation.
+    /// At 90/270 the 2x6 strip becomes 6x2.</summary>
     public static (int Rows, int Cols) VisualGrid(DisplayRotation r) =>
         r == DisplayRotation.None ? (PhysRows, PhysCols) : (PhysCols, PhysRows);
 
     /// <summary>
-    /// Tabella di permutazione: per ogni visual slot (0..11, in ordine di
-    /// lettura della griglia a schermo) restituisce l'indice FISICO del
-    /// tasto da mostrare in quella posizione.
+    /// Permutation table: for each visual slot (0..11, in the reading
+    /// order of the on-screen grid) returns the PHYSICAL index of the
+    /// button to display in that position.
     /// </summary>
     public static int[] PhysicalForVisual(DisplayRotation r)
     {
@@ -70,12 +70,12 @@ public static class DisplayPadLayout
             int vr, vc;
             switch (r)
             {
-                // Device ruotato 90 CW: l'angolo fisico in alto-sx va in alto-dx.
+                // Device rotated 90 CW: the physical top-left corner goes to top-right.
                 case DisplayRotation.Cw90:
                     vr = pc;
                     vc = PhysRows - 1 - pr;
                     break;
-                // Device ruotato 270 CW (= 90 CCW): in alto-sx va in basso-sx.
+                // Device rotated 270 CW (= 90 CCW): top-left goes to bottom-left.
                 case DisplayRotation.Cw270:
                     vr = PhysCols - 1 - pc;
                     vc = pr;
@@ -90,7 +90,7 @@ public static class DisplayPadLayout
         return map;
     }
 
-    /// <summary>Etichetta breve per la UI.</summary>
+    /// <summary>Short label for the UI.</summary>
     public static string Label(DisplayRotation r) => r switch
     {
         DisplayRotation.Cw90  => "90°",
@@ -98,7 +98,7 @@ public static class DisplayPadLayout
         _                     => "0°",
     };
 
-    /// <summary>Converte il valore salvato su DB ("0"/"90"/"270") in enum.</summary>
+    /// <summary>Converts the value saved in the DB ("0"/"90"/"270") into the enum.</summary>
     public static DisplayRotation Parse(string? s) => s switch
     {
         "90"  => DisplayRotation.Cw90,
@@ -108,19 +108,19 @@ public static class DisplayPadLayout
 }
 
 /// <summary>
-/// Ruota i PNG delle icone prima dell'upload sul firmware.
+/// Rotates icon PNGs before uploading them to the firmware.
 ///
-/// Le icone del DisplayPad sono 102x102 px (quadrate, verificato sui
-/// profili BaseCamp): una rotazione di 90/270 e' senza perdita e non
-/// cambia le dimensioni, quindi non serve alcun re-fit.
+/// DisplayPad icons are 102x102 px (square, verified on BaseCamp
+/// profiles): a 90/270 rotation is lossless and doesn't change the
+/// dimensions, so no re-fit is needed.
 ///
-/// L'angolo applicato all'IMMAGINE e' OPPOSTO a quello del device, cosi'
-/// che (rotazione device) + (pre-rotazione icona) = icona dritta per chi
-/// guarda il pad montato ruotato.
+/// The angle applied to the IMAGE is OPPOSITE to the device's, so that
+/// (device rotation) + (icon pre-rotation) = an upright icon for whoever
+/// looks at the pad mounted rotated.
 ///
-/// I file ruotati sono messi in cache su disco; la chiave include il path
-/// originale, la data di modifica e l'angolo, percio' la cache si
-/// auto-invalida quando l'immagine sorgente cambia.
+/// Rotated files are cached on disk; the cache key includes the original
+/// path, the modification date and the angle, so the cache
+/// auto-invalidates whenever the source image changes.
 /// </summary>
 public static class IconRotator
 {
@@ -128,19 +128,19 @@ public static class IconRotator
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "K2.DisplayPad", "rotated");
 
-    /// <summary>Angolo orario da applicare ALL'IMMAGINE per compensare il
-    /// montaggio del device.</summary>
+    /// <summary>Clockwise angle to apply TO THE IMAGE to compensate for the
+    /// device's mounting.</summary>
     private static int ImageAngleCw(DisplayRotation r) => r switch
     {
-        DisplayRotation.Cw90  => 270, // device 90 CW  -> icona ruotata 90 CCW
-        DisplayRotation.Cw270 => 90,  // device 270 CW -> icona ruotata 90 CW
+        DisplayRotation.Cw90  => 270, // device 90 CW  -> icon rotated 90 CCW
+        DisplayRotation.Cw270 => 90,  // device 270 CW -> icon rotated 90 CW
         _                     => 0,
     };
 
     /// <summary>
-    /// Restituisce il path di un PNG ruotato pronto per l'upload.
-    /// Se la rotazione e' <see cref="DisplayRotation.None"/>, il path non
-    /// esiste o la rotazione fallisce, restituisce il path originale.
+    /// Returns the path of a rotated PNG ready for upload.
+    /// If the rotation is <see cref="DisplayRotation.None"/>, the path
+    /// doesn't exist, or the rotation fails, returns the original path.
     /// </summary>
     public static string ResolveForUpload(string? originalPath, DisplayRotation r)
     {
@@ -156,8 +156,8 @@ public static class IconRotator
             string cached = Path.Combine(CacheDir, CacheName(originalPath, angle));
             if (File.Exists(cached)) return cached;
 
-            // Caricamento via MemoryStream: cosi' il file sorgente non resta
-            // lockato e possiamo lavorare su una copia indipendente.
+            // Loaded via MemoryStream: this way the source file doesn't stay
+            // locked and we can work on an independent copy.
             byte[] bytes = File.ReadAllBytes(originalPath);
             using (var ms  = new MemoryStream(bytes))
             using (var src = new Bitmap(ms))
@@ -172,8 +172,8 @@ public static class IconRotator
         }
         catch
         {
-            // In caso di errore meglio caricare l'icona non ruotata che
-            // lasciare il tasto vuoto.
+            // On error, better to load the unrotated icon than to
+            // leave the button empty.
             return originalPath;
         }
     }

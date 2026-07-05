@@ -105,7 +105,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
 
     public bool HasAction => !string.IsNullOrEmpty(_actionType);
 
-    /// <summary>Etichetta mostrata nel bottone overlay.</summary>
+    /// <summary>Label shown on the overlay button.</summary>
     public string Display
     {
         get

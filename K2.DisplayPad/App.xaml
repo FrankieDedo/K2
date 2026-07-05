@@ -3,8 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-        <!-- Tema scuro condiviso: vive in K2.Core, qui fuso via pack URI.
-             L'implicit style di Window porta la barra del titolo custom. -->
+        <!-- Shared dark theme: lives in K2.Core, merged here via pack URI.
+             The implicit Window style brings in the custom title bar. -->
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/K2.Core;component/Themes/K2Theme.xaml"/>

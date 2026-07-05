@@ -156,11 +156,8 @@
   <string name="dial_pixel_shift">Pixel shift (min):</string>
   <string name="dial_cannot_read">Impossibile leggere ExtendInfo dal dispositivo.</string>
 
-  <!-- Azioni Dock / Tasti Display -->
-  <string name="dock_actions">Azioni Dock / Tasti Display</string>
-  <string name="dock_display_keys">Tasti Display (numpad)</string>
-  <string name="dock_media_keys">Tasti Media Dock</string>
-  <string name="dock_dial">Corona rotante (Dial)</string>
+  <!-- Associazione Tasti (tasti rimappati + utility di cattura HW per dock/corona/tasti display) -->
+  <string name="ev_key_binding">Associazione Tasti</string>
   <string name="dock_capture_hw">Cattura tasto HW…</string>
   <string name="dock_cancel_capture">Annulla cattura</string>
   <string name="dock_press_hw">Premi un tasto HW (dock, tasto display, corona)…</string>

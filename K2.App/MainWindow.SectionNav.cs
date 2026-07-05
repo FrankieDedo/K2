@@ -5,10 +5,12 @@
 //  - Debug mode toggle → reveals AP controls, USB Recorder section, SDK log
 //
 // Section panels (all in the same Grid cell, one Visible at a time):
-//   PnlSecKeyMapping  — mapped key list + capture/remap/configure
+//   PnlSecKeyMapping  — "Key Binding": mapped key list + capture/remap/configure,
+//                       plus the generic HW-key capture utility (dock/crown/display
+//                       keys are configured directly on the device graphic — see
+//                       MainWindow.DockActions.cs and MainWindow.NumpadDisplayKeys.cs)
 //   PnlSecRgb         — RGB preset effects + per-key custom lighting
 //   PnlSecDial        — Display Dial page/clock/screensaver settings
-//   PnlSecDock        — Dock + numpad display key actions
 //   PnlSecMacros      — Keyboard macro CRUD / record / play
 //   PnlSecUsb         — USB Recorder (debug only)
 
@@ -39,7 +41,6 @@ public partial class MainWindow
             nameof(RbSecKeyMapping) => PnlSecKeyMapping,
             nameof(RbSecRgb)        => PnlSecRgb,
             nameof(RbSecDial)       => PnlSecDial,
-            nameof(RbSecDock)       => PnlSecDock,
             nameof(RbSecMacros)     => PnlSecMacros,
             nameof(RbSecUsb)        => PnlSecUsb,
             _                       => null

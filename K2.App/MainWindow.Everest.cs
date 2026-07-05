@@ -759,7 +759,7 @@ public partial class MainWindow
 
                 if (isTouchKey)
                 {
-                    // NDK 0-3: KeyId sintetico 9001-9004 (vedi EvProfileExporter) — device-globali in K2.
+                    // NDK 0-3: synthetic KeyId 9001-9004 (see EvProfileExporter) — device-global in K2.
                     int ndkIndex = matrixId - 9001;
                     if (ndkIndex < 0 || ndkIndex > 3) continue;
 
@@ -1084,7 +1084,7 @@ public partial class MainWindow
             return;
         }
 
-        // Highlight nell'overlay tastiera visuale
+        // Highlight in the visual keyboard overlay
         EvHighlightKeyboardButton(matrix, e.Pressed);
 
         if (_evByMatrix.TryGetValue(matrix, out var key))
@@ -1371,7 +1371,7 @@ public partial class MainWindow
 
             // Defaults — overwritten if persisted settings exist.
             CbEvEffect.SelectedIndex     = 2; // Wave
-            CbEvSpeed.SelectedIndex      = 2; // centrale
+            CbEvSpeed.SelectedIndex      = 2; // middle
             SldEvBrightness.Value        = 100;
 
             LoadEverestRgbFromStore();
@@ -1444,13 +1444,13 @@ public partial class MainWindow
     private void CbEvEffect_DropDownClosed(object sender, EventArgs e)
     {
         if (_evEffectChangedWhileOpen) { _evEffectChangedWhileOpen = false; return; }
-        ApplyCurrentEffect(); // stessa voce ricliccata -> reinvia comunque
+        ApplyCurrentEffect(); // same item re-clicked -> resend anyway
     }
 
     private void CbEvEffect_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         _evEffectChangedWhileOpen = true;
-        UpdateEvCapabilities();   // riallinea i controlli al nuovo effetto
+        UpdateEvCapabilities();   // realign the controls to the new effect
         ApplyCurrentEffect();
     }
 
@@ -1472,7 +1472,7 @@ public partial class MainWindow
         if (sender is not Button btn || btn.Tag is not string tag) return;
         int current = tag switch { "1" => _evColor1, "2" => _evColor2, _ => _evColor3 };
 
-        // ColorDialog di WinForms: l'unico dialog di sistema che WPF non ha.
+        // WinForms ColorDialog: the one system dialog WPF doesn't have.
         using var dlg = new System.Windows.Forms.ColorDialog
         {
             FullOpen     = true,

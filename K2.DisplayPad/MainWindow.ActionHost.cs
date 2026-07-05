@@ -7,18 +7,18 @@ using K2.DisplayPad.Services;
 namespace K2.DisplayPad;
 
 /// <summary>
-/// Partial della MainWindow: aggancio al motore azioni condiviso (K2.Core).
+/// MainWindow partial: hook into the shared action engine (K2.Core).
 ///
-/// La MainWindow funge da <see cref="IActionHost"/> per il DisplayPad: espone
-/// al motore le operazioni che dipendono dallo specifico dispositivo (cambio
-/// profilo, stato, pressione software dei tasti). Tutta la logica delle azioni
-/// device-agnostiche (url, exec, keys, pyscript, ...) vive invece in K2.Core.
+/// MainWindow acts as the <see cref="IActionHost"/> for the DisplayPad: it exposes
+/// to the engine the operations that depend on the specific device (profile
+/// switch, state, software button press). All device-agnostic action logic
+/// (url, exec, keys, pyscript, ...) instead lives in K2.Core.
 /// </summary>
 public partial class MainWindow : IActionHost
 {
     private ButtonActionEngine? _engine;
 
-    /// <summary>Crea e avvia il motore azioni condiviso. Chiamato dal costruttore.</summary>
+    /// <summary>Creates and starts the shared action engine. Called from the constructor.</summary>
     private void InitActionEngine()
     {
         _engine = new ButtonActionEngine(this);
@@ -26,7 +26,7 @@ public partial class MainWindow : IActionHost
         Closed += (_, _) => _engine?.Dispose();
     }
 
-    // ---- IActionHost: implementazione device-specific del DisplayPad ----
+    // ---- IActionHost: DisplayPad device-specific implementation ----
 
     Dispatcher IActionHost.Dispatcher => Dispatcher;
 

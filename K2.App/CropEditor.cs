@@ -64,6 +64,11 @@ internal sealed class CropEditor
 
     private int _gridRows = 1, _gridCols = 1;
 
+    // Real-world key geometry (15×15mm keys, 3mm gap between them) — used to size the
+    // "show key outline" overlay's cells + gaps proportionally instead of an even
+    // edge-to-edge grid.
+    private const double KeyMm = 15, GapMm = 3;
+
     private readonly Image _img = new() { Stretch = Stretch.Fill };
     private readonly Canvas _gridOverlay = new() { IsHitTestVisible = false, Visibility = Visibility.Collapsed };
     private readonly Canvas _viewport;
@@ -194,27 +199,31 @@ internal sealed class CropEditor
         var brush = new SolidColorBrush(Color.FromArgb(0xE0, 0xFF, 0xC1, 0x07));   // amber, high-contrast
         const double thickness = 1.5;
 
-        if (_gridRows <= 1 && _gridCols <= 1)
-        {
-            double radius = Math.Min(vw, vh) * 0.12;
-            var rect = new Rectangle
-            {
-                Width = Math.Max(0, vw - thickness), Height = Math.Max(0, vh - thickness),
-                RadiusX = radius, RadiusY = radius,
-                Stroke = brush, StrokeThickness = thickness, Fill = Brushes.Transparent,
-            };
-            Canvas.SetLeft(rect, thickness / 2);
-            Canvas.SetTop(rect, thickness / 2);
-            _gridOverlay.Children.Add(rect);
-            return;
-        }
+        // Each key is drawn as its own rounded-rect, with a real gap between adjacent
+        // ones sized to the 14×14mm key / 4mm gap ratio (rather than an even edge-to-edge
+        // grid) — also covers the 1×1 case (no gap to draw, cell fills the viewport).
+        double totalUnitsW = _gridCols * KeyMm + (_gridCols - 1) * GapMm;
+        double totalUnitsH = _gridRows * KeyMm + (_gridRows - 1) * GapMm;
+        double cellW = vw * KeyMm / totalUnitsW, gapW = vw * GapMm / totalUnitsW;
+        double cellH = vh * KeyMm / totalUnitsH, gapH = vh * GapMm / totalUnitsH;
+        double radius = Math.Min(cellW, cellH) * 0.12;
 
-        double cellW = vw / _gridCols, cellH = vh / _gridRows;
-        for (int c = 1; c < _gridCols; c++)
-            _gridOverlay.Children.Add(new Line { X1 = c * cellW, Y1 = 0, X2 = c * cellW, Y2 = vh, Stroke = brush, StrokeThickness = thickness });
-        for (int r = 1; r < _gridRows; r++)
-            _gridOverlay.Children.Add(new Line { X1 = 0, Y1 = r * cellH, X2 = vw, Y2 = r * cellH, Stroke = brush, StrokeThickness = thickness });
-        _gridOverlay.Children.Add(new Rectangle { Width = vw, Height = vh, Stroke = brush, StrokeThickness = thickness, Fill = Brushes.Transparent });
+        for (int r = 0; r < _gridRows; r++)
+        {
+            for (int c = 0; c < _gridCols; c++)
+            {
+                double x = c * (cellW + gapW), y = r * (cellH + gapH);
+                var rect = new Rectangle
+                {
+                    Width = Math.Max(0, cellW - thickness), Height = Math.Max(0, cellH - thickness),
+                    RadiusX = radius, RadiusY = radius,
+                    Stroke = brush, StrokeThickness = thickness, Fill = Brushes.Transparent,
+                };
+                Canvas.SetLeft(rect, x + thickness / 2);
+                Canvas.SetTop(rect, y + thickness / 2);
+                _gridOverlay.Children.Add(rect);
+            }
+        }
     }
 
     /// <summary>Changes the crop target aspect (the DisplayPad fullscreen dialog needs this:
@@ -495,7 +504,7 @@ internal sealed class CropEditor
                         rect.X, rect.Y, rect.Width, rect.Height, System.Drawing.GraphicsUnit.Pixel);
         }
 
-        string cacheDir = Path.Combine(
+        string cacheDir = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "K2", "cropped");
         Directory.CreateDirectory(cacheDir);
@@ -504,7 +513,7 @@ internal sealed class CropEditor
         string key = $"{_sourcePath}|{mtime}|{_targetW}x{_targetH}|" +
                      (noCrop ? "nocrop" : $"{rect.X:F1},{rect.Y:F1},{rect.Width:F1},{rect.Height:F1}");
         string name = Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(key))).ToLowerInvariant() + ".png";
-        string outPath = Path.Combine(cacheDir, name);
+        string outPath = System.IO.Path.Combine(cacheDir, name);
         result.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
         return outPath;
     }
@@ -534,7 +543,7 @@ internal sealed class CropEditor
             cref = new CroppedGifRef(_sourcePath, false, rect.X, rect.Y, rect.Width, rect.Height);
         }
 
-        string cacheDir = Path.Combine(
+        string cacheDir = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "K2", "cropped");
         return cref.Save(cacheDir);

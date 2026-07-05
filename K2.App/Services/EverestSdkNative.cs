@@ -53,7 +53,7 @@ internal static class EverestSdkNative
 
     // ---- Struct hardware (Sequential, Pack=1) ------------------------------
 
-    /// <summary>Identificativi USB e versioni del device.</summary>
+    /// <summary>USB identifiers and versions of the device.</summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct DevInfo
     {
@@ -63,7 +63,7 @@ internal static class EverestSdkNative
         public ushort bootloadVer;
     }
 
-    /// <summary>Stato firmware: versione, profili, indici effetto correnti.</summary>
+    /// <summary>Firmware state: version, profiles, current effect indices.</summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct FWInfo
     {
@@ -75,7 +75,7 @@ internal static class EverestSdkNative
         public byte byEffectMenuIndex;
     }
 
-    /// <summary>Riga della tabella effetti per un profilo.</summary>
+    /// <summary>Row of the effect table for a profile.</summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct EffectTable
     {
@@ -83,7 +83,7 @@ internal static class EverestSdkNative
         public byte byEffSize;
     }
 
-    /// <summary>Tabella effetti di tutti i profili (usata da GetProfileEffectTable).</summary>
+    /// <summary>Effect table for all profiles (used by GetProfileEffectTable).</summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct EffectMenu
     {
@@ -216,15 +216,15 @@ internal static class EverestSdkNative
     public static extern void SetKeyCallBack(KEY_CALLBACK callback);
 
     // =======================================================================
-    // Illuminazione RGB (preset di sistema)
+    // RGB lighting (system presets)
     // =======================================================================
     //
-    // Struct e indici ricavati dai metadati di BaseCamp.Service.exe:
+    // Structs and indices derived from BaseCamp.Service.exe metadata:
     //  - enum EFF_INDEX (BaseCamp.Service.Service / Common)
-    //  - struct FWColor / EffData (Pack=1, dimensioni array da FieldMarshal)
-    // I numeri arrivano da `_reference/tools/dotnet_pinvoke_dump.py` /
-    // `dotnet_enum_dump.py` / `dotnet_marshalas.py`: niente firme indovinate.
-    // Tutte le struct effetto del firmware Mountain sono fissate a 62 byte.
+    //  - struct FWColor / EffData (Pack=1, array sizes from FieldMarshal)
+    // The numbers come from `_reference/tools/dotnet_pinvoke_dump.py` /
+    // `dotnet_enum_dump.py` / `dotnet_marshalas.py`: no guessed signatures.
+    // All Mountain firmware effect structs are fixed at 62 bytes.
     // -----------------------------------------------------------------------
 
     /// <summary>Numeric index of the lighting preset (Base Camp's EFF_INDEX enum).
@@ -261,61 +261,61 @@ internal static class EverestSdkNative
 
         public FWColor(byte r, byte g, byte b) { this.r = r; this.g = g; this.b = b; }
 
-        /// <summary>Costruisce da intero 0xRRGGBB (es. <c>0x900000</c>).</summary>
+        /// <summary>Builds from a 0xRRGGBB integer (e.g. <c>0x900000</c>).</summary>
         public static FWColor FromRgb(int rgb) =>
             new((byte)((rgb >> 16) & 0xFF), (byte)((rgb >> 8) & 0xFF), (byte)(rgb & 0xFF));
     }
 
     /// <summary>
-    /// Payload "ChangeEffect" per i preset principali della tastiera.
-    /// Pack=1, dimensione totale 62 byte.
+    /// "ChangeEffect" payload for the keyboard's main presets.
+    /// Pack=1, total size 62 bytes.
     ///
-    /// <para><b>BLITTABILE (2026-05-30).</b> Prima i 3 colori e i 43 byte di
-    /// coda erano <c>FWColor[]</c>/<c>byte[]</c> con <c>[MarshalAs(ByValArray)]</c>:
-    /// questo rende la struct NON blittabile, e il marshalling by-value su x86
-    /// (cdecl) non copiava i 62 byte correttamente sullo stack — risultato:
-    /// <c>ChangeEffect</c> tornava True ma <b>non emetteva alcun pacchetto</b>
-    /// sul bus (confronto USB sniff: Base Camp manda <c>14 2C ...</c>, K2 niente,
-    /// mentre <c>APEnable</c>/<c>SaveFlash</c> a parametro scalare uscivano).
-    /// Ora i colori sono campi inline e la coda un buffer <c>fixed</c>: la struct
-    /// e' interamente blittabile e il passaggio by-value e' una copia esatta.</para>
+    /// <para><b>BLITTABLE (2026-05-30).</b> The 3 colors and the 43-byte tail
+    /// used to be <c>FWColor[]</c>/<c>byte[]</c> with <c>[MarshalAs(ByValArray)]</c>:
+    /// this makes the struct NOT blittable, and by-value marshalling on x86
+    /// (cdecl) did not copy the 62 bytes correctly onto the stack — result:
+    /// <c>ChangeEffect</c> returned True but <b>emitted no packet</b>
+    /// on the bus (USB sniff comparison: Base Camp sends <c>14 2C ...</c>, K2 nothing,
+    /// while <c>APEnable</c>/<c>SaveFlash</c> with scalar parameters did go out).
+    /// Now the colors are inline fields and the tail a <c>fixed</c> buffer: the struct
+    /// is entirely blittable and the by-value pass is an exact copy.</para>
     /// </summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public unsafe struct EffData
     {
         public byte byEffectIndex;   // EffectIndex
-        public byte byAll;            // 1 = applica a tutti i tasti
-        public byte bySpeed;          // SpeedT (valore enum 0/1/2)
+        public byte byAll;            // 1 = applies to all keys
+        public byte bySpeed;          // SpeedT (enum value 0/1/2)
         public byte byLightness;      // BrightT
-        public byte byRandColor;      // 1 = colori casuali
-        public byte byDirection;      // DirectionT (forzato 0xFF: vedi getChangeEffect)
-        public byte byWidth;          // larghezza onda (forzato 0xFF: vedi getChangeEffect)
+        public byte byRandColor;      // 1 = random colors
+        public byte byDirection;      // DirectionT (forced to 0xFF: see getChangeEffect)
+        public byte byWidth;          // wave width (forced to 0xFF: see getChangeEffect)
 
-        /// <summary>Colori principali dell'effetto (3 terne RGB inline).</summary>
+        /// <summary>Main effect colors (3 inline RGB triplets).</summary>
         public FWColor colorLv0;
         public FWColor colorLv1;
         public FWColor colorLv2;
 
-        /// <summary>Colore di background dell'effetto.</summary>
+        /// <summary>Effect background color.</summary>
         public FWColor bkColor;
 
-        /// <summary>Coda del comando firmware (43 byte, zero per i preset standard).
-        /// Buffer <c>fixed</c> inline -> struct blittabile.</summary>
+        /// <summary>Firmware command tail (43 bytes, zero for standard presets).
+        /// Inline <c>fixed</c> buffer -> blittable struct.</summary>
         public fixed byte byData[43];
 
         /// <summary>
-        /// Crea un <see cref="EffData"/> per un preset. Schema da dump CIL di
+        /// Creates an <see cref="EffData"/> for a preset. Layout from CIL dump of
         /// <c>MacroPadSDK::getChangeEffect</c> (2026-06-07):
         ///
-        /// <para><b>1 colore (Type==0):</b> colorLv[0]=c1, byRandColor=0.</para>
-        /// <para><b>2 colori (Type==1):</b>
+        /// <para><b>1 color (Type==0):</b> colorLv[0]=c1, byRandColor=0.</para>
+        /// <para><b>2 colors (Type==1):</b>
         ///   - bkColor path (Reactive/Yeti/Matrix): colorLv[0]=c1, bkColor=c2, byRandColor=0.
         ///   - colorLv path (Breath): colorLv[0]=c1, colorLv[1]=c2, byRandColor=16.
         /// </para>
         /// <para><b>Rainbow:</b> byRandColor=2.</para>
         ///
-        /// <para><paramref name="forceRandColor16"/> forza byRandColor=16 + colorLv path
-        /// anche per effetti che normalmente usano bkColor (es. Matrix 2).</para>
+        /// <para><paramref name="forceRandColor16"/> forces byRandColor=16 + colorLv path
+        /// even for effects that normally use bkColor (e.g. Matrix 2).</para>
         /// </summary>
         public static EffData New(EffectIndex eff,
                                    FWColor c1, FWColor? c2 = null, FWColor? c3 = null,
@@ -334,10 +334,10 @@ internal static class EverestSdkNative
             FWColor zero = default;
             byte spd = speedOverride >= 0 ? (byte)speedOverride : (byte)speed;
 
-            // Da decompilato BC + test empirici:
-            //   - Breath: 2° colore in colorLv[1], byRandColor=16
-            //   - Reactive/Yeti/Matrix: 2° colore in bkColor, byRandColor=0
-            //   - forceRandColor16: variante "Matrix 2" → colorLv[1] + byRandColor=16
+            // From decompiled BC + empirical tests:
+            //   - Breath: 2nd color in colorLv[1], byRandColor=16
+            //   - Reactive/Yeti/Matrix: 2nd color in bkColor, byRandColor=0
+            //   - forceRandColor16: "Matrix 2" variant → colorLv[1] + byRandColor=16
             bool usesBkColor = eff == EffectIndex.ReactiveA
                             || eff == EffectIndex.ReactiveB
                             || eff == EffectIndex.ReactiveC
@@ -352,7 +352,7 @@ internal static class EverestSdkNative
             if (randomColor)
                 randColor = 2;
             else if (hasTwoColors && !usesBkColor)
-                randColor = 16;   // 0x10: gradient multi-colore (da BC)
+                randColor = 16;   // 0x10: multi-color gradient (from BC)
             else
                 randColor = 0;
 
@@ -361,13 +361,13 @@ internal static class EverestSdkNative
 
             if (hasTwoColors && usesBkColor)
             {
-                // Reactive/Yeti/Matrix: 2° colore in bkColor
+                // Reactive/Yeti/Matrix: 2nd color in bkColor
                 lv1 = zero;
                 bk  = c2!.Value;
             }
             else if (hasTwoColors)
             {
-                // Breath (o Matrix2 forzato): 2° colore in colorLv[1]
+                // Breath (or forced Matrix2): 2nd color in colorLv[1]
                 lv1 = c2!.Value;
                 bk  = isOff ? zero : (background ?? zero);
             }
@@ -394,7 +394,7 @@ internal static class EverestSdkNative
         }
     }
 
-    /// <summary>Stato colori live di tutta la tastiera (171 LED).</summary>
+    /// <summary>Live color state of the whole keyboard (171 LEDs).</summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct KEYBOARD_COLOR
     {
@@ -402,7 +402,7 @@ internal static class EverestSdkNative
         public FWColor[] color;
     }
 
-    // ==== Struct per Numpad Display Keys + Media Dock ==========================
+    // ==== Structs for Numpad Display Keys + Media Dock ==========================
 
     /// <summary>
     /// Info for uploading an image to a sub-device (numpad display key or
@@ -524,14 +524,14 @@ internal static class EverestSdkNative
     // =======================================================================
     // Block effect (Wave / Tornado) — ChangeBlockEffect(BlockData)
     // =======================================================================
-    // Scoperto 2026-05-30 via USB sniff: Wave(EFF_INDEX 4) e Tornado(7) NON
-    // passano da ChangeEffect (che li rifiuta) ma da ChangeBlockEffect. Sul
-    // bus il payload `14 2C` ha un byte extra `byBlockNum` in pos.7 e i colori
-    // sono FWBColor (pos+rgb, 4 byte) invece di FWColor (rgb, 3 byte).
-    // Layout BlockData (Pack=1, 62B) da dotnet_struct_dump/marshalas:
+    // Discovered 2026-05-30 via USB sniff: Wave(EFF_INDEX 4) and Tornado(7) do NOT
+    // go through ChangeEffect (which rejects them) but through ChangeBlockEffect. On
+    // the bus the `14 2C` payload has an extra `byBlockNum` byte at pos.7 and the colors
+    // are FWBColor (pos+rgb, 4 bytes) instead of FWColor (rgb, 3 bytes).
+    // BlockData layout (Pack=1, 62B) from dotnet_struct_dump/marshalas:
     //   header 8B + colorLv FWBColor[2] + undef FWBColor[5] + bkColor FWColor + 23B.
 
-    /// <summary>Terna colore "block" del firmware: posizione/livello + RGB (4 byte).</summary>
+    /// <summary>Firmware "block" color triplet: position/level + RGB (4 bytes).</summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct FWBColor
     {
@@ -540,8 +540,8 @@ internal static class EverestSdkNative
     }
 
     /// <summary>
-    /// Payload "ChangeBlockEffect" per gli effetti a blocchi (Wave/Tornado).
-    /// Pack=1, 62 byte, BLITTABILE (campi inline + buffer fixed).
+    /// "ChangeBlockEffect" payload for block effects (Wave/Tornado).
+    /// Pack=1, 62 bytes, BLITTABLE (inline fields + fixed buffer).
     /// </summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public unsafe struct BlockData
@@ -566,11 +566,11 @@ internal static class EverestSdkNative
         public fixed byte tail[23]; // undef2[23]
 
         /// <summary>
-        /// Costruisce un BlockData replicando il wire di Base Camp (single color):
-        /// <c>byBlockNum=1</c>; <c>byWidth</c>/<c>byRandColor</c> = 0 (mono) o 2
-        /// (rainbow); <c>colorLv0 = {pos=lightness, RGB primario}</c>;
-        /// <c>colorLv1 = {pos=lightness, RGB secondario}</c> se presente, altrimenti
-        /// marker <c>{pos=0xFF,0,0,0}</c> (come nelle catture).
+        /// Builds a BlockData replicating Base Camp's wire format (single color):
+        /// <c>byBlockNum=1</c>; <c>byWidth</c>/<c>byRandColor</c> = 0 (mono) or 2
+        /// (rainbow); <c>colorLv0 = {pos=lightness, primary RGB}</c>;
+        /// <c>colorLv1 = {pos=lightness, secondary RGB}</c> if present, otherwise
+        /// marker <c>{pos=0xFF,0,0,0}</c> (as seen in captures).
         /// </summary>
         public static BlockData New(EffectIndex eff, byte direction, byte speed, byte lightness,
                                      FWColor c1, FWColor? c2 = null, bool rainbow = false)
@@ -585,28 +585,28 @@ internal static class EverestSdkNative
                 bkColor       = default,
             };
 
-            // Schema da decompilato BC (MacroPadSDK.getChangeBlockEffect):
-            //   1 colore  -> byRand=0, byWidth=0(?), byBlockNum=1, colorLv[0]={0,r,g,b}
-            //   2 colori  -> byRand=16(0x10), byWidth=2, byBlockNum=1,
+            // Layout from decompiled BC (MacroPadSDK.getChangeBlockEffect):
+            //   1 color   -> byRand=0, byWidth=0(?), byBlockNum=1, colorLv[0]={0,r,g,b}
+            //   2 colors  -> byRand=16(0x10), byWidth=2, byBlockNum=1,
             //                colorLv[0]={0,r,g,b}, colorLv[1]={0,r,g,b}
-            //   rainbow   -> byRand=2, byWidth=2(?), byBlockNum=0, nessuno stop
+            //   rainbow   -> byRand=2, byWidth=2(?), byBlockNum=0, no stop
             if (rainbow)
             {
                 d.byRandColor = 2; d.byWidth = 2; d.byBlockNum = 0;
             }
             else if (c2 is { } s)
             {
-                // 2 colori: da decompilato BC (getChangeBlockEffect):
+                // 2 colors: from decompiled BC (getChangeBlockEffect):
                 //   byRandColor=16 (0x10), byBlockNum=1, byWidth=2
                 //   colorLv[0] = {pos=0, r,g,b}, colorLv[1] = {pos=0, r,g,b}
-                //   HexToFWBColor NON setta pos (resta 0 da initobj).
+                //   HexToFWBColor does NOT set pos (stays 0 from initobj).
                 d.byRandColor = 16; d.byWidth = 2; d.byBlockNum = 1;
                 d.colorLv0 = new FWBColor(0, c1.r, c1.g, c1.b);
                 d.colorLv1 = new FWBColor(0, s.r,  s.g,  s.b);
             }
             else
             {
-                // 1 colore: byWidth=2 (settato globale in BC), pos=0
+                // 1 color: byWidth=2 (set globally in BC), pos=0
                 d.byRandColor = 0; d.byWidth = 2; d.byBlockNum = 1;
                 d.colorLv0 = new FWBColor(0, c1.r, c1.g, c1.b);
             }
@@ -614,33 +614,33 @@ internal static class EverestSdkNative
         }
     }
 
-    /// <summary>Applica un effetto "block" (Wave/Tornado) via P/Invoke by-value.
-    /// Riabilitato dopo la scoperta che il fallimento precedente era causato da
-    /// InitDllState mancante, non dal passaggio della struct (2026-06-05).</summary>
+    /// <summary>Applies a "block" effect (Wave/Tornado) via by-value P/Invoke.
+    /// Re-enabled after discovering the previous failure was caused by
+    /// missing InitDllState, not by the struct passing (2026-06-05).</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool ChangeBlockEffect(BlockData data);
 
     /// <summary>
-    /// Chiama <c>ChangeBlockEffect</c> via function pointer nativo, bypassando
-    /// completamente il marshaler P/Invoke di .NET 8. Il blittabile
-    /// <see cref="BlockData"/> viene passato by-value direttamente al codice
-    /// macchina x86 cdecl, senza intermediari managed.
+    /// Calls <c>ChangeBlockEffect</c> via a native function pointer, completely
+    /// bypassing the .NET 8 P/Invoke marshaler. The blittable
+    /// <see cref="BlockData"/> is passed by-value directly to x86 cdecl
+    /// machine code, with no managed intermediaries.
     ///
-    /// <para><b>Cronologia tentativi falliti su .NET 8 x86:</b>
-    /// (1) BlockData blittabile DllImport → True, wire stale;
+    /// <para><b>History of failed attempts on .NET 8 x86:</b>
+    /// (1) blittable BlockData via DllImport → True, wire stale;
     /// (2) ref BlockData → False;
     /// (3) BlockDataRaw ByValArray byte[62] → True, wire stale;
-    /// (4) BlockDataManaged (array managed BC-style) → True, wire stale;
-    /// (5) EffData come trasporto (EntryPoint=ChangeBlockEffect) → True, wire stale.
-    /// Tutti i percorsi P/Invoke producono lo stesso risultato. Qui si usa
-    /// <c>delegate* unmanaged[Cdecl]</c> come ultima risorsa.</para>
+    /// (4) BlockDataManaged (BC-style managed array) → True, wire stale;
+    /// (5) EffData as transport (EntryPoint=ChangeBlockEffect) → True, wire stale.
+    /// All P/Invoke paths produce the same result. Here we use
+    /// <c>delegate* unmanaged[Cdecl]</c> as a last resort.</para>
     /// </summary>
     /// <summary>
-    /// Chiama <c>ChangeBlockEffect</c> passando un puntatore a memoria nativa.
-    /// Ipotesi: .NET Framework (usato da BC) per struct non-blittabili alloca
-    /// memoria nativa e passa un PUNTATORE, non i 62 byte sullo stack.
-    /// Il DLL potrebbe aspettare un puntatore internamente.
+    /// Calls <c>ChangeBlockEffect</c> by passing a pointer to native memory.
+    /// Hypothesis: .NET Framework (used by BC) allocates native memory for
+    /// non-blittable structs and passes a POINTER, not the 62 bytes on the stack.
+    /// The DLL might internally expect a pointer.
     /// </summary>
     public static unsafe bool ChangeBlockEffectRaw(BlockData data)
     {
@@ -650,7 +650,7 @@ internal static class EverestSdkNative
         nint proc = System.Runtime.InteropServices.NativeLibrary.GetExport(hDll, "ChangeBlockEffect");
         if (proc == 0) return false;
 
-        // Alloca 62 byte in memoria NATIVA (non-GC) e copia il struct
+        // Allocate 62 bytes of NATIVE (non-GC) memory and copy the struct
         IntPtr buf = Marshal.AllocHGlobal(62);
         try
         {
@@ -658,7 +658,7 @@ internal static class EverestSdkNative
             byte* dst = (byte*)buf;
             for (int i = 0; i < 62; i++) dst[i] = src[i];
 
-            // Chiama con un singolo puntatore (4 byte sullo stack su x86)
+            // Call with a single pointer (4 bytes on the stack on x86)
             var fn = (delegate* unmanaged[Cdecl]<IntPtr, byte>)proc;
             byte result = fn(buf);
             return result != 0;

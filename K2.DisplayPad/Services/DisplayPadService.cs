@@ -8,22 +8,22 @@ using DisplayPad.SDK;
 namespace K2.DisplayPad.Services;
 
 /// <summary>
-/// Facade su <c>DisplayPad.SDK</c>.
+/// Facade over <c>DisplayPad.SDK</c>.
 ///
-/// Mappa reale dell'SDK (verificata leggendo i metadati ECMA-335 della DLL):
-///   - <c>DisplayPad.SDK.DisplayPadSDK</c>: i metodi sono <em>internal static</em>,
-///     quindi NON utilizzabili direttamente dall'esterno dell'assembly.
-///     L'unica cosa raggiungibile dall'esterno via reflection e' il field statico
-///     <c>lstDeviceID</c> (la collection degli ID dei device noti).
-///   - <c>DisplayPad.SDK.DisplayPadHelper</c>: classe pubblica con metodi
-///     pubblici di <em>istanza</em> (DisplayPadOpenUSBDriver, DisplayPadIsDevicePlug,
-///     UploadImage, ...). Gli eventi <c>DisplayPadPlugCallBack</c>,
-///     <c>DisplayPadKeyCallBack</c>, <c>DisplayPadProgressCallBack</c> sono invece
-///     <em>statici</em> sulla classe.
+/// Actual SDK map (verified by reading the DLL's ECMA-335 metadata):
+///   - <c>DisplayPad.SDK.DisplayPadSDK</c>: the methods are <em>internal static</em>,
+///     so they are NOT usable directly from outside the assembly.
+///     The only thing reachable from outside via reflection is the static field
+///     <c>lstDeviceID</c> (the collection of known device IDs).
+///   - <c>DisplayPad.SDK.DisplayPadHelper</c>: public class with public
+///     <em>instance</em> methods (DisplayPadOpenUSBDriver, DisplayPadIsDevicePlug,
+///     UploadImage, ...). The events <c>DisplayPadPlugCallBack</c>,
+///     <c>DisplayPadKeyCallBack</c>, <c>DisplayPadProgressCallBack</c> are instead
+///     <em>static</em> on the class.
 ///
-/// Questa facade istanzia una sola <c>DisplayPadHelper</c>, aggancia i tre eventi
-/// statici via reflection (firme target: <c>void(int,int,int)</c> come da
-/// DisplayPad.SDK.xml) e ri-espone tutto come eventi .NET tipizzati.
+/// This facade instantiates a single <c>DisplayPadHelper</c>, hooks the three
+/// static events via reflection (target signatures: <c>void(int,int,int)</c> per
+/// DisplayPad.SDK.xml) and re-exposes everything as typed .NET events.
 /// </summary>
 public sealed class DisplayPadService : IDisposable
 {
@@ -33,22 +33,22 @@ public sealed class DisplayPadService : IDisposable
     private Delegate? _keyHandler;
     private Delegate? _progressHandler;
 
-    /// <summary>Plug / Unplug / Suspend del device.</summary>
+    /// <summary>Plug / Unplug / Suspend of the device.</summary>
     public event EventHandler<DevicePlugEventArgs>? DevicePlug;
 
-    /// <summary>Tasto del DisplayPad premuto/rilasciato.</summary>
+    /// <summary>DisplayPad button pressed/released.</summary>
     public event EventHandler<DisplayPadKeyEventArgs>? KeyEvent;
 
-    /// <summary>Avanzamento update firmware (0..100, -1 = fail).</summary>
+    /// <summary>Firmware update progress (0..100, -1 = fail).</summary>
     public event EventHandler<FirmwareProgressEventArgs>? FirmwareProgress;
 
-    /// <summary>Numero massimo di device gestiti dall'SDK (MAX_DEV_COUNT = 10).</summary>
+    /// <summary>Maximum number of devices handled by the SDK (MAX_DEV_COUNT = 10).</summary>
     public const int MaxDeviceCount = 10;
 
-    /// <summary>Apre il driver USB. <paramref name="hWnd"/> e' l'HWND della
-    /// finestra principale: serve perche' l'SDK posta WM_DEVICE_PLUG /
-    /// WM_FW_PROGRESS al suo message pump.
-    /// L'API DisplayPadHelper accetta l'handle come <em>stringa</em> (decimale).</summary>
+    /// <summary>Opens the USB driver. <paramref name="hWnd"/> is the HWND of the
+    /// main window: needed because the SDK posts WM_DEVICE_PLUG /
+    /// WM_FW_PROGRESS to its message pump.
+    /// The DisplayPadHelper API accepts the handle as a <em>string</em> (decimal).</summary>
     public bool Open(IntPtr hWnd)
     {
         if (_opened) return true;
@@ -65,7 +65,7 @@ public sealed class DisplayPadService : IDisposable
         return ok;
     }
 
-    /// <summary>Chiude il driver e disiscrive gli eventi.</summary>
+    /// <summary>Closes the driver and unsubscribes the events.</summary>
     public void Close()
     {
         if (!_opened) return;
@@ -77,19 +77,19 @@ public sealed class DisplayPadService : IDisposable
         _plugHandler = _keyHandler = _progressHandler = null;
     }
 
-    /// <summary>Versione della DLL SDK managed.</summary>
+    /// <summary>Version of the managed SDK DLL.</summary>
     public int SdkVersion() => _helper.DisplayPadDllVersion();
 
-    // L'SDK consente solo i valori 0/25/50/75/100 per la luminosita'.
-    // Usiamo questo come discriminante: gli slot phantom restituiscono
-    // valori fuori range, mentre i device reali ritornano sempre uno
-    // di questi cinque step.
+    // The SDK only allows the values 0/25/50/75/100 for brightness.
+    // We use this as a discriminant: phantom slots return
+    // out-of-range values, while real devices always return one
+    // of these five steps.
     private static readonly HashSet<int> ValidBrightness = new() { 0, 25, 50, 75, 100 };
 
-    /// <summary>ID dei device REALMENTE collegati.
-    /// <c>DisplayPadIsDevicePlug</c> e' inaffidabile (puo' restituire true
-    /// anche per slot phantom). Filtriamo verificando che la luminosita'
-    /// letta sia uno dei cinque step ammessi dall'SDK.</summary>
+    /// <summary>IDs of the devices ACTUALLY connected.
+    /// <c>DisplayPadIsDevicePlug</c> is unreliable (it can return true
+    /// even for phantom slots). We filter by verifying that the read
+    /// brightness is one of the five steps allowed by the SDK.</summary>
     public IReadOnlyList<int> DeviceIds()
     {
         var found = new List<int>();
@@ -120,7 +120,7 @@ public sealed class DisplayPadService : IDisposable
 
             if (!ValidBrightness.Contains(brightness))
             {
-                App.WriteLog($"[DeviceIds] id={id} skipped (brightness={brightness} non valida -> phantom)");
+                App.WriteLog($"[DeviceIds] id={id} skipped (brightness={brightness} invalid -> phantom)");
                 continue;
             }
             found.Add(id);
@@ -129,9 +129,9 @@ public sealed class DisplayPadService : IDisposable
         return found;
     }
 
-    /// <summary>Snapshot del field <c>lstDeviceID</c> dell'SDK (puo' essere
-    /// vuoto subito dopo l'Open finche' non si interroga il driver).
-    /// Utile a scopo diagnostico.</summary>
+    /// <summary>Snapshot of the SDK's <c>lstDeviceID</c> field (can be
+    /// empty right after Open until the driver is queried).
+    /// Useful for diagnostic purposes.</summary>
     public IReadOnlyList<int> ListDeviceIdSnapshot()
     {
         var sdkType = typeof(DisplayPadHelper).Assembly
@@ -150,40 +150,40 @@ public sealed class DisplayPadService : IDisposable
         return result;
     }
 
-    /// <summary>Numero di device collegati.</summary>
+    /// <summary>Number of connected devices.</summary>
     public int DeviceCount() => DeviceIds().Count;
 
-    /// <summary>True se il device e' fisicamente plugged.</summary>
+    /// <summary>True if the device is physically plugged.</summary>
     public bool IsPlugged(int id) => _helper.DisplayPadIsDevicePlug(id);
 
-    /// <summary>Versione FW del device.
-    /// L'API SDK ritorna la versione come <see cref="string"/> (es. "1.0.6"). </summary>
+    /// <summary>Device FW version.
+    /// The SDK API returns the version as a <see cref="string"/> (e.g. "1.0.6"). </summary>
     public string FirmwareVersion(int id) => _helper.DisplayPadGetDevAppVer(id) ?? "";
 
-    /// <summary>Luminosita' attuale del device (0/25/50/75/100).</summary>
+    /// <summary>Current device brightness (0/25/50/75/100).</summary>
     public int GetBrightness(int id) => _helper.DisplayPadGetMainBrightness(id);
 
-    /// <summary>Imposta la luminosita' (0/25/50/75/100).</summary>
+    /// <summary>Sets the brightness (0/25/50/75/100).</summary>
     public bool SetBrightness(int id, int level) =>
         _helper.DisplayPadSetMainBrightness(level, id);
 
-    /// <summary>Cambia profilo attivo (1..5).</summary>
+    /// <summary>Switches the active profile (1..5).</summary>
     public bool SwitchProfile(int id, int profile) =>
         _helper.DisplayPadSwitchProfile(profile.ToString(), id);
 
-    /// <summary>Numero di tasti del DisplayPad (FW_NUM_KEY = 12).</summary>
+    /// <summary>Number of DisplayPad buttons (FW_NUM_KEY = 12).</summary>
     public const int ButtonCount = 12;
 
-    /// <summary>Numero massimo di profili (FW_NUM_PROFILE = 5).</summary>
+    /// <summary>Maximum number of profiles (FW_NUM_PROFILE = 5).</summary>
     public const int ProfileCount = 5;
 
-    /// <summary>Abilita / disabilita il controllo SW del device.
-    /// Quando true, l'host gestisce le immagini dei tasti in tempo reale
-    /// (UploadImage usa SetIconPacket); quando false, le immagini stanno nel
-    /// profilo memorizzato sul firmware.
+    /// <summary>Enables / disables SW control of the device.
+    /// When true, the host manages button images in real time
+    /// (UploadImage uses SetIconPacket); when false, images live in the
+    /// profile stored on the firmware.
     ///
-    /// Il MountainDisplayPadWorker.exe originale fa retry fino a ~6 volte
-    /// quando APEnable ritorna false: replichiamo lo stesso pattern.</summary>
+    /// The original MountainDisplayPadWorker.exe retries up to ~6 times
+    /// when APEnable returns false: we replicate the same pattern.</summary>
     public bool APEnable(int id, bool enable, int retries = 10)
     {
         for (int attempt = 0; attempt <= retries; attempt++)
@@ -206,17 +206,17 @@ public sealed class DisplayPadService : IDisposable
         return false;
     }
 
-    /// <summary>Probe del device: chiama <c>DisplayPadGetFWInfo</c> e ritorna
-    /// una stringa diagnostica con i campi della struct. Utile per distinguere
-    /// device "veri" dagli slot phantom popolati da <c>IsDevicePlug</c>.</summary>
+    /// <summary>Probes the device: calls <c>DisplayPadGetFWInfo</c> and returns
+    /// a diagnostic string with the struct's fields. Useful for distinguishing
+    /// "real" devices from phantom slots populated by <c>IsDevicePlug</c>.</summary>
     public string ProbeFirmwareInfo(int id)
     {
         try
         {
             object? info = _helper.DisplayPadGetFWInfo(id);
             if (info is null) return "<null>";
-            // Estraiamo i campi public via reflection: la struct FWInfo non e'
-            // referenziabile in C# senza definirla esplicitamente.
+            // We extract the public fields via reflection: the FWInfo struct is
+            // not referenceable in C# without defining it explicitly.
             var t = info.GetType();
             var parts = new List<string>();
             foreach (var f in t.GetFields(BindingFlags.Instance | BindingFlags.Public))
@@ -233,39 +233,39 @@ public sealed class DisplayPadService : IDisposable
         }
     }
 
-    /// <summary>Reset di TUTTE le immagini dei tasti del profilo corrente.</summary>
+    /// <summary>Resets ALL button images of the current profile.</summary>
     public bool ResetAllPictures(int id) =>
         _helper.DisplayPadResetPicture(id);
 
-    /// <summary>Carica un'immagine sul tasto in modalita' "live" via SetIconPacket
-    /// (richiede AP enabled). E' veloce ma <b>non persistente</b>: il firmware
-    /// ridisegna l'icona dal suo profilo memorizzato non appena riceve un
-    /// evento di redraw. Utile solo per anteprima al volo.</summary>
+    /// <summary>Uploads an image to the button in "live" mode via SetIconPacket
+    /// (requires AP enabled). It's fast but <b>not persistent</b>: the firmware
+    /// redraws the icon from its stored profile as soon as it receives a
+    /// redraw event. Useful only for a quick preview.</summary>
     public bool UploadImage(int id, string imagePath, int buttonIndex) =>
         _helper.UploadImage(id, imagePath, buttonIndex);
 
-    /// <summary>Carica un'immagine e la <b>salva</b> nello slot del profilo
-    /// indicato (1..5) del firmware via SetIconPic. Da preferire all'<see cref="UploadImage"/>
-    /// quando vogliamo che l'icona sopravviva a pressioni/redraw/cambi profilo.
-    /// Il parametro <c>isAPEnable</c> passato all'SDK e' false: questo dice al
-    /// firmware "scrivi nel mio storage, non solo nel display buffer".</summary>
+    /// <summary>Uploads an image and <b>saves</b> it in the given profile
+    /// slot (1..5) of the firmware via SetIconPic. Preferred over <see cref="UploadImage"/>
+    /// when we want the icon to survive presses/redraws/profile changes.
+    /// The <c>isAPEnable</c> parameter passed to the SDK is false: this tells the
+    /// firmware "write to my storage, not just to the display buffer".</summary>
     public bool UploadImageToProfile(int id, string imagePath, int buttonIndex, int profileIndex) =>
         _helper.UploadImageBySetIconPic(id, imagePath, buttonIndex, false, profileIndex);
 
     public void Dispose() => Close();
 
-    // ---------- handler interni (reflection target) ----------
+    // ---------- internal handlers (reflection targets) ----------
     //
-    // Le firme dei delegate SDK (verificate dai metadati della DLL):
+    // SDK delegate signatures (verified from the DLL's metadata):
     //   DisplayPadStatus.Invoke         (int, int)            -> Plug
     //   DisplayPadKeyStatus.Invoke      (int, int, int)       -> Key
     //   DisplayPadProgressStatus.Invoke (int)                 -> Progress
 
-    // Plug: i due int (a, b) non sono documentati esplicitamente nell'XML
-    // doc dell'SDK. Empiricamente uno dovrebbe essere il device ID e
-    // l'altro lo status (0=remove, 1=plug, 2=suspend). Riportiamo
-    // entrambi e li chiamiamo "a" / "b" finche' non vediamo dal vivo
-    // cosa sono; chi consuma l'evento puo' usarli direttamente.
+    // Plug: the two ints (a, b) are not explicitly documented in the SDK's
+    // XML doc. Empirically one should be the device ID and the
+    // other the status (0=remove, 1=plug, 2=suspend). We report
+    // both and call them "a" / "b" until we see live
+    // what they are; whoever consumes the event can use them directly.
     private void OnPlug(int a, int b)
     {
         DevicePlug?.Invoke(this, new DevicePlugEventArgs(
@@ -297,7 +297,7 @@ public sealed class DisplayPadService : IDisposable
 
     // ---------- reflection helpers ----------
 
-    // Gli eventi sono statici sulla classe DisplayPadHelper.
+    // The events are static on the DisplayPadHelper class.
     private void AttachStaticEvent(string eventName, string handlerName, out Delegate? created)
     {
         created = null;
@@ -349,11 +349,11 @@ public sealed class DevicePlugEventArgs : EventArgs
         Arg1 = arg1;
         Status = status;
     }
-    /// <summary>Primo argomento del delegate SDK (deviceId o status, TBD).</summary>
+    /// <summary>First argument of the SDK delegate (deviceId or status, TBD).</summary>
     public int Arg0 { get; }
-    /// <summary>Secondo argomento del delegate SDK.</summary>
+    /// <summary>Second argument of the SDK delegate.</summary>
     public int Arg1 { get; }
-    /// <summary>Interpretazione di <see cref="Arg1"/> assumendo che sia lo status.</summary>
+    /// <summary>Interpretation of <see cref="Arg1"/> assuming it's the status.</summary>
     public DevicePlugStatus Status { get; }
 }
 

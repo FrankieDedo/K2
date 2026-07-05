@@ -22,11 +22,11 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<int>       _deviceIds = new();
     private readonly ButtonCell[] _cells;
 
-    /// <summary>Controlli Button indicizzati per indice FISICO del tasto
-    /// (0..11). La rotazione li ridispone nella griglia, non li ricrea.</summary>
+    /// <summary>Button controls indexed by PHYSICAL button index
+    /// (0..11). Rotation rearranges them in the grid, it doesn't recreate them.</summary>
     private readonly Button[] _cellButtons;
 
-    /// <summary>Rotazione del device attualmente selezionato.</summary>
+    /// <summary>Rotation of the currently selected device.</summary>
     private DisplayRotation _rotation = DisplayRotation.None;
     private RotationOption[] _rotationOptions = Array.Empty<RotationOption>();
     private bool _suppressRotationUpdate;
@@ -87,9 +87,9 @@ public partial class MainWindow : Window
         _service.KeyEvent         += OnKeyEvent;
         _service.FirmwareProgress += OnFirmwareProgress;
 
-        // Motore azioni condiviso (K2.Core) + ponte Python.
-        // Inizializzato PRIMA dell'handler di Dispose qui sotto cosi' che, alla
-        // chiusura, gli script vengano terminati prima di smontare l'SDK.
+        // Shared action engine (K2.Core) + Python bridge.
+        // Initialized BEFORE the Dispose handler below so that, on
+        // shutdown, scripts get terminated before the SDK is torn down.
         InitActionEngine();
 
         Closed += (_, _) =>
@@ -134,7 +134,7 @@ public partial class MainWindow : Window
     private void CbDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (CbDevice.SelectedItem is not int id) return;
-        Log($"[UI] Device attivo: {id}");
+        Log($"[UI] Active device: {id}");
 
         _suppressBrightnessUpdate = true;
         try
@@ -148,7 +148,7 @@ public partial class MainWindow : Window
         try { CbProfile.SelectedItem = _store.GetCurrentProfile(id); }
         finally { _suppressProfileUpdate = false; }
 
-        // Rotazione: ogni device ha la sua, salvata su DB.
+        // Rotation: each device has its own, saved to the DB.
         _suppressRotationUpdate = true;
         try
         {
@@ -172,7 +172,7 @@ public partial class MainWindow : Window
 
     private void BtnResetAll_Click(object sender, RoutedEventArgs e)
     {
-        if (CbDevice.SelectedItem is not int id) { Log("[WARN] Nessun device selezionato."); return; }
+        if (CbDevice.SelectedItem is not int id) { Log("[WARN] No device selected."); return; }
         int profile = CurrentProfile();
         try
         {
@@ -207,7 +207,7 @@ public partial class MainWindow : Window
         catch (Exception ex) { Log($"[ERR ] SwitchProfile: {ex.Message}"); }
     }
 
-    // ---- rotazione ----
+    // ---- rotation ----
 
     private void CbRotation_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -220,13 +220,13 @@ public partial class MainWindow : Window
         if (CbDevice.SelectedItem is not int id) return;
         _store.SetRotation(id, _rotation);
         Log($"[ROT ] device {id} -> {DisplayPadLayout.Label(_rotation)}");
-        // Le icone gia' caricate vanno ri-uploadate con la nuova rotazione.
+        // Already-uploaded icons need to be re-uploaded with the new rotation.
         ReloadCurrentProfile();
     }
 
-    /// <summary>Ridispone i controlli tasto nella <c>GridButtons</c> secondo
-    /// la rotazione: 2x6 nativo, 6x2 a 90/270. Il modello (ButtonCell.Index)
-    /// resta in indici fisici, cambiano solo le posizioni a schermo.</summary>
+    /// <summary>Rearranges the button controls in <c>GridButtons</c> according
+    /// to the rotation: 2x6 native, 6x2 at 90/270. The model (ButtonCell.Index)
+    /// stays in physical indices, only the on-screen positions change.</summary>
     private void LayoutGrid(DisplayRotation rotation)
     {
         var (rows, cols)  = DisplayPadLayout.VisualGrid(rotation);
@@ -239,12 +239,12 @@ public partial class MainWindow : Window
             GridButtons.Children.Add(_cellButtons[phys]);
     }
 
-    // ---- griglia tasti ----
+    // ---- button grid ----
 
     private void BtnCell_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not ButtonCell cell) return;
-        if (CbDevice.SelectedItem is not int id) { Log("[WARN] Seleziona prima un device."); return; }
+        if (CbDevice.SelectedItem is not int id) { Log("[WARN] Select a device first."); return; }
 
         var dlg = new CellConfigDialog(cell.Index, cell.ImagePath, cell.ActionType, cell.ActionValue) { Owner = this };
         if (dlg.ShowDialog() != true) return;
@@ -262,13 +262,13 @@ public partial class MainWindow : Window
             {
                 cell.ImagePath = null;
                 _store.SaveButton(new ButtonRecord(id, CurrentProfile(), cell.Index, null, cell.ActionType, cell.ActionValue));
-                Log($"[IMG ] cella #{cell.Index} immagine rimossa");
+                Log($"[IMG ] cell #{cell.Index} image removed");
             }
         }
         else
         {
             _store.SaveButton(new ButtonRecord(id, CurrentProfile(), cell.Index, cell.ImagePath, cell.ActionType, cell.ActionValue));
-            Log($"[ACT ] cella #{cell.Index} <- type={cell.ActionType ?? "none"}");
+            Log($"[ACT ] cell #{cell.Index} <- type={cell.ActionType ?? "none"}");
         }
     }
 
@@ -276,16 +276,16 @@ public partial class MainWindow : Window
     {
         try
         {
-            // L'upload usa l'immagine pre-ruotata; nello store resta il path
-            // ORIGINALE, cosi' l'anteprima e' dritta e si puo' ri-ruotare
-            // se in futuro la rotazione del device cambia.
+            // Upload uses the pre-rotated image; the store keeps the
+            // ORIGINAL path, so the preview is upright and can be re-rotated
+            // if the device's rotation changes in the future.
             string up = IconRotator.ResolveForUpload(path, _rotation);
             string rotNote = up != path ? $" [rot {DisplayPadLayout.Label(_rotation)}]" : "";
             Log($"UploadImageToProfile(id={id}, slot={profile}, btn={cell.Index}, path=\"{path}\"{rotNote})");
             bool ok = _service.UploadImageToProfile(id, up, cell.Index, profile);
             if (!ok)
             {
-                Log("  -> FAIL (persistent), provo upload live");
+                Log("  -> FAIL (persistent), trying live upload");
                 ok = _service.UploadImage(id, up, cell.Index);
                 Log($"  -> live = {(ok ? "OK" : "FAIL")}");
                 if (!ok) { LblStatus.Text = "Upload fallito (FW storage pieno?)."; return; }
@@ -297,7 +297,7 @@ public partial class MainWindow : Window
         catch (Exception ex) { Log($"[ERR ] Upload: {ex}"); }
     }
 
-    // ---- context menu (in code-behind per evitare collisioni connection-id) ----
+    // ---- context menu (in code-behind to avoid connection-id collisions) ----
 
     private ContextMenu BuildCellContextMenu()
     {
@@ -325,7 +325,7 @@ public partial class MainWindow : Window
             cell.ActionType  = string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none" ? null : dlg.ActionType;
             cell.ActionValue = cell.ActionType is null ? null : dlg.ActionValue;
             _store.SaveButton(new ButtonRecord(id, CurrentProfile(), cell.Index, cell.ImagePath, cell.ActionType, cell.ActionValue));
-            Log($"[ACT ] cella #{cell.Index} <- type={cell.ActionType ?? "none"} value=\"{cell.ActionValue}\"");
+            Log($"[ACT ] cell #{cell.Index} <- type={cell.ActionType ?? "none"} value=\"{cell.ActionValue}\"");
         }
     }
 
@@ -335,7 +335,7 @@ public partial class MainWindow : Window
         if (CbDevice.SelectedItem is not int id) return;
         cell.ActionType = null; cell.ActionValue = null;
         _store.SaveButton(new ButtonRecord(id, CurrentProfile(), cell.Index, cell.ImagePath, null, null));
-        Log($"[ACT ] cella #{cell.Index} azione rimossa");
+        Log($"[ACT ] cell #{cell.Index} action removed");
     }
 
     private void MnuRemoveImage_Click(object sender, RoutedEventArgs e)
@@ -344,10 +344,10 @@ public partial class MainWindow : Window
         if (CbDevice.SelectedItem is not int id) return;
         cell.ImagePath = null;
         _store.SaveButton(new ButtonRecord(id, CurrentProfile(), cell.Index, null, cell.ActionType, cell.ActionValue));
-        Log($"[IMG ] cella #{cell.Index} immagine rimossa");
+        Log($"[IMG ] cell #{cell.Index} image removed");
     }
 
-    // ---- refresh / persistenza ----
+    // ---- refresh / persistence ----
 
     private void RefreshDevices()
     {
@@ -385,7 +385,7 @@ public partial class MainWindow : Window
         int profile = CurrentProfile();
         foreach (var c in _cells) { c.ImagePath = null; c.ActionType = null; c.ActionValue = null; }
         var rows = _store.LoadProfile(id, profile);
-        Log($"[DB  ] caricati {rows.Count} record per device={id} profilo={profile}");
+        Log($"[DB  ] loaded {rows.Count} records for device={id} profile={profile}");
         foreach (var r in rows)
         {
             if (r.ButtonIndex < 0 || r.ButtonIndex >= _cells.Length) continue;
@@ -396,23 +396,23 @@ public partial class MainWindow : Window
                 cell.ImagePath = r.ImagePath;
                 try
                 {
-                    // Re-uploadiamo nel profilo FW per assicurarci che le icone
-                    // siano persistenti anche dopo riavvio device, ruotate
-                    // secondo il montaggio corrente del device.
+                    // Re-upload to the FW profile to make sure icons stay
+                    // persistent even after a device restart, rotated
+                    // according to the device's current mounting.
                     string up = IconRotator.ResolveForUpload(r.ImagePath, _rotation);
                     bool ok = _service.UploadImageToProfile(id, up, r.ButtonIndex, profile);
                     if (!ok)
                     {
-                        Log($"[DB  ] upload persistente cella #{r.ButtonIndex} FAIL, fallback live");
+                        Log($"[DB  ] persistent upload cell #{r.ButtonIndex} FAIL, falling back to live");
                         _service.UploadImage(id, up, r.ButtonIndex);
                     }
                 }
-                catch (Exception ex) { Log($"[ERR ] reload upload cella #{r.ButtonIndex}: {ex.Message}"); }
+                catch (Exception ex) { Log($"[ERR ] reload upload cell #{r.ButtonIndex}: {ex.Message}"); }
             }
         }
     }
 
-    // ---- eventi device ----
+    // ---- device events ----
 
     private void OnDevicePlug(object? sender, DevicePlugEventArgs e)
     {
@@ -432,7 +432,7 @@ public partial class MainWindow : Window
                 int idx = _mapAwaitingIndex;
                 _matrixToIndex[e.KeyMatrix] = idx;
                 _cells[idx].KeyMatrix = e.KeyMatrix;
-                Log($"[MAP ] cella #{idx} <- matrix 0x{e.KeyMatrix:X2}");
+                Log($"[MAP ] cell #{idx} <- matrix 0x{e.KeyMatrix:X2}");
                 _mapAwaitingIndex++;
                 if (_mapAwaitingIndex >= _cells.Length)
                 {
@@ -445,7 +445,7 @@ public partial class MainWindow : Window
             }
 
             string label = _matrixToIndex.TryGetValue(e.KeyMatrix, out int cellIdx)
-                ? $"cella #{cellIdx}" : "non mappato";
+                ? $"cell #{cellIdx}" : "unmapped";
             Log($"[KEY ] id={e.DeviceId} matrix=0x{e.KeyMatrix:X2} {(e.Pressed ? "DOWN" : "UP")}  -> {label}");
 
             if (_matrixToIndex.TryGetValue(e.KeyMatrix, out int hi) && hi < _cells.Length)
@@ -480,8 +480,8 @@ public partial class MainWindow : Window
         public string Brightness      { get; set; } = "";
     }
 
-    /// <summary>Voce della ComboBox rotazione. <see cref="ToString"/> e'
-    /// quello che la ComboBox mostra a video.</summary>
+    /// <summary>Entry of the rotation ComboBox. <see cref="ToString"/> is
+    /// what the ComboBox displays on screen.</summary>
     private sealed record RotationOption(string Label, DisplayRotation Value)
     {
         public override string ToString() => Label;

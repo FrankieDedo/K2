@@ -157,11 +157,8 @@
   <string name="dial_pixel_shift">Pixel shift (min):</string>
   <string name="dial_cannot_read">Cannot read ExtendInfo from device.</string>
 
-  <!-- Dock Actions / Display Keys -->
-  <string name="dock_actions">Dock Actions / Display Keys</string>
-  <string name="dock_display_keys">Display Keys (numpad)</string>
-  <string name="dock_media_keys">Media Dock Keys</string>
-  <string name="dock_dial">Rotating Crown (Dial)</string>
+  <!-- Key Binding (mapped keys + HW capture utility for dock/crown/display-key hotspots) -->
+  <string name="ev_key_binding">Key Binding</string>
   <string name="dock_capture_hw">Capture HW key…</string>
   <string name="dock_cancel_capture">Cancel capture</string>
   <string name="dock_press_hw">Press an HW key (dock, display key, crown)…</string>

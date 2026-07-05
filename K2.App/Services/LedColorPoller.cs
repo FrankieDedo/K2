@@ -6,15 +6,15 @@ using K2.Core;
 namespace K2.App.Services;
 
 /// <summary>
-/// Polling periodico dei colori LED correnti dai dispositivi (Everest + MacroPad).
-/// Usa un DispatcherTimer in modo che gli eventi vengano emessi sul thread UI,
-/// permettendo l'aggiornamento diretto dei brush WPF senza Dispatcher.Invoke.
+/// Periodic polling of the current LED colors from the devices (Everest + MacroPad).
+/// Uses a DispatcherTimer so events are raised on the UI thread,
+/// allowing direct updates of WPF brushes without Dispatcher.Invoke.
 ///
-/// Pattern d'uso:
-///   1. Creare istanza passando i servizi device
-///   2. Sottoscrivere <see cref="EverestColorsUpdated"/> e/o <see cref="MacroPadColorsUpdated"/>
-///   3. Chiamare <see cref="Start"/>
-///   4. Nel handler aggiornare i brush dei tasti nell'overlay
+/// Usage pattern:
+///   1. Create an instance passing the device services
+///   2. Subscribe to <see cref="EverestColorsUpdated"/> and/or <see cref="MacroPadColorsUpdated"/>
+///   3. Call <see cref="Start"/>
+///   4. In the handler, update the key brushes in the overlay
 /// </summary>
 internal sealed class LedColorPoller : IDisposable
 {
@@ -26,19 +26,19 @@ internal sealed class LedColorPoller : IDisposable
     private bool _macroPadEnabled;
     private uint _macroPadSlot = 1;
 
-    // Buffer riusati per evitare allocazioni a ogni tick
+    // Buffers reused to avoid allocations on every tick
     private EverestSdkNative.KEYBOARD_COLOR _evColorBuf;
     private MacroPadSdkNative.MACROPAD_COLOR _mpColorBuf;
 
     /// <summary>
-    /// Colori Everest aggiornati. L'array ha 171 elementi indicizzati per matrixId.
-    /// Emesso sul thread UI.
+    /// Updated Everest colors. The array has 171 elements indexed by matrixId.
+    /// Raised on the UI thread.
     /// </summary>
     public event Action<EverestSdkNative.FWColor[]>? EverestColorsUpdated;
 
     /// <summary>
-    /// Colori MacroPad aggiornati. L'array ha 126 elementi indicizzati per matrixId.
-    /// Emesso sul thread UI.
+    /// Updated MacroPad colors. The array has 126 elements indexed by matrixId.
+    /// Raised on the UI thread.
     /// </summary>
     public event Action<MacroPadSdkNative.FWColor[]>? MacroPadColorsUpdated;
 
@@ -54,28 +54,28 @@ internal sealed class LedColorPoller : IDisposable
         _timer.Tick += OnTick;
     }
 
-    /// <summary>Intervallo di polling (default 120ms ≈ 8fps, buon compromesso).</summary>
+    /// <summary>Polling interval (default 120ms ~ 8fps, a good compromise).</summary>
     public TimeSpan Interval
     {
         get => _timer.Interval;
         set => _timer.Interval = value;
     }
 
-    /// <summary>Abilita il polling dei colori Everest.</summary>
+    /// <summary>Enables polling of Everest colors.</summary>
     public bool EverestEnabled
     {
         get => _everestEnabled;
         set => _everestEnabled = value;
     }
 
-    /// <summary>Abilita il polling dei colori MacroPad.</summary>
+    /// <summary>Enables polling of MacroPad colors.</summary>
     public bool MacroPadEnabled
     {
         get => _macroPadEnabled;
         set => _macroPadEnabled = value;
     }
 
-    /// <summary>Slot device MacroPad da interrogare (default 1).</summary>
+    /// <summary>MacroPad device slot to poll (default 1).</summary>
     public uint MacroPadSlot
     {
         get => _macroPadSlot;
@@ -110,7 +110,7 @@ internal sealed class LedColorPoller : IDisposable
         if (App.SdkCrashRecoveryNeeded)
         {
             Stop();
-            App.WriteLog("[LED-POLL] fermato: SdkCrashRecoveryNeeded");
+            App.WriteLog("[LED-POLL] stopped: SdkCrashRecoveryNeeded");
             SdkCrashDetected?.Invoke();
             return;
         }
@@ -121,8 +121,8 @@ internal sealed class LedColorPoller : IDisposable
 
         if (_everestEnabled && _everest.IsOpen)
         {
-            // DIAG tick#0: testa anche la variante raw (IntPtr) per escludere
-            // problemi di marshalling della struct ref KEYBOARD_COLOR.
+            // DIAG tick#0: also test the raw (IntPtr) variant to rule out
+            // marshalling issues with the ref KEYBOARD_COLOR struct.
             if (diag && _diagCount == 0)
             {
                 const int bufSize = 171 * 3; // 513 byte = 171 FWColor
@@ -144,8 +144,8 @@ internal sealed class LedColorPoller : IDisposable
             }
 
             // TryGetColorData uses Monitor.TryEnter: if the SDK lock is busy
-            // (upload, SaveFlash, ecc.) salta il tick — evita accesso concorrente
-            // alla DLL che causa crash a SDKDLL.dll+0x5133.
+            // (upload, SaveFlash, etc.) the tick is skipped — this avoids concurrent
+            // access to the DLL that causes crashes at SDKDLL.dll+0x5133.
             bool ok = _everest.TryGetColorData(ref _evColorBuf);
             if (diag)
                 App.WriteLog($"[LED-POLL] tick#{_diagCount} GetColorData={ok} colorNull={_evColorBuf.color == null}");

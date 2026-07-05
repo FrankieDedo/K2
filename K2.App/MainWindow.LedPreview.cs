@@ -126,7 +126,7 @@ public partial class MainWindow
     }
 
     // ==================================================================
-    // Raccolta LedTint — Everest
+    // LedTint collection — Everest
     // ==================================================================
 
     private void BuildEverestLedTints(Canvas canvas, Dictionary<int, int> vkToLedMap)
@@ -143,7 +143,7 @@ public partial class MainWindow
     }
 
     // ==================================================================
-    // Raccolta LedTint — MacroPad
+    // LedTint collection — MacroPad
     // ==================================================================
 
     private void BuildMacroPadLedTints()
