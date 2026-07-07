@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
@@ -32,6 +33,10 @@ public static class AppSettings
         public bool DisplayPadNativeEngine { get; set; }
         public bool EverestNativeEngine { get; set; }
         public bool KillBaseCampWorker { get; set; } = true;
+        public bool CloseToTray { get; set; }
+        public bool StartMinimizedToTray { get; set; }
+        public List<string> RecentExecPaths { get; set; } = new();
+        public List<string> RecentFolderPaths { get; set; } = new();
     }
 
     private static Data _data = new();
@@ -139,6 +144,44 @@ public static class AppSettings
         Changed?.Invoke();
     }
 
+    /// <summary>When true, closing the main window hides it to the system tray instead
+    /// of exiting the app (the tray icon's "Exit" item performs the real close).</summary>
+    public static bool CloseToTray
+    {
+        get { EnsureLoaded(); return _data.CloseToTray; }
+    }
+
+    public static void SetCloseToTray(bool value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.CloseToTray == value) return;
+            _data.CloseToTray = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>When true, K2 starts with its drivers active but the window hidden in
+    /// the tray, instead of showing it. Read once at startup (see App.OnStartup).</summary>
+    public static bool StartMinimizedToTray
+    {
+        get { EnsureLoaded(); return _data.StartMinimizedToTray; }
+    }
+
+    public static void SetStartMinimizedToTray(bool value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.StartMinimizedToTray == value) return;
+            _data.StartMinimizedToTray = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
     public static void SetLogLevel(K2LogLevel value)
     {
         EnsureLoaded();
@@ -149,6 +192,37 @@ public static class AppSettings
             Save();
         }
         Changed?.Invoke();
+    }
+
+    /// <summary>Most-recently-used executable/file paths chosen in the "Open program / file" action picker (newest first).</summary>
+    public static IReadOnlyList<string> RecentExecPaths
+    {
+        get { EnsureLoaded(); return _data.RecentExecPaths; }
+    }
+
+    /// <summary>Most-recently-used folder paths chosen in the "Open folder" action picker (newest first).</summary>
+    public static IReadOnlyList<string> RecentFolderPaths
+    {
+        get { EnsureLoaded(); return _data.RecentFolderPaths; }
+    }
+
+    public static void AddRecentExecPath(string path) => AddRecent(_data.RecentExecPaths, path);
+
+    public static void AddRecentFolderPath(string path) => AddRecent(_data.RecentFolderPaths, path);
+
+    private const int MaxRecentPaths = 10;
+
+    private static void AddRecent(List<string> list, string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        EnsureLoaded();
+        lock (_lock)
+        {
+            list.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+            list.Insert(0, path);
+            while (list.Count > MaxRecentPaths) list.RemoveAt(list.Count - 1);
+            Save();
+        }
     }
 
     private static void EnsureLoaded()

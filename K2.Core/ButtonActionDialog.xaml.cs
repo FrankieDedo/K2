@@ -12,9 +12,17 @@ public partial class ButtonActionDialog : Window
     public string ActionType  { get; private set; } = "none";
     public string ActionValue { get; private set; } = "";
 
-    public ButtonActionDialog(int buttonIndex, string? currentType, string? currentValue)
+    /// <summary>
+    /// The device host the button being configured belongs to (null in the few call
+    /// sites that don't have one handy — the "switch profile" cross-device picker then
+    /// degrades to self-target only, since it has no host to enumerate other devices).
+    /// </summary>
+    private readonly IActionHost? _host;
+
+    public ButtonActionDialog(int buttonIndex, string? currentType, string? currentValue, IActionHost? host = null)
     {
         InitializeComponent();
+        _host = host;
         LblHeader.Text = Loc.Get("dlg_button_label").Replace("#?", $"#{buttonIndex}");
 
         SetType(currentType ?? "none");
@@ -22,6 +30,32 @@ public partial class ButtonActionDialog : Window
         if (currentType == "pyscript")
         {
             LoadPySpec(PyScriptPayload.Parse(currentValue) ?? new PyScriptPayload());
+        }
+        else if (currentType == "exec")
+        {
+            TxtExecPath.Text = currentValue ?? "";
+        }
+        else if (currentType == "folder")
+        {
+            TxtFolderPath.Text = currentValue ?? "";
+        }
+        else if (currentType == "browser")
+        {
+            LoadBrowserSpec(BrowserActionPayload.Parse(currentValue)
+                ?? new BrowserActionPayload { Browser = "other", Url = currentValue ?? "" });
+        }
+        else if (currentType == "profile")
+        {
+            LoadProfileSpec(ProfileTargetPayload.Parse(currentValue)
+                ?? LegacyProfileSpec(currentValue));
+        }
+        else if (currentType is "oscmd" or "media" or "mouse")
+        {
+            LoadComboSpec(currentType, currentValue ?? "");
+        }
+        else if (currentType == "keys")
+        {
+            LoadKeysSpec(currentValue ?? "");
         }
         else
         {
@@ -92,9 +126,31 @@ public partial class ButtonActionDialog : Window
     private void UpdatePanels()
     {
         if (PyPanel is null || StandardPanel is null) return;
-        bool py = CurrentTag() == "pyscript";
-        PyPanel.Visibility       = py ? Visibility.Visible    : Visibility.Collapsed;
-        StandardPanel.Visibility = py ? Visibility.Collapsed  : Visibility.Visible;
+        var tag = CurrentTag();
+        bool py      = tag == "pyscript";
+        bool exec    = tag == "exec";
+        bool folder  = tag == "folder";
+        bool browser = tag == "browser";
+        bool profile = tag == "profile";
+        bool combo   = tag is "oscmd" or "media" or "mouse";
+        bool keys    = tag == "keys";
+        bool std     = !py && !exec && !folder && !browser && !profile && !combo && !keys;
+
+        PyPanel.Visibility       = py      ? Visibility.Visible : Visibility.Collapsed;
+        ExecPanel.Visibility     = exec    ? Visibility.Visible : Visibility.Collapsed;
+        FolderPanel.Visibility   = folder  ? Visibility.Visible : Visibility.Collapsed;
+        BrowserPanel.Visibility  = browser ? Visibility.Visible : Visibility.Collapsed;
+        ProfilePanel.Visibility  = profile ? Visibility.Visible : Visibility.Collapsed;
+        ComboPanel.Visibility    = combo   ? Visibility.Visible : Visibility.Collapsed;
+        KeysPanel.Visibility     = keys    ? Visibility.Visible : Visibility.Collapsed;
+        StandardPanel.Visibility = std     ? Visibility.Visible : Visibility.Collapsed;
+
+        if (exec) RefreshExecPanel();
+        if (folder) RefreshFolderPanel();
+        if (browser) EnsureBrowserChoicesPopulated();
+        if (profile) EnsureProfileRows();
+        if (combo) EnsureComboPanel(tag);
+        if (keys) EnsureKeysPanel();
     }
 
     // ---- Python Script panel ----------------------------------------
@@ -151,6 +207,32 @@ public partial class ButtonActionDialog : Window
                 TimeoutSeconds = timeout,
             };
             ActionValue = spec.ToJson();
+        }
+        else if (tag == "exec")
+        {
+            ActionValue = TxtExecPath.Text?.Trim() ?? "";
+            if (ActionValue.Length > 0) AppSettings.AddRecentExecPath(ActionValue);
+        }
+        else if (tag == "folder")
+        {
+            ActionValue = TxtFolderPath.Text?.Trim() ?? "";
+            if (ActionValue.Length > 0) AppSettings.AddRecentFolderPath(ActionValue);
+        }
+        else if (tag == "browser")
+        {
+            ActionValue = SaveBrowserSpec().ToJson();
+        }
+        else if (tag == "profile")
+        {
+            ActionValue = SaveProfileSpec().ToJson();
+        }
+        else if (tag is "oscmd" or "media" or "mouse")
+        {
+            ActionValue = SaveComboSpec();
+        }
+        else if (tag == "keys")
+        {
+            ActionValue = SaveKeysSpec();
         }
         else
         {

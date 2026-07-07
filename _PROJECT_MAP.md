@@ -66,8 +66,9 @@ produced files; dependencies from other folders are copied inside `K2`.
   `DisplayPadOperations.SetDeviceId()` of `MountainDisplayPadWorker.exe`. Fix =
   C# patch via dnSpy, source in `K2/_reference/BaseCamp_Patch/`. External fixes
   (`DisplayPad_Stabilizer/`) alone do NOT hold: Base Camp overrides them at runtime.
-- **DisplayPad rotation:** 90° and 270° implemented; 180° excluded by design
-  (never mounted upside down). Square 102×102 px icons → lossless rotation.
+- **DisplayPad/MacroPad rotation:** 90°/180°/270° all implemented ("Positioning"
+  section in the UI, shows Horizontal/Vertical + degrees). Square 102×102 px
+  icons → lossless rotation.
 - **UI theme:** shared dark modern look in `K2.Core/Themes/K2Theme.xaml`
   (ResourceDictionary with `x:Class` + code-behind: the 3 window buttons).
   Custom title bar via `WindowChrome`. Palette: bg `#1A1A1E`, teal accent
@@ -145,12 +146,23 @@ platform (x86 or x64).
 - `MainWindow.CustomLighting.cs` — partial Everest: pannello "Custom Lighting
   (per-key)". Paint mode + color picker + overlay sui tasti keyboard. SDK:
   SwitchToCustomizeEffect + ChangeCustomizeEffect (171 LED). Persistenza JSON.
-- `MainWindow.DisplayDial.cs` — partial Everest: pannello Display Dial (pagine
-  dial, clock 12/24h, screensaver, auto-off, pixel shift, menu color). Legge/
+- `MainWindow.DisplayDial.cs` — partial Everest: pannello Display Dial (8 pagine
+  dial come toggle 2 colonne x 4, formato 12/24h + stile analog/digital, enable/
+  disable separati per screensaver e auto-off, combo funzione screensaver, menu
+  color, reset). Legge/
   scrive FW_EXTEND_INFO via EverestService. Persistenza in EverestStore `dial.*`.
-- `MainWindow.Macro.cs` — partial Everest: pannello Keyboard Macro. CRUD macro
-  (ListBox + settings), registrazione (MacroRecorder), riproduzione (MacroPlayer),
-  import da BaseCamp.db. Persistenza in MacroStore (tabella Macros in everest.db).
+- `MainWindow.Macro.cs` — partial: pannello **Macro**, sezione top-level a sé
+  stante (non più dentro Everest), bottone dedicato nella barra in alto a
+  sinistra delle Impostazioni (`BtnMacroTab`/`PnlMacro`). Layout in colonne
+  stile Base Camp: libreria macro a sx; colonna Devices/Delay/Playback
+  (RadioButton "a pillola", stile `MacroOptionRowStyle`) impilata; lista
+  Inputs registrati (`MacroInputRow`) al centro; sezione **Assigned to**
+  a destra dei comandi (query `GetKeysByAction` su MacroPadStore/EverestStore
+  per `ActionType=="macro"` — oggi popolata solo da import BaseCamp.db, non
+  c'è ancora un modo di assegnare "macro" a un tasto da `ButtonActionDialog`).
+  CRUD macro, registrazione (MacroRecorder, con recordKeyboard/recordMouse
+  separati), riproduzione (MacroPlayer), import da BaseCamp.db. Persistenza
+  in MacroStore (tabella Macros in everest.db).
 - `MainWindow.Layout.cs` — partial Everest: layout dinamico tastiera. Riposiziona
   dock (CvsEvDock) e numpad (CvsEvNumpad) a sx/dx del corpo tastiera in base a
   byMMDockPlug/byNumpadPlug (0=nascosto, 1=sx, 2=dx).
@@ -202,6 +214,10 @@ platform (x86 or x64).
 - `Models/KeyboardMacro.cs` — modello macro: MacroInput (eventi key/mouse/text),
   MacroDefinition (macro completa con delay/playback options), enum MacroPlayback/
   MacroDelay. Import da formato BaseCamp via FromBaseCamp().
+- `Models/MacroInputRow.cs` — view model di una riga della lista Inputs nel
+  pannello Macro (glyph/label/ms/press-o-release/indice sorgente per riordino).
+- `Models/MacroAssignment.cs` — view model per la sezione "Assigned to" del
+  pannello Macro (key label + sottotitolo device/profilo).
 - `Services/MacroStore.cs` — persistenza macro in tabella Macros (stesso DB
   di EverestStore). CRUD, ImportAll, ReadFromBaseCampDb per import da BC.
 - `Services/MacroRecorder.cs` — hook globale keyboard+mouse (SetWindowsHookEx
@@ -233,7 +249,8 @@ platform (x86 or x64).
 - `K2.Core.csproj` — libreria WPF; `<Platforms>x86;x64</Platforms>`; porta con
   sé (Content transitivo) gli helper Python di `lib/pybridge/`
 - `IActionHost.cs` — astrazione device-specific (log, profilo/device correnti,
-  SwitchProfile, GetButtons, PressButton) + record `HostButton`
+  `SwitchProfile(targetKey?, target)` con targeting cross-device, `ListProfileTargets()`,
+  GetButtons, PressButton) + record `HostButton`/`ProfileTargetOption`
 - `ButtonActionEngine.cs` — motore di esecuzione delle azioni dei tasti
 - `PyBridge.cs` — incapsula server RPC + servizio script + dispatcher RPC
 - `ActionExecutor.cs` — esecuzione tipi di azione non triviali (oscmd/media/mouse/multi…)
@@ -242,12 +259,32 @@ platform (x86 or x64).
 - `PythonScriptService.cs` — lancio script in processo + streaming output
 - `PythonRuntimeLocator.cs` — ricerca interprete embeddable + `k2_runner.py`
 - `PyScriptPayload.cs` — codifica/decodifica azione "pyscript" (JSON)
-- `ButtonActionDialog.xaml(.cs)` — dialog "Configura azione tasto" (incl. Script Python)
+- `ProfileTargetPayload.cs` — codifica/decodifica azione "profile" multi-device (JSON)
+- `BrowserActionPayload.cs` — codifica/decodifica azione "browser" (browser scelto/path/URL, JSON)
+- `BrowserDetector.cs` — rileva Chrome/Edge/Firefox/Opera/Brave installati (registro `App Paths`)
+- `IconImageGenerator.cs` — genera l'immagine di un tasto da un'azione "exec" (icona
+  eseguibile via Shell `IShellItemImageFactory`, fallback `Icon.ExtractAssociatedIcon`) o
+  "folder" (glyph Segoe MDL2 + nome cartella)
+- `ButtonActionDialog.xaml(.cs)` + partial `.Exec.cs`/`.Browser.cs`/`.Profile.cs`/
+  `.Simple.cs`/`.Keys.cs` — dialog "Configura azione tasto": pannello dedicato per tipo
+  (path+icona+recenti per exec, path+recenti per folder, radio browser rilevati per
+  browser, righe multi-device per profile, combo per oscmd/media/mouse, modificatori+combo
+  per keys, Script Python invariato)
 - `Themes/K2Theme.xaml(.cs)` — **tema scuro condiviso**: palette, stili impliciti
   dei controlli (Button, ComboBox, Slider, CheckBox, ListView, GroupBox,
   StatusBar, ScrollBar, Menu, Tab…) + stile `Window` con barra del titolo
   custom. `.xaml.cs` = handler dei pulsanti minimizza/massimizza/chiudi.
-  `.xaml` auto-incluso come `Page` (nessuna modifica al `.csproj`)
+  `.xaml` auto-incluso come `Page` (nessuna modifica al `.csproj`). Font
+  app-wide = Roboto (`FontFamily` del `K2WindowStyle`, con fallback "Segoe UI").
+- `Fonts/Roboto-Regular.ttf`, `Roboto-Bold.ttf`, `Roboto-Italic.ttf`,
+  `Roboto-BoldItalic.ttf` — font Roboto (licenza SIL OFL 1.1, vedi
+  `Fonts/LICENSE.Roboto.txt`) embedded come `Resource` in `K2.Core.csproj`,
+  referenziato da `K2Theme.xaml` via pack URI
+  (`pack://application:,,,/K2.Core;component/Fonts/#Roboto`) — non richiede
+  che Roboto sia installato sul PC dell'utente finale. Non tocca i font
+  espliciti già presenti altrove (KeyCapStyle = replica pixel-perfect delle
+  keycap CSS di Base Camp, log/hex viewer = Consolas monospace, icone =
+  Segoe MDL2 Assets).
 
 ### `K2.DisplayPad/` — modulo DisplayPad (WPF, x64) — usa `K2.Core`
 - `K2.DisplayPad.csproj` — referenzia `K2.Core`; `App.xaml(.cs)` entry point.
@@ -341,6 +378,17 @@ Tutto ciò che deriva dai binari di Base Camp. Solo per sviluppo locale.
   `--callers ::ChangeEffect`). Usato per ricostruire la sequenza esatta
   di costruzione `EffData` in `MacroPadSDK::getChangeEffect` e trovare il
   wrapper end-to-end `Everest::EverestChangeEffect`.
+- **Estrarre `BaseCamp.UI.dll` da `BaseCamp.UI.exe`** (per raggiungere le view
+  Razor MVC dell'app Base Camp, es. `Views_Everest__Setting`, non presenti nei
+  DLL di `BaseCamp_Decompiled/`): `Mountain Base Camp/resources/bin/
+  BaseCamp.UI.exe` è un *self-contained single-file .NET bundle* (Electron.NET),
+  quindi `pefile` non vede l'header CLR (appeso dopo lo stub nativo). Si cerca
+  nel file la entry di manifest `"<Assembly>.dll"` (preceduta da
+  `[offset:u64][size:u64][compressedSize:u64][type:u8]`), si fa lo slice
+  `data[offset:offset+size]` (parte con `MZ`, PE valido con CLR header) e si
+  passa il risultato ai `tools/dotnet_*.py` esistenti. Non serve `node`/`asar`
+  per questo (serve solo per leggere `app.asar`, i file statici .js/.cshtml
+  compilati non ci sono dentro).
 - `tools/parse_usb_pcap.py <file.pcapng>` — parser pcap-ng minimo (link_type
   USBPcap 249), nessuna dipendenza. Filtra i pacchetti USB OUT non-vuoti
   e stampa hex dump. Usato per confrontare i comandi HID che Base Camp
@@ -402,4 +450,11 @@ Tutto ciò che deriva dai binari di Base Camp. Solo per sviluppo locale.
    **FATTO**: editor per-key custom lighting (pannello Custom Lighting,
    struct `CustomEffect`/`CustomData`, `ChangeCustomizeEffect`/
    `SwitchToCustomizeEffect`/`GetEffCustomizeContent`).
-4. Fusione dei moduli dentro `K2.App` (richiede DisplayPad ricompilato x86).
+4. Fusione dei moduli dentro `K2.App` — FATTA: `K2.App` è ora il guscio
+   unificato x86 con tab MacroPad + Everest + DisplayPad nello stesso
+   processo (DisplayPad via `DisplayPadSatelliteClient`/`DisplayPadNativeClient`,
+   niente più bisogno di `K2.DisplayPad.exe` separato per l'uso quotidiano).
+   `K2.DisplayPad.sln`/`K2.DisplayPad.exe` restano come prodotto standalone
+   x64 a parte (stessa base `K2.Core`, tre `IActionHost` distinti nello stesso
+   processo di K2.App: `MainWindow` per MacroPad, `EverestActionHost`,
+   `DisplayPadActionHost` — vedi `K2.Core/IActionHost.cs`).

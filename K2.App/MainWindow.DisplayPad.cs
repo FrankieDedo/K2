@@ -118,7 +118,13 @@ public partial class MainWindow
         // DP device tabs are added to TcDevices by DpRefreshDevices; CbDpProfile by DpRefreshProfiles
 
         _dpSuppressRotation = true;
-        CbDpRotation.ItemsSource = new[] { "0°", "90°", "270°" };
+        CbDpRotation.ItemsSource = new[]
+        {
+            Loc.Get("pos_horizontal", 0),
+            Loc.Get("pos_vertical", 90),
+            Loc.Get("pos_horizontal", 180),
+            Loc.Get("pos_vertical", 270),
+        };
         CbDpRotation.SelectedIndex = 0;
         _dpSuppressRotation = false;
 
@@ -127,6 +133,8 @@ public partial class MainWindow
         _dpClient.PlugEvent += OnDpPlug;
         _dpClient.ProgressEvent += OnDpProgress;
         _dpClient.SatelliteLog += (_, msg) => Dispatcher.BeginInvoke(() => DpLog(msg));
+
+        InitDpSectionNav();
     }
 
     // ================================================================
@@ -594,6 +602,17 @@ public partial class MainWindow
     private void CbDpDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (DpSelectedDeviceId() is not int id) return;
+        DpActivateDevice(id);
+    }
+
+    /// <summary>
+    /// Loads the given device's brightness/profile/rotation/keys and re-uploads its icons —
+    /// the actual "make this device live" work, factored out of <see cref="CbDpDevice_SelectionChanged"/>
+    /// so <see cref="DpRefreshDevices"/> can call it for auto-activation (see remarks there)
+    /// without needing a real <see cref="SelectionChangedEventArgs"/>.
+    /// </summary>
+    private void DpActivateDevice(int id)
+    {
         DpLog($"[UI] Active device: {id} ({_dpDeviceLabels.GetValueOrDefault(id, "?")})");
 
         _dpSuppressBrightness = true;
@@ -610,7 +629,7 @@ public partial class MainWindow
         try
         {
             _dpRotation = _dpStore.GetRotation(id);
-            CbDpRotation.SelectedIndex = _dpRotation switch { 90 => 1, 270 => 2, _ => 0 };
+            CbDpRotation.SelectedIndex = _dpRotation switch { 90 => 1, 180 => 2, 270 => 3, _ => 0 };
         }
         finally { _dpSuppressRotation = false; }
         DpRebuildKeyGrid();
@@ -621,32 +640,49 @@ public partial class MainWindow
     /// <summary>
     /// Resolves "Next"/"Previous"/"N" and switches the DisplayPad firmware profile.
     /// Cycles through existing slots only. Called by DisplayPadActionHost.SwitchProfile.
+    /// <paramref name="deviceId"/> = null targets the currently active/selected tab (and
+    /// updates its UI combo); an explicit id (cross-device "switch profile" action)
+    /// switches that device's stored profile and repaints it without touching the UI
+    /// unless it happens to be the active tab.
     /// </summary>
-    internal void DpSwitchProfile(string target)
+    internal void DpSwitchProfile(int? deviceId, string target)
     {
-        if (DpSelectedDeviceId() is not int id) return;
-        if (CbDpProfile.ItemsSource is not List<DpProfileItem> items) return;
-        var real = items.Where(x => !x.IsNew).ToList();
+        int? sel = deviceId ?? DpSelectedDeviceId();
+        if (sel is not int id) return;
+        bool isActive = id == DpSelectedDeviceId();
+
+        List<int> real;
+        int cur;
+        if (isActive)
+        {
+            if (CbDpProfile.ItemsSource is not List<DpProfileItem> items) return;
+            real = items.Where(x => !x.IsNew).Select(x => x.Slot).ToList();
+            cur  = CbDpProfile.SelectedItem is DpProfileItem pi ? pi.Slot : (real.Count > 0 ? real[0] : 1);
+        }
+        else
+        {
+            real = _dpStore.GetExistingProfiles(id);
+            cur  = _dpStore.GetCurrentProfile(id);
+        }
         if (real.Count == 0) return;
 
-        int cur = CbDpProfile.SelectedItem is DpProfileItem pi ? pi.Slot : real[0].Slot;
-        int curIdx = real.FindIndex(x => x.Slot == cur);
+        int curIdx = real.IndexOf(cur);
         if (curIdx < 0) curIdx = 0;
 
         var t = (target ?? "").Trim();
-        DpProfileItem? targetItem;
+        int? nextSlot;
         if (t.Equals("Next", StringComparison.OrdinalIgnoreCase) ||
             t.Equals("Next Profile", StringComparison.OrdinalIgnoreCase))
-            targetItem = real[(curIdx + 1) % real.Count];
+            nextSlot = real[(curIdx + 1) % real.Count];
         else if (t.Equals("Previous", StringComparison.OrdinalIgnoreCase) ||
                  t.Equals("Previous Profile", StringComparison.OrdinalIgnoreCase) ||
                  t.Equals("prev", StringComparison.OrdinalIgnoreCase))
-            targetItem = real[(curIdx - 1 + real.Count) % real.Count];
+            nextSlot = real[(curIdx - 1 + real.Count) % real.Count];
         else if (int.TryParse(t, out var n))
-            targetItem = real.FirstOrDefault(x => x.Slot == n);
+            nextSlot = real.Contains(n) ? n : null;
         else { DpLog($"[EXEC] profile: target \"{t}\" not resolved"); return; }
 
-        if (targetItem is null || targetItem.Slot == cur) return;
+        if (nextSlot is not int slot || slot == cur) return;
 
         // NOTE: do NOT call _dpClient.SwitchProfile here. Reference (decompiled BaseCamp,
         // DisplayPadOperations.ChangeProfileFromUI) confirms Base Camp never calls the
@@ -656,13 +692,16 @@ public partial class MainWindow
         // native SwitchProfile here (removed 2026-07-01) put the firmware into an
         // untested state that raced with our own image re-upload burst and corrupted
         // the icons (confirmed via photo: garbled icons except the last few uploaded).
-        _dpStore.SetCurrentProfile(id, targetItem.Slot);
-        DpSelectProfileSlot(targetItem.Slot);
-        ResetDpNavigation();
+        _dpStore.SetCurrentProfile(id, slot);
+        if (isActive)
+        {
+            DpSelectProfileSlot(slot);
+            ResetDpNavigation();
+        }
         // Hardware repaint is serialized + coalesced per device (see DpRequestRepaint):
         // the store/UI switched instantly above; the device repaints when free.
         DpRequestRepaint(id);
-        DpLog($"[EXEC] DisplayPad profile -> {targetItem.Slot}");
+        DpLog($"[EXEC] DisplayPad profile -> {slot} (device {id})");
     }
 
     /// <summary>Selects a slot in the profile combo (suppressing the event).</summary>
@@ -742,7 +781,7 @@ public partial class MainWindow
     private void CbDpRotation_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_dpSuppressRotation) return;
-        _dpRotation = CbDpRotation.SelectedIndex switch { 1 => 90, 2 => 270, _ => 0 };
+        _dpRotation = CbDpRotation.SelectedIndex switch { 1 => 90, 2 => 180, 3 => 270, _ => 0 };
         DpRebuildKeyGrid();
         if (DpSelectedDeviceId() is int id)
         {
@@ -952,49 +991,33 @@ public partial class MainWindow
     }
 
     // ================================================================
-    // Export profile — Base Camp-compatible XML / K2-only XML
+    // Export profiles — Base Camp-compatible XML / K2-only XML
     // ================================================================
 
-    private void BtnDpExportBc_Click(object sender, RoutedEventArgs e) => DpExportProfile(bcCompatible: true);
-    private void BtnDpExportK2_Click(object sender, RoutedEventArgs e) => DpExportProfile(bcCompatible: false);
-
-    private void DpExportProfile(bool bcCompatible)
+    private void BtnDpExportProfiles_Click(object sender, RoutedEventArgs e)
     {
         if (DpSelectedDeviceId() is not int id) { LblStatus.Text = Loc.Get("dp_export_no_profile"); return; }
-        if (CbDpProfile.SelectedItem is not DpProfileItem pi || pi.IsNew) { LblStatus.Text = Loc.Get("dp_export_no_profile"); return; }
-        int slot = pi.Slot;
-        string profileName = _dpStore.GetProfileName(id, slot) ?? Loc.Get("profile_n", slot);
 
-        var dlg = new SaveFileDialog
-        {
-            Title    = bcCompatible ? Loc.Get("dp_save_bc_profile") : Loc.Get("dp_save_k2_profile"),
-            Filter   = Loc.Get("dp_filter_bc_xml"),
-            FileName = $"{profileName}.xml",
-        };
-        if (dlg.ShowDialog(this) != true) return;
+        var profiles = _dpStore.GetExistingProfiles(id)
+            .Select(slot => (Slot: slot, Name: _dpStore.GetProfileName(id, slot) ?? Loc.Get("profile_n", slot)))
+            .ToList();
+        int? currentSlot = CbDpProfile.SelectedItem is DpProfileItem pi && !pi.IsNew ? pi.Slot : null;
+        string deviceLabel = _dpDeviceLabels.GetValueOrDefault(id, $"DisplayPad {id}");
 
-        try
-        {
-            var result = bcCompatible
-                ? DpProfileExporter.ExportBaseCamp(_dpStore, id, slot, profileName, dlg.FileName)
-                : DpProfileExporter.ExportK2(_dpStore, id, slot, profileName, dlg.FileName);
-
-            if (bcCompatible)
+        ExportProfileHelper.Run(
+            owner: this,
+            deviceLabel: deviceLabel,
+            profiles: profiles,
+            currentSlot: currentSlot,
+            exportOne: (slot, name, bcCompatible, path) =>
             {
-                LblStatus.Text = Loc.Get("dp_exported_bc", profileName, result.Exported, result.SkippedActions);
-                DpLog($"[EXP-BC] '{profileName}' -> {dlg.FileName}: {result.Exported} actions, {result.SkippedActions} skipped");
-                foreach (var reason in result.SkipReasons) DpLog($"[EXP-BC] skip: {reason}");
-            }
-            else
-            {
-                LblStatus.Text = Loc.Get("dp_exported_k2", profileName, result.Exported);
-                DpLog($"[EXP-K2] '{profileName}' -> {dlg.FileName}: {result.Exported} actions");
-            }
-        }
-        catch (Exception ex)
-        {
-            DpLog($"[ERR] export XML: {ex.Message}");
-        }
+                var result = bcCompatible
+                    ? DpProfileExporter.ExportBaseCamp(_dpStore, id, slot, name, path)
+                    : DpProfileExporter.ExportK2(_dpStore, id, slot, name, path);
+                return (result.Exported, result.SkippedActions, result.SkipReasons);
+            },
+            log: DpLog,
+            setStatus: s => LblStatus.Text = s);
     }
 
     // ================================================================
@@ -1149,6 +1172,10 @@ public partial class MainWindow
             return;
         }
 
+        // Key editing is only enabled while the "Key Binding" section is active
+        // (folder/back navigation above always works, since that's normal usage).
+        if (!IsDpKeyBindingSectionActive) return;
+
         // Unified dialog: image + action
         var dlg = new DpKeyConfigDialog(key.Index, key.ImagePath, key.ActionType, key.ActionValue) { Owner = this };
         if (dlg.ShowDialog() != true) return;
@@ -1241,9 +1268,10 @@ public partial class MainWindow
 
     private void DpMnuConfigureAction_Click(object sender, RoutedEventArgs e)
     {
+        if (!IsDpKeyBindingSectionActive) return;
         if (DpKeyFromMenu(sender) is not DisplayPadKey key) return;
         if (DpSelectedDeviceId() is not int id) return;
-        var dlg = new ButtonActionDialog(key.Index, key.ActionType, key.ActionValue) { Owner = this };
+        var dlg = new ButtonActionDialog(key.Index, key.ActionType, key.ActionValue, _dpActionHost) { Owner = this };
         if (dlg.ShowDialog() == true)
         {
             key.ActionType = string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none" ? null : dlg.ActionType;
@@ -1255,6 +1283,7 @@ public partial class MainWindow
 
     private void DpMnuRemoveAction_Click(object sender, RoutedEventArgs e)
     {
+        if (!IsDpKeyBindingSectionActive) return;
         if (DpKeyFromMenu(sender) is not DisplayPadKey key) return;
         if (DpSelectedDeviceId() is not int id) return;
         key.ActionType = null; key.ActionValue = null;
@@ -1263,6 +1292,7 @@ public partial class MainWindow
 
     private void DpMnuChangeImage_Click(object sender, RoutedEventArgs e)
     {
+        if (!IsDpKeyBindingSectionActive) return;
         if (DpKeyFromMenu(sender) is not DisplayPadKey key) return;
         if (DpSelectedDeviceId() is not int id) return;
         var dlg = new OpenFileDialog
@@ -1285,6 +1315,7 @@ public partial class MainWindow
 
     private void DpMnuRemoveImage_Click(object sender, RoutedEventArgs e)
     {
+        if (!IsDpKeyBindingSectionActive) return;
         if (DpKeyFromMenu(sender) is not DisplayPadKey key) return;
         if (DpSelectedDeviceId() is not int id) return;
         DpGifAnimator.Stop(id, key.Index);
@@ -1355,12 +1386,29 @@ public partial class MainWindow
             var tab = new TabItem { Header = item.Label, Tag = $"dp_{item.SdkId}" };
             TcDevices.Items.Insert(insertIdx++, tab);
         }
-        if (items.Count > 0)
+        // Only steer the top-level selection to a DisplayPad tab if the user is
+        // already on one — a background device refresh (e.g. a plug event arriving
+        // after startup) must not steal focus away from whatever tab is active.
+        string? selTag = (TcDevices.SelectedItem as TabItem)?.Tag as string;
+        bool currentlyOnDp = selTag != null && selTag.StartsWith("dp_");
+        if (items.Count > 0 && currentlyOnDp)
         {
             int targetId = prevActive.HasValue && items.Any(x => x.SdkId == prevActive.Value)
                            ? prevActive.Value : items[0].SdkId;
             TcDevices.SelectedItem = TcDevices.Items.OfType<TabItem>()
                                      .FirstOrDefault(t => (t.Tag as string) == $"dp_{targetId}");
+        }
+        else if (items.Count > 0 && _activeDpDeviceId is null)
+        {
+            // Nobody has ever opened the DisplayPad tab this session (e.g. app auto-started
+            // to the tray, or the user is parked on Everest/Settings): _activeDpDeviceId would
+            // otherwise stay null forever, and OnDpKey/DpReloadCurrentProfile/DpSwitchProfile
+            // all no-op without it — physical key presses would silently do nothing until the
+            // user happened to click the DisplayPad tab. Load the device's state (keys, action
+            // bindings, icons) in the background WITHOUT touching TcDevices.SelectedItem, so it
+            // starts responding immediately but doesn't steal focus (same concern as above).
+            _activeDpDeviceId = items[0].SdkId;
+            DpActivateDevice(_activeDpDeviceId.Value);
         }
     }
 
@@ -1406,6 +1454,7 @@ public partial class MainWindow
         // `fullscreenActive` makes it always-safe at runtime. Using `fullscreen.Value`
         // directly (guarded by the plain bool) sidesteps that entirely.
         bool fullscreenActive = fullscreen.HasValue && File.Exists(fullscreen.Value.Path);
+        _dpFullscreenByDevice[id] = fullscreenActive;
         if (!fullscreenActive) DpFullscreenAnimator.Stop(id);
 
         var toUpload = new List<(int btnIndex, string imagePath)>();
@@ -1478,6 +1527,10 @@ public partial class MainWindow
     private readonly Dictionary<int, bool> _dpRepaintBusy = new();
     /// <summary>Per-device: a repaint was requested while one was running — run another when done.</summary>
     private readonly HashSet<int> _dpRepaintPending = new();
+    /// <summary>Per-device: whether a fullscreen image currently owns the hardware's 12 icons
+    /// (set by <see cref="DpReloadCurrentProfile"/>) — checked by <see cref="DpUploadPressVisual"/>
+    /// to skip the per-key press-bounce while the fullscreen panel is in control.</summary>
+    private readonly Dictionary<int, bool> _dpFullscreenByDevice = new();
 
     /// <summary>
     /// Serializes full hardware repaints per device. Profile switches update the
@@ -1625,6 +1678,7 @@ public partial class MainWindow
             if (_dpMatrixToIndex.TryGetValue(matrix, out int hi) && hi < 12)
             {
                 _dpKeys[hi].IsHighlighted = pressed;
+                DpUploadPressVisual(selId, hi, pressed);
                 if (pressed)
                 {
                     string? action = _dpKeys[hi].ActionType;
@@ -1638,6 +1692,31 @@ public partial class MainWindow
                 }
             }
         });
+
+    /// <summary>
+    /// Hardware press-bounce: re-uploads the given key's icon shrunk (pressed=true, on key-down)
+    /// or back at full size (pressed=false, on key-up) — mirrors Base Camp, which does the exact
+    /// same re-render + re-upload on every physical press/release (see
+    /// <c>DisplayPadOperations.UploadImage</c>'s <c>IsBtnPressed</c> branch in the decompiled
+    /// worker; there is no separate device-side animation). Chained onto the same per-device
+    /// <see cref="_dpUploadChain"/> as every other icon upload so it can never race a profile/page
+    /// reload's batch upload on the wire (the documented cause of past icon corruption).
+    /// Skipped for animated GIFs (already live-looping via <see cref="DpGifAnimator"/>) and while
+    /// a fullscreen image owns the hardware's icons (no per-key icon to shrink).
+    /// </summary>
+    private void DpUploadPressVisual(int id, int btnIndex, bool pressed)
+    {
+        string? imgPath = _dpKeys[btnIndex].ImagePath;
+        if (string.IsNullOrEmpty(imgPath) || !File.Exists(imgPath)) return;
+        if (DpGifAnimator.IsAnimatedGif(imgPath)) return;
+        if (_dpFullscreenByDevice.TryGetValue(id, out bool fs) && fs) return;
+
+        int rotation = _dpRotation;
+        var previous = _dpUploadChain.TryGetValue(id, out var p) ? p : Task.CompletedTask;
+        var next = previous.ContinueWith(_ => _dpClient.UploadImage(id, imgPath, btnIndex, rotation, pressed),
+            TaskScheduler.Default);
+        _dpUploadChain[id] = next;
+    }
 
     private void OnDpProgress(object? sender, JsonElement e) =>
         Dispatcher.BeginInvoke(() => DpLog($"[FW] {e.Get("percent")}%"));
@@ -1661,12 +1740,13 @@ public partial class MainWindow
     // ================================================================
 
     internal ButtonActionEngine? _dpEngine;
+    internal DisplayPadActionHost? _dpActionHost;
 
     private void InitDpActionEngine()
     {
         // The DisplayPad ActionHost is separate from the MacroPad one
-        var host = new DisplayPadActionHost(this);
-        _dpEngine = new ButtonActionEngine(host);
+        _dpActionHost = new DisplayPadActionHost(this);
+        _dpEngine = new ButtonActionEngine(_dpActionHost);
         _dpEngine.Start();
     }
 
@@ -1681,10 +1761,13 @@ public partial class MainWindow
         var vis = debug ? Visibility.Visible : Visibility.Collapsed;
         BtnDpOpen.Visibility       = vis;
         BtnDpClose.Visibility      = vis;
+        SepDpOpenDbg.Visibility    = vis;
         SepDpMapKeysDbg.Visibility = vis;
         BtnDpMapKeys.Visibility    = vis;  // remap keys: debug-only, see project rule
         BtnDpResetAll.Visibility   = vis;  // reset keys: debug-only, see project rule
         PnlDpDebugRight.Visibility = vis;
+        PnlDpDebugGroup.Visibility = vis;  // common actions: Debug group (Refresh)
+        LblDpSdk.Visibility        = vis;  // toolbar: SDK/DLL info label
         DisplayPadKey.DebugMode    = debug;
         foreach (var k in _dpKeys) k.NotifyDebugModeChanged();
     }

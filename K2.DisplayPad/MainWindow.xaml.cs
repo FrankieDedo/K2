@@ -74,9 +74,10 @@ public partial class MainWindow : Window
 
         _rotationOptions = new[]
         {
-            new RotationOption("0°",   DisplayRotation.None),
-            new RotationOption("90°",  DisplayRotation.Cw90),
-            new RotationOption("270°", DisplayRotation.Cw270),
+            new RotationOption(Loc.Get("pos_horizontal", 0),   DisplayRotation.None),
+            new RotationOption(Loc.Get("pos_vertical", 90),    DisplayRotation.Cw90),
+            new RotationOption(Loc.Get("pos_horizontal", 180), DisplayRotation.Cw180),
+            new RotationOption(Loc.Get("pos_vertical", 270),   DisplayRotation.Cw270),
         };
         _suppressRotationUpdate = true;
         CbRotation.ItemsSource   = _rotationOptions;
@@ -319,7 +320,7 @@ public partial class MainWindow : Window
     {
         if (CellFromContextMenu(sender) is not ButtonCell cell) return;
         if (CbDevice.SelectedItem is not int id) return;
-        var dlg = new ButtonActionDialog(cell.Index, cell.ActionType, cell.ActionValue) { Owner = this };
+        var dlg = new ButtonActionDialog(cell.Index, cell.ActionType, cell.ActionValue, this) { Owner = this };
         if (dlg.ShowDialog() == true)
         {
             cell.ActionType  = string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none" ? null : dlg.ActionType;

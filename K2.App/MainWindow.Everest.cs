@@ -30,6 +30,7 @@ public partial class MainWindow
     private readonly EverestStore   _evStore = new();
 
     private ButtonActionEngine? _evEngine;
+    internal EverestActionHost? _evActionHost;
 
     private readonly ObservableCollection<EverestKey> _evKeys = new();
     private readonly Dictionary<int, EverestKey> _evByMatrix = new();
@@ -191,7 +192,7 @@ public partial class MainWindow
 
         _everest.KeyEvent += OnEverestKey;
 
-        var host = new EverestActionHost(
+        _evActionHost = new EverestActionHost(
             dispatcher:           Dispatcher,
             log:                  LogEverestSafe,
             currentProfile:       EvCurrentProfile,
@@ -199,9 +200,11 @@ public partial class MainWindow
             getButtons:           EvGetButtons,
             pressButton:          EvPressButton,
             switchProfile:        EvSwitchProfile,
-            configuredPythonPath: () => _evStore.GetSetting("python.exePath"));
+            configuredPythonPath: () => _evStore.GetSetting("python.exePath"),
+            listAllProfileTargets: ListAllProfileTargets,
+            switchProfileByKey:    SwitchProfileByKey);
 
-        _evEngine = new ButtonActionEngine(host);
+        _evEngine = new ButtonActionEngine(_evActionHost);
         _evEngine.Start();
 
         Closed += (_, _) =>
@@ -215,9 +218,9 @@ public partial class MainWindow
         ReloadEverestProfile();
         InitSectionNav();
         InitEverestRgbPanel();
+        InitEverestSettingsPanel();
         InitMediaDockPanel();
         InitDisplayDialPanel();
-        InitMacroPanel();
         InitCustomLightingPanel();
         InitDockActionsPanel();
         _evLayoutType = EverestKeyboardLayout.DetectLayout();
@@ -427,6 +430,99 @@ public partial class MainWindow
         RebuildEverestKeyboardForLayout();
     }
 
+    // ---- Settings panel (Game Mode / Indicator LEDs / factory reset) -----
+
+    /// <summary>True while <see cref="LoadEverestSettingsFromStore"/> is repopulating
+    /// the checkboxes, to avoid re-saving/re-applying spuriously.</summary>
+    private bool _evSettingsSuppress;
+
+    private void InitEverestSettingsPanel()
+    {
+        _evSettingsSuppress = true;
+        try { LoadEverestSettingsFromStore(); }
+        finally { _evSettingsSuppress = false; }
+    }
+
+    /// <summary>
+    /// Loads Game Mode / Indicator LED state saved from the previous session
+    /// (keys <c>settings.*</c>). "Sync across profiles" mirrors the RGB &amp;
+    /// Lighting panel's checkbox: same physical device flag (SetSyncAcrossProfiles),
+    /// so both controls stay aligned rather than tracking their own copy.
+    /// </summary>
+    private void LoadEverestSettingsFromStore()
+    {
+        CkSettingsSync.IsChecked = CkEvSync.IsChecked;
+
+        int mode = int.TryParse(_evStore.GetSetting("settings.game_mode"), out var m) ? m : 0;
+        CkGameModeShiftTab.IsChecked = (mode & 0x1) != 0;
+        CkGameModeAltF4.IsChecked    = (mode & 0x2) != 0;
+        CkGameModeWinKey.IsChecked   = (mode & 0x4) != 0;
+        CkGameModeAltTab.IsChecked   = (mode & 0x8) != 0;
+
+        CkCoreIndicatorLed.IsChecked =
+            int.TryParse(_evStore.GetSetting("settings.indicator_led"), out var led) && led != 0;
+    }
+
+    /// <summary>
+    /// Bit layout confirmed by decompiling Base Camp's own
+    /// <c>EverestOperations.SaveSettings</c> (BaseCamp.UI.dll): it builds a
+    /// 4-char binary string "AltTab Win AltF4 Shift" and parses it base-2.
+    /// </summary>
+    private int EvGameModeBitmask() =>
+        (CkGameModeShiftTab.IsChecked == true ? 0x1 : 0) |
+        (CkGameModeAltF4.IsChecked    == true ? 0x2 : 0) |
+        (CkGameModeWinKey.IsChecked   == true ? 0x4 : 0) |
+        (CkGameModeAltTab.IsChecked   == true ? 0x8 : 0);
+
+    /// <summary>Re-applies the persisted Game Mode / Indicator LED / Sync state
+    /// to the device — called after the driver opens, mirroring RGB's ApplyCurrentEffect.</summary>
+    private void ApplyEverestSettingsToDevice()
+    {
+        if (!_everest.IsOpen) return;
+        LogEverest($"[SET ] SetGameMode({EvGameModeBitmask()}) -> {_everest.SetGameMode(EvGameModeBitmask())}");
+        LogEverest($"[SET ] SetIndicatorLed({CkCoreIndicatorLed.IsChecked == true}) -> " +
+                    $"{_everest.SetIndicatorLed(CkCoreIndicatorLed.IsChecked == true)}");
+        _everest.SetSyncAcrossProfiles(CkEvSync.IsChecked == true);
+    }
+
+    private void CkGameMode_Click(object sender, RoutedEventArgs e)
+    {
+        if (_evSettingsSuppress) return;
+        int mode = EvGameModeBitmask();
+        _evStore.SetSetting("settings.game_mode", mode.ToString());
+        if (!_everest.IsOpen) { LogEverest("[WARN] Everest driver not open: state saved but not applied"); return; }
+        LogEverest($"[SET ] SetGameMode({mode}) -> {_everest.SetGameMode(mode)}");
+    }
+
+    private void CkCoreIndicatorLed_Click(object sender, RoutedEventArgs e)
+    {
+        if (_evSettingsSuppress) return;
+        bool enable = CkCoreIndicatorLed.IsChecked == true;
+        _evStore.SetSetting("settings.indicator_led", enable ? "1" : "0");
+        if (!_everest.IsOpen) { LogEverest("[WARN] Everest driver not open: state saved but not applied"); return; }
+        LogEverest($"[SET ] SetIndicatorLed({enable}) -> {_everest.SetIndicatorLed(enable)}");
+    }
+
+    private void CkSettingsSync_Click(object sender, RoutedEventArgs e)
+    {
+        if (_evSettingsSuppress) return;
+        CkEvSync.IsChecked = CkSettingsSync.IsChecked; // same device flag as RGB & Lighting's checkbox
+        CkEvSync_Click(sender, e);
+    }
+
+    private void BtnSettingsFactoryReset_Click(object sender, RoutedEventArgs e)
+    {
+        var res = MessageBox.Show(
+            Loc.Get("settings_factory_reset_confirm"),
+            Loc.Get("settings_factory_reset"),
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+        if (res != MessageBoxResult.OK) return;
+
+        if (!_everest.IsOpen) { LogEverest("[WARN] Everest driver not open"); return; }
+        LogEverest($"[SET ] ResetFlash(true) -> {_everest.ResetFlash(true)}");
+    }
+
     /// <summary>
     /// Click on a key in the keyboard overlay — equivalent to "capture" if in
     /// capture mode; otherwise opens <see cref="ButtonActionDialog"/> to configure
@@ -447,6 +543,10 @@ public partial class MainWindow
             return;
         }
 
+        // Key editing is only enabled while the "Key Binding" section is active
+        // (elsewhere the keyboard overlay is just a visual reference for other panels).
+        if (!IsEvKeyBindingSectionActive) return;
+
         // Get or create the key entry
         if (!_evByMatrix.TryGetValue(matrixId, out var key))
         {
@@ -460,7 +560,7 @@ public partial class MainWindow
         LvEvKeys.SelectedItem = key;
 
         // Open action dialog directly
-        var dlg = new ButtonActionDialog(key.KeyMatrix, key.ActionType, key.ActionValue) { Owner = this };
+        var dlg = new ButtonActionDialog(key.KeyMatrix, key.ActionType, key.ActionValue, _evActionHost) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
         key.ActionType  = string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none"
@@ -632,6 +732,7 @@ public partial class MainWindow
         EvRefresh();
         UpdateKeyboardLayout();
         ApplyCurrentEffect();
+        ApplyEverestSettingsToDevice();
         StartLedPreview();
 
         // Restore custom device name if previously set
@@ -668,6 +769,7 @@ public partial class MainWindow
         {
             UpdateKeyboardLayout();
             ApplyCurrentEffect();
+            ApplyEverestSettingsToDevice();
             StartLedPreview();
         }
     }
@@ -695,6 +797,8 @@ public partial class MainWindow
 
         if (_everest.TryGetFirmwareInfo(out var fi))
             LogEverest($"Firmware current profile: {fi.currentlyProfileIndex}");
+
+        UpdateKeyboardLayout();
     }
 
     private void BtnEvApOn_Click(object sender, RoutedEventArgs e)  =>
@@ -813,48 +917,30 @@ public partial class MainWindow
     }
 
     // ============================================================
-    // Export profile — Base Camp-compatible XML / K2-only XML
+    // Export profiles — Base Camp-compatible XML / K2-only XML
     // ============================================================
 
-    private void BtnEvExportBc_Click(object sender, RoutedEventArgs e) => EvExportProfile(bcCompatible: true);
-    private void BtnEvExportK2_Click(object sender, RoutedEventArgs e) => EvExportProfile(bcCompatible: false);
-
-    private void EvExportProfile(bool bcCompatible)
+    private void BtnEvExportProfiles_Click(object sender, RoutedEventArgs e)
     {
-        if (CbEvProfile.SelectedItem is not EvProfileItem pi) { LblStatus.Text = Loc.Get("dp_export_no_profile"); return; }
-        int slot = pi.Slot;
-        string profileName = _evStore.GetProfileName(slot) ?? Loc.Get("profile_n", slot);
+        var profiles = Enumerable.Range(1, EverestService.ProfileCount)
+            .Select(slot => (Slot: slot, Name: _evStore.GetProfileName(slot) ?? Loc.Get("profile_n", slot)))
+            .ToList();
+        int? currentSlot = CbEvProfile.SelectedItem is EvProfileItem pi ? pi.Slot : null;
 
-        var dlg = new SaveFileDialog
-        {
-            Title    = bcCompatible ? Loc.Get("dp_save_bc_profile") : Loc.Get("dp_save_k2_profile"),
-            Filter   = Loc.Get("dp_filter_bc_xml"),
-            FileName = $"{profileName}.xml",
-        };
-        if (dlg.ShowDialog(this) != true) return;
-
-        try
-        {
-            var result = bcCompatible
-                ? EvProfileExporter.ExportBaseCamp(_evStore, slot, profileName, dlg.FileName)
-                : EvProfileExporter.ExportK2(_evStore, slot, profileName, dlg.FileName);
-
-            if (bcCompatible)
+        ExportProfileHelper.Run(
+            owner: this,
+            deviceLabel: "Everest",
+            profiles: profiles,
+            currentSlot: currentSlot,
+            exportOne: (slot, name, bcCompatible, path) =>
             {
-                LblStatus.Text = Loc.Get("dp_exported_bc", profileName, result.Exported, result.SkippedActions);
-                LogEverest($"[EXP-BC] '{profileName}' -> {dlg.FileName}: {result.Exported} actions, {result.SkippedActions} skipped");
-                foreach (var reason in result.SkipReasons) LogEverest($"[EXP-BC] skip: {reason}");
-            }
-            else
-            {
-                LblStatus.Text = Loc.Get("dp_exported_k2", profileName, result.Exported);
-                LogEverest($"[EXP-K2] '{profileName}' -> {dlg.FileName}: {result.Exported} actions");
-            }
-        }
-        catch (Exception ex)
-        {
-            LogEverest($"[ERR] export XML: {ex.Message}");
-        }
+                var result = bcCompatible
+                    ? EvProfileExporter.ExportBaseCamp(_evStore, slot, name, path)
+                    : EvProfileExporter.ExportK2(_evStore, slot, name, path);
+                return (result.Exported, result.SkippedActions, result.SkipReasons);
+            },
+            log: LogEverest,
+            setStatus: s => LblStatus.Text = s);
     }
 
     // ============================================================
@@ -996,7 +1082,7 @@ public partial class MainWindow
             LogEverest("[WARN] select a key first");
             return;
         }
-        var dlg = new ButtonActionDialog(key.KeyMatrix, key.ActionType, key.ActionValue)
+        var dlg = new ButtonActionDialog(key.KeyMatrix, key.ActionType, key.ActionValue, _evActionHost)
                   { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
@@ -1496,6 +1582,7 @@ public partial class MainWindow
 
     private void CkEvSync_Click(object sender, RoutedEventArgs e)
     {
+        CkSettingsSync.IsChecked = CkEvSync.IsChecked; // same device flag as the Settings panel's checkbox
         SaveEverestRgbToStore();
         if (!_everest.IsOpen)
         {

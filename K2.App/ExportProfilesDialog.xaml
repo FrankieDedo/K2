@@ -1,0 +1,63 @@
+<Window x:Class="K2.App.ExportProfilesDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+        Title="{loc:Get export_profiles_title}"
+        Width="360" SizeToContent="Height"
+        MinWidth="320"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Style="{DynamicResource K2WindowStyle}">
+
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- pick label -->
+            <RowDefinition Height="6"/>
+            <RowDefinition Height="Auto"/>  <!-- profile list -->
+            <RowDefinition Height="14"/>
+            <RowDefinition Height="Auto"/>  <!-- format section -->
+            <RowDefinition Height="14"/>
+            <RowDefinition Height="Auto"/>  <!-- buttons -->
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="{loc:Get export_profiles_pick}"
+                   FontSize="13" FontWeight="SemiBold"/>
+
+        <ScrollViewer Grid.Row="2" MaxHeight="220" VerticalScrollBarVisibility="Auto">
+            <ItemsControl x:Name="LstProfiles">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <CheckBox Content="{Binding Name}"
+                                  IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                  Margin="0,3"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="4">
+            <TextBlock Text="{loc:Get export_format_section}"
+                       FontSize="12" Foreground="#AAA" Margin="0,0,0,6"/>
+            <RadioButton x:Name="RbBc" Content="{loc:Get export_format_bc}"
+                         GroupName="ExportFormat" IsChecked="True" Margin="0,0,0,4"/>
+            <RadioButton x:Name="RbK2" Content="{loc:Get export_format_k2}"
+                         GroupName="ExportFormat"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="6"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right">
+            <Button Content="{loc:Get ok}"
+                    IsDefault="True"
+                    MinWidth="72"
+                    Style="{StaticResource K2IconAccentButton}"
+                    Click="BtnOk_Click"
+                    Margin="0,0,8,0"/>
+            <Button Content="{loc:Get cancel}"
+                    IsCancel="True"
+                    MinWidth="72"/>
+        </StackPanel>
+    </Grid>
+</Window>

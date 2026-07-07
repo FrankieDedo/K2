@@ -76,6 +76,9 @@ public partial class MainWindow
         string[] dockNames = { "Dock Btn 1", "Dock Btn 2", "Dock Btn 3", "Dock Btn 4" };
         string[] dialNames = { "Crown ←", "Crown →" };
         string[] dialGlyphs = { "↺", "↻" }; // ↺ ↻
+        // Each glyph rotated 90° in its own rotational sense (CCW turns further
+        // CCW, CW turns further CW) so they read as pointing "into" the dial.
+        double[] dialGlyphRotations = { -90, 90 };
 
         for (int i = 0; i < dockNames.Length; i++)
             _hwSlots.Add(CreateHwSlot(dockNames[i], "dock", i));
@@ -89,7 +92,8 @@ public partial class MainWindow
 
         // Crown rotation: no artwork above the dial, so show a small ↺ / ↻ glyph.
         for (int i = 0; i < 2; i++)
-            PlaceHwOverlayButton(_hwSlots[4 + i], CvsEvDock, CrownHotspots[i], glyph: dialGlyphs[i]);
+            PlaceHwOverlayButton(_hwSlots[4 + i], CvsEvDock, CrownHotspots[i], glyph: dialGlyphs[i],
+                glyphRotation: dialGlyphRotations[i]);
     }
 
     private HwActionSlot CreateHwSlot(string name, string prefix, int index)
@@ -145,9 +149,12 @@ public partial class MainWindow
     /// <summary>Creates a round, mostly-transparent hotspot button for a slot and
     /// places it on the given canvas at the given geometry. <paramref name="glyph"/>,
     /// if set, is shown as small centered text (used where the artwork has no icon
-    /// of its own, e.g. the crown rotation buttons).</summary>
+    /// of its own, e.g. the crown rotation buttons). <paramref name="glyphRotation"/>
+    /// rotates the whole button (glyph included; the hotspot circle is symmetric
+    /// so it is unaffected) by the given degrees.</summary>
     private void PlaceHwOverlayButton(
-        HwActionSlot slot, Canvas canvas, (double X, double Y, double W, double H) geo, string? glyph)
+        HwActionSlot slot, Canvas canvas, (double X, double Y, double W, double H) geo, string? glyph,
+        double glyphRotation = 0)
     {
         var btn = new Button
         {
@@ -165,6 +172,11 @@ public partial class MainWindow
             ToolTip = SlotTooltip(slot),
             ContextMenu = BuildHwSlotContextMenu(),
         };
+        if (glyphRotation != 0)
+        {
+            btn.RenderTransformOrigin = new Point(0.5, 0.5);
+            btn.RenderTransform = new RotateTransform(glyphRotation);
+        }
         btn.Click += HwSlotButton_Click;
         slot.UiButton = btn;
 
@@ -204,7 +216,7 @@ public partial class MainWindow
         if (sender is not Button { Tag: HwActionSlot slot }) return;
 
         var dlg = new ButtonActionDialog(
-            _hwSlots.IndexOf(slot), slot.ActionType, slot.ActionValue)
+            _hwSlots.IndexOf(slot), slot.ActionType, slot.ActionValue, _evActionHost)
         { Owner = this };
 
         if (dlg.ShowDialog() == true)

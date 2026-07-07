@@ -517,6 +517,59 @@
         </Setter>
     </Style>
 
+    <!-- ===== Toggle row (icon + label + pill switch) =====
+         A CheckBox re-skinned as a settings row: `Tag` carries a Segoe
+         MDL2 Assets glyph (icon), `Content` the label, and the check
+         state renders as a sliding pill switch on the right — used by
+         the Everest Display Dial "show menu" grid. -->
+    <Style x:Key="K2ToggleRow" TargetType="CheckBox">
+        <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Padding" Value="0,6"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Grid Background="Transparent" Margin="{TemplateBinding Padding}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{TemplateBinding Tag}"
+                                   FontFamily="Segoe MDL2 Assets" FontSize="15"
+                                   Foreground="{StaticResource K2TextMutedBrush}"
+                                   VerticalAlignment="Center" Width="20" Margin="0,0,10,0"/>
+                        <ContentPresenter Grid.Column="1" VerticalAlignment="Center"/>
+                        <Border x:Name="pill" Grid.Column="2" Width="36" Height="18" CornerRadius="9"
+                                Background="{StaticResource K2SurfaceAltBrush}"
+                                BorderBrush="{StaticResource K2BorderStrongBrush}" BorderThickness="1.5"
+                                Margin="10,0,0,0" VerticalAlignment="Center">
+                            <Ellipse x:Name="knob" Width="12" Height="12"
+                                     Fill="{StaticResource K2TextMutedBrush}"
+                                     HorizontalAlignment="Left" Margin="1,0,0,0"/>
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="pill" Property="Background" Value="{StaticResource K2AccentBrush}"/>
+                            <Setter TargetName="pill" Property="BorderBrush" Value="{StaticResource K2AccentBrush}"/>
+                            <Setter TargetName="knob" Property="HorizontalAlignment" Value="Right"/>
+                            <Setter TargetName="knob" Property="Margin" Value="0,0,1,0"/>
+                            <Setter TargetName="knob" Property="Fill" Value="White"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="pill" Property="BorderBrush" Value="{StaticResource K2AccentBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ===== RadioButton ===== -->
     <Style TargetType="RadioButton">
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
@@ -688,6 +741,18 @@
         </Setter>
     </Style>
 
+    <!-- ===== Separator (horizontal, for category dividers in vertical sidebars) ===== -->
+    <Style x:Key="K2SideSeparator" TargetType="Separator">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Border Height="1" Margin="0,6"
+                            Background="{StaticResource K2BorderBrush}"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ===== ContextMenu / MenuItem ===== -->
     <Style TargetType="ContextMenu">
         <Setter Property="Background" Value="{StaticResource K2SurfaceBrush}"/>
@@ -801,7 +866,13 @@
     <Style x:Key="K2WindowStyle" TargetType="Window">
         <Setter Property="Background" Value="{StaticResource K2BgBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
-        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <!-- Roboto (embedded, see K2.Core/Fonts): app-wide default, inherited by
+             every descendant control that doesn't set its own FontFamily (e.g.
+             KeyCapStyle's BC keycap replica, Consolas log/hex viewers, and the
+             Segoe MDL2 Assets icon glyphs are intentionally untouched).
+             "Segoe UI" fallback covers the unlikely case the pack URI fails to
+             resolve. -->
+        <Setter Property="FontFamily" Value="pack://application:,,,/K2.Core;component/Fonts/#Roboto, Segoe UI"/>
         <Setter Property="FontSize" Value="13"/>
         <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
         <Setter Property="shell:WindowChrome.WindowChrome">

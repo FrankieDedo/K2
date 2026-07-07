@@ -93,6 +93,22 @@ ON CONFLICT(DeviceId, Profile, KeyIndex) DO UPDATE SET
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>Every key currently configured with the given action (e.g. macro assignment lookup).</summary>
+    public List<(int DeviceId, int Profile, int KeyIndex)> GetKeysByAction(string actionType, string actionValue)
+    {
+        var result = new List<(int, int, int)>();
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = @"SELECT DeviceId, Profile, KeyIndex FROM Keys
+                            WHERE ActionType=$t AND ActionValue=$v
+                            ORDER BY DeviceId, Profile, KeyIndex";
+        cmd.Parameters.AddWithValue("$t", actionType);
+        cmd.Parameters.AddWithValue("$v", actionValue);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            result.Add((r.GetInt32(0), r.GetInt32(1), r.GetInt32(2)));
+        return result;
+    }
+
     /// <summary>Deletes all actions of a profile.</summary>
     public void ClearProfile(int deviceId, int profile)
     {

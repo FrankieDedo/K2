@@ -25,7 +25,11 @@ public partial class MainWindow
     private int  _macroColor3 = 0x000000;
 
     /// <summary>Effect combo item: (preset, label).</summary>
-    private sealed record MacroEffectChoice(MacroPadService.Effect Eff, string Label);
+    private sealed record MacroEffectChoice(MacroPadService.Effect Eff, string Label)
+    {
+        // See RotationChoice.ToString() in MainWindow.Keys.cs for why this matters.
+        public override string ToString() => Label;
+    }
 
     private static readonly MacroEffectChoice[] MacroEffectList =
     {

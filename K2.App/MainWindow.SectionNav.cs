@@ -1,18 +1,45 @@
-// MainWindow.SectionNav.cs — partial class: Everest section navigation.
+// MainWindow.SectionNav.cs — partial class: per-device section navigation
+// (Everest, MacroPad, DisplayPad).
 //
 // Manages:
 //  - Sidebar RadioButton selection → shows the matching bottom panel
 //  - Debug mode toggle → reveals AP controls, USB Recorder section, SDK log
 //
-// Section panels (all in the same Grid cell, one Visible at a time):
+// Everest section panels (all in the same Grid cell, one Visible at a time):
 //   PnlSecKeyMapping  — "Key Binding": mapped key list + capture/remap/configure,
 //                       plus the generic HW-key capture utility (dock/crown/display
 //                       keys are configured directly on the device graphic — see
 //                       MainWindow.DockActions.cs and MainWindow.NumpadDisplayKeys.cs)
 //   PnlSecRgb         — RGB preset effects + per-key custom lighting
 //   PnlSecDial        — Display Dial page/clock/screensaver settings
-//   PnlSecMacros      — Keyboard macro CRUD / record / play
+//   PnlSecSettings    — general Everest settings: sync-across-profiles, Game Mode
+//                       key-lock checkboxes, Core indicator LEDs, keyboard layout
+//                       selector, factory reset (see MainWindow.Everest.cs)
 //   PnlSecUsb         — USB Recorder (debug only)
+//
+// Keyboard macro CRUD/record/play used to live here (PnlSecMacros) but is now
+// its own top-level section (PnlMacro), reachable via the dedicated Macro
+// icon button next to Settings — see BtnMacroTab_Click in MainWindow.xaml.cs.
+//
+// MacroPad section panels: PnlMpSecKeyBinding (keys configured on the grid above),
+//   PnlMpSecOrientation (rotation), PnlMpSecLed (RGB lighting)
+// DisplayPad section panels: PnlDpSecKeyBinding (keys configured on the grid above),
+//   PnlDpSecRotation (rotation + icon rotate)
+//
+// Brightness sliders (SldEvBrightness/SldMacroBrightness/SldDpBrightness) live in
+// the shared top-right brightness bar (BrEverest/BrMacroPad/BrDisplayPad in
+// MainWindow.xaml), not in these per-device sections — see MainWindow.xaml.cs
+// TcDevices_SelectionChanged for how that bar switches with the active tab.
+//
+// Key-editing gate: clicking a key on the on-screen grid/keyboard only opens the
+// action-configuration dialog while that device's Key Binding section is the
+// active one (see EvKeyboardButton_Click, KeyButton_Click/ConfigureAction,
+// DpKeyButton_Click and their context-menu equivalents). Elsewhere the click is
+// a no-op (or, for DisplayPad folders, still just navigates).
+//
+// Everest LED preview gate: the real-time LED color overlay (MainWindow.LedPreview.cs)
+// is only meaningful while looking at "RGB & Lighting" — ShowEvSection toggles
+// _ledPoller.EverestEnabled accordingly so it isn't polled/painted elsewhere.
 
 using System.Windows;
 using System.Windows.Controls;
@@ -41,7 +68,7 @@ public partial class MainWindow
             nameof(RbSecKeyMapping) => PnlSecKeyMapping,
             nameof(RbSecRgb)        => PnlSecRgb,
             nameof(RbSecDial)       => PnlSecDial,
-            nameof(RbSecMacros)     => PnlSecMacros,
+            nameof(RbSecSettings)   => PnlSecSettings,
             nameof(RbSecUsb)        => PnlSecUsb,
             _                       => null
         };
@@ -59,7 +86,84 @@ public partial class MainWindow
         // Show new section
         panel.Visibility  = Visibility.Visible;
         _activeEvSection  = panel;
+
+        // LED color preview is only useful (and only polled) while looking at RGB & Lighting.
+        UpdateEverestLedPreviewActive(panel == PnlSecRgb);
     }
+
+    /// <summary>True while the Everest "Key Binding" section is the active one —
+    /// gates whether clicking a key on the keyboard overlay opens the action dialog.</summary>
+    private bool IsEvKeyBindingSectionActive => _activeEvSection == PnlSecKeyMapping;
+
+    // ── MacroPad sidebar (Key Binding / Orientation / LED Lighting) ───
+    private FrameworkElement? _activeMpSection;
+
+    private void InitMpSectionNav() => ShowMpSection(PnlMpSecKeyBinding);
+
+    private void MpSection_Changed(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton rb) return;
+
+        FrameworkElement? panel = rb.Name switch
+        {
+            nameof(RbMpSecKeyBinding)  => PnlMpSecKeyBinding,
+            nameof(RbMpSecOrientation) => PnlMpSecOrientation,
+            nameof(RbMpSecLed)         => PnlMpSecLed,
+            _                          => null
+        };
+
+        if (panel is not null)
+            ShowMpSection(panel);
+    }
+
+    private void ShowMpSection(FrameworkElement panel)
+    {
+        if (_activeMpSection is not null)
+            _activeMpSection.Visibility = Visibility.Collapsed;
+
+        panel.Visibility = Visibility.Visible;
+        _activeMpSection = panel;
+    }
+
+    /// <summary>True while the MacroPad "Key Binding" section is the active one —
+    /// gates whether clicking a key on the grid opens the action dialog.</summary>
+    private bool IsMpKeyBindingSectionActive => _activeMpSection == PnlMpSecKeyBinding;
+
+    // ── DisplayPad sidebar (Key Binding / Rotation) ───────────────────
+    private FrameworkElement? _activeDpSection;
+
+    private void InitDpSectionNav() => ShowDpSection(PnlDpSecKeyBinding);
+
+    private void DpSection_Changed(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton rb) return;
+
+        // Null-guard: the default RadioButton's IsChecked="True" fires this Checked
+        // event synchronously during InitializeComponent, before the panel fields
+        // (declared later in the same XAML file) have been constructed/assigned yet.
+        FrameworkElement? panel = rb.Name switch
+        {
+            nameof(RbDpSecKeyBinding) => PnlDpSecKeyBinding,
+            nameof(RbDpSecRotation)   => PnlDpSecRotation,
+            _                         => null
+        };
+
+        if (panel is not null)
+            ShowDpSection(panel);
+    }
+
+    private void ShowDpSection(FrameworkElement panel)
+    {
+        if (_activeDpSection is not null)
+            _activeDpSection.Visibility = Visibility.Collapsed;
+
+        panel.Visibility = Visibility.Visible;
+        _activeDpSection = panel;
+    }
+
+    /// <summary>True while the DisplayPad "Key Binding" section is the active one —
+    /// gates whether clicking a key on the grid opens the action dialog.</summary>
+    private bool IsDpKeyBindingSectionActive => _activeDpSection == PnlDpSecKeyBinding;
 
     // ── Debug mode ─────────────────────────────────────────────────────
     // Driven centrally by the General Settings tab (MainWindow.Settings.cs) —
@@ -85,6 +189,13 @@ public partial class MainWindow
 
         // Settings panel: SDK log
         GbEvLog.Visibility = vis;
+
+        // Common actions: Debug group (Refresh)
+        PnlEvDebugGroup.Visibility = vis;
+
+        // Toolbar: SDK/DLL info label
+        SepEvSdkDbg.Visibility = vis;
+        LblEvSdk.Visibility = vis;
 
         // If USB section was selected while we hide it, fall back to Key Mapping
         if (!debug && RbSecUsb.IsChecked == true)

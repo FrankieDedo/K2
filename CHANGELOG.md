@@ -9,7 +9,523 @@
 > mappa stabile in `_PROJECT_MAP.md`. Consultare qui solo per il contesto
 > di una modifica specifica passata (grep per parola chiave/data).
 
-> Last updated: 2026-07-05 (Everest: auto-rinomina tab in base a numpad/media dock collegati):
+> Last updated: 2026-07-07 (ButtonActionDialog: selettori dedicati per azione + icone automatiche):
+>   - **Obiettivo**: sostituire il generico textbox "Value:" con controlli
+>     dedicati per tipo di azione (stesse azioni assegnabili su tutti i
+>     device, dialog condiviso in `K2.Core`), e generare automaticamente
+>     l'immagine del tasto (DisplayPad 12-key grid + 4 numpad display key
+>     Everest) quando l'azione è "exec"/"folder".
+>   - **Open program/file**: riga icona 32×32 + path compatto + Browse…,
+>     lista percorsi recenti sotto (`AppSettings.RecentExecPaths`, MRU 10).
+>     Icona via `System.Drawing.Icon.ExtractAssociatedIcon`.
+>   - **Open folder**: solo path + Browse (`Microsoft.Win32.OpenFolderDialog`)
+>     + lista recenti (`RecentFolderPaths`), niente anteprima icona.
+>   - **Open browser**: radio Chrome/Edge/Firefox/Opera/Brave mostrati solo se
+>     rilevati (`BrowserDetector`, registro `App Paths`), radio "Altro…" con
+>     path/Browse sempre presente, URL iniziale opzionale. Valore serializzato
+>     come `BrowserActionPayload` JSON; stringa legacy (URL nudo) resta
+>     supportata come fallback in `ButtonActionEngine.RunBrowserAction`.
+>   - **Switch profile**: righe multiple (pulsante "+ Aggiungi dispositivo"),
+>     ogni riga sceglie un dispositivo (combo popolata da
+>     `IActionHost.ListProfileTargets()`, sempre con "Questo dispositivo" come
+>     self-target retrocompatibile) e Next/Previous/Profilo N. Valore JSON
+>     `ProfileTargetPayload`; stringa legacy resta supportata (self-target).
+>     **Cambio architetturale**: `IActionHost.SwitchProfile` ora prende
+>     `(string? targetKey, string target)`; K2.App (MacroPad+Everest+DisplayPad
+>     ormai unificati nello stesso processo — vedi `DisplayPadActionHost`/
+>     `EverestActionHost`) espone un dispatcher condiviso
+>     `MainWindow.SwitchProfileByKey`/`ListAllProfileTargets`; lo standalone
+>     `K2.DisplayPad.exe` espone solo i propri device. `MpSwitchProfile`/
+>     `DpSwitchProfile` accettano ora un `deviceId` opzionale per switchare un
+>     device diverso da quello visualizzato senza toccarne la UI.
+>   - **System command / Media key / Mouse action**: un solo `ComboBox`
+>     ripopolato per tipo con le stringhe già riconosciute da
+>     `ActionExecutor` (nessuna modifica alla logica di esecuzione).
+>   - **Keys**: checkbox modificatori (Ctrl/Shift/Alt/Win) + combo editabile
+>     per il tasto (A-Z, 0-9, F1-F24, tasti speciali comuni); compone/parsa la
+>     stessa sintassi umana `"Ctrl + Shift + A"` già letta da
+>     `SendKeysTranslator` — nessuna modifica all'esecuzione. Win noto per non
+>     essere inviato da SendKeys (hint in UI, comportamento preesistente).
+>   - **Icone automatiche** (`K2.Core/IconImageGenerator.cs`): quando l'azione
+>     assegnata/cambiata tramite il dialog è "exec", icona dell'eseguibile via
+>     Shell `IShellItemImageFactory::GetImage` (jumbo, fallback a
+>     `Icon.ExtractAssociatedIcon`); quando è "folder", glyph Segoe MDL2
+>     "OpenFolderHorizontal" + nome cartella come didascalia. Generate solo
+>     quando tipo/valore azione cambia davvero (non sovrascrive un'immagine
+>     scelta manualmente se l'utente riapre il dialog senza modificare
+>     l'azione). Agganciato in `DpKeyConfigDialog` (K2.App), `CellConfigDialog`
+>     (K2.DisplayPad standalone) e `MainWindow.NumpadDisplayKeys.cs`
+>     (`TryAutoGenerateNdkImage` → stessa cascata di upload di
+>     `NdkButton_Click`, ora fattorizzata in `NdkApplyImage`).
+>   - **Localizzazione**: tutte le nuove chiavi in `Strings.xml` (EN) e
+>     `Strings.it.xml` (IT) tradotte; le altre 8 lingue hanno le stesse chiavi
+>     con testo inglese come placeholder (nessuna traduzione persa, solo da
+>     completare in una sessione futura se serve).
+>   - **Verificato**: `build-check.bat` pulito (0 errori/0 warning, entrambe
+>     le solution) dopo ogni step. **Da verificare su hardware/UI
+>     dall'utente**: aspetto reale dei pannelli nel dialog, qualità/nitidezza
+>     delle icone auto-generate sui tile DisplayPad (102×102) e sui numpad
+>     display key Everest (72×72), leggibilità del nome cartella a 72px,
+>     comportamento dello switch profilo cross-device su hardware reale.
+>
+> Previous: 2026-07-07 (Macro window: redesign ispirato a Base Camp):
+>   - **Obiettivo**: migliorare il pannello Macro (`PnlMacro`), partendo dallo
+>     screenshot dell'editor macro di Base Camp e da quanto recuperabile da
+>     `_reference/BaseCamp_decompiled` (schema `KeyboardMacro`/`KeyboardBinding`,
+>     enum Delay/Playback via `Makalu/Macro.cs`: `WithDelay/SetDelay/NoDelay`,
+>     `RUN_Once/Repeat/RUN_PRESSED(Hold)/RUN_LOOP(Toggle)`) — BaseCampLinux non
+>     ha aggiunto altro (reimplementazione custom, non fedele a BC).
+>   - **Layout**: Delay (Recorded/Custom/No delay) e Playback (Once/Hold/
+>     Repeat/Toggle) sono ora `RadioButton` mutuamente esclusivi in stile
+>     "pillola" (nuovo style `MacroOptionRowStyle`), non più `ComboBox`.
+>     Sezioni Devices/Delay/Playback impilate in un'unica colonna centrale;
+>     colonna Inputs (registrazione) al centro-largo; colonna "Assigned to"
+>     a destra dei comandi, come richiesto.
+>   - **Assigned to**: nuova query `GetKeysByAction(actionType, actionValue)`
+>     su `MacroPadStore`/`EverestStore` (già esistevano `ActionType`/
+>     `ActionValue` per riga) per trovare i tasti con `ActionType=="macro"` e
+>     `ActionValue==<nome macro>` — stessa convenzione già usata da
+>     `BaseCampDbImporter.TranslateAction` per importare i binding "Macro" da
+>     BaseCamp.db. **Nota**: K2 non permette ancora di assegnare un'azione
+>     "macro" a un tasto da `ButtonActionDialog` (solo l'import da BC popola
+>     questo binding) — la sezione è pronta, ma oggi mostrerà assegnazioni
+>     solo per profili importati da BaseCamp.db.
+>   - **Fix incidentali**: `MacroRecorder.Start` ora accetta anche
+>     `recordKeyboard` (prima la tastiera veniva sempre registrata,
+>     `MacroDefinition.RecordKeyboard` esisteva ma non era esposto in UI —
+>     aggiunta checkbox "Record keyboard"); i campi custom-delay-ms e
+>     repeat-count ora salvano su `TextChanged` (prima si salvavano solo se
+>     l'utente toccava un altro controllo prima); il combo Delay riusava per
+>     sbaglio le chiavi loc `act_none`/`dial_custom` di altri pannelli — ora
+>     usa le chiavi dedicate `macro_delay_recorded/custom/none` già esistenti
+>     ma inutilizzate.
+>   - **Inputs list**: lista dei tasti registrati con numero, glyph
+>     tastiera/mouse, indicatore press/release (▲/▼, toggle "Show press/
+>     release"), ms di delay, e icone per-riga (sposta su/giù, elimina) — per
+>     ora un `ListView` semplice bindato a `MacroInputRow` (view model
+>     nuovo), migrazione a drag&drop reale rimandata a una sessione futura
+>     come da richiesta utente.
+>   - **Verificato**: `build-check.bat`, 0 errori/0 warning su entrambe le
+>     solution. Avviato `K2.App.exe` in locale: `MainWindow.xaml` (incluso il
+>     nuovo `PnlMacro`) carica senza eccezioni XAML, l'app arriva fino
+>     all'inizializzazione hardware (LED sync, MacroPad/DisplayPad/Everest)
+>     prima di un crash nativo (0xE06D7363) non correlato — causato dai
+>     processi Base Camp ancora in esecuzione in concorrenza con K2.App (già
+>     loggato come warning esplicito dall'app stessa); non ho girato
+>     `stop-basecamp.bat` prima del test. **Da verificare su hardware/UI
+>     dall'utente**: aspetto visivo del nuovo layout (colonne, radio "a
+>     pillola", lista Inputs, sezione Assigned To), comportamento reale di
+>     record/play con le nuove checkbox Devices.
+>
+> Previous: 2026-07-07 (DisplayPad: non risponde finché non si apre la sua pagina):
+>   - **Bug segnalato dall'utente**: aprendo K2, i DisplayPad fisici non
+>     rispondono alle pressioni tasto finché l'utente non apre manualmente la
+>     loro tab nella UI (`TcDevices`) — capita anche con un solo DisplayPad
+>     collegato, non solo in setup multi-device.
+>   - **Causa**: `_activeDpDeviceId` (`MainWindow.DisplayPad.cs`) viene
+>     impostato SOLO da `TcDevices_SelectionChanged` (click utente sulla tab
+>     `dp_{id}`) — resta `null` finché non succede. `OnDpKey`,
+>     `DpReloadCurrentProfile`, `DpSwitchProfile` ecc. controllano tutti
+>     `DpSelectedDeviceId()` (= `_activeDpDeviceId`) e fanno no-op silenzioso se
+>     `null`: niente azioni, niente caricamento tasti/icone, niente risposta
+>     hardware, finché non si apre la tab almeno una volta. `DpRefreshDevices`
+>     aveva già una guardia esplicita per NON rubare il focus alla tab visibile
+>     durante un refresh in background ("a background device refresh must not
+>     steal focus") — ma questo lasciava `_activeDpDeviceId` per sempre `null`
+>     se l'utente restava su Everest/Settings o se l'app partiva minimizzata in
+>     tray (vedi sessione precedente: `StartMinimizedToTray`).
+>   - **Fix**: estratto il corpo di `CbDpDevice_SelectionChanged` in un nuovo
+>     `DpActivateDevice(int id)` (carica luminosità/profili/rotazione/griglia
+>     tasti + ri-upload icone). `DpRefreshDevices` ora, quando non c'è nessuna
+>     tab DisplayPad visibile E `_activeDpDeviceId` è ancora `null` (mai
+>     attivato in questa sessione), attiva silenziosamente il primo device
+>     trovato chiamando `DpActivateDevice` direttamente — SENZA toccare
+>     `TcDevices.SelectedItem`, quindi non ruba il focus (stesso vincolo di
+>     prima, preservato per il caso "utente già su una tab DisplayPad").
+>   - **Verificato**: chiuso il processo `K2.App.exe` in esecuzione (di test
+>     dell'utente) e ricompilate entrambe le solution, 0 errori/0 warning.
+>     **Da verificare su hardware**: conferma utente che ora il DisplayPad
+>     risponde ai tasti fisici subito dopo l'avvio di K2, senza dover aprire
+>     la sua tab.
+>
+> Previous: 2026-07-07 (opzioni generali app: chiudi in tray, avvio con Windows, avvia ridotto in tray):
+>   - **Richiesta utente**: aggiungere alle Impostazioni generali 3 opzioni:
+>     chiudere K2 lo manda nella system tray invece di uscire, avviare K2
+>     all'avvio di Windows, avviare K2 direttamente ridotto a icona in tray.
+>   - **`AppSettings.cs`**: due nuovi flag persistiti, `CloseToTray` e
+>     `StartMinimizedToTray` (stesso meccanismo JSON degli altri flag app-wide).
+>   - **`Services/K2AutostartService.cs`** (nuovo): voce HKCU Run per K2.App
+>     stesso (distinta da `BaseCampProcessGuard`, che gestisce solo le voci di
+>     Base Camp) — nessun diritto admin richiesto, coerente con "preferenza
+>     per-utente".
+>   - **`MainWindow.Tray.cs`** (nuovo, partial): `NotifyIcon` (System.Windows.Forms,
+>     già referenziato via `UseWindowsForms` per il ColorDialog Everest — nessuna
+>     nuova dipendenza) creato una volta nel costruttore, menu contestuale
+>     Mostra/Esci, `Closing` handler che se `CloseToTray` è attivo fa
+>     `e.Cancel=true` + `Hide()` invece di chiudere davvero (un flag
+>     `_reallyClosing`, settato solo dal menu tray "Esci", distingue la chiusura
+>     reale). Gotcha C#: `Icon.ExtractAssociatedIcon(...)` va qualificato
+>     `System.Drawing.Icon...` per intero — `Icon` bare si risolve alla proprietà
+>     d'istanza `Window.Icon` (ImageSource), non al tipo `System.Drawing.Icon`.
+>   - **`App.xaml`/`App.xaml.cs`**: rimosso `StartupUri` (serviva per poter
+>     decidere se mostrare la finestra o avviarla ridotta in tray), aggiunto
+>     `OnStartup` che crea `MainWindow` esplicitamente, imposta
+>     `ShutdownMode.OnExplicitShutdown` (altrimenti nascondere la finestra in
+>     tray chiuderebbe il processo) e se `StartMinimizedToTray` chiama
+>     `window.StartMinimizedToTray()` (Show() poi immediatamente Hide() — nessun
+>     flicker perché nulla cede il controllo al message loop tra le due
+>     chiamate, e i driver si aprono comunque da `OnSourceInitialized` esattamente
+>     come in un avvio normale) invece di `window.Show()`. `OnWindowClosed` ora
+>     fa dispose del tray icon e chiama `Application.Current.Shutdown()`
+>     esplicitamente (necessario con lo shutdown mode esplicito).
+>   - **Stringhe nuove** (EN+IT, altre lingue ereditano il default EN):
+>     `settings_general`, `settings_close_to_tray`, `settings_k2_autostart`,
+>     `settings_start_min_tray(_hint)`, `tray_show`, `tray_exit`.
+>   - **Verificato**: `dotnet build` pulito (0 errori/0 warning) su entrambe le
+>     solution (`K2.sln` x86, `K2.DisplayPad.sln` x64). Avvio reale di `K2.App.exe`
+>     testato in locale: driver DisplayPad/MacroPad/Everest si aprono
+>     normalmente come prima, nessun crash log. **Da verificare dall'utente**:
+>     comportamento a occhio del tray (icona/menu/restore), voce autostart HKCU
+>     effettivamente scritta/rimossa dal registro, avvio ridotto a tray end-to-end.
+>
+> Previous: 2026-07-07 (DisplayPad: press-bounce hardware mancante):
+>   - **Bug segnalato dall'utente**: premendo un tasto fisico del DisplayPad,
+>     manca l'animazione "bouncing" che fa Base Camp (l'icona si rimpicciolisce
+>     leggermente alla pressione e torna alla dimensione piena al rilascio).
+>   - **Causa**: `OnDpKey` (`K2.App/MainWindow.DisplayPad.cs`) aggiornava solo
+>     `IsHighlighted` (bordo bianco nella UI K2) ma non ri-caricava l'icona sul
+>     device fisico. Nel worker BC decompilato (`DisplayPadOperations.cs`,
+>     `IsBtnPressed`/`UploadImage`/`CallBack` in `DisplayPadMessagePumpManager.cs`)
+>     il "bounce" NON è un'animazione firmware: ad ogni key-down BC ri-carica
+>     la stessa icona rimpicciolita a 80×80 centrata su un canvas nero 102×102
+>     (margine 11px, via `DrawBitmapWithBorder`), e al key-up la ricarica a piena
+>     dimensione (`SetDefaultSize`) — un vero e proprio re-upload, non un effetto
+>     lato device.
+>   - **Fix**: aggiunto parametro `bool pressed` a `IDisplayPadClient.UploadImage`
+>     (default `false`, non-breaking). Implementato in entrambi i backend:
+>     - `DisplayPadNativeClient.LoadBgr` — se `pressed`, disegna l'icona 80×80
+>       centrata su canvas nero 102×102 (stesso schema BC, niente mascheratura
+>       angoli arrotondati dato che quel path non la fa nemmeno a riposo).
+>     - `K2.DisplayPad.Satellite/NativeIconUploader.Upload` — replica esatta di
+>       BC (resize 80×80 + maschera angoli raggio 40 + `DrawWithBorder` margine
+>       11px), thread-ata da `SdkHandler.CmdUploadImage` via nuovo campo JSON
+>       `"pressed"` (helper `OptBool` aggiunto).
+>   - **`MainWindow.DisplayPad.cs`**: nuovo `DpUploadPressVisual(id, btnIndex,
+>     pressed)` chiamato da `OnDpKey` su ogni key-down/key-up; incodato sulla
+>     stessa `_dpUploadChain` per-device di ogni altro upload icona (mai in
+>     parallelo con un reload di profilo — causa storica di corruzione icone).
+>     Skippato per GIF animate (già in loop live via `DpGifAnimator`) e quando
+>     un'immagine fullscreen possiede le 12 icone (nuovo dizionario
+>     `_dpFullscreenByDevice`, popolato in `DpReloadCurrentProfile`).
+>   - **Verificato**: `build-check.bat` pulito, 0 errori/0 warning su entrambe
+>     le solution. **Da verificare su hardware**: l'utente usa il motore nativo
+>     (`DisplayPadNativeEngine: true` in `app_settings.json`) — il path
+>     satellite/SDK è stato aggiornato per coerenza ma non è quello attivo, va
+>     ritestato se l'utente passa a quel motore.
+>
+> Previous: 2026-07-07 (Display Dial: layout più compatto):
+>   - **Richiesta utente**: nel pannello Display Dial, spostare la combo
+>     "cosa mostra lo screensaver" sulla stessa riga dei secondi dello
+>     screensaver (compattare l'interfaccia); allargare le entry dei secondi
+>     di screensaver/turn-off e allinearle (stessa left position).
+>   - **`MainWindow.xaml`** (`PnlSecDial`, sezione Screensaver): da 3
+>     `WrapPanel` impilati a un unico `Grid` 2 righe × 5 colonne — colonna 0
+>     larghezza fissa (130) per le due checkbox "Screensaver after"/"Turn off
+>     after" (di lunghezza diversa), colonna 1 larghezza fissa (60, prima
+>     `Width="46"` sulla singola TextBox) per i due `TextBox` dei secondi:
+>     essendo in colonna fissa, i due `TextBox` condividono lo stesso left
+>     edge indipendentemente dalla lunghezza del testo della checkbox a
+>     sinistra. La combo funzione screensaver (`CbDialScreenSaverFunction`)
+>     si è spostata sulla riga 0, colonne 3-4, subito dopo l'unità "s" —
+>     elimina una riga intera rispetto a prima.
+>   - **Verificato**: `build-check.bat` pulito, 0 errori/0 warning su
+>     entrambe le solution. Nessun cambio nel code-behind (gli handler erano
+>     già tutti presenti, solo re-innestati nel nuovo `Grid`).
+>
+> Previous: 2026-07-06 (nuova sezione "Settings" Everest + tecnica di
+> reverse engineering delle view Razor di Base Camp):
+>   - **Richiesta utente**: aggiungere una sezione "Settings" nella sidebar
+>     Everest con la selezione layout tastiera (già esistente, spostata da un
+>     overlay in alto a destra sull'immagine device), poi aggiungere anche
+>     "Sync across profiles", "Game Mode" (4 checkbox: disable Shift+Tab/
+>     Alt+F4/Windows key/Alt+Tab), "Indicator LEDs" (Enable Core indicator
+>     LEDs) e "Reset to factory default", come da screenshot di Base Camp.
+>     Vincolo: niente bit-layout inventati, verificare su Base Camp decompilato
+>     e BaseCampLinux prima.
+>   - **Scoperta metodologica importante**: `Mountain Base Camp/resources/bin/
+>     BaseCamp.UI.exe` (~216 MB) è un **self-contained single-file .NET bundle**
+>     (Electron.NET + ASP.NET Core MVC, "Views_*" = Razor views compilate in C#).
+>     `pefile` non vede l'header CLR perché è appeso dopo lo stub nativo: si
+>     estrae cercando nel file la entry di manifest con nome `"<Assembly>.dll"`
+>     preceduta da `[offset:u64][size:u64][compressedSize:u64][type:u8]`, poi si
+>     fa lo slice `data[offset:offset+size]` (parte con `MZ`, PE valido con CLR
+>     header). Il dll estratto (`BaseCamp.UI.dll`) è leggibile con gli stessi
+>     tool `_reference/tools/dotnet_*.py` già in uso per `BaseCamp.Service.exe`.
+>     **Questo supera la conclusione della sessione precedente** ("le view MVC
+>     non sono nel decompilato") — ora sono raggiungibili, incluso il body IL
+>     completo delle Razor view (`Views_Everest__Setting` e affini) con tutte le
+>     label/tooltip/binding ai model `BaseCamp.Data.*`. Utile per prossime
+>     feature (es. Display Dial icons/menu byte lasciati in sospeso).
+>   - **Bit layout Game Mode confermato** (da `EverestOperations.SaveSettings`
+>     in `BaseCamp.UI.dll`): costruisce una stringa binaria a 4 char nell'ordine
+>     "AltTab Win AltF4 Shift" e la parsa con `Convert.ToInt32(s, 2)` — quindi
+>     bit0=DisableShift(+Tab), bit1=DisableAltF4, bit2=DisableWin,
+>     bit3=DisableAltTab. `EnableCoreLED`/Indicator LED è un bool diretto
+>     (`SetIndicatorLed`). "Sync across profiles" nella pagina Settings di Base
+>     Camp è **lo stesso flag fisico** già esposto in K2 dal checkbox "Sync
+>     profiles" del pannello RGB & Lighting (`SetSyncAcrossProfiles`/
+>     `GetSyncAcrossProfiles`, un solo bool a livello device, non per-sezione).
+>   - **Reset to factory default**: in Base Camp chiama `ResetFlash(true)` +
+>     cancella/ricrea tutti i profili nel DB SQLite di Base Camp. In K2 è stato
+>     replicato **solo `ResetFlash(true)`** (azione hardware reale): la parte di
+>     wipe/ricreazione profili è bookkeeping specifico del modello dati di Base
+>     Camp, non pertinente al modello profili di K2, e sarebbe un'azione
+>     distruttiva a sorpresa sui profili dell'utente — quindi omessa
+>     intenzionalmente.
+>   - **`EverestSdkNative.cs`**: nuovi P/Invoke `SetGameMode(int)`,
+>     `SetIndicatorLed(bool)`, `ResetFlash(bool)` (SDKDLL.dll, firme confermate
+>     in `_reference/Everest_SDK_signatures.txt`). **`EverestService.cs`**:
+>     wrapper `SetGameMode`/`SetIndicatorLed`/`ResetFlash` (stesso pattern
+>     try/catch/log di `SetSyncAcrossProfiles`/`ResetEffects`). Nessun wrapper
+>     `Get*` aggiunto (non usati in UI, K2 tiene lo stato in `EverestStore`
+>     come per RGB, non li rilegge dal device).
+>   - **`MainWindow.xaml`/`MainWindow.Everest.cs`**: nuova `RadioButton
+>     RbSecSettings`/pannello `PnlSecSettings` nella sidebar Everest (dopo
+>     "Display Dial"). Checkbox Sync/Game Mode/Indicator LED persistite in
+>     `EverestStore` (chiavi `settings.game_mode` int, `settings.indicator_led`
+>     bool; il sync usa la stessa chiave `rgb.sync` già esistente per restare
+>     allineato al checkbox del pannello RGB). Applicate al device all'apertura
+>     driver (`ApplyEverestSettingsToDevice`, chiamata da `EvAutoOpen`/
+>     `BtnEvOpen_Click` accanto ad `ApplyCurrentEffect`). Bottone factory reset
+>     con conferma `MessageBox` (pattern già usato per cancellazione profili).
+>   - **Stringhe**: nuove chiavi EN+IT (`settings_sync_profiles`,
+>     `settings_game_mode`, `settings_game_mode_tip`, `settings_disable_shift_tab`,
+>     `settings_disable_alt_f4`, `settings_disable_win_key`,
+>     `settings_disable_alt_tab`, `settings_indicator_leds`,
+>     `settings_enable_core_led`, `settings_factory_reset`,
+>     `settings_factory_reset_confirm`).
+>   - **Verificato**: `build-check.bat`/`dotnet build K2.sln x86` puliti, 0
+>     errori/0 warning. **Da verificare su hardware**: che `SetGameMode`/
+>     `SetIndicatorLed`/`ResetFlash` producano davvero l'effetto atteso sulla
+>     Everest Max fisica (mai testati prima in K2), e il comportamento dopo
+>     `ResetFlash` (se il device si disconnette/riconnette).
+>
+> Previous: 2026-07-06 (redesign pannello Display Dial Everest):
+>   - **Richiesta utente**: ridisegnare "Display Dial" come lo screenshot di
+>     riferimento (Base Camp): 8 toggle "show menu" in 2 colonne da 4 con
+>     icona + slider switch; rimuovere Pixel Shift; aggiungere checkbox
+>     enable/disable separate per Screensaver e Turn-off; aggiungere combo
+>     "cosa mostra lo screensaver" e combo tipo orologio analogico/digitale;
+>     aggiungere bottone "Reset Display Dial". Vincolo: niente funzioni
+>     inventate, solo cose recuperabili da Base Camp decompilato/BaseCampLinux.
+>   - **Ricerca (agente in background)**: `BaseCamp.Data.DisplayDial` (decompilato)
+>     ha colonne separate `EnableSecreenSaver`/`EnableTurnOff` (bool, indipendenti
+>     dal valore in secondi) — conferma che l'enable/disable è un concetto reale,
+>     non un'invenzione. Ha anche `ClockType` (int) e `ScreenSaverType` (string),
+>     ma senza enum backing nel decompilato (probabilmente nella view Razor non
+>     estratta). `BaseCampLinux` conferma un byte reale `STYLE_ANALOG`/
+>     `STYLE_DIGITAL` (0x00/0x01) nel protocollo, e una tabella
+>     `MAIN_DISPLAY_MODES` (image/clock/cpu/gpu/hd/network/ram/apm → menu byte)
+>     per la selezione "cosa mostra lo screensaver" — ma questi byte non
+>     combaciano col commento già presente su `byMMDockMenuIndex` in
+>     `EverestSdkNative.cs` (valori 97-101/113), quindi non sono la stessa cosa
+>     per questo SDK: **niente USB capture per SDKDLL.dll su questi due campi**,
+>     solo per il raw-USB protocol di BaseCampLinux (device diverso/generazione).
+>     Icone: nessun set dedicato scaricabile per gli 8 toggle — Base Camp le
+>     serve da una view Razor compilata in `BaseCamp.Service.exe`, non presente
+>     nel decompilato (`_reference/BaseCamp_decompiled/` ha solo le classi C#,
+>     non le view MVC). Estrarre le PNG da `Mountain Base Camp/resources/bin/
+>     wwwroot/images/` sarebbe comunque materiale non ridistribuibile
+>     (`DISTRIBUTION.md`) — usate invece glyph Segoe MDL2 Assets (stesso
+>     pattern icon-in-Tag già usato da `K2IconButton` in tutta l'app).
+>   - **`K2Theme.xaml`**: nuovo style `K2ToggleRow` (CheckBox reskin: icona da
+>     `Tag` + label + pillola scorrevole a destra, colore accento K2 `#900000`
+>     invece del blu dello screenshot per coerenza col resto del tema).
+>   - **`MainWindow.xaml`** (`PnlSecDial`): grid 2 colonne — sinistra: 8
+>     `CheckBox` stile `K2ToggleRow` in 2 stack da 4; destra: sezione "Clock
+>     type" (combo formato 12h/24h esistente + nuova combo stile analogico/
+>     digitale), sezione "Screensaver" (checkbox enable + secondi + combo
+>     funzione), checkbox enable + secondi per "Turn off", colore menu,
+>     bottoni Apply/Read/**Reset** (nuovo). Pixel Shift rimosso.
+>   - **`MainWindow.DisplayDial.cs`**: `wMMDockScreenSaver`/`wMMDockTurnOff`
+>     ora vengono forzati a 0 quando la relativa checkbox enable è spenta
+>     (mappa 1:1 sul modello Base Camp: enable separato dal valore); lettura
+>     dal device non tocca più il campo se è 0 (non perde il valore configurato
+>     in UI). Combo stile orologio e combo funzione screensaver sono
+>     persistite (`dial.clockStyle`/`dial.screenSaverFunction`) ma **non**
+>     ancora scritte su `FW_EXTEND_INFO` (nessun campo confermato — vedi sopra);
+>     bottone Reset chiama `_everest.ResetMMDock()` (già esposto in
+>     `EverestService`, prima inutilizzato). `TryGetExtendInfo`/`SetExtendInfo`
+>     non toccano più `byPixelShiftTime` (letto e ri-scritto invariato).
+>   - **Stringhe**: nuove chiavi EN+IT (`dial_clock_section`, `dial_clock_style_label`,
+>     `dial_clock_digital/analog`, `dial_screensaver_section`,
+>     `dial_screensaver_function_label`, `dial_turnoff_enable_tip`,
+>     `reset_display_dial`, `unit_seconds`); rimossa `dial_pixel_shift` da
+>     tutte le lingue (chiave morta).
+>   - **Verificato**: `build-check.bat` pulito, 0 errori/0 warning su entrambe
+>     le solution. **Da verificare su hardware**: layout 2 colonne (spazio
+>     disponibile reale nel riquadro), rendering dei glyph Segoe MDL2 scelti,
+>     comportamento enable/disable screensaver/turn-off sul device reale.
+>
+> Previous: 2026-07-06 (riquadro sezioni a dimensione fissa):
+>   - **Richiesta utente**: il "riquadro in basso" (pannello impostazioni sotto
+>     l'immagine device/griglia tasti, nei tab Everest/MacroPad/DisplayPad) aveva
+>     `Height="Auto"`: cambiava dimensione/saltava a seconda della sezione attiva
+>     (es. Everest: Key Binding ~250px / RGB & Lighting ~240px / Display Dial
+>     ~150px / USB Recorder variabile), perché tutte le sezioni condividono la
+>     stessa cella di Grid e solo una è Visible alla volta.
+>   - **`MainWindow.xaml`**: sui 3 `Border` "Bottom settings panel" (Everest,
+>     MacroPad, DisplayPad) aggiunto `Height` fissa (270/130/90, calibrata sulla
+>     sezione più "alta" di ciascun tab) al posto dell'auto-sizing implicito, e
+>     avvolto il contenuto in uno `ScrollViewer` (`VerticalScrollBarVisibility=
+>     "Auto"`) come rete di sicurezza per qualunque sezione/stato che superi
+>     l'altezza fissa (es. USB Recorder con risultati espansi) invece di essere
+>     tagliato.
+>   - **Verificato**: app lanciata, screenshot su "Key Binding" e "Display Dial"
+>     nell'Everest — il riquadro resta della stessa altezza passando da una
+>     sezione lunga a una corta (spazio vuoto sotto invece di restringersi).
+>     Build pulita (`build-check.bat`): 0 errori, 0 warning su entrambe le
+>     solution.
+>
+> Previous: 2026-07-06 (etichetta bottone Macro + font Roboto app-wide):
+>   - **Richiesta utente**: 2 modifiche UI. (1) Il bottone icona "Macro" (appena
+>     promosso a sezione top-level) doveva avere anche un'etichetta testuale
+>     "Macro", non solo l'icona. (2) Tutti i testi dell'app devono usare il font
+>     Roboto.
+>   - **`MainWindow.xaml` (`BtnMacroTab`)**: da bottone quadrato 34×34 icon-only
+>     a bottone largato (Height=34, Padding auto) con `StackPanel` orizzontale
+>     icona + `TextBlock {loc:Get tab_macro}`; stesso trigger hover/background
+>     di prima. `BtnSettingsTab` (gear) lasciato icon-only, non richiesto.
+>   - **Font Roboto app-wide**: scaricati i 4 static TTF (Regular/Bold/Italic/
+>     BoldItalic, non i variable font `[wdth,wght]` ora nel repo google/fonts —
+>     rischiano compatibilità WPF incerta su weight/style mapping) da
+>     `fonts.gstatic.com` (richiesta CSS2 con User-Agent Android 2.2 per
+>     ottenere TTF invece di woff2, non serviti direttamente da WPF) +
+>     `LICENSE.Roboto.txt` (SIL OFL 1.1) da `google/fonts` su GitHub. Messi in
+>     nuovo `K2.Core/Fonts/`, embedded come `Resource` in `K2.Core.csproj`
+>     (+ licenza come `Content` copiata in output). `K2Theme.xaml`:
+>     `K2WindowStyle.FontFamily` da `"Segoe UI"` a
+>     `"pack://application:,,,/K2.Core;component/Fonts/#Roboto, Segoe UI"` —
+>     eredita su tutta la UI (Window è la style root, `FontFamily` è una
+>     proprietà ereditata WPF) tranne dove già impostato esplicitamente
+>     (KeyCapStyle = replica pixel-perfect keycap Base Camp, Consolas nei
+>     log/hex viewer, Segoe MDL2 Assets per le icone) — questi non toccati
+>     di proposito.
+>   - **Verificato**: `GetManifestResourceStream` su `K2.Core.dll` conferma
+>     i 4 `fonts/roboto-*.ttf` presenti nel `.g.resources` compilato (prova
+>     statica che il pack URI risolve indipendentemente da Roboto installato
+>     o meno sul sistema — su questa macchina di sviluppo Roboto risultava
+>     già installato come font di sistema, quindi lo screenshot da solo non
+>     bastava a distinguere embedded vs sistema). App lanciata e screenshottata:
+>     bottone Macro con etichetta visibile, pannello "Keyboard Macro" apribile
+>     correttamente. Build pulita (`build-check.bat`): 0 errori, 0 warning su
+>     entrambe le solution.
+>
+> Previous: 2026-07-06 (Macro promossa a sezione top-level):
+>   - **Richiesta utente**: la sezione "Keyboard Macro" viveva solo dentro la sidebar
+>     dell'Everest (`RbSecMacros`/`PnlSecMacros`); ora è una sezione a sé stante,
+>     raggiungibile da un bottone icona dedicato in alto a destra, subito a sinistra
+>     del bottone Impostazioni.
+>   - **`MainWindow.xaml`**: rimossi `RbSecMacros` (sidebar Everest) e il vecchio
+>     `Grid x:Name="PnlSecMacros"` annidato nel pannello sezioni Everest. Aggiunto un
+>     terzo `ColumnDefinition` nella riga tab in alto + `Button x:Name="BtnMacroTab"`
+>     (icona `&#xE7C8;`, stesso template icon-only del gear Impostazioni) fra il
+>     `TabControl` e `BtnSettingsTab`. Aggiunto un nuovo pannello top-level
+>     `Grid x:Name="PnlMacro"` (sibling di `PnlSettings`/`PnlEverest`/`PnlMacroPad`/
+>     `PnlDisplayPad`) con lo stesso contenuto (lista+CRUD+record a sinistra,
+>     settings macro a destra), ora senza `MaxHeight` (spazio pieno come le altre
+>     sezioni top-level) e con titolo (`{loc:Get keyboard_macro}`).
+>   - **`MainWindow.xaml.cs`**: nuovo `BtnMacroTab_Click` (stesso pattern di
+>     `BtnSettingsTab_Click`: nasconde gli altri pannelli, deseleziona `TcDevices`) +
+>     `SetMacroTabActive(bool)` (stile pulsante attivo, mirror di
+>     `SetSettingsTabActive`). `TcDevices_SelectionChanged`/`BtnSettingsTab_Click`
+>     ora collassano anche `PnlMacro`. `InitMacroPanel()` richiamato direttamente nel
+>     costruttore di `MainWindow` (non più da `InitEverestModule` in
+>     `MainWindow.Everest.cs`), perché il pannello non dipende più dal device Everest.
+>   - **`MainWindow.SectionNav.cs`**: rimossa la entry `PnlSecMacros` dallo switch di
+>     `EvSection_Changed` + commento aggiornato.
+>   - **Nuova stringa `tab_macro`** ("Macro" / "Macro") in `Strings.xml` + `Strings.it.xml`
+>     (tooltip del nuovo bottone). Build pulita (`build-check.bat`): 0 errori, 0 warning
+>     su entrambe le solution.
+>
+> Previous: 2026-07-06 (export profili: popup multi-selezione + scelta formato):
+>   - **Richiesta utente**: sostituire i due pulsanti "Export (Base Camp)…"/"Export (K2)…"
+>     (uno per formato, un profilo alla volta) con un unico popup che permetta di
+>     scegliere i profili da esportare via checkbox multiple + il formato in un colpo
+>     solo. In caso di export multiplo, niente prompt del nome file: i profili vengono
+>     scritti automaticamente come `nomedevice_nomeprofilo.xml` in una cartella scelta
+>     dall'utente (con un solo profilo selezionato resta il SaveFileDialog classico,
+>     nome precompilato).
+>   - **`K2.App/ExportProfilesDialog.xaml(.cs)`** (nuovo): dialog condiviso — lista di
+>     `CheckBox` (una per profilo esistente del device/tab corrente, preselezionate se
+>     nessun profilo era "corrente" es. su "+ New profile") + 2 `RadioButton` per il
+>     formato (Base Camp compatibile / K2 lossless). Segue lo stile di
+>     `DpKeyConfigDialog` (Style `K2WindowStyle` via `DynamicResource`, `xmlns:loc` per
+>     `{loc:Get}`). Espone `SelectedProfiles`/`BcCompatible` letti dal chiamante dopo
+>     `ShowDialog() == true`.
+>   - **`K2.App/Services/ExportProfileHelper.cs`** (nuovo): unico punto che orchestra il
+>     flusso per tutti e 3 i tab (DisplayPad/MacroPad/Everest) — apre il dialog, poi se
+>     1 profilo selezionato usa `SaveFileDialog` (comportamento invariato), se piu' di 1
+>     usa `Microsoft.Win32.OpenFolderDialog` (disponibile da .NET 8 per WPF, verificato
+>     con build pulita x86+x64) e scrive un file per profilo con nome
+>     `{deviceLabel}_{profileName}.xml` (sanitizzato via `Path.GetInvalidFileNameChars`).
+>     Il chiamante passa solo un delegato `exportOne(slot, name, bcCompatible, path)` che
+>     incapsula la chiamata al proprio `*ProfileExporter` (Dp/Mp/Ev hanno ciascuno un
+>     `ExportResult` record identico nella forma ma di tipo diverso, non unificabile
+>     senza toccare gli exporter esistenti — il delegato normalizza a una tupla).
+>   - **3 tab aggiornati**: `BtnDpExportProfiles_Click`/`BtnMpExportProfiles_Click`/
+>     `BtnEvExportProfiles_Click` sostituiscono le vecchie coppie `*ExportBc`/`*ExportK2`
+>     in `MainWindow.DisplayPad.cs`/`MainWindow.Keys.cs`/`MainWindow.Everest.cs` e nei
+>     bottoni XAML corrispondenti in `MainWindow.xaml` (un solo `Button` per tab, nuova
+>     chiave loc `export_profiles_btn`). L'elenco profili viene da
+>     `_dpStore.GetExistingProfiles(id)`/`_store.GetExistingProfiles(id)` (DisplayPad/
+>     MacroPad, per-device) o `Enumerable.Range(1, EverestService.ProfileCount)`
+>     (Everest, nessun concetto di device, tutti gli slot esistono sempre).
+>   - **Nuove chiavi loc** (EN in `Strings.xml` + IT in `Strings.it.xml`,
+>     `export_profiles_btn`/`export_profiles_title`/`export_profiles_pick`/
+>     `export_format_section`/`export_format_bc`/`export_format_k2`/
+>     `export_select_at_least_one`/`export_pick_folder`); le altre 8 lingue non
+>     toccate (fallback automatico su EN via `Loc.Init`, gia' verificato per le chiavi
+>     mancanti in generale). Le vecchie `dp_export_bc`/`dp_export_k2` restano nei file
+>     Strings (ora inutilizzate) — non rimosse per non toccare tutte le 10 lingue per
+>     due chiavi morte innocue.
+>   - **Verificato**: `build-check.bat` pulito, 0 errori/0 warning su entrambe le
+>     solution (K2.sln x86 + K2.DisplayPad.sln x64). Test su hardware fisico
+>     (export multiplo con device DisplayPad/MacroPad/Everest reali) resta da fare
+>     dall'utente.
+>
+> Previous: 2026-07-06 (fix: crash silenzioso all'avvio — DisplayPad sidebar):
+>   - **Sintomo**: K2.App non si apriva piu', log fermo a due righe ("App start" +
+>     "DllImportResolver registered"), nessuna eccezione, nessun crash log, nessun
+>     dump. WER/Event Viewer: `coreclr.dll` "internal error", exit code `0x80131506`
+>     — crash nativo non intercettabile dai normali handler (Dispatcher/AppDomain
+>     UnhandledException), ne' dal VEH gia' presente in `App.xaml.cs`.
+>   - **Causa**: nel refactor "sidebar sezioni per-device" (in corso, non ancora
+>     committato), il nuovo `RadioButton x:Name="RbDpSecRotation"` nel tab
+>     DisplayPad (`MainWindow.xaml`) ha `IsChecked="True"` — WPF spara l'evento
+>     `Checked` **in modo sincrono durante `InitializeComponent()`**, prima che
+>     l'elemento `PnlDpSecRotation` (dichiarato piu' in basso nello stesso file
+>     XAML) sia stato costruito. `DpSection_Changed` (in
+>     `MainWindow.SectionNav.cs`) dereferenziava `PnlDpSecRotation` senza guardia
+>     null — a differenza degli handler equivalenti per Everest/MacroPad
+>     (`EvSection_Changed`/`MpSection_Changed`), che gia' controllano `is not
+>     null` prima di toccare il pannello. Il crash e' avvenuto esattamente li'.
+>   - **Fix**: aggiunta la stessa guardia null gia' presente per Everest/MacroPad
+>     a `DpSection_Changed` — un solo `&& PnlDpSecRotation is not null` in piu'.
+>     Verificato con rebuild pulita + avvio: l'app parte e inizializza tutti i
+>     device (MacroPad, Everest, 3 DisplayPad) senza crash.
+>   - **Metodo di debug** (riutilizzabile in futuro per crash simili): il crash
+>     bypassava OGNI handler gestito, quindi la diagnosi e' stata fatta per
+>     bisezione in un **git worktree usa-e-getta** (mai toccato il working tree
+>     reale dell'utente) confrontando via via porzioni del diff non committato
+>     contro l'ultimo commit, con rebuild pulita (`rm -rf bin obj`) ad ogni passo
+>     — le build incrementali di WPF/XAML davano falsi negativi (BAML non
+>     rigenerata). Una volta isolato il file/blocco, `App.WriteLog` temporanei
+>     PRIMA/DOPO ogni chiamata nel costruttore di `MainWindow` hanno individuato
+>     il punto esatto (dentro `InitializeComponent`), poi un log del valore
+>     `is null` sull'elemento sospetto ha confermato l'ipotesi in un colpo solo.
+>
+> Previous: 2026-07-05 (Everest: auto-rinomina tab in base a numpad/media dock collegati):
 >   - **Richiesta utente**: rilevare se numpad e/o media dock sono collegati alla Everest
 >     e rinominare automaticamente il tab — "Everest Max" se entrambi collegati, "Everest
 >     Core" se entrambi scollegati, "Everest" se ne è collegato solo uno — ma solo finché

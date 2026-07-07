@@ -180,13 +180,57 @@ public partial class DpKeyConfigDialog : Window
 
     private void BtnConfigureAction_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new ButtonActionDialog(_keyIndex, ActionType, ActionValue) { Owner = this };
+        var dlg = new ButtonActionDialog(_keyIndex, ActionType, ActionValue, (Owner as MainWindow)?._dpActionHost) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
+        string? oldType = ActionType, oldValue = ActionValue;
         ActionType  = string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none"
                       ? null : dlg.ActionType;
         ActionValue = ActionType is null ? null : dlg.ActionValue;
+
+        if (ActionType != oldType || ActionValue != oldValue)
+            TryAutoGenerateKeyImage();
+
         RefreshActionSummary();
+    }
+
+    /// <summary>
+    /// When the action just assigned/changed is "exec" or "folder", auto-generate the
+    /// key's picture (the executable's own icon, or a folder glyph + name) instead of
+    /// requiring the user to manually pick an image — mirrors <see cref="BtnLoadImage_Click"/>
+    /// but with a generated source instead of a user-picked file.
+    /// </summary>
+    private void TryAutoGenerateKeyImage()
+    {
+        if (string.IsNullOrWhiteSpace(ActionValue)) return;
+        if (ActionType != "exec" && ActionType != "folder") return;
+
+        string dest = AutoIconCachePath(ActionType!, ActionValue!);
+        bool ok = ActionType == "exec"
+            ? IconImageGenerator.TryGenerateExecIcon(ActionValue!, DpHidNative.IconSize, dest)
+            : IconImageGenerator.TryGenerateFolderIcon(ActionValue!, DpHidNative.IconSize, dest);
+        if (!ok) return;
+
+        _pendingPath  = dest;
+        _rotation     = 0;
+        Rb0.IsChecked = true;
+        _previewRotate.Angle = 0;
+        RefreshImagePreview();
+        UpdateRotationAvailability();
+    }
+
+    private static string AutoIconCachePath(string kind, string sourceValue)
+    {
+        string cacheRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "K2.DisplayPad", "auto_icons");
+        Directory.CreateDirectory(cacheRoot);
+
+        long mtime = 0;
+        if (kind == "exec") { try { mtime = File.GetLastWriteTimeUtc(sourceValue).Ticks; } catch { } }
+        byte[] hash = System.Security.Cryptography.SHA1.HashData(
+            System.Text.Encoding.UTF8.GetBytes($"{kind}|{sourceValue}|{mtime}"));
+        return Path.Combine(cacheRoot, Convert.ToHexString(hash).ToLowerInvariant() + $"_{kind}.png");
     }
 
     private void BtnRemoveAction_Click(object sender, RoutedEventArgs e)

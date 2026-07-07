@@ -35,11 +35,13 @@ public partial class MainWindow : Window
         InitMacroLedPanel();     // MacroPad: LED lighting panel (firmware presets)
         InitActionEngine();      // MacroPad: action engine + Python bridge
         InitEverestModule();     // Everest Max: on-demand key list + dedicated action engine
+        InitMacroPanel();        // Macro: top-level section (recording/playback), own nav button
         InitUsbRecorderModule(); // USB Recorder: capture Base Camp packets via tshark
         InitDisplayPadModule();  // DisplayPad: graphic overlay + x64 satellite IPC
         InitDpActionEngine();    // DisplayPad: dedicated action engine
         InitLedPreview();        // Real-time LED color preview across all devices
         InitAppSettingsPanel();  // General Settings: centralized Debug + Log level
+        InitTray();              // System tray: close-to-tray + tray icon menu
 
         _macroPad.KeyEvent += OnMacroPadKey;
         _macroPad.DevicePlug += OnMacroPadPlug;
@@ -126,11 +128,9 @@ public partial class MainWindow : Window
         // --- DisplayPad satellite ---
         DpOpenDriver();
 
-        // --- All drivers attempted: hide loading overlay, select the Everest tab ---
-        // (TabSettings is index 0 so the "gear" tab stays leftmost/stable regardless
-        // of how many DisplayPad device tabs get appended at runtime.)
+        // --- All drivers attempted: hide loading overlay, select the first available tab ---
         PnlLoading.Visibility = Visibility.Collapsed;
-        TcDevices.SelectedItem = TabEverest;
+        TcDevices.SelectedItem = TcDevices.Items.OfType<TabItem>().FirstOrDefault();
     }
 
     // ---- Toolbar -----------------------------------------------------------
@@ -179,11 +179,20 @@ public partial class MainWindow : Window
         if (TcDevices.SelectedItem is not TabItem tab) return;
         string tag = tab.Tag as string ?? "";
 
+        SetSettingsTabActive(false);
+        SetMacroTabActive(false);
+
         // Show/hide content panels
-        PnlSettings.Visibility   = tag == "settings"         ? Visibility.Visible : Visibility.Collapsed;
+        PnlSettings.Visibility   = Visibility.Collapsed;
+        PnlMacro.Visibility      = Visibility.Collapsed;
         PnlEverest.Visibility    = tag == "everest"          ? Visibility.Visible : Visibility.Collapsed;
         PnlMacroPad.Visibility   = tag == "macropad"         ? Visibility.Visible : Visibility.Collapsed;
         PnlDisplayPad.Visibility = tag.StartsWith("dp_")     ? Visibility.Visible : Visibility.Collapsed;
+
+        // Shared top-right brightness bar: same active-device switch as the content panels
+        BrEverest.Visibility    = PnlEverest.Visibility;
+        BrMacroPad.Visibility   = PnlMacroPad.Visibility;
+        BrDisplayPad.Visibility = PnlDisplayPad.Visibility;
 
         if (tag == "macropad")
             CbDevice_SelectionChanged(sender, e);
@@ -192,6 +201,56 @@ public partial class MainWindow : Window
             _activeDpDeviceId = dpId;
             CbDpDevice_SelectionChanged(sender, e);
         }
+    }
+
+    /// <summary>Gear-icon Settings button: not part of TcDevices, so it's handled
+    /// separately from TcDevices_SelectionChanged (deselects the device tabs).</summary>
+    private void BtnSettingsTab_Click(object sender, RoutedEventArgs e)
+    {
+        PnlSettings.Visibility   = Visibility.Visible;
+        PnlMacro.Visibility      = Visibility.Collapsed;
+        PnlEverest.Visibility    = Visibility.Collapsed;
+        PnlMacroPad.Visibility   = Visibility.Collapsed;
+        PnlDisplayPad.Visibility = Visibility.Collapsed;
+
+        BrEverest.Visibility    = Visibility.Collapsed;
+        BrMacroPad.Visibility   = Visibility.Collapsed;
+        BrDisplayPad.Visibility = Visibility.Collapsed;
+
+        TcDevices.SelectedIndex = -1;
+        SetSettingsTabActive(true);
+        SetMacroTabActive(false);
+    }
+
+    /// <summary>Macro icon button: top-level section (not device-specific), same
+    /// deselect-the-device-tabs pattern as <see cref="BtnSettingsTab_Click"/>.</summary>
+    private void BtnMacroTab_Click(object sender, RoutedEventArgs e)
+    {
+        PnlMacro.Visibility      = Visibility.Visible;
+        PnlSettings.Visibility   = Visibility.Collapsed;
+        PnlEverest.Visibility    = Visibility.Collapsed;
+        PnlMacroPad.Visibility   = Visibility.Collapsed;
+        PnlDisplayPad.Visibility = Visibility.Collapsed;
+
+        BrEverest.Visibility    = Visibility.Collapsed;
+        BrMacroPad.Visibility   = Visibility.Collapsed;
+        BrDisplayPad.Visibility = Visibility.Collapsed;
+
+        TcDevices.SelectedIndex = -1;
+        SetSettingsTabActive(false);
+        SetMacroTabActive(true);
+    }
+
+    private void SetSettingsTabActive(bool active)
+    {
+        BtnSettingsTab.Background = active ? (Brush)FindResource("K2AccentBrush")     : Brushes.Transparent;
+        BtnSettingsTab.Foreground = active ? (Brush)FindResource("K2AccentTextBrush") : (Brush)FindResource("K2TextMutedBrush");
+    }
+
+    private void SetMacroTabActive(bool active)
+    {
+        BtnMacroTab.Background = active ? (Brush)FindResource("K2AccentBrush")     : Brushes.Transparent;
+        BtnMacroTab.Foreground = active ? (Brush)FindResource("K2AccentTextBrush") : (Brush)FindResource("K2TextMutedBrush");
     }
 
     /// <summary>Removes all top-level device tabs with the given tag prefix.</summary>
@@ -394,6 +453,10 @@ public partial class MainWindow : Window
         _store.Dispose();
         _usbRec.Dispose();
         CleanupDisplayPad();
+        _trayIcon?.Dispose();
+        // ShutdownMode is OnExplicitShutdown (see App.OnStartup) so that hiding the
+        // window to the tray never ends the process — the real close must ask for it.
+        Application.Current.Shutdown();
     }
 }
 

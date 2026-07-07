@@ -24,10 +24,16 @@ internal sealed class DisplayPadActionHost : IActionHost
     int IActionHost.SdkVersion => 0; // not relevant over IPC
     string? IActionHost.ConfiguredPythonPath => null;
 
-    void IActionHost.SwitchProfile(string target)
+    void IActionHost.SwitchProfile(string? targetKey, string target)
     {
-        _win.Dispatcher.Invoke(() => _win.DpSwitchProfile(target));
+        _win.Dispatcher.Invoke(() =>
+        {
+            if (string.IsNullOrEmpty(targetKey)) _win.DpSwitchProfile(null, target);
+            else _win.SwitchProfileByKey(targetKey, target);
+        });
     }
+
+    IReadOnlyList<ProfileTargetOption> IActionHost.ListProfileTargets() => _win.ListAllProfileTargets();
 
     IReadOnlyList<HostButton> IActionHost.GetButtons() =>
         _win._dpKeys.Select(k => new HostButton(

@@ -89,15 +89,11 @@ public sealed class ButtonActionEngine : IDisposable
                 break;
 
             case "browser":
-            {
-                var url = string.IsNullOrWhiteSpace(value) ? "https://duckduckgo.com" : value;
-                Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
-                Log($"[EXEC] browser -> {url}");
+                RunBrowserAction(value, Log);
                 break;
-            }
 
             case "profile":
-                _host.SwitchProfile(value);
+                RunProfileSwitch(value, Log);
                 break;
 
             case "command":
@@ -192,11 +188,9 @@ public sealed class ButtonActionEngine : IDisposable
                         Arguments = $"\"{value}\"", UseShellExecute = true });
                 break;
             case "browser":
-                Process.Start(new ProcessStartInfo {
-                    FileName = string.IsNullOrWhiteSpace(value) ? "https://duckduckgo.com" : value,
-                    UseShellExecute = true });
+                RunBrowserAction(value, Log);
                 break;
-            case "profile":  _host.SwitchProfile(value); break;
+            case "profile":  RunProfileSwitch(value, Log); break;
             case "keys":
             {
                 string seq = value.IndexOfAny(SendKeysMeta) >= 0
@@ -229,6 +223,68 @@ public sealed class ButtonActionEngine : IDisposable
             Button  = buttonIndex,
         };
         _py.RunScript(spec, ctx);
+    }
+
+    /// <summary>
+    /// Runs the "profile" action. <paramref name="value"/> is either a
+    /// <see cref="ProfileTargetPayload"/> JSON (one or more device+target rows from the
+    /// dialog's "switch profile" picker) or a legacy plain string ("Next"/"Previous"/"N")
+    /// predating that payload — in which case we fall back to the original behavior:
+    /// switch the profile of the device this button lives on.
+    /// </summary>
+    private void RunProfileSwitch(string value, Action<string> log)
+    {
+        var spec = ProfileTargetPayload.Parse(value);
+        if (spec is null)
+        {
+            _host.SwitchProfile(null, value);
+            return;
+        }
+        foreach (var t in spec.Targets)
+        {
+            try { _host.SwitchProfile(string.IsNullOrEmpty(t.Key) ? null : t.Key, t.Target); }
+            catch (Exception ex) { log($"[EXEC] profile: target \"{t.Key}\" error: {ex.Message}"); }
+        }
+    }
+
+    /// <summary>
+    /// Runs the "browser" action. <paramref name="value"/> is either a
+    /// <see cref="BrowserActionPayload"/> JSON (specific browser chosen in the dialog) or
+    /// a legacy plain string (a raw URL, or empty) predating that payload — in which case
+    /// we fall back to the original behavior: open the URL with the OS default browser.
+    /// </summary>
+    private static void RunBrowserAction(string value, Action<string> log)
+    {
+        var spec = BrowserActionPayload.Parse(value);
+        if (spec is null)
+        {
+            var url = string.IsNullOrWhiteSpace(value) ? "https://duckduckgo.com" : value;
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            log($"[EXEC] browser -> {url}");
+            return;
+        }
+
+        string? exe = spec.Browser == "other"
+            ? spec.CustomPath
+            : BrowserDetector.ResolveById(spec.Browser);
+
+        if (string.IsNullOrWhiteSpace(exe))
+        {
+            // "Other" with no path (or a known browser that's no longer installed):
+            // fall back to the OS default browser, same as the legacy behavior.
+            var url = string.IsNullOrWhiteSpace(spec.Url) ? "https://duckduckgo.com" : spec.Url;
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            log($"[EXEC] browser -> default -> {url}");
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = exe,
+            Arguments = string.IsNullOrWhiteSpace(spec.Url) ? "" : spec.Url,
+            UseShellExecute = true
+        });
+        log($"[EXEC] browser -> {exe} {spec.Url}");
     }
 
     private static string EscapeSendKeysLiteral(string input)

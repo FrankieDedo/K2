@@ -18,6 +18,8 @@ public enum DisplayRotation
     None = 0,
     /// <summary>Device mounted rotated 90 degrees clockwise.</summary>
     Cw90 = 90,
+    /// <summary>Device mounted upside down (180 degrees, same 2x6 grid).</summary>
+    Cw180 = 180,
     /// <summary>Device mounted rotated 270 degrees clockwise (= 90 counter-clockwise).</summary>
     Cw270 = 270,
 }
@@ -50,9 +52,9 @@ public static class DisplayPadLayout
     public const int ButtonCount = PhysRows * PhysCols; // 12
 
     /// <summary>On-screen grid size for the given rotation.
-    /// At 90/270 the 2x6 strip becomes 6x2.</summary>
+    /// At 90/270 the 2x6 strip becomes 6x2; at 0/180 it stays 2x6.</summary>
     public static (int Rows, int Cols) VisualGrid(DisplayRotation r) =>
-        r == DisplayRotation.None ? (PhysRows, PhysCols) : (PhysCols, PhysRows);
+        r is DisplayRotation.Cw90 or DisplayRotation.Cw270 ? (PhysCols, PhysRows) : (PhysRows, PhysCols);
 
     /// <summary>
     /// Permutation table: for each visual slot (0..11, in the reading
@@ -80,6 +82,11 @@ public static class DisplayPadLayout
                     vr = PhysCols - 1 - pc;
                     vc = pr;
                     break;
+                // Device rotated 180: top-left goes to bottom-right.
+                case DisplayRotation.Cw180:
+                    vr = PhysRows - 1 - pr;
+                    vc = PhysCols - 1 - pc;
+                    break;
                 default:
                     vr = pr;
                     vc = pc;
@@ -94,14 +101,16 @@ public static class DisplayPadLayout
     public static string Label(DisplayRotation r) => r switch
     {
         DisplayRotation.Cw90  => "90°",
+        DisplayRotation.Cw180 => "180°",
         DisplayRotation.Cw270 => "270°",
         _                     => "0°",
     };
 
-    /// <summary>Converts the value saved in the DB ("0"/"90"/"270") into the enum.</summary>
+    /// <summary>Converts the value saved in the DB ("0"/"90"/"180"/"270") into the enum.</summary>
     public static DisplayRotation Parse(string? s) => s switch
     {
         "90"  => DisplayRotation.Cw90,
+        "180" => DisplayRotation.Cw180,
         "270" => DisplayRotation.Cw270,
         _     => DisplayRotation.None,
     };
@@ -133,6 +142,7 @@ public static class IconRotator
     private static int ImageAngleCw(DisplayRotation r) => r switch
     {
         DisplayRotation.Cw90  => 270, // device 90 CW  -> icon rotated 90 CCW
+        DisplayRotation.Cw180 => 180, // device 180    -> icon rotated 180 (self-opposite)
         DisplayRotation.Cw270 => 90,  // device 270 CW -> icon rotated 90 CW
         _                     => 0,
     };
@@ -163,9 +173,12 @@ public static class IconRotator
             using (var src = new Bitmap(ms))
             using (var bmp = new Bitmap(src))
             {
-                bmp.RotateFlip(angle == 90
-                    ? RotateFlipType.Rotate90FlipNone
-                    : RotateFlipType.Rotate270FlipNone);
+                bmp.RotateFlip(angle switch
+                {
+                    90  => RotateFlipType.Rotate90FlipNone,
+                    180 => RotateFlipType.Rotate180FlipNone,
+                    _   => RotateFlipType.Rotate270FlipNone,
+                });
                 bmp.Save(cached, ImageFormat.Png);
             }
             return cached;

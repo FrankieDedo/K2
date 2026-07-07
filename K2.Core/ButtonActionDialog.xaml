@@ -58,6 +58,158 @@
                            MinHeight="60"/>
             </Grid>
 
+            <!-- Open program / file panel -->
+            <Grid x:Name="ExecPanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="{loc:Get exec_path_label}" Margin="0,0,0,4"/>
+
+                <Grid Grid.Row="1" Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Width="32" Height="32" Margin="0,0,8,0"
+                            VerticalAlignment="Center" Background="#22222A" CornerRadius="4">
+                        <Image x:Name="ImgExecIcon" Width="24" Height="24" Stretch="Uniform"/>
+                    </Border>
+                    <TextBox x:Name="TxtExecPath" Grid.Column="1"
+                             VerticalContentAlignment="Center"
+                             FontFamily="Consolas"
+                             TextChanged="TxtExecPath_TextChanged"/>
+                    <Button  x:Name="BtnExecBrowse" Grid.Column="2"
+                             Content="{loc:Get browse}" Padding="10,2" Margin="6,0,0,0"
+                             Click="BtnExecBrowse_Click"/>
+                </Grid>
+
+                <TextBlock Grid.Row="2" Text="{loc:Get recent_paths}" Margin="0,0,0,4" Foreground="#9A9AA2"/>
+                <ListBox x:Name="LstExecRecent" Grid.Row="3"
+                         SelectionChanged="LstExecRecent_SelectionChanged"/>
+            </Grid>
+
+            <!-- Open folder panel -->
+            <Grid x:Name="FolderPanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="{loc:Get folder_path_label}" Margin="0,0,0,4"/>
+
+                <Grid Grid.Row="1" Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="TxtFolderPath" Grid.Column="0"
+                             VerticalContentAlignment="Center"
+                             FontFamily="Consolas"/>
+                    <Button  x:Name="BtnFolderBrowse" Grid.Column="1"
+                             Content="{loc:Get browse}" Padding="10,2" Margin="6,0,0,0"
+                             Click="BtnFolderBrowse_Click"/>
+                </Grid>
+
+                <TextBlock Grid.Row="2" Text="{loc:Get recent_paths}" Margin="0,0,0,4" Foreground="#9A9AA2"/>
+                <ListBox x:Name="LstFolderRecent" Grid.Row="3"
+                         SelectionChanged="LstFolderRecent_SelectionChanged"/>
+            </Grid>
+
+            <!-- Open browser panel -->
+            <Grid x:Name="BrowserPanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel x:Name="PnlBrowserChoices" Grid.Row="0" Margin="0,0,0,4"/>
+
+                <RadioButton x:Name="RbBrowserOther" Grid.Row="1" Content="{loc:Get browser_other}"
+                             GroupName="BrowserChoice" Margin="0,2,0,6" Checked="BrowserChoice_Changed"/>
+
+                <Grid Grid.Row="2" Margin="18,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="TxtBrowserOtherPath" Grid.Column="0"
+                             VerticalContentAlignment="Center" FontFamily="Consolas"/>
+                    <Button  x:Name="BtnBrowserOtherBrowse" Grid.Column="1"
+                             Content="{loc:Get browse}" Padding="10,2" Margin="6,0,0,0"
+                             Click="BtnBrowserOtherBrowse_Click"/>
+                </Grid>
+
+                <TextBlock Grid.Row="3" Text="{loc:Get browser_url_label}" Margin="0,0,0,4"/>
+                <TextBox   x:Name="TxtBrowserUrl" Grid.Row="4" VerticalContentAlignment="Center"/>
+            </Grid>
+
+            <!-- Switch profile panel -->
+            <Grid x:Name="ProfilePanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="{loc:Get profile_targets_label}" Margin="0,0,0,6"/>
+
+                <StackPanel x:Name="PnlProfileRows" Grid.Row="1"/>
+
+                <Button x:Name="BtnProfileAddRow" Grid.Row="2" Content="{loc:Get profile_add_target}"
+                        HorizontalAlignment="Left" Padding="10,4" Margin="0,6,0,0"
+                        Click="BtnProfileAddRow_Click"/>
+            </Grid>
+
+            <!-- Simple selector panel (system command / media key / mouse action) -->
+            <Grid x:Name="ComboPanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="LblComboPanel" Grid.Row="0" Margin="0,0,0,4"/>
+                <ComboBox  x:Name="CbComboValue" Grid.Row="1"/>
+            </Grid>
+
+            <!-- Keys panel -->
+            <Grid x:Name="KeysPanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="{loc:Get keys_modifiers_label}" Margin="0,0,0,4"/>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
+                    <CheckBox x:Name="ChkKeyCtrl"  Content="Ctrl"  Margin="0,0,16,0"/>
+                    <CheckBox x:Name="ChkKeyShift" Content="Shift" Margin="0,0,16,0"/>
+                    <CheckBox x:Name="ChkKeyAlt"   Content="Alt"   Margin="0,0,16,0"/>
+                    <CheckBox x:Name="ChkKeyWin"   Content="Win"/>
+                </StackPanel>
+
+                <TextBlock Grid.Row="2" Text="{loc:Get keys_key_label}" Margin="0,0,0,4"/>
+                <ComboBox  x:Name="CbKeyValue" Grid.Row="3" IsEditable="True"/>
+
+                <TextBlock Grid.Row="4" Margin="0,8,0,0"
+                           TextWrapping="Wrap" Foreground="#9A9AA2"
+                           Text="{loc:Get keys_win_hint}"/>
+            </Grid>
+
             <!-- Python Script panel -->
             <Grid x:Name="PyPanel" Visibility="Collapsed">
                 <Grid.RowDefinitions>

@@ -18,6 +18,7 @@ copiandola dalla propria installazione di Base Camp (scaricabile liberamente).
 | `DisplayPad_Stabilizer/` (script `.py`, `.bat`, `.spec`) | Codice Python originale. |
 | `lib/DisplayPadSDK.dll`, `lib/DisplayPad.SDK.dll`, `lib/DisplayPad.SDK.xml` | SDK ufficiale Mountain, **licenza MIT** — vedi `lib/LICENSE.DisplayPad.SDK.txt`. La MIT consente la ridistribuzione a patto di includere l'avviso di licenza. |
 | `lib/LICENSE.DisplayPad.SDK.txt` | Da tenere accanto alle DLL del DisplayPad SDK. |
+| `K2.Core/Fonts/Roboto-*.ttf` | Font Roboto (Google), **licenza SIL OFL 1.1** — vedi `K2.Core/Fonts/LICENSE.Roboto.txt`. Embedded come `Resource` in `K2.Core.dll` (font app-wide, non richiede installazione sul PC utente); l'OFL consente la ridistribuzione/embedding a patto di includere il file di licenza (copiato in output accanto all'exe). |
 | `*.sln`, `*.csproj`, `README.md`, `_PROJECT_MAP.md`, `DISTRIBUTION.md`, `.gitignore` | File di progetto e documentazione. |
 
 ## ⛔ NON redistribuibile — cartella `_reference/`

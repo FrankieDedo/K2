@@ -131,7 +131,7 @@ public sealed class PyBridge : IDisposable
                 var target = RpcStr(p, "target");
                 if (string.IsNullOrWhiteSpace(target))
                     return RpcResult.Fail("missing 'target' parameter");
-                _host.SwitchProfile(target);
+                _host.SwitchProfile(null, target);
                 return RpcResult.Success(new Dictionary<string, object?>
                 {
                     ["profile"] = _host.CurrentProfile,

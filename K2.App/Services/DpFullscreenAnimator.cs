@@ -456,6 +456,7 @@ internal static class DpFullscreenAnimator
         switch (deviceRotation)
         {
             case 90:  canvas.RotateFlip(RotateFlipType.Rotate270FlipNone); break;
+            case 180: canvas.RotateFlip(RotateFlipType.Rotate180FlipNone); break;
             case 270: canvas.RotateFlip(RotateFlipType.Rotate90FlipNone); break;
         }
         // canvas is now guaranteed exactly PanelW×PanelH regardless of the branch above.
@@ -510,6 +511,7 @@ internal static class DpFullscreenAnimator
             switch (deviceRotation)
             {
                 case 90: tileBmp.RotateFlip(RotateFlipType.Rotate270FlipNone); break;
+                case 180: tileBmp.RotateFlip(RotateFlipType.Rotate180FlipNone); break;
                 case 270: tileBmp.RotateFlip(RotateFlipType.Rotate90FlipNone); break;
             }
 

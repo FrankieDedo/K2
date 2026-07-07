@@ -320,7 +320,7 @@ public sealed class DisplayPadNativeClient : IDisplayPadClient
         catch (Exception ex) { Log($"[DpNative] panel blank failed: {ex.Message}"); return false; }
     }
 
-    public bool UploadImage(int id, string path, int btn, int rotation = 0)
+    public bool UploadImage(int id, string path, int btn, int rotation = 0, bool pressed = false)
     {
         if (btn is < 0 or > 11) return false;
         DpHidNative.Pad? pad;
@@ -328,11 +328,11 @@ public sealed class DisplayPadNativeClient : IDisplayPadClient
         if (pad is null) return false;
         try
         {
-            byte[] bgr = LoadBgr(path, rotation);
+            byte[] bgr = LoadBgr(path, rotation, pressed);
             var sw = System.Diagnostics.Stopwatch.StartNew();
             bool ok = pad.UploadIcon(btn, bgr);
             if (AppSettings.LogLevel == K2LogLevel.Verbose)
-                Log($"[DpNative] upload dev={id} btn={btn} ms={sw.ElapsedMilliseconds} ok={ok}");
+                Log($"[DpNative] upload dev={id} btn={btn} pressed={pressed} ms={sw.ElapsedMilliseconds} ok={ok}");
             return ok;
         }
         catch (Exception ex)
@@ -385,8 +385,12 @@ public sealed class DisplayPadNativeClient : IDisplayPadClient
     /// the image is counter-rotated the same way the satellite's ResolveForUpload did
     /// (device 90° → rotate image 270°, device 270° → rotate 90°) — but entirely in
     /// memory, so there is no rotation-cache file to race on.
+    /// <paramref name="pressed"/> reproduces BC's hardware press-bounce: the icon is drawn
+    /// at 80×80 centered on an otherwise-black 102×102 canvas (11px margin all around,
+    /// same as <c>DisplayPadOperations.UploadImage</c>'s <c>IsBtnPressed</c> branch) instead
+    /// of filling the whole tile.
     /// </summary>
-    private static byte[] LoadBgr(string path, int deviceRotation)
+    private static byte[] LoadBgr(string path, int deviceRotation, bool pressed = false)
     {
         byte[] fileBytes = File.ReadAllBytes(path);   // avoid GDI+ file locks
         using var ms = new MemoryStream(fileBytes);
@@ -397,11 +401,22 @@ public sealed class DisplayPadNativeClient : IDisplayPadClient
         {
             g.InterpolationMode = InterpolationMode.HighQualityBicubic;
             g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-            g.DrawImage(src, 0, 0, DpHidNative.IconSize, DpHidNative.IconSize);
+            if (pressed)
+            {
+                const int inner = 80;
+                int off = (DpHidNative.IconSize - inner) / 2;
+                g.Clear(Color.Black);
+                g.DrawImage(src, off, off, inner, inner);
+            }
+            else
+            {
+                g.DrawImage(src, 0, 0, DpHidNative.IconSize, DpHidNative.IconSize);
+            }
         }
         switch (deviceRotation)
         {
             case 90: bmp.RotateFlip(RotateFlipType.Rotate270FlipNone); break;
+            case 180: bmp.RotateFlip(RotateFlipType.Rotate180FlipNone); break;
             case 270: bmp.RotateFlip(RotateFlipType.Rotate90FlipNone); break;
         }
 

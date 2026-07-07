@@ -13,6 +13,13 @@ public sealed record HostButton(
     string? ActionValue);
 
 /// <summary>
+/// One device a "switch profile" action can target, offered by <see cref="IActionHost.ListProfileTargets"/>.
+/// <see cref="Key"/> format is <c>"{kind}:{id}"</c> (e.g. <c>"macropad:1"</c>, <c>"displaypad:2"</c>,
+/// <c>"everest:1"</c>); <see cref="Profiles"/> lists that specific device's existing profile numbers.
+/// </summary>
+public sealed record ProfileTargetOption(string Key, string Label, IReadOnlyList<int> Profiles);
+
+/// <summary>
 /// Abstraction of the "device host" for the shared action engine.
 ///
 /// Each K2 device module (DisplayPad, MacroPad, Everest, ...) implements
@@ -48,8 +55,21 @@ public interface IActionHost
     /// <summary>Manually configured Python interpreter path (null = autodetect).</summary>
     string? ConfiguredPythonPath { get; }
 
-    /// <summary>Switch profile: <paramref name="target"/> = "Next" | "Previous" | "1".."N".</summary>
-    void SwitchProfile(string target);
+    /// <summary>
+    /// Switch profile. <paramref name="targetKey"/> is null/"" for "the device this button
+    /// lives on" (self-target, the only mode that existed before cross-device targeting was
+    /// added), or one of the keys returned by <see cref="ListProfileTargets"/> to target a
+    /// different device. <paramref name="target"/> = "Next" | "Previous" | "1".."N".
+    /// </summary>
+    void SwitchProfile(string? targetKey, string target);
+
+    /// <summary>
+    /// Devices this host can target with <see cref="SwitchProfile"/> besides "self" (used to
+    /// populate the "switch profile" action picker). K2.App (unified shell) returns MacroPad +
+    /// DisplayPad + Everest entries; the standalone K2.DisplayPad returns only its own DisplayPad
+    /// devices.
+    /// </summary>
+    IReadOnlyList<ProfileTargetOption> ListProfileTargets();
 
     /// <summary>Button states for the current profile (for the <c>get_buttons</c> API).</summary>
     IReadOnlyList<HostButton> GetButtons();

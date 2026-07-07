@@ -314,6 +314,7 @@ internal static class DpGifAnimator
             switch (rotation)
             {
                 case 90: frameBmp.RotateFlip(RotateFlipType.Rotate270FlipNone); break;
+                case 180: frameBmp.RotateFlip(RotateFlipType.Rotate180FlipNone); break;
                 case 270: frameBmp.RotateFlip(RotateFlipType.Rotate90FlipNone); break;
             }
 

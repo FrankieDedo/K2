@@ -291,6 +291,10 @@ internal sealed class SdkHandler : IDisposable
         int btn = Int(root, "buttonIndex");
         string path = Str(root, "imagePath");
         int rotation = OptInt(root, "rotation", 0);
+        // Hardware press-bounce (K2.App re-uploads the same key with pressed=true on key-down
+        // and pressed=false on key-up — see IDisplayPadClient.UploadImage remarks): reproduces
+        // BC's IsBtnPressed branch (icon shrinks to 80x80 centered on a black 102x102 canvas).
+        bool pressed = OptBool(root, "pressed", false);
         bool ok;
         // ResolveForUpload (rotation + cache file write) must be INSIDE the lock too: it used to
         // run before acquiring it, so two concurrent uploads of the same source image (e.g. two
@@ -303,9 +307,9 @@ internal sealed class SdkHandler : IDisposable
             var sw = System.Diagnostics.Stopwatch.StartNew();
             // NativeIconUploader talks to SetIconPacket directly (same native call BC itself
             // uses), bypassing DisplayPadHelper.UploadImage — see NativeIconUploader.cs for why.
-            ok = NativeIconUploader.Upload(resolved, btn, (uint)id);
+            ok = NativeIconUploader.Upload(resolved, btn, (uint)id, pressed);
             sw.Stop();
-            Program.Log($"[UploadImage/native] dev={id} btn={btn} nativeCallMs={sw.ElapsedMilliseconds} ok={ok} path={resolved}");
+            Program.Log($"[UploadImage/native] dev={id} btn={btn} pressed={pressed} nativeCallMs={sw.ElapsedMilliseconds} ok={ok} path={resolved}");
             Thread.Sleep(IconSettleDelayMs);
         }
         return new { ok, result = ok };
@@ -371,7 +375,7 @@ internal sealed class SdkHandler : IDisposable
     private static string ResolveForUpload(string path, int rotationDegrees)
     {
         if (string.IsNullOrEmpty(path) || !File.Exists(path)) return path;
-        int angle = rotationDegrees switch { 90 => 270, 270 => 90, _ => 0 };
+        int angle = rotationDegrees switch { 90 => 270, 180 => 180, 270 => 90, _ => 0 };
         if (angle == 0) return path;
 
         try
@@ -388,9 +392,12 @@ internal sealed class SdkHandler : IDisposable
             using var ms = new MemoryStream(bytes);
             using var src = new Bitmap(ms);
             using var bmp = new Bitmap(src);
-            bmp.RotateFlip(angle == 90
-                ? RotateFlipType.Rotate90FlipNone
-                : RotateFlipType.Rotate270FlipNone);
+            bmp.RotateFlip(angle switch
+            {
+                90  => RotateFlipType.Rotate90FlipNone,
+                180 => RotateFlipType.Rotate180FlipNone,
+                _   => RotateFlipType.Rotate270FlipNone,
+            });
             bmp.Save(cached, ImageFormat.Png);
             return cached;
         }
@@ -431,6 +438,8 @@ internal sealed class SdkHandler : IDisposable
     private static string Str(JsonElement e, string prop) => e.GetProperty(prop).GetString() ?? "";
     private static int OptInt(JsonElement e, string prop, int def) =>
         e.TryGetProperty(prop, out var v) ? v.GetInt32() : def;
+    private static bool OptBool(JsonElement e, string prop, bool def) =>
+        e.TryGetProperty(prop, out var v) ? v.GetBoolean() : def;
 
     public void Dispose()
     {

@@ -15,9 +15,12 @@
   <string name="close_driver">Chiudi driver</string>
   <string name="refresh">Aggiorna</string>
   <string name="refresh_devices">Aggiorna dispositivi</string>
-  <string name="profile">Profilo:</string>
-  <string name="device">Dispositivo:</string>
-  <string name="orientation">Orientamento:</string>
+  <string name="debug_group">Debug</string>
+  <string name="profile">Profilo</string>
+  <string name="device">Dispositivo</string>
+  <string name="positioning">Posizionamento</string>
+  <string name="pos_horizontal">Orizzontale ({0}°)</string>
+  <string name="pos_vertical">Verticale ({0}°)</string>
   <string name="brightness">Luminosità:</string>
   <string name="save">Salva</string>
   <string name="cancel">Annulla</string>
@@ -69,11 +72,49 @@
   <string name="py_args">Argomenti:</string>
   <string name="py_timeout">Timeout (s, 0 = nessuno):</string>
   <string name="py_hint">Nello script usa 'import k2' per chiamare le funzioni K2 (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...). stdout/stderr vanno nel log K2.</string>
+  <string name="exec_path_label">Percorso eseguibile / file:</string>
+  <string name="folder_path_label">Percorso cartella:</string>
+  <string name="recent_paths">Recenti:</string>
+  <string name="browser_other">Altro…</string>
+  <string name="browser_url_label">URL iniziale (opzionale):</string>
+  <string name="profile_targets_label">Cambia questi profili:</string>
+  <string name="profile_add_target">+ Aggiungi dispositivo</string>
+  <string name="profile_this_device">Questo dispositivo</string>
+  <string name="profile_next">Profilo successivo</string>
+  <string name="profile_previous">Profilo precedente</string>
+  <string name="oscmd_taskmgr">Gestione attività</string>
+  <string name="oscmd_calc">Calcolatrice</string>
+  <string name="oscmd_explorer">Esplora file</string>
+  <string name="oscmd_lock">Blocca computer</string>
+  <string name="oscmd_shutdown">Arresta il sistema</string>
+  <string name="oscmd_restart">Riavvia</string>
+  <string name="oscmd_sleep">Sospendi</string>
+  <string name="oscmd_hibernate">Iberna</string>
+  <string name="media_play_pause">Play / Pausa</string>
+  <string name="media_stop">Stop</string>
+  <string name="media_prev">Traccia precedente</string>
+  <string name="media_next">Traccia successiva</string>
+  <string name="media_vol_up">Volume su</string>
+  <string name="media_vol_down">Volume giù</string>
+  <string name="media_mute">Muto</string>
+  <string name="mouse_left">Tasto sinistro</string>
+  <string name="mouse_right">Tasto destro</string>
+  <string name="mouse_middle">Tasto centrale</string>
+  <string name="mouse_forward">Avanti</string>
+  <string name="mouse_backward">Indietro</string>
+  <string name="mouse_scroll_up">Scorri su</string>
+  <string name="mouse_scroll_down">Scorri giù</string>
+  <string name="mouse_scroll_left">Scorri a sinistra</string>
+  <string name="mouse_scroll_right">Scorri a destra</string>
+  <string name="keys_modifiers_label">Modificatori:</string>
+  <string name="keys_key_label">Tasto:</string>
+  <string name="keys_win_hint">Il tasto Windows è selezionabile ma non viene inviato dal backend tastiera attuale (SendKeys) — viene ignorato silenziosamente.</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
        TAB IMPOSTAZIONI GENERALI
        ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_settings">Impostazioni</string>
+  <string name="tab_macro">Macro</string>
   <string name="settings_debug_mode">Modalità debug</string>
   <string name="settings_debug_mode_hint">Abilita gli strumenti di debug (apri/chiudi driver, controlli AP, log eventi) su tutti i dispositivi.</string>
   <string name="settings_log_level">Log</string>
@@ -90,6 +131,13 @@
   <string name="settings_bc_autostart_hint">Attiva/disattiva le voci di esecuzione automatica di Base Camp (stesso meccanismo della scheda Avvio di Gestione Attività — reversibile). Le voci in HKLM possono richiedere K2 come amministratore.</string>
   <string name="settings_bc_autostart_none">Nessuna voce di avvio automatico di Base Camp trovata nel registro.</string>
   <string name="settings_bc_autostart_done">Avvio automatico Base Camp: {0} voci aggiornate.</string>
+  <string name="settings_general">Opzioni generali</string>
+  <string name="settings_close_to_tray">Chiudi nella system tray invece di uscire</string>
+  <string name="settings_k2_autostart">Avvia K2 all'avvio di Windows</string>
+  <string name="settings_start_min_tray">Avvia direttamente ridotto a icona (tray)</string>
+  <string name="settings_start_min_tray_hint">K2 si avvia con i driver attivi ma la finestra nascosta nella tray — riaprila in qualsiasi momento dall'icona.</string>
+  <string name="tray_show">Mostra K2</string>
+  <string name="tray_exit">Esci</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
        TAB EVEREST MAX
@@ -142,24 +190,34 @@
 
   <!-- Display Dial -->
   <string name="display_dial">Display Dial</string>
-  <string name="dial_pages_visible">Pagine dial visibili:</string>
+  <string name="dial_pages_visible">Menu da mostrare</string>
   <string name="dial_clock">Orologio</string>
   <string name="dial_profile">Profilo</string>
   <string name="dial_volume">Volume</string>
   <string name="dial_brightness">Luminosità</string>
-  <string name="dial_lighting">Illuminazione</string>
+  <string name="dial_lighting">Modalità illuminazione</string>
   <string name="dial_pcinfo">Info PC</string>
-  <string name="dial_apm">APM</string>
-  <string name="dial_custom">Personalizzato</string>
-  <string name="dial_clock_label">Orologio:</string>
-  <string name="dial_screensaver">Salvaschermo (sec):</string>
-  <string name="dial_autooff">Spegnimento auto (sec):</string>
+  <string name="dial_apm">Contatore APM</string>
+  <string name="dial_custom">Modalità personalizzata</string>
+  <string name="dial_clock_section">Tipo di orologio</string>
+  <string name="dial_clock_label">Formato:</string>
+  <string name="dial_clock_style_label">Stile:</string>
+  <string name="dial_clock_digital">Digitale</string>
+  <string name="dial_clock_analog">Analogico</string>
+  <string name="dial_screensaver_section">Salvaschermo</string>
+  <string name="dial_screensaver">Salvaschermo dopo</string>
+  <string name="dial_screensaver_enable_tip">Se disabilitato, il display dial non passa mai al salvaschermo.</string>
+  <string name="dial_screensaver_function_label">Mostra:</string>
+  <string name="dial_autooff">Spegni dopo</string>
+  <string name="dial_turnoff_enable_tip">Se disabilitato, il display dial resta sempre acceso.</string>
   <string name="dial_menu_color">Colore menu:</string>
-  <string name="dial_pixel_shift">Pixel shift (min):</string>
+  <string name="reset_display_dial">Ripristina Display Dial</string>
+  <string name="unit_seconds">s</string>
   <string name="dial_cannot_read">Impossibile leggere ExtendInfo dal dispositivo.</string>
 
   <!-- Associazione Tasti (tasti rimappati + utility di cattura HW per dock/corona/tasti display) -->
   <string name="ev_key_binding">Associazione Tasti</string>
+  <string name="key_binding_hint">Clicca un tasto sul dispositivo qui sopra per configurarne l'azione.</string>
   <string name="dock_capture_hw">Cattura tasto HW…</string>
   <string name="dock_cancel_capture">Annulla cattura</string>
   <string name="dock_press_hw">Premi un tasto HW (dock, tasto display, corona)…</string>
@@ -169,24 +227,53 @@
   <string name="dock_configure_action">Configura azione…</string>
   <string name="dock_remove_action">Rimuovi azione</string>
 
+  <!-- Impostazioni (sezione sidebar Everest: selezione layout tastiera) -->
+  <string name="ev_settings">Impostazioni</string>
+  <string name="ev_layout">Layout</string>
+  <string name="settings_sync_profiles">Sincronizza tra profili</string>
+  <string name="settings_game_mode">Modalità gioco</string>
+  <string name="settings_game_mode_tip">La modalità gioco disabilita alcune combinazioni di tasti per evitare di interrompere accidentalmente una partita.</string>
+  <string name="settings_disable_shift_tab">Disabilita Shift + Tab</string>
+  <string name="settings_disable_alt_f4">Disabilita Alt + F4</string>
+  <string name="settings_disable_win_key">Disabilita tasto Windows</string>
+  <string name="settings_disable_alt_tab">Disabilita Alt + Tab</string>
+  <string name="settings_indicator_leds">LED indicatori</string>
+  <string name="settings_enable_core_led">Abilita i LED indicatori Core</string>
+  <string name="settings_factory_reset">Ripristina impostazioni di fabbrica</string>
+  <string name="settings_factory_reset_confirm">Questo ripristina Modalità gioco, LED indicatori ed effetti di illuminazione della tastiera alle impostazioni di fabbrica. Continuare?</string>
+
   <!-- Macro tastiera -->
   <string name="keyboard_macro">Macro tastiera</string>
+  <string name="macro_library">Libreria macro</string>
   <string name="macro_new">Nuova</string>
   <string name="macro_delete">Elimina</string>
   <string name="macro_record">Registra</string>
   <string name="macro_record_stop">■ Ferma</string>
   <string name="macro_play">Riproduci</string>
   <string name="macro_name">Nome:</string>
-  <string name="macro_delay">Ritardo:</string>
+  <string name="macro_delay">Ritardo</string>
   <string name="macro_delay_recorded">Registrato</string>
   <string name="macro_delay_none">Nessuno</string>
   <string name="macro_delay_custom">Personalizzato</string>
-  <string name="macro_playback">Riproduzione:</string>
-  <string name="macro_playback_once">Una volta</string>
+  <string name="macro_playback">Riproduzione</string>
+  <string name="macro_playback_once">Riproduci una volta</string>
   <string name="macro_playback_repeat">Ripeti N volte</string>
-  <string name="macro_playback_held">Finché premuto</string>
+  <string name="macro_playback_held">Tieni premuto</string>
   <string name="macro_playback_toggle">Toggle</string>
+  <string name="macro_repeat_short">Ripeti</string>
+  <string name="macro_times_suffix">volte</string>
   <string name="macro_record_mouse">Registra mouse</string>
+  <string name="macro_record_keyboard">Registra tastiera</string>
+  <string name="macro_section_devices">Dispositivi</string>
+  <string name="macro_section_inputs">Input</string>
+  <string name="macro_section_assigned">Assegnata a</string>
+  <string name="macro_assigned_help">Ogni tasto, su qualsiasi dispositivo, attualmente configurato per riprodurre questa macro.</string>
+  <string name="macro_not_assigned">Non ancora assegnata a nessun tasto.</string>
+  <string name="macro_show_press_release">Mostra pressione/rilascio</string>
+  <string name="macro_start_recording">Avvia registrazione</string>
+  <string name="macro_move_up">Sposta su</string>
+  <string name="macro_move_down">Sposta giù</string>
+  <string name="macro_delete_input">Rimuovi</string>
   <string name="macro_actions_count">{0} azioni</string>
   <string name="macro_import_bc">Importa da BaseCamp.db</string>
   <string name="macro_select_first">Seleziona o crea una macro prima di registrare.</string>
@@ -234,7 +321,6 @@
   <string name="dp_driver_opened">Driver DisplayPad aperto.</string>
   <string name="dp_driver_open_failed">Apertura driver DisplayPad fallita.</string>
   <string name="dp_driver_closed">Driver DisplayPad chiuso.</string>
-  <string name="dp_rotation">Rotazione:</string>
   <string name="dp_rotate_icons_ccw">Ruota icone ↺</string>
   <string name="dp_rotate_icons_cw">Ruota icone ↻</string>
   <string name="dp_reset_keys">Ripristina tasti</string>
@@ -273,6 +359,14 @@
   <string name="dp_exported_bc">Esportato '{0}' come XML Base Camp: {1} azioni scritte, {2} omesse (nessun equivalente Base Camp).</string>
   <string name="dp_exported_k2">Esportato '{0}' come XML K2: {1} azioni scritte.</string>
   <string name="dp_export_no_profile">Seleziona prima un profilo.</string>
+  <string name="export_profiles_btn">Esporta profili…</string>
+  <string name="export_profiles_title">Esporta profili</string>
+  <string name="export_profiles_pick">Seleziona i profili da esportare:</string>
+  <string name="export_format_section">Formato:</string>
+  <string name="export_format_bc">Compatibile Base Camp</string>
+  <string name="export_format_k2">K2 (lossless)</string>
+  <string name="export_select_at_least_one">Seleziona almeno un profilo.</string>
+  <string name="export_pick_folder">Scegli una cartella per i profili esportati</string>
   <!-- Fullscreen -->
   <string name="dp_fullscreen_group">Schermo intero</string>
   <string name="dp_fullscreen_set">Imposta immagine schermo intero…</string>
@@ -300,7 +394,6 @@
   <string name="ev_imported_bc">Importati {0} profili Everest ({1} tasti) da Base Camp.</string>
   <string name="mp_no_profiles_in_bc">Nessun profilo MacroPad trovato nel database Base Camp.</string>
   <string name="mp_imported_bc">Importati {0} profili MacroPad ({1} tasti) da Base Camp.</string>
-  <string name="select_device_first">Seleziona prima un dispositivo.</string>
   <!-- Navigazione cartelle DisplayPad -->
   <string name="dp_back">Indietro</string>
 

@@ -1,4 +1,6 @@
 // MainWindow.Macro.cs — partial class: "Keyboard Macro" panel.
+// Top-level section (PnlMacro in MainWindow.xaml), reachable via its own
+// nav button next to Settings — not tied to any single device tab.
 // Handles recording, playback, and persistence of macros.
 
 using System;
@@ -18,7 +20,10 @@ public partial class MainWindow
     private MacroRecorder? _macroRecorder;
     private MacroPlayer? _macroPlayer;
     private readonly ObservableCollection<MacroDefinition> _macros = new();
+    private readonly ObservableCollection<MacroInputRow> _macroInputRows = new();
+    private readonly ObservableCollection<MacroAssignment> _macroAssignments = new();
     private bool _macroLoading;
+    private bool _macroShowPressRelease = true;
 
     // ─────────────────────── Init ───────────────────────
 
@@ -42,6 +47,9 @@ public partial class MainWindow
             });
 
             LbMacros.ItemsSource = _macros;
+            LvMacroInputs.ItemsSource = _macroInputRows;
+            LvMacroAssignments.ItemsSource = _macroAssignments;
+            CkMacroShowPressRelease.IsChecked = _macroShowPressRelease;
             RefreshMacroList();
             BtnMacroStop.IsEnabled = false;
         }
@@ -83,14 +91,29 @@ public partial class MainWindow
         try
         {
             TxtMacroName.Text = m.Name;
-            CbMacroDelay.SelectedIndex = (int)m.DelayOption;
-            CbMacroPlayback.SelectedIndex = (int)m.PlaybackOption;
-            TxtMacroCustomDelay.Text = m.CustomDelayMs.ToString();
-            TxtMacroRepeatN.Text = m.RepeatCount.ToString();
             CkMacroMouse.IsChecked = m.RecordMouse;
+            CkMacroKeyboard.IsChecked = m.RecordKeyboard;
+
+            switch (m.DelayOption)
+            {
+                case MacroDelay.Custom:  RbMacroDelayCustom.IsChecked  = true; break;
+                case MacroDelay.NoDelay: RbMacroDelayNone.IsChecked    = true; break;
+                default:                 RbMacroDelayRecorded.IsChecked = true; break;
+            }
+            TxtMacroCustomDelay.Text = m.CustomDelayMs.ToString();
+
+            switch (m.PlaybackOption)
+            {
+                case MacroPlayback.RepeatN:   RbMacroPlaybackRepeat.IsChecked = true; break;
+                case MacroPlayback.WhileHeld: RbMacroPlaybackHold.IsChecked   = true; break;
+                case MacroPlayback.Toggle:    RbMacroPlaybackToggle.IsChecked = true; break;
+                default:                      RbMacroPlaybackOnce.IsChecked   = true; break;
+            }
+            TxtMacroRepeatN.Text = m.RepeatCount.ToString();
+
             TblMacroInputCount.Text = Loc.Get("macro_actions_count", m.Inputs.Count);
-            UpdateDelayVisibility();
-            UpdatePlaybackVisibility();
+            RebuildInputRows();
+            RefreshMacroAssignments();
         }
         finally
         {
@@ -137,7 +160,9 @@ public partial class MainWindow
             var inputs = _macroRecorder.Stop();
             m.Inputs = inputs;
             TblMacroInputCount.Text = Loc.Get("macro_actions_count", inputs.Count);
-            BtnMacroRecord.Content = Loc.Get("macro_record");
+            BtnMacroRecord.Content = Loc.Get("macro_start_recording");
+            RebuildInputRows();
+            RefreshMacroAssignments();
             SaveCurrentMacro();
             LogEverest($"[MACRO] Recording stopped: {inputs.Count} actions");
         }
@@ -145,7 +170,8 @@ public partial class MainWindow
         {
             // Start recording
             bool mouse = CkMacroMouse.IsChecked == true;
-            _macroRecorder.Start(mouse);
+            bool keyboard = CkMacroKeyboard.IsChecked == true;
+            _macroRecorder.Start(mouse, keyboard);
             BtnMacroRecord.Content = Loc.Get("macro_record_stop");
             LogEverest("[MACRO] Recording started" + (mouse ? " (with mouse)" : ""));
         }
@@ -185,25 +211,86 @@ public partial class MainWindow
             LbMacros.SelectedIndex = idx;
         }
         SaveCurrentMacro();
+        RefreshMacroAssignments();
     }
 
-    private void CbMacroDelay_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void CkMacroDevice_Click(object sender, RoutedEventArgs e)
     {
         if (_macroLoading) return;
-        var m = SelectedMacro;
-        if (m is null) return;
-        m.DelayOption = (MacroDelay)CbMacroDelay.SelectedIndex;
-        UpdateDelayVisibility();
         SaveCurrentMacro();
     }
 
-    private void CbMacroPlayback_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void RbMacroDelay_Checked(object sender, RoutedEventArgs e)
     {
         if (_macroLoading) return;
         var m = SelectedMacro;
         if (m is null) return;
-        m.PlaybackOption = (MacroPlayback)CbMacroPlayback.SelectedIndex;
-        UpdatePlaybackVisibility();
+        if (ReferenceEquals(sender, RbMacroDelayCustom)) m.DelayOption = MacroDelay.Custom;
+        else if (ReferenceEquals(sender, RbMacroDelayNone)) m.DelayOption = MacroDelay.NoDelay;
+        else m.DelayOption = MacroDelay.Recorded;
+        SaveCurrentMacro();
+    }
+
+    private void TxtMacroCustomDelay_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_macroLoading) return;
+        SaveCurrentMacro();
+    }
+
+    private void RbMacroPlayback_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_macroLoading) return;
+        var m = SelectedMacro;
+        if (m is null) return;
+        if (ReferenceEquals(sender, RbMacroPlaybackRepeat)) m.PlaybackOption = MacroPlayback.RepeatN;
+        else if (ReferenceEquals(sender, RbMacroPlaybackHold)) m.PlaybackOption = MacroPlayback.WhileHeld;
+        else if (ReferenceEquals(sender, RbMacroPlaybackToggle)) m.PlaybackOption = MacroPlayback.Toggle;
+        else m.PlaybackOption = MacroPlayback.Once;
+        SaveCurrentMacro();
+    }
+
+    private void TxtMacroRepeatN_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_macroLoading) return;
+        SaveCurrentMacro();
+    }
+
+    private void CkMacroShowPressRelease_Click(object sender, RoutedEventArgs e)
+    {
+        _macroShowPressRelease = CkMacroShowPressRelease.IsChecked == true;
+        RebuildInputRows();
+    }
+
+    private void BtnMacroInputDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: MacroInputRow row }) return;
+        var m = SelectedMacro;
+        if (m is null || row.SourceIndex < 0 || row.SourceIndex >= m.Inputs.Count) return;
+        m.Inputs.RemoveAt(row.SourceIndex);
+        RebuildInputRows();
+        TblMacroInputCount.Text = Loc.Get("macro_actions_count", m.Inputs.Count);
+        SaveCurrentMacro();
+    }
+
+    private void BtnMacroInputMoveUp_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: MacroInputRow row }) return;
+        var m = SelectedMacro;
+        if (m is null || row.SourceIndex <= 0 || row.SourceIndex >= m.Inputs.Count) return;
+        (m.Inputs[row.SourceIndex - 1], m.Inputs[row.SourceIndex]) =
+            (m.Inputs[row.SourceIndex], m.Inputs[row.SourceIndex - 1]);
+        RebuildInputRows();
+        SaveCurrentMacro();
+    }
+
+    private void BtnMacroInputMoveDown_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: MacroInputRow row }) return;
+        var m = SelectedMacro;
+        if (m is null || row.SourceIndex < 0 || row.SourceIndex >= m.Inputs.Count - 1) return;
+        (m.Inputs[row.SourceIndex + 1], m.Inputs[row.SourceIndex]) =
+            (m.Inputs[row.SourceIndex], m.Inputs[row.SourceIndex + 1]);
+        RebuildInputRows();
         SaveCurrentMacro();
     }
 
@@ -261,20 +348,116 @@ public partial class MainWindow
         if (int.TryParse(TxtMacroRepeatN.Text, out int rn))
             m.RepeatCount = rn;
         m.RecordMouse = CkMacroMouse.IsChecked == true;
+        m.RecordKeyboard = CkMacroKeyboard.IsChecked == true;
         m.ModifiedAt = DateTime.Now;
         _macroStore.Update(m);
     }
 
-    private void UpdateDelayVisibility()
+    /// <summary>Rebuilds the recorded-inputs list shown in the INPUTS section.</summary>
+    private void RebuildInputRows()
     {
-        bool showCustom = CbMacroDelay.SelectedIndex == 2; // Custom
-        TxtMacroCustomDelay.Visibility = showCustom ? Visibility.Visible : Visibility.Collapsed;
-        TblMacroMs.Visibility = showCustom ? Visibility.Visible : Visibility.Collapsed;
+        _macroInputRows.Clear();
+        var m = SelectedMacro;
+        if (m is null) return;
+        for (int i = 0; i < m.Inputs.Count; i++)
+            _macroInputRows.Add(BuildInputRow(m.Inputs[i], i));
     }
 
-    private void UpdatePlaybackVisibility()
+    private MacroInputRow BuildInputRow(MacroInput inp, int index)
     {
-        bool showN = CbMacroPlayback.SelectedIndex == 1; // RepeatN
-        TxtMacroRepeatN.Visibility = showN ? Visibility.Visible : Visibility.Collapsed;
+        bool isPress = inp.Type is "keydown" or "mousedown";
+        string glyph = inp.Type switch
+        {
+            "keydown" or "keyup" => "",                        // keyboard
+            "mousedown" or "mouseup" or "mousemove" => "",     // mouse
+            "text" => "",                                      // text
+            _ => ""
+        };
+        string label = inp.Type switch
+        {
+            "keydown" or "keyup" => KeyName(inp.Key),
+            "mousedown" or "mouseup" => inp.Key switch
+            {
+                1 => "Left Click",
+                2 => "Right Click",
+                _ => $"Mouse {inp.Key}"
+            },
+            "mousemove" => $"Move ({inp.X},{inp.Y})",
+            "text" => $"\"{inp.Text}\"",
+            _ => inp.Type
+        };
+        return new MacroInputRow
+        {
+            Number = index + 1,
+            Glyph = glyph,
+            Label = label,
+            DelayMs = inp.DelayMs,
+            IsPress = isPress,
+            ShowIndicator = _macroShowPressRelease,
+            SourceIndex = index
+        };
+    }
+
+    private static string KeyName(int vk)
+    {
+        var key = (System.Windows.Forms.Keys)vk;
+        string s = key.ToString();
+        // "D1".."D0" -> plain digit
+        if (s.Length == 2 && s[0] == 'D' && char.IsDigit(s[1])) return s[1].ToString();
+        return s;
+    }
+
+    /// <summary>
+    /// Scans the MacroPad and Everest key stores for keys whose action is
+    /// this macro (ActionType == "macro", ActionValue == macro name — the
+    /// same convention <see cref="BaseCampDbImporter"/> uses when importing
+    /// "Macro" bindings from BaseCamp.db). K2 doesn't yet let a user pick
+    /// "Macro" as an action type from <c>ButtonActionDialog</c>, so today
+    /// this only surfaces assignments brought in via BC import — the query
+    /// is ready for when direct in-app assignment is added.
+    /// </summary>
+    private void RefreshMacroAssignments()
+    {
+        _macroAssignments.Clear();
+        var m = SelectedMacro;
+        if (m is null || string.IsNullOrWhiteSpace(m.Name)) return;
+
+        try
+        {
+            foreach (var (deviceId, profile, keyIndex) in _store.GetKeysByAction("macro", m.Name))
+            {
+                string profileName = _store.GetProfileName(deviceId, profile) ?? Loc.Get("profile_n", profile);
+                _macroAssignments.Add(new MacroAssignment
+                {
+                    KeyLabel = $"M{keyIndex + 1}",
+                    Subtitle = $"{Loc.Get("tab_macropad")} #{deviceId} · {profileName}"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            LogEverest($"[MACRO] Assignment lookup (MacroPad) failed: {ex.Message}");
+        }
+
+        try
+        {
+            foreach (var (profile, keyMatrix, label) in _evStore.GetKeysByAction("macro", m.Name))
+            {
+                string profileName = _evStore.GetProfileName(profile) ?? Loc.Get("profile_n", profile);
+                string keyLabel = string.IsNullOrWhiteSpace(label) ? $"0x{keyMatrix:X2}" : label;
+                _macroAssignments.Add(new MacroAssignment
+                {
+                    KeyLabel = keyLabel,
+                    Subtitle = $"{Loc.Get("tab_everest")} · {profileName}"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            LogEverest($"[MACRO] Assignment lookup (Everest) failed: {ex.Message}");
+        }
+
+        TblMacroNotAssigned.Visibility = _macroAssignments.Count == 0
+            ? Visibility.Visible : Visibility.Collapsed;
     }
 }

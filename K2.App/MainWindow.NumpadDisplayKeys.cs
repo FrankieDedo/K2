@@ -187,6 +187,22 @@ public partial class MainWindow
         string? cropped = ImageCropDialog.Show(this, picked, 72, 72, Loc.Get("crop_title", 72, 72));
         if (cropped is not null) picked = cropped;
 
+        NdkApplyImage(keyIndex, picked);
+    }
+
+    /// <summary>
+    /// Uploads <paramref name="imagePath"/> (already 72×72 — either user-cropped via
+    /// <see cref="NdkButton_Click"/> or auto-generated via <see cref="TryAutoGenerateNdkImage"/>)
+    /// to display key <paramref name="keyIndex"/>, persists it, and refreshes the thumbnail.
+    /// </summary>
+    private void NdkApplyImage(int keyIndex, string imagePath)
+    {
+        if (_everest is null || !_everest.IsOpen)
+        {
+            LogEverest("[NDK] Everest not connected.");
+            return;
+        }
+
         // Upload to device — try parameter combinations for debugging.
         // SDK: targetDev=1, targetPic=picSlot, targetSubItem=keyIndex.
         // Try different (picSlot, keyIndex) combinations to find which
@@ -194,39 +210,66 @@ public partial class MainWindow
         bool ok = false;
 
         // Attempt 1: picSlot=0, subItem=keyIndex (all on the same slot)
-        ok = _everest.UploadNumpadImage(picked, keyIndex, picSlot: 0);
+        ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: 0);
         LogEverest($"[NDK] Upload key={keyIndex} try1(pic=0,sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
 
         if (!ok)
         {
             // Attempt 2: picSlot=keyIndex, subItem=keyIndex
-            ok = _everest.UploadNumpadImage(picked, keyIndex, picSlot: (byte)keyIndex);
+            ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: (byte)keyIndex);
             LogEverest($"[NDK] Upload key={keyIndex} try2(pic={keyIndex},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
         }
 
         if (!ok)
         {
             // Attempt 3: picSlot=keyIndex+1, subItem=keyIndex
-            ok = _everest.UploadNumpadImage(picked, keyIndex, picSlot: (byte)(keyIndex + 1));
+            ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: (byte)(keyIndex + 1));
             LogEverest($"[NDK] Upload key={keyIndex} try3(pic={keyIndex + 1},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
         }
 
         if (!ok)
         {
             // Attempt 4: strip mode (targetDev=0, targetPic=2+keyIndex)
-            ok = _everest.UploadNumpadImageStrip(picked, keyIndex, picSlot: (byte)keyIndex);
+            ok = _everest.UploadNumpadImageStrip(imagePath, keyIndex, picSlot: (byte)keyIndex);
             LogEverest($"[NDK] Upload key={keyIndex} try4-strip(pic={keyIndex},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
         }
 
         if (ok)
         {
-            _ndkImagePaths[keyIndex] = picked;
-            NdkSetThumbnail(keyIndex, picked);
+            _ndkImagePaths[keyIndex] = imagePath;
+            NdkSetThumbnail(keyIndex, imagePath);
             SaveNdkKey(keyIndex);
 
             // Update SetDisplayKeyPic to show the new image
             NdkRefreshDevicePicSlots();
         }
+    }
+
+    /// <summary>
+    /// When the action just assigned/changed on a display key is "exec" or "folder",
+    /// auto-generate its picture (the executable's own icon, or a folder glyph + name)
+    /// instead of requiring the user to manually pick+crop an image.
+    /// </summary>
+    private void TryAutoGenerateNdkImage(int keyIndex, string actionType, string actionValue)
+    {
+        if (string.IsNullOrWhiteSpace(actionValue)) return;
+        if (actionType != "exec" && actionType != "folder") return;
+
+        string cacheRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "K2.App", "auto_icons");
+        Directory.CreateDirectory(cacheRoot);
+
+        long mtime = 0;
+        if (actionType == "exec") { try { mtime = File.GetLastWriteTimeUtc(actionValue).Ticks; } catch { } }
+        byte[] hash = System.Security.Cryptography.SHA1.HashData(
+            System.Text.Encoding.UTF8.GetBytes($"{actionType}|{actionValue}|{mtime}|72"));
+        string dest = Path.Combine(cacheRoot, Convert.ToHexString(hash).ToLowerInvariant() + $"_{actionType}.png");
+
+        bool ok = actionType == "exec"
+            ? IconImageGenerator.TryGenerateExecIcon(actionValue, 72, dest)
+            : IconImageGenerator.TryGenerateFolderIcon(actionValue, 72, dest);
+        if (ok) NdkApplyImage(keyIndex, dest);
     }
 
     /// <summary>Sends SetDisplayKeyPic with the current slots.</summary>
@@ -269,16 +312,21 @@ public partial class MainWindow
         if (idx < 0) return;
 
         var dlg = new ButtonActionDialog(
-            idx, _ndkActions[idx].Type, _ndkActions[idx].Value)
+            idx, _ndkActions[idx].Type, _ndkActions[idx].Value, _evActionHost)
         { Owner = this };
 
         if (dlg.ShowDialog() == true)
         {
+            var (oldType, oldValue) = _ndkActions[idx];
             string? aType = string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none"
                 ? null : dlg.ActionType;
-            _ndkActions[idx] = (aType, aType is null ? null : dlg.ActionValue);
+            string? aValue = aType is null ? null : dlg.ActionValue;
+            _ndkActions[idx] = (aType, aValue);
             SaveNdkKey(idx);
             LogEverest($"[NDK] key={idx} action <- {aType ?? "none"}");
+
+            if (aType is not null && (aType != oldType || aValue != oldValue))
+                TryAutoGenerateNdkImage(idx, aType, aValue ?? "");
         }
     }
 

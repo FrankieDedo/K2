@@ -44,7 +44,24 @@ public partial class MainWindow : IActionHost
 
     string? IActionHost.ConfiguredPythonPath => _store.GetSetting("python.exePath");
 
-    void IActionHost.SwitchProfile(string target) => ExecuteProfileSwitch(target);
+    void IActionHost.SwitchProfile(string? targetKey, string target)
+    {
+        // Standalone K2.DisplayPad only ever addresses its own DisplayPad devices, so the
+        // "kind" prefix from ListProfileTargets is always "displaypad" here; just take the id.
+        int? id = null;
+        if (!string.IsNullOrEmpty(targetKey))
+        {
+            var parts = targetKey.Split(':', 2);
+            if (parts.Length == 2 && int.TryParse(parts[1], out int parsed)) id = parsed;
+        }
+        ExecuteProfileSwitch(id, target);
+    }
+
+    IReadOnlyList<ProfileTargetOption> IActionHost.ListProfileTargets()
+        => _deviceIds.Select(id => new ProfileTargetOption(
+               $"displaypad:{id}", $"DisplayPad {id}",
+               Enumerable.Range(1, DisplayPadService.ProfileCount).ToList()))
+           .ToList();
 
     IReadOnlyList<HostButton> IActionHost.GetButtons()
         => _cells.Select(c => new HostButton(

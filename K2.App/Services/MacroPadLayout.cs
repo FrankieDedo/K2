@@ -5,8 +5,7 @@ namespace K2.App.Services;
 /// how many degrees CLOCKWISE the device is rotated relative to the
 /// native layout (2 rows x 6 columns, keys upright).
 ///
-/// <para>As with the DisplayPad: 90° and 270° are supported, 180° is excluded
-/// by design (never mounted upside down).</para>
+/// <para>As with the DisplayPad: 0°, 90°, 180° and 270° are all supported.</para>
 /// </summary>
 public enum MacroPadRotation
 {
@@ -14,6 +13,8 @@ public enum MacroPadRotation
     None = 0,
     /// <summary>Device mounted rotated 90 degrees clockwise.</summary>
     Cw90 = 90,
+    /// <summary>Device mounted upside down (180 degrees, same 2x6 grid).</summary>
+    Cw180 = 180,
     /// <summary>Device mounted rotated 270 degrees clockwise (= 90 counter-clockwise).</summary>
     Cw270 = 270,
 }
@@ -46,9 +47,9 @@ public static class MacroPadLayout
     public const int ButtonCount = PhysRows * PhysCols; // 12
 
     /// <summary>On-screen grid size for the given rotation.
-    /// At 90/270 the 2x6 strip becomes 6x2.</summary>
+    /// At 90/270 the 2x6 strip becomes 6x2; at 0/180 it stays 2x6.</summary>
     public static (int Rows, int Cols) VisualGrid(MacroPadRotation r) =>
-        r == MacroPadRotation.None ? (PhysRows, PhysCols) : (PhysCols, PhysRows);
+        r is MacroPadRotation.Cw90 or MacroPadRotation.Cw270 ? (PhysCols, PhysRows) : (PhysRows, PhysCols);
 
     /// <summary>
     /// Permutation table: for each visual slot (0..11, in reading order of
@@ -76,6 +77,11 @@ public static class MacroPadLayout
                     vr = PhysCols - 1 - pc;
                     vc = pr;
                     break;
+                // Device rotated 180: top-left goes to bottom-right.
+                case MacroPadRotation.Cw180:
+                    vr = PhysRows - 1 - pr;
+                    vc = PhysCols - 1 - pc;
+                    break;
                 default:
                     vr = pr;
                     vc = pc;
@@ -90,14 +96,16 @@ public static class MacroPadLayout
     public static string Label(MacroPadRotation r) => r switch
     {
         MacroPadRotation.Cw90  => "90°",
+        MacroPadRotation.Cw180 => "180°",
         MacroPadRotation.Cw270 => "270°",
         _                      => "0°",
     };
 
-    /// <summary>Converts the saved value ("0"/"90"/"270") to the enum.</summary>
+    /// <summary>Converts the saved value ("0"/"90"/"180"/"270") to the enum.</summary>
     public static MacroPadRotation Parse(string? s) => s switch
     {
         "90"  => MacroPadRotation.Cw90,
+        "180" => MacroPadRotation.Cw180,
         "270" => MacroPadRotation.Cw270,
         _     => MacroPadRotation.None,
     };

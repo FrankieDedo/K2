@@ -54,6 +54,21 @@
     </Content>
   </ItemGroup>
 
+  <!-- Roboto font (SIL OFL 1.1, see Fonts/LICENSE.Roboto.txt): embedded as
+       Resource so K2Theme.xaml can reference it via pack URI regardless of
+       whether Roboto is installed on the end-user's machine. License text
+       copied to output next to the executable (OFL requires it travel with
+       the font). -->
+  <ItemGroup>
+    <Resource Include="Fonts\Roboto-Regular.ttf" />
+    <Resource Include="Fonts\Roboto-Bold.ttf" />
+    <Resource Include="Fonts\Roboto-Italic.ttf" />
+    <Resource Include="Fonts\Roboto-BoldItalic.ttf" />
+    <Content Include="Fonts\LICENSE.Roboto.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <!-- PyBridge: Python helpers copied to pybridge\ next to the executable.
        Content from a referenced project flows into the referencing app's
        output, so every app using K2.Core gets k2.py and k2_runner.py

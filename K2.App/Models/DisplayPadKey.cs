@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using K2.App.Services;
 
 namespace K2.App.Models;
 
@@ -49,6 +50,14 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
                 return null;
             try
             {
+                // A cropped GIF's assigned path is a CroppedGifRef sidecar (JSON pointing at
+                // the real source + crop rect, see that class' remarks) — not an image file
+                // a BitmapImage can decode. The grid only shows a static thumbnail anyway
+                // (live playback happens on the device via DpGifAnimator), so render just the
+                // first frame with the saved crop.
+                if (CroppedGifRef.IsCropRef(_imagePath))
+                    return LoadCroppedGifPreview(_imagePath);
+
                 var bmp = new BitmapImage();
                 bmp.BeginInit();
                 bmp.CacheOption = BitmapCacheOption.OnLoad;
@@ -59,6 +68,36 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
             }
             catch { return null; }
         }
+    }
+
+    private static ImageSource? LoadCroppedGifPreview(string sidecarPath)
+    {
+        var cref = CroppedGifRef.TryLoad(sidecarPath);
+        if (cref is null || !File.Exists(cref.Source)) return null;
+
+        using var img = new System.Drawing.Bitmap(cref.Source);
+        var srcRect = cref.NoCrop
+            ? new System.Drawing.RectangleF(0, 0, img.Width, img.Height)
+            : new System.Drawing.RectangleF(cref.RectX, cref.RectY, cref.RectW, cref.RectH);
+
+        using var frame = new System.Drawing.Bitmap(DpHidNative.IconSize, DpHidNative.IconSize);
+        using (var g = System.Drawing.Graphics.FromImage(frame))
+        {
+            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            g.DrawImage(img, new System.Drawing.Rectangle(0, 0, DpHidNative.IconSize, DpHidNative.IconSize),
+                srcRect.X, srcRect.Y, srcRect.Width, srcRect.Height, System.Drawing.GraphicsUnit.Pixel);
+        }
+
+        using var ms = new MemoryStream();
+        frame.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+        ms.Position = 0;
+        var result = new BitmapImage();
+        result.BeginInit();
+        result.CacheOption = BitmapCacheOption.OnLoad;
+        result.StreamSource = ms;
+        result.EndInit();
+        result.Freeze();
+        return result;
     }
 
     public bool HasImage => !string.IsNullOrEmpty(_imagePath);

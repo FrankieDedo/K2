@@ -116,15 +116,59 @@ public partial class CellConfigDialog : Window
     // Action section
     // ================================================================
 
+    /// <summary>Square icon size for auto-generated pictures (matches the DisplayPad's 102×102 key tiles).</summary>
+    private const int AutoIconSize = 102;
+
     private void BtnConfigureAction_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new ButtonActionDialog(_cellIndex, ActionType, ActionValue) { Owner = this };
+        var dlg = new ButtonActionDialog(_cellIndex, ActionType, ActionValue, Owner as K2.Core.IActionHost) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
+        string? oldType = ActionType, oldValue = ActionValue;
         ActionType  = string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none"
                       ? null : dlg.ActionType;
         ActionValue = ActionType is null ? null : dlg.ActionValue;
+
+        if (ActionType != oldType || ActionValue != oldValue)
+            TryAutoGenerateCellImage();
+
         RefreshActionSummary();
+    }
+
+    /// <summary>
+    /// When the action just assigned/changed is "exec" or "folder", auto-generate the
+    /// cell's picture (the executable's own icon, or a folder glyph + name) instead of
+    /// requiring the user to manually pick an image.
+    /// </summary>
+    private void TryAutoGenerateCellImage()
+    {
+        if (string.IsNullOrWhiteSpace(ActionValue)) return;
+        if (ActionType != "exec" && ActionType != "folder") return;
+
+        string dest = AutoIconCachePath(ActionType!, ActionValue!);
+        bool ok = ActionType == "exec"
+            ? IconImageGenerator.TryGenerateExecIcon(ActionValue!, AutoIconSize, dest)
+            : IconImageGenerator.TryGenerateFolderIcon(ActionValue!, AutoIconSize, dest);
+        if (!ok) return;
+
+        _pendingPath  = dest;
+        _rotation     = 0;
+        Rb0.IsChecked = true;
+        RefreshImagePreview();
+    }
+
+    private static string AutoIconCachePath(string kind, string sourceValue)
+    {
+        string cacheRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "K2.DisplayPad", "auto_icons");
+        Directory.CreateDirectory(cacheRoot);
+
+        long mtime = 0;
+        if (kind == "exec") { try { mtime = File.GetLastWriteTimeUtc(sourceValue).Ticks; } catch { } }
+        byte[] hash = System.Security.Cryptography.SHA1.HashData(
+            System.Text.Encoding.UTF8.GetBytes($"{kind}|{sourceValue}|{mtime}"));
+        return Path.Combine(cacheRoot, Convert.ToHexString(hash).ToLowerInvariant() + $"_{kind}.png");
     }
 
     private void BtnRemoveAction_Click(object sender, RoutedEventArgs e)

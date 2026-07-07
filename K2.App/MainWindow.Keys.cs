@@ -92,9 +92,10 @@ public partial class MainWindow
         _suppressRotationUpdate = true;
         CbMacroRotation.ItemsSource = new[]
         {
-            new RotationChoice(MacroPadRotation.None,  "Horizontal (0°)"),
-            new RotationChoice(MacroPadRotation.Cw90,  "Vertical 90°"),
-            new RotationChoice(MacroPadRotation.Cw270, "Vertical 270°"),
+            new RotationChoice(MacroPadRotation.None,  Loc.Get("pos_horizontal", 0)),
+            new RotationChoice(MacroPadRotation.Cw90,  Loc.Get("pos_vertical", 90)),
+            new RotationChoice(MacroPadRotation.Cw180, Loc.Get("pos_horizontal", 180)),
+            new RotationChoice(MacroPadRotation.Cw270, Loc.Get("pos_vertical", 270)),
         };
         CbMacroRotation.DisplayMemberPath = nameof(RotationChoice.Label);
         CbMacroRotation.SelectedIndex = 0;
@@ -110,6 +111,8 @@ public partial class MainWindow
         var savedName = _store.GetSetting("device.name");
         if (!string.IsNullOrEmpty(savedName))
             TabMacroPad.Header = savedName;
+
+        InitMpSectionNav();
     }
 
     private void BtnMpRename_Click(object sender, RoutedEventArgs e)
@@ -163,7 +166,15 @@ public partial class MainWindow
     }
 
     /// <summary>Rotation combo item.</summary>
-    private sealed record RotationChoice(MacroPadRotation Rotation, string Label);
+    private sealed record RotationChoice(MacroPadRotation Rotation, string Label)
+    {
+        // Fallback for the closed ComboBox: when the control's ancestor is still
+        // Visibility="Collapsed" at the time ItemsSource/DisplayMemberPath are
+        // set (e.g. MacroPad tab not yet selected), WPF may render the closed
+        // box via ToString() instead of DisplayMemberPath. Matching ToString()
+        // to the label keeps it correct either way.
+        public override string ToString() => Label;
+    }
 
     /// <summary>
     /// Places buttons in the <see cref="Canvas"/> <c>CvsMacroKeys</c> always
@@ -290,9 +301,11 @@ public partial class MainWindow
 
     private void ConfigureAction(MacroPadKey key)
     {
+        // Key editing is only enabled while the "Key Binding" section is active.
+        if (!IsMpKeyBindingSectionActive) return;
         if (CurrentDeviceId() is not int id) { Log("[WARN] Select a device first."); return; }
 
-        var dlg = new ButtonActionDialog(key.Index, key.ActionType, key.ActionValue) { Owner = this };
+        var dlg = new ButtonActionDialog(key.Index, key.ActionType, key.ActionValue, this) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
         key.ActionType  = string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none"
@@ -304,6 +317,7 @@ public partial class MainWindow
 
     private void MnuRemoveAction_Click(object sender, RoutedEventArgs e)
     {
+        if (!IsMpKeyBindingSectionActive) return;
         if (KeyFromContextMenu(sender) is not MacroPadKey key) return;
         if (CurrentDeviceId() is not int id) return;
         key.ActionType = null;
@@ -563,49 +577,33 @@ public partial class MainWindow
     }
 
     // ============================================================
-    // Export profile — Base Camp-compatible XML / K2-only XML
+    // Export profiles — Base Camp-compatible XML / K2-only XML
     // ============================================================
 
-    private void BtnMpExportBc_Click(object sender, RoutedEventArgs e) => MpExportProfile(bcCompatible: true);
-    private void BtnMpExportK2_Click(object sender, RoutedEventArgs e) => MpExportProfile(bcCompatible: false);
-
-    private void MpExportProfile(bool bcCompatible)
+    private void BtnMpExportProfiles_Click(object sender, RoutedEventArgs e)
     {
         if (CurrentDeviceId() is not int id) { LblStatus.Text = Loc.Get("dp_export_no_profile"); return; }
-        if (CbProfile.SelectedItem is not MpProfileItem pi || pi.IsNew) { LblStatus.Text = Loc.Get("dp_export_no_profile"); return; }
-        int slot = pi.Slot;
-        string profileName = _store.GetProfileName(id, slot) ?? Loc.Get("profile_n", slot);
 
-        var dlg = new SaveFileDialog
-        {
-            Title    = bcCompatible ? Loc.Get("dp_save_bc_profile") : Loc.Get("dp_save_k2_profile"),
-            Filter   = Loc.Get("dp_filter_bc_xml"),
-            FileName = $"{profileName}.xml",
-        };
-        if (dlg.ShowDialog(this) != true) return;
+        var profiles = _store.GetExistingProfiles(id)
+            .Select(slot => (Slot: slot, Name: _store.GetProfileName(id, slot) ?? Loc.Get("profile_n", slot)))
+            .ToList();
+        int? currentSlot = CbProfile.SelectedItem is MpProfileItem pi && !pi.IsNew ? pi.Slot : null;
+        string deviceLabel = _mpDeviceLabels.GetValueOrDefault((uint)id, $"MacroPad {id}");
 
-        try
-        {
-            var result = bcCompatible
-                ? MpProfileExporter.ExportBaseCamp(_store, id, slot, profileName, dlg.FileName)
-                : MpProfileExporter.ExportK2(_store, id, slot, profileName, dlg.FileName);
-
-            if (bcCompatible)
+        ExportProfileHelper.Run(
+            owner: this,
+            deviceLabel: deviceLabel,
+            profiles: profiles,
+            currentSlot: currentSlot,
+            exportOne: (slot, name, bcCompatible, path) =>
             {
-                LblStatus.Text = Loc.Get("dp_exported_bc", profileName, result.Exported, result.SkippedActions);
-                Log($"[EXP-BC] '{profileName}' -> {dlg.FileName}: {result.Exported} actions, {result.SkippedActions} skipped");
-                foreach (var reason in result.SkipReasons) Log($"[EXP-BC] skip: {reason}");
-            }
-            else
-            {
-                LblStatus.Text = Loc.Get("dp_exported_k2", profileName, result.Exported);
-                Log($"[EXP-K2] '{profileName}' -> {dlg.FileName}: {result.Exported} actions");
-            }
-        }
-        catch (Exception ex)
-        {
-            Log($"[ERR] export XML: {ex.Message}");
-        }
+                var result = bcCompatible
+                    ? MpProfileExporter.ExportBaseCamp(_store, id, slot, name, path)
+                    : MpProfileExporter.ExportK2(_store, id, slot, name, path);
+                return (result.Exported, result.SkippedActions, result.SkipReasons);
+            },
+            log: Log,
+            setStatus: s => LblStatus.Text = s);
     }
 
     // ============================================================
@@ -702,6 +700,8 @@ public partial class MainWindow
         SepMpApDbg.Visibility       = vis;
         BtnMapKeys.Visibility       = vis;  // remap keys: debug-only, see project rule
         PnlMpDebugRight.Visibility  = vis;
+        PnlMpDebugGroup.Visibility  = vis;  // common actions: Debug group (Refresh)
+        LblSdk.Visibility           = vis;  // toolbar: SDK/DLL info label
     }
 
     /// <summary>SDK ID of the active MacroPad (set by TcDevices_SelectionChanged in xaml.cs).</summary>
@@ -719,13 +719,18 @@ public partial class MainWindow
 
     /// <summary>
     /// Resolves "Next"/"Previous"/"N" and switches the MacroPad firmware profile.
-    /// Cycles through existing profile slots only; also updates the UI combo.
+    /// Cycles through existing profile slots only. <paramref name="deviceId"/> = null
+    /// targets the currently active MacroPad (and updates the UI combo); an explicit id
+    /// (cross-device "switch profile" action) switches that device's stored profile and
+    /// repaints it without touching the UI unless it happens to be the active device.
     /// </summary>
-    internal void MpSwitchProfile(string target)
+    internal void MpSwitchProfile(int? deviceId, string target)
     {
-        if (CurrentDeviceId() is not int id) return;
-        int cur = CurrentProfile();
-        var existing = _store.GetExistingProfiles(id);
+        int? id = deviceId ?? CurrentDeviceId();
+        if (id is not int devId) return;
+        bool isActive = devId == CurrentDeviceId();
+        int cur = isActive ? CurrentProfile() : _store.GetCurrentProfile(devId);
+        var existing = _store.GetExistingProfiles(devId);
         if (existing.Count == 0) return;
 
         var t = (target ?? "").Trim();
@@ -752,10 +757,13 @@ public partial class MainWindow
         }
         if (next == cur) return;
 
-        _macroPad.SwitchProfile((uint)(uint)id, next);
-        _store.SetCurrentProfile(id, next);
-        MpSelectProfileSlot(next);
-        ReloadCurrentProfile();
-        Log($"[EXEC] MacroPad profile -> {next}");
+        _macroPad.SwitchProfile((uint)devId, next);
+        _store.SetCurrentProfile(devId, next);
+        if (isActive)
+        {
+            MpSelectProfileSlot(next);
+            ReloadCurrentProfile();
+        }
+        Log($"[EXEC] MacroPad profile -> {next} (device {devId})");
     }
 }

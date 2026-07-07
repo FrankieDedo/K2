@@ -80,12 +80,17 @@ public partial class MainWindow
         //
         // Investigation proved the crash is independent of color streaming (same RVA and
         // timing even with EverestEnabled=false). Disabling GetColorData was unnecessary.
+        //
+        // The device-side setup below (sync/backlight) always runs so the physical
+        // keyboard's effect keeps working; only the on-screen preview polling
+        // (_ledPoller.EverestEnabled) is gated to the "RGB & Lighting" section —
+        // see IsEvKeyBindingSectionActive/UpdateEverestLedPreviewActive.
         if (_everest.IsOpen)
         {
             _everest.SetSyncEffect(false, 50);
             _everest.SetSyncEffect(true,  50);
             _everest.EnableColorStream(10);
-            _ledPoller.EverestEnabled = true;
+            _ledPoller.EverestEnabled = _activeEvSection == PnlSecRgb;
             _everest.SetBacklight(true);
         }
 
@@ -123,6 +128,22 @@ public partial class MainWindow
     private void StopLedPreview()
     {
         _ledPoller?.Stop();
+    }
+
+    /// <summary>
+    /// Enables/disables just the Everest half of the LED color preview. Called from
+    /// <see cref="ShowEvSection"/> whenever the active Everest section changes: the
+    /// preview is only meaningful while looking at "RGB &amp; Lighting", so polling
+    /// stays off (and tints are cleared) on every other section. MacroPad polling is
+    /// untouched — <see cref="LedColorPoller"/> tracks the two independently.
+    /// </summary>
+    private void UpdateEverestLedPreviewActive(bool active)
+    {
+        if (_ledPoller == null) return;
+        _ledPoller.EverestEnabled = active && _everest.IsOpen;
+        if (!active)
+            foreach (var kv in _evKeyTints)
+                kv.Value.Background = Brushes.Transparent;
     }
 
     // ==================================================================

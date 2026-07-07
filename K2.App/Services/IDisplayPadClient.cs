@@ -35,7 +35,17 @@ public interface IDisplayPadClient : IDisposable
     bool SwitchProfile(int id, int profile);
     bool APEnable(int id, bool enable);
     bool ResetPictures(int id);
-    bool UploadImage(int id, string path, int btn, int rotation = 0);
+
+    /// <summary>
+    /// Uploads <paramref name="path"/> to <paramref name="btn"/>. When <paramref name="pressed"/>
+    /// is true, the icon is re-rendered shrunk (like Base Camp's hardware press-bounce:
+    /// <c>DisplayPadOperations.UploadImage</c>'s <c>IsBtnPressed</c> branch in the decompiled
+    /// worker shrinks the icon to 80×80 centered on a black 102×102 canvas) instead of the normal
+    /// full-size icon — callers re-upload the same key with <c>pressed: true</c> on key-down and
+    /// <c>pressed: false</c> on key-up to reproduce that feedback; there is no separate device
+    /// animation, it's just a fast re-render + re-upload of the same icon at a different inner size.
+    /// </summary>
+    bool UploadImage(int id, string path, int btn, int rotation = 0, bool pressed = false);
     bool UploadImageToProfile(int id, string path, int btn, int profile, int rotation = 0);
     bool Ping();
 

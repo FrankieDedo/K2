@@ -206,6 +206,26 @@ public partial class App : Application
     }
 
     /// <summary>
+    /// Creates and shows MainWindow explicitly (no StartupUri): needed so "start
+    /// minimized to tray" can Show()+immediately hide it instead of never showing it
+    /// (drivers auto-open from OnSourceInitialized, which only fires once the window
+    /// has a real HWND). ShutdownMode is explicit so hiding the window to the tray —
+    /// close-to-tray or the minimized start below — never ends the process; only
+    /// MainWindow's tray "Exit" (see MainWindow.Tray.cs) calls Shutdown().
+    /// </summary>
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        var window = new MainWindow();
+        if (AppSettings.StartMinimizedToTray)
+            window.StartMinimizedToTray();
+        else
+            window.Show();
+    }
+
+    /// <summary>
     /// Allocates executable memory and writes an x86 stub that calls ExitThread(0).
     /// Layout (9 bytes):
     ///   push 0              ; 6A 00

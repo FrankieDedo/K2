@@ -101,8 +101,8 @@
             <TextBlock Text="Profilo:" VerticalAlignment="Center" Margin="14,0,4,0"/>
             <ComboBox x:Name="CbProfile" Width="56"
                       SelectionChanged="CbProfile_SelectionChanged"/>
-            <TextBlock Text="Rotazione:" VerticalAlignment="Center" Margin="14,0,4,0"/>
-            <ComboBox x:Name="CbRotation" Width="66"
+            <TextBlock Text="{loc:Get positioning}" VerticalAlignment="Center" Margin="14,0,4,0"/>
+            <ComboBox x:Name="CbRotation" Width="120"
                       SelectionChanged="CbRotation_SelectionChanged"/>
             <TextBlock Text="&#xE706;" FontFamily="Segoe MDL2 Assets" FontSize="15"
                        VerticalAlignment="Center" Margin="16,0,6,0"

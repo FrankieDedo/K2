@@ -24,11 +24,19 @@ public partial class MainWindow
     /// <summary>
     /// DisplayPad profile switch — device-specific operation invoked by the
     /// shared engine via <see cref="K2.Core.IActionHost.SwitchProfile"/>.
+    /// <paramref name="deviceId"/> = null targets the currently selected device (and
+    /// updates the UI combo); an explicit id (cross-device "switch profile" action)
+    /// switches that device's stored profile without touching the UI unless it happens
+    /// to be the selected one.
     /// </summary>
-    private void ExecuteProfileSwitch(string target)
+    private void ExecuteProfileSwitch(int? deviceId, string target)
     {
-        if (CbDevice.SelectedItem is not int id) { Log("[EXEC] profile: no device selected"); return; }
-        int current = CurrentProfile();
+        bool hasSelection = CbDevice.SelectedItem is int;
+        int? sel = deviceId ?? (hasSelection ? (int)CbDevice.SelectedItem : (int?)null);
+        if (sel is not int id) { Log("[EXEC] profile: no device selected"); return; }
+        bool isActive = hasSelection && (int)CbDevice.SelectedItem == id;
+
+        int current = isActive ? CurrentProfile() : _store.GetCurrentProfile(id);
         int next = current;
         var t = (target ?? "").Trim();
         if (t.Equals("Next", StringComparison.OrdinalIgnoreCase) ||
@@ -42,8 +50,9 @@ public partial class MainWindow
         else { Log($"[EXEC] profile: target \"{t}\" not resolved"); return; }
 
         if (next == current) { Log($"[EXEC] profile: already on {current}"); return; }
-        CbProfile.SelectedItem = next;
-        Log($"[EXEC] profile -> {next}");
+        if (isActive) CbProfile.SelectedItem = next;
+        else _store.SetCurrentProfile(id, next);
+        Log($"[EXEC] profile -> {next} (device {id})");
     }
 
     // ============================================================

@@ -16,9 +16,12 @@
   <string name="close_driver">Close driver</string>
   <string name="refresh">Refresh</string>
   <string name="refresh_devices">Refresh devices</string>
-  <string name="profile">Profile:</string>
-  <string name="device">Device:</string>
-  <string name="orientation">Orientation:</string>
+  <string name="debug_group">Debug</string>
+  <string name="profile">Profile</string>
+  <string name="device">Device</string>
+  <string name="positioning">Positioning</string>
+  <string name="pos_horizontal">Horizontal ({0}°)</string>
+  <string name="pos_vertical">Vertical ({0}°)</string>
   <string name="brightness">Brightness:</string>
   <string name="save">Save</string>
   <string name="cancel">Cancel</string>
@@ -70,11 +73,49 @@
   <string name="py_args">Arguments:</string>
   <string name="py_timeout">Timeout (s, 0 = none):</string>
   <string name="py_hint">In the script use 'import k2' to call K2 functions (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...). stdout/stderr go to the K2 log.</string>
+  <string name="exec_path_label">Executable / file path:</string>
+  <string name="folder_path_label">Folder path:</string>
+  <string name="recent_paths">Recent:</string>
+  <string name="browser_other">Other…</string>
+  <string name="browser_url_label">Initial URL (optional):</string>
+  <string name="profile_targets_label">Switch these profiles:</string>
+  <string name="profile_add_target">+ Add device</string>
+  <string name="profile_this_device">This device</string>
+  <string name="profile_next">Next profile</string>
+  <string name="profile_previous">Previous profile</string>
+  <string name="oscmd_taskmgr">Task Manager</string>
+  <string name="oscmd_calc">Calculator</string>
+  <string name="oscmd_explorer">Explorer</string>
+  <string name="oscmd_lock">Lock computer</string>
+  <string name="oscmd_shutdown">Shut down</string>
+  <string name="oscmd_restart">Restart</string>
+  <string name="oscmd_sleep">Sleep</string>
+  <string name="oscmd_hibernate">Hibernate</string>
+  <string name="media_play_pause">Play / Pause</string>
+  <string name="media_stop">Stop</string>
+  <string name="media_prev">Previous track</string>
+  <string name="media_next">Next track</string>
+  <string name="media_vol_up">Volume up</string>
+  <string name="media_vol_down">Volume down</string>
+  <string name="media_mute">Mute</string>
+  <string name="mouse_left">Left button</string>
+  <string name="mouse_right">Right button</string>
+  <string name="mouse_middle">Middle button</string>
+  <string name="mouse_forward">Forward</string>
+  <string name="mouse_backward">Backward</string>
+  <string name="mouse_scroll_up">Scroll up</string>
+  <string name="mouse_scroll_down">Scroll down</string>
+  <string name="mouse_scroll_left">Scroll left</string>
+  <string name="mouse_scroll_right">Scroll right</string>
+  <string name="keys_modifiers_label">Modifiers:</string>
+  <string name="keys_key_label">Key:</string>
+  <string name="keys_win_hint">The Windows key can be selected but is not sent by the current keystroke backend (SendKeys) — it is silently ignored.</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
        GENERAL SETTINGS TAB
        ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_settings">Settings</string>
+  <string name="tab_macro">Macro</string>
   <string name="settings_debug_mode">Debug mode</string>
   <string name="settings_debug_mode_hint">Enables debug tools (driver open/close, AP controls, event log) on every device.</string>
   <string name="settings_log_level">Logging</string>
@@ -91,6 +132,13 @@
   <string name="settings_bc_autostart_hint">Enables/disables the Windows autostart entries of Base Camp (same mechanism as Task Manager's Startup tab — reversible). Entries in HKLM may require running K2 as administrator.</string>
   <string name="settings_bc_autostart_none">No Base Camp autostart entry found in the registry.</string>
   <string name="settings_bc_autostart_done">Base Camp autostart: {0} entries updated.</string>
+  <string name="settings_general">General options</string>
+  <string name="settings_close_to_tray">Close to tray instead of exiting</string>
+  <string name="settings_k2_autostart">Start K2 with Windows</string>
+  <string name="settings_start_min_tray">Start directly minimized to tray</string>
+  <string name="settings_start_min_tray_hint">K2 starts with its drivers active but the window hidden in the tray — open it anytime from the tray icon.</string>
+  <string name="tray_show">Show K2</string>
+  <string name="tray_exit">Exit</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
        EVEREST MAX TAB
@@ -143,24 +191,34 @@
 
   <!-- Display Dial -->
   <string name="display_dial">Display Dial</string>
-  <string name="dial_pages_visible">Visible dial pages:</string>
+  <string name="dial_pages_visible">Show menus</string>
   <string name="dial_clock">Clock</string>
   <string name="dial_profile">Profile</string>
   <string name="dial_volume">Volume</string>
   <string name="dial_brightness">Brightness</string>
-  <string name="dial_lighting">Lighting</string>
+  <string name="dial_lighting">Lighting mode</string>
   <string name="dial_pcinfo">PC Info</string>
-  <string name="dial_apm">APM</string>
-  <string name="dial_custom">Custom</string>
-  <string name="dial_clock_label">Clock:</string>
-  <string name="dial_screensaver">Screensaver (sec):</string>
-  <string name="dial_autooff">Auto-off (sec):</string>
+  <string name="dial_apm">APM counter</string>
+  <string name="dial_custom">Custom mode</string>
+  <string name="dial_clock_section">Clock type</string>
+  <string name="dial_clock_label">Format:</string>
+  <string name="dial_clock_style_label">Style:</string>
+  <string name="dial_clock_digital">Digital</string>
+  <string name="dial_clock_analog">Analog</string>
+  <string name="dial_screensaver_section">Screensaver</string>
+  <string name="dial_screensaver">Screensaver after</string>
+  <string name="dial_screensaver_enable_tip">If disabled, the display dial never dims/switches to the screensaver.</string>
+  <string name="dial_screensaver_function_label">Shows:</string>
+  <string name="dial_autooff">Turn off after</string>
+  <string name="dial_turnoff_enable_tip">If disabled, the display dial stays on indefinitely.</string>
   <string name="dial_menu_color">Menu color:</string>
-  <string name="dial_pixel_shift">Pixel shift (min):</string>
+  <string name="reset_display_dial">Reset Display Dial</string>
+  <string name="unit_seconds">s</string>
   <string name="dial_cannot_read">Cannot read ExtendInfo from device.</string>
 
   <!-- Key Binding (mapped keys + HW capture utility for dock/crown/display-key hotspots) -->
   <string name="ev_key_binding">Key Binding</string>
+  <string name="key_binding_hint">Click a key on the device above to configure its action.</string>
   <string name="dock_capture_hw">Capture HW key…</string>
   <string name="dock_cancel_capture">Cancel capture</string>
   <string name="dock_press_hw">Press an HW key (dock, display key, crown)…</string>
@@ -170,24 +228,53 @@
   <string name="dock_configure_action">Configure action…</string>
   <string name="dock_remove_action">Remove action</string>
 
+  <!-- Settings (Everest sidebar section: keyboard layout) -->
+  <string name="ev_settings">Settings</string>
+  <string name="ev_layout">Layout</string>
+  <string name="settings_sync_profiles">Sync across profiles</string>
+  <string name="settings_game_mode">Game Mode</string>
+  <string name="settings_game_mode_tip">Game mode disables certain key combinations to avoid accidentally interrupting a game.</string>
+  <string name="settings_disable_shift_tab">Disable Shift + Tab</string>
+  <string name="settings_disable_alt_f4">Disable Alt + F4</string>
+  <string name="settings_disable_win_key">Disable Windows key</string>
+  <string name="settings_disable_alt_tab">Disable Alt + Tab</string>
+  <string name="settings_indicator_leds">Indicator LEDs</string>
+  <string name="settings_enable_core_led">Enable Core indicator LEDs</string>
+  <string name="settings_factory_reset">Reset to factory default</string>
+  <string name="settings_factory_reset_confirm">This resets the keyboard's Game Mode, indicator LEDs and lighting effects to factory defaults. Continue?</string>
+
   <!-- Keyboard Macro -->
   <string name="keyboard_macro">Keyboard Macro</string>
+  <string name="macro_library">Macro Library</string>
   <string name="macro_new">New</string>
   <string name="macro_delete">Delete</string>
   <string name="macro_record">Record</string>
   <string name="macro_record_stop">■ Stop</string>
   <string name="macro_play">Play</string>
   <string name="macro_name">Name:</string>
-  <string name="macro_delay">Delay:</string>
+  <string name="macro_delay">Delay</string>
   <string name="macro_delay_recorded">Recorded</string>
   <string name="macro_delay_none">None</string>
   <string name="macro_delay_custom">Custom</string>
-  <string name="macro_playback">Playback:</string>
-  <string name="macro_playback_once">Once</string>
+  <string name="macro_playback">Playback</string>
+  <string name="macro_playback_once">Play once</string>
   <string name="macro_playback_repeat">Repeat N times</string>
-  <string name="macro_playback_held">While held</string>
+  <string name="macro_playback_held">Hold</string>
   <string name="macro_playback_toggle">Toggle</string>
+  <string name="macro_repeat_short">Repeat</string>
+  <string name="macro_times_suffix">times</string>
   <string name="macro_record_mouse">Record mouse</string>
+  <string name="macro_record_keyboard">Record keyboard</string>
+  <string name="macro_section_devices">Devices</string>
+  <string name="macro_section_inputs">Inputs</string>
+  <string name="macro_section_assigned">Assigned to</string>
+  <string name="macro_assigned_help">Every key, on any device, currently configured to play this macro.</string>
+  <string name="macro_not_assigned">Not assigned to any key yet.</string>
+  <string name="macro_show_press_release">Show press/release</string>
+  <string name="macro_start_recording">Start recording</string>
+  <string name="macro_move_up">Move up</string>
+  <string name="macro_move_down">Move down</string>
+  <string name="macro_delete_input">Remove</string>
   <string name="macro_actions_count">{0} actions</string>
   <string name="macro_import_bc">Import from BaseCamp.db</string>
   <string name="macro_select_first">Select or create a macro before recording.</string>
@@ -235,7 +322,6 @@
   <string name="dp_driver_opened">DisplayPad driver opened.</string>
   <string name="dp_driver_open_failed">DisplayPad driver open failed.</string>
   <string name="dp_driver_closed">DisplayPad driver closed.</string>
-  <string name="dp_rotation">Rotation:</string>
   <string name="dp_rotate_icons_ccw">Rotate icons ↺</string>
   <string name="dp_rotate_icons_cw">Rotate icons ↻</string>
   <string name="dp_reset_keys">Reset keys</string>
@@ -274,6 +360,14 @@
   <string name="dp_exported_bc">Exported '{0}' as Base Camp XML: {1} actions written, {2} skipped (no Base Camp equivalent).</string>
   <string name="dp_exported_k2">Exported '{0}' as K2 XML: {1} actions written.</string>
   <string name="dp_export_no_profile">Select a profile first.</string>
+  <string name="export_profiles_btn">Export profiles…</string>
+  <string name="export_profiles_title">Export profiles</string>
+  <string name="export_profiles_pick">Select the profiles to export:</string>
+  <string name="export_format_section">Format:</string>
+  <string name="export_format_bc">Base Camp compatible</string>
+  <string name="export_format_k2">K2 (lossless)</string>
+  <string name="export_select_at_least_one">Select at least one profile.</string>
+  <string name="export_pick_folder">Choose a folder for the exported profiles</string>
   <!-- Fullscreen -->
   <string name="dp_fullscreen_group">Fullscreen</string>
   <string name="dp_fullscreen_set">Set fullscreen image…</string>
@@ -303,7 +397,6 @@
   <!-- MacroPad import -->
   <string name="mp_no_profiles_in_bc">No MacroPad profiles found in the Base Camp database.</string>
   <string name="mp_imported_bc">Imported {0} MacroPad profiles ({1} keys) from Base Camp.</string>
-  <string name="select_device_first">Select a device first.</string>
   <!-- DisplayPad folder navigation -->
   <string name="dp_back">Back</string>
 

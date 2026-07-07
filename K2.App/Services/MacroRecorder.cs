@@ -34,7 +34,7 @@ public sealed class MacroRecorder : IDisposable
         _mouseProc = MouseHookCallback;
     }
 
-    public void Start(bool recordMouse = false)
+    public void Start(bool recordMouse = false, bool recordKeyboard = true)
     {
         if (_recording) return;
         _recordMouse = recordMouse;
@@ -43,8 +43,12 @@ public sealed class MacroRecorder : IDisposable
 
         using var proc = Process.GetCurrentProcess();
         using var mod = proc.MainModule!;
-        _keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, _kbProc,
-            GetModuleHandle(mod.ModuleName), 0);
+
+        if (recordKeyboard)
+        {
+            _keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, _kbProc,
+                GetModuleHandle(mod.ModuleName), 0);
+        }
 
         if (recordMouse)
         {

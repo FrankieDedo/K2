@@ -700,6 +700,54 @@ public sealed class EverestService : IDisposable
         }
     }
 
+    /// <summary>Sets the "Game Mode" key-lock bitmask (see EverestSdkNative.SetGameMode).</summary>
+    public bool SetGameMode(int mode)
+    {
+        try
+        {
+            bool ok = EverestSdkNative.SetGameMode(mode);
+            App.WriteLog($"[Everest.SetGameMode] mode={mode} -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.SetGameMode] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>Enables/disables the keyboard's Core indicator LEDs.</summary>
+    public bool SetIndicatorLed(bool enable)
+    {
+        try
+        {
+            bool ok = EverestSdkNative.SetIndicatorLed(enable);
+            App.WriteLog($"[Everest.SetIndicatorLed] enable={enable} -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.SetIndicatorLed] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>Resets the keyboard to factory defaults.</summary>
+    public bool ResetFlash(bool full = true)
+    {
+        try
+        {
+            bool ok = EverestSdkNative.ResetFlash(full);
+            App.WriteLog($"[Everest.ResetFlash] full={full} -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.ResetFlash] threw: " + ex);
+            return false;
+        }
+    }
+
     /// <summary>
     /// Sets the sync effect (HID 12 [sync] 00 00 [brightness]).
     /// Required to enable the color stream on a clean boot.

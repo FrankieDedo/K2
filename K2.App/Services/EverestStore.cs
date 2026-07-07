@@ -93,6 +93,22 @@ ON CONFLICT(Profile, KeyMatrix) DO UPDATE SET
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>Every key currently configured with the given action (e.g. macro assignment lookup).</summary>
+    public List<(int Profile, int KeyMatrix, string? Label)> GetKeysByAction(string actionType, string actionValue)
+    {
+        var result = new List<(int, int, string?)>();
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = @"SELECT Profile, KeyMatrix, Label FROM Keys
+                            WHERE ActionType=$t AND ActionValue=$v
+                            ORDER BY Profile, KeyMatrix";
+        cmd.Parameters.AddWithValue("$t", actionType);
+        cmd.Parameters.AddWithValue("$v", actionValue);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            result.Add((r.GetInt32(0), r.GetInt32(1), r.IsDBNull(2) ? null : r.GetString(2)));
+        return result;
+    }
+
     public void RemoveKey(int profile, int keyMatrix)
     {
         using var cmd = _conn.CreateCommand();

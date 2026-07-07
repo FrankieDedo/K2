@@ -137,8 +137,8 @@ public sealed class DisplayPadSatelliteClient : IDisplayPadClient
     public bool APEnable(int id, bool enable) => Send("apEnable", ("deviceId", id), ("enable", enable))?.GetBool("result") ?? false;
     public bool ResetPictures(int id) => Send("resetPictures", ("deviceId", id))?.GetBool("result") ?? false;
 
-    public bool UploadImage(int id, string path, int btn, int rotation = 0) =>
-        Send("uploadImage", ("deviceId", id), ("imagePath", path), ("buttonIndex", btn), ("rotation", rotation))?.GetBool("result") ?? false;
+    public bool UploadImage(int id, string path, int btn, int rotation = 0, bool pressed = false) =>
+        Send("uploadImage", ("deviceId", id), ("imagePath", path), ("buttonIndex", btn), ("rotation", rotation), ("pressed", pressed))?.GetBool("result") ?? false;
 
     public bool UploadImageToProfile(int id, string path, int btn, int profile, int rotation = 0) =>
         Send("uploadImageToProfile", ("deviceId", id), ("imagePath", path), ("buttonIndex", btn), ("profile", profile), ("rotation", rotation))?.GetBool("result") ?? false;

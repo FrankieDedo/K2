@@ -24,6 +24,8 @@ internal sealed class EverestActionHost : IActionHost
     private readonly Action<int> _pressButton;
     private readonly Action<string> _switchProfile;
     private readonly Func<string?> _configuredPythonPath;
+    private readonly Func<IReadOnlyList<ProfileTargetOption>> _listAllProfileTargets;
+    private readonly Action<string, string> _switchProfileByKey;
 
     public EverestActionHost(
         Dispatcher dispatcher,
@@ -33,16 +35,20 @@ internal sealed class EverestActionHost : IActionHost
         Func<IReadOnlyList<HostButton>> getButtons,
         Action<int> pressButton,
         Action<string> switchProfile,
-        Func<string?> configuredPythonPath)
+        Func<string?> configuredPythonPath,
+        Func<IReadOnlyList<ProfileTargetOption>> listAllProfileTargets,
+        Action<string, string> switchProfileByKey)
     {
-        _dispatcher           = dispatcher;
-        _log                  = log;
-        _currentProfile       = currentProfile;
-        _sdkVersion           = sdkVersion;
-        _getButtons           = getButtons;
-        _pressButton          = pressButton;
-        _switchProfile        = switchProfile;
-        _configuredPythonPath = configuredPythonPath;
+        _dispatcher             = dispatcher;
+        _log                    = log;
+        _currentProfile         = currentProfile;
+        _sdkVersion             = sdkVersion;
+        _getButtons             = getButtons;
+        _pressButton            = pressButton;
+        _switchProfile          = switchProfile;
+        _configuredPythonPath   = configuredPythonPath;
+        _listAllProfileTargets  = listAllProfileTargets;
+        _switchProfileByKey     = switchProfileByKey;
     }
 
     Dispatcher IActionHost.Dispatcher => _dispatcher;
@@ -64,7 +70,13 @@ internal sealed class EverestActionHost : IActionHost
 
     string? IActionHost.ConfiguredPythonPath => _configuredPythonPath();
 
-    void IActionHost.SwitchProfile(string target) => _switchProfile(target);
+    void IActionHost.SwitchProfile(string? targetKey, string target)
+    {
+        if (string.IsNullOrEmpty(targetKey)) _switchProfile(target);
+        else _switchProfileByKey(targetKey, target);
+    }
+
+    IReadOnlyList<ProfileTargetOption> IActionHost.ListProfileTargets() => _listAllProfileTargets();
 
     IReadOnlyList<HostButton> IActionHost.GetButtons() => _getButtons();
 

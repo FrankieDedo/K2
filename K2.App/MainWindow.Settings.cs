@@ -36,7 +36,28 @@ public partial class MainWindow
         CkKillBcWorker.IsChecked = AppSettings.KillBaseCampWorker;
         InitBcAutostartCheckbox();
 
+        CkCloseToTray.IsChecked = AppSettings.CloseToTray;
+        CkStartMinToTray.IsChecked = AppSettings.StartMinimizedToTray;
+        CkK2Autostart.IsChecked = Services.K2AutostartService.IsEnabled();
+
         ApplyDebugModeToAllDevices(debug);
+    }
+
+    private void CkCloseToTray_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.SetCloseToTray(CkCloseToTray.IsChecked == true);
+    }
+
+    /// <summary>Persists the "start minimized to tray" flag. Read once at process start
+    /// by App.OnStartup, so it takes effect at the next app launch.</summary>
+    private void CkStartMinToTray_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.SetStartMinimizedToTray(CkStartMinToTray.IsChecked == true);
+    }
+
+    private void CkK2Autostart_Click(object sender, RoutedEventArgs e)
+    {
+        Services.K2AutostartService.SetEnabled(CkK2Autostart.IsChecked == true);
     }
 
     /// <summary>Reflects the current Windows-autostart state of Base Camp entries

@@ -776,6 +776,30 @@ internal static class EverestSdkNative
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SaveFlash(int profile);
 
+    /// <summary>
+    /// Sets the "Game Mode" key-lock bitmask. Bit layout confirmed by
+    /// decompiling <c>EverestOperations.SaveSettings</c> in Base Camp's own
+    /// BaseCamp.UI.dll: it builds a 4-char binary string in the order
+    /// "AltTab Win AltF4 Shift" and parses it with <c>Convert.ToInt32(s, 2)</c> —
+    /// i.e. bit0=DisableShift(+Tab), bit1=DisableAltF4, bit2=DisableWin, bit3=DisableAltTab.
+    /// </summary>
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool SetGameMode(int mode);
+
+    /// <summary>Enables/disables the keyboard's Core indicator LEDs.</summary>
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool SetIndicatorLed([MarshalAs(UnmanagedType.I1)] bool enable);
+
+    /// <summary>
+    /// Resets the keyboard to factory defaults (parameter observed as always
+    /// <c>true</c> in Base Camp's <c>EverestOperations.ResetSettings</c>).
+    /// </summary>
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool ResetFlash([MarshalAs(UnmanagedType.I1)] bool full);
+
     // ==== Numpad Display Keys =================================================
 
     /// <summary>

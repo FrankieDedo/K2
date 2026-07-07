@@ -4,17 +4,35 @@
 //
 // FW_EXTEND_INFO ↔ Display Dial mapping (to verify with USB capture):
 //   byMMDockShowMenu  = page bitmask (bit0=Clock … bit7=Custom)
-//   byMMDockScreenSetup = clock type (0=24h, 1=12h — assumed)
+//   byMMDockScreenSetup = clock format, 12h/24h (assumed — see CbDialClockType)
 //   wMMDockScreenSaver  = screensaver timeout in seconds (0=disabled)
 //   wMMDockTurnOff      = auto-off timeout in seconds (0=disabled)
 //   MMDockColor         = menu color
-//   byPixelShiftTime    = pixel shift in minutes
+//
+// Enable/disable checkboxes for screensaver and turn-off mirror Base Camp's
+// own DB model (BaseCamp.Data.DisplayDial: EnableSecreenSaver/EnableTurnOff
+// are separate bool columns from ScreenSaverTime/TurnOffTime) — when
+// unchecked, K2 sends 0 (disabled) to the firmware but keeps the configured
+// seconds value so it's not lost if re-enabled.
+//
+// Clock style (analog/digital) and "screensaver shows" (which page acts as
+// the screensaver) are real Base Camp concepts — BaseCamp.Data.DisplayDial
+// has ClockType/ScreenSaverType columns, and BaseCampLinux's raw protocol
+// has a confirmed STYLE_ANALOG/STYLE_DIGITAL byte and a MAIN_DISPLAY_MODES
+// menu-byte table — but neither has a confirmed byte mapping in SDKDLL's
+// FW_EXTEND_INFO for THIS SDK (the existing byMMDockMenuIndex comment in
+// EverestSdkNative.cs quotes different values than BaseCampLinux's table,
+// so they are not directly interchangeable). Both combos are therefore
+// UI + persisted-only for now; wiring them to a device field needs a USB
+// capture first (see _reference/USB_SNIFF_GUIDE.md), consistent with the
+// project's "don't guess the bit-layout" rule.
 
 using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using K2.App.Services;
+using K2.Core;
 
 namespace K2.App;
 
@@ -38,14 +56,39 @@ public partial class MainWindow
         All        = 0xFF
     }
 
+    // Screensaver-function combo entries, in the same order as the page
+    // toggles above. Values are internal page names (persisted), not a
+    // confirmed device byte — see file header.
+    private static readonly (string Key, string Value)[] DialFunctions =
+    {
+        ("dial_clock",     "clock"),
+        ("dial_profile",   "profile"),
+        ("dial_lighting",  "lighting"),
+        ("dial_volume",    "volume"),
+        ("dial_brightness","brightness"),
+        ("dial_pcinfo",    "pcinfo"),
+        ("dial_apm",       "apm"),
+        ("dial_custom",    "custom"),
+    };
+
     // ─────────────────────── Init ───────────────────────
 
     private void InitDisplayDialPanel()
     {
-        // Populate clock type combo
+        // Populate clock format combo (12h/24h)
         CbDialClockType.Items.Clear();
         CbDialClockType.Items.Add("24h");
         CbDialClockType.Items.Add("12h");
+
+        // Populate clock style combo (digital/analog)
+        CbDialClockStyle.Items.Clear();
+        CbDialClockStyle.Items.Add(Loc.Get("dial_clock_digital"));
+        CbDialClockStyle.Items.Add(Loc.Get("dial_clock_analog"));
+
+        // Populate screensaver-function combo (which page shows as screensaver)
+        CbDialScreenSaverFunction.Items.Clear();
+        foreach (var (key, _) in DialFunctions)
+            CbDialScreenSaverFunction.Items.Add(Loc.Get(key));
 
         // Load saved settings (or defaults)
         _dialLoading = true;
@@ -76,9 +119,17 @@ public partial class MainWindow
         int clockType = ParseInt(_evStore?.GetSetting("dial.clockType"), 0);
         CbDialClockType.SelectedIndex = clockType < CbDialClockType.Items.Count ? clockType : 0;
 
+        int clockStyle = ParseInt(_evStore?.GetSetting("dial.clockStyle"), 0);
+        CbDialClockStyle.SelectedIndex = clockStyle < CbDialClockStyle.Items.Count ? clockStyle : 0;
+
+        string ssFunction = _evStore?.GetSetting("dial.screenSaverFunction") ?? DialFunctions[0].Value;
+        int ssIndex = Array.FindIndex(DialFunctions, f => f.Value == ssFunction);
+        CbDialScreenSaverFunction.SelectedIndex = ssIndex >= 0 ? ssIndex : 0;
+
+        CkDialScreenSaverEnable.IsChecked = ParseBool(_evStore?.GetSetting("dial.screenSaverEnable"), true);
+        CkDialTurnOffEnable.IsChecked     = ParseBool(_evStore?.GetSetting("dial.turnOffEnable"), false);
         TxtDialScreenSaver.Text = _evStore?.GetSetting("dial.screenSaver") ?? "30";
         TxtDialTurnOff.Text     = _evStore?.GetSetting("dial.turnOff") ?? "0";
-        TxtDialPixelShift.Text  = _evStore?.GetSetting("dial.pixelShift") ?? "0";
 
         string menuColor = _evStore?.GetSetting("dial.menuColor") ?? "#F3CC23";
         try
@@ -94,9 +145,13 @@ public partial class MainWindow
         if (_evStore is null) return;
         _evStore.SetSetting("dial.pages", BuildPageByte().ToString());
         _evStore.SetSetting("dial.clockType", CbDialClockType.SelectedIndex.ToString());
+        _evStore.SetSetting("dial.clockStyle", CbDialClockStyle.SelectedIndex.ToString());
+        _evStore.SetSetting("dial.screenSaverFunction", DialFunctions[CbDialScreenSaverFunction.SelectedIndex >= 0
+            ? CbDialScreenSaverFunction.SelectedIndex : 0].Value);
+        _evStore.SetSetting("dial.screenSaverEnable", (CkDialScreenSaverEnable.IsChecked == true) ? "1" : "0");
+        _evStore.SetSetting("dial.turnOffEnable", (CkDialTurnOffEnable.IsChecked == true) ? "1" : "0");
         _evStore.SetSetting("dial.screenSaver", TxtDialScreenSaver.Text.Trim());
         _evStore.SetSetting("dial.turnOff", TxtDialTurnOff.Text.Trim());
-        _evStore.SetSetting("dial.pixelShift", TxtDialPixelShift.Text.Trim());
         _evStore.SetSetting("dial.menuColor", FormatColor(BtnDialMenuColor));
     }
 
@@ -124,6 +179,7 @@ public partial class MainWindow
         if (_everest is null) return;
 
         // Read current state from device to avoid overwriting unknown fields
+        // (this also preserves byPixelShiftTime, which K2 no longer exposes in the UI).
         if (!_everest.TryGetExtendInfo(out var info))
         {
             LogEverest("[DIAL] Cannot read ExtendInfo from device.");
@@ -133,9 +189,10 @@ public partial class MainWindow
         // Update only the fields controlled by the Display Dial panel
         info.byMMDockShowMenu = BuildPageByte();
         info.byMMDockScreenSetup = (byte)CbDialClockType.SelectedIndex;  // 0=24h, 1=12h (to be confirmed)
-        info.wMMDockScreenSaver = ParseUshort(TxtDialScreenSaver.Text, 30);
-        info.wMMDockTurnOff = ParseUshort(TxtDialTurnOff.Text, 0);
-        info.byPixelShiftTime = ParseByte(TxtDialPixelShift.Text, 0);
+        info.wMMDockScreenSaver = CkDialScreenSaverEnable.IsChecked == true
+            ? ParseUshort(TxtDialScreenSaver.Text, 30) : (ushort)0;
+        info.wMMDockTurnOff = CkDialTurnOffEnable.IsChecked == true
+            ? ParseUshort(TxtDialTurnOff.Text, 0) : (ushort)0;
 
         // Menu color → FWColor
         try
@@ -148,7 +205,7 @@ public partial class MainWindow
         bool ok = _everest.SetExtendInfo(info);
         LogEverest($"[DIAL] SetExtendInfo -> {ok}  pages=0x{info.byMMDockShowMenu:X2} " +
                    $"clock={info.byMMDockScreenSetup} ss={info.wMMDockScreenSaver} " +
-                   $"off={info.wMMDockTurnOff} pxShift={info.byPixelShiftTime}");
+                   $"off={info.wMMDockTurnOff}");
 
         SaveDialSettings();
     }
@@ -178,9 +235,15 @@ public partial class MainWindow
 
             CbDialClockType.SelectedIndex = info.byMMDockScreenSetup < 2
                 ? info.byMMDockScreenSetup : 0;
-            TxtDialScreenSaver.Text = info.wMMDockScreenSaver.ToString();
-            TxtDialTurnOff.Text = info.wMMDockTurnOff.ToString();
-            TxtDialPixelShift.Text = info.byPixelShiftTime.ToString();
+
+            // The firmware only reports a timeout, not a separate enable flag
+            // (Base Camp keeps that flag DB-side). 0 => disabled, keep the last
+            // configured seconds value in the textbox instead of overwriting it.
+            CkDialScreenSaverEnable.IsChecked = info.wMMDockScreenSaver != 0;
+            if (info.wMMDockScreenSaver != 0) TxtDialScreenSaver.Text = info.wMMDockScreenSaver.ToString();
+
+            CkDialTurnOffEnable.IsChecked = info.wMMDockTurnOff != 0;
+            if (info.wMMDockTurnOff != 0) TxtDialTurnOff.Text = info.wMMDockTurnOff.ToString();
 
             var c = info.MMDockColor;
             BtnDialMenuColor.Background = new SolidColorBrush(
@@ -188,8 +251,7 @@ public partial class MainWindow
 
             LogEverest($"[DIAL] Read from device: pages=0x{pages:X2} " +
                        $"clock={info.byMMDockScreenSetup} ss={info.wMMDockScreenSaver} " +
-                       $"off={info.wMMDockTurnOff} pxShift={info.byPixelShiftTime} " +
-                       $"color=({c.r},{c.g},{c.b})");
+                       $"off={info.wMMDockTurnOff} color=({c.r},{c.g},{c.b})");
 
             SaveDialSettings();
         }
@@ -213,6 +275,30 @@ public partial class MainWindow
         SaveDialSettings();
     }
 
+    private void CbDialClockStyle_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_dialLoading) return;
+        SaveDialSettings();
+    }
+
+    private void CbDialScreenSaverFunction_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_dialLoading) return;
+        SaveDialSettings();
+    }
+
+    private void CkDialScreenSaverEnable_Click(object sender, RoutedEventArgs e)
+    {
+        if (_dialLoading) return;
+        SaveDialSettings();
+    }
+
+    private void CkDialTurnOffEnable_Click(object sender, RoutedEventArgs e)
+    {
+        if (_dialLoading) return;
+        SaveDialSettings();
+    }
+
     private void TxtDialScreenSaver_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_dialLoading) return;
@@ -220,12 +306,6 @@ public partial class MainWindow
     }
 
     private void TxtDialTurnOff_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (_dialLoading) return;
-        SaveDialSettings();
-    }
-
-    private void TxtDialPixelShift_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_dialLoading) return;
         SaveDialSettings();
@@ -252,6 +332,14 @@ public partial class MainWindow
     private void BtnDialApply_Click(object sender, RoutedEventArgs e) => ApplyDialToDevice();
     private void BtnDialRead_Click(object sender, RoutedEventArgs e) => ReadDialFromDevice();
 
+    private void BtnDialReset_Click(object sender, RoutedEventArgs e)
+    {
+        if (_everest is null) return;
+        bool ok = _everest.ResetMMDock();
+        LogEverest($"[DIAL] ResetMMDock -> {ok}");
+        if (ok) ReadDialFromDevice();
+    }
+
     // ─────────────────────── Helper ───────────────────────
 
     private static byte ParseByte(string? s, byte fallback)
@@ -267,6 +355,11 @@ public partial class MainWindow
     private static int ParseInt(string? s, int fallback)
     {
         return int.TryParse(s, out var v) ? v : fallback;
+    }
+
+    private static bool ParseBool(string? s, bool fallback)
+    {
+        return s switch { "1" => true, "0" => false, _ => fallback };
     }
 
     private static string FormatColor(Button btn)
