@@ -9,7 +9,187 @@
 > mappa stabile in `_PROJECT_MAP.md`. Consultare qui solo per il contesto
 > di una modifica specifica passata (grep per parola chiave/data).
 
-> Last updated: 2026-07-08 (4 richieste utente: crash "Aggiungi testo", doppia rotazione
+> Last updated: 2026-07-08 (DisplayPad: icone cartella/pagina — rotazione doppia, icone
+> reali di Windows, template Base Camp, azione "Pagina" nel dialog azioni):
+>   - **Richiesta utente**: partita da "l'icona della cartella arriva ruotata e col testo
+>     verticale su un DisplayPad ruotato di 90°", poi evoluta via via in: usare l'icona
+>     vera di Windows per le cartelle su disco, usare il PNG originale di Base Camp per le
+>     icone-pagina invece di un glifo/disegno a codice, poter assegnare/rinominare una
+>     pagina anche dal dialog "Configura azione" (non solo da "Crea cartella"), ripulire
+>     l'icona quando si rimuove un'azione, angoli arrotondati nell'anteprima, e la lista
+>     "recenti" delle cartelle che non funzionava.
+>   - **Bug 1 — doppia rotazione cartella+testo**: `IconImageGenerator.TryGenerateFolderIcon`
+>     "cuoceva" la counter-rotation del device dentro il PNG (convenzione usata altrove per
+>     evitare di ruotare due volte all'upload), ma questo rompeva l'anteprima nel dialog
+>     (che mostra il file grezzo) e rendeva l'icona illeggibile per qualunque rotazione
+>     ≠0°. Rimossa la rotazione baked-in ovunque (`TryGenerateExecIcon`/`TryGenerateFolderIcon`
+>     ora generano sempre upright): `DpKeyConfigDialog`/`CellConfigDialog`/`MainWindow.DisplayPad.cs`
+>     non passano più `deviceRotation` al generatore, e la rotazione del device si applica
+>     SOLO all'upload (`_dpRotation`/`EffectiveDpRotation`), come per qualsiasi altra immagine.
+>   - **Bug 2 — glifo Segoe MDL2 sbagliato**: il commento diceva "OpenFolderHorizontal" ma
+>     quel glifo non esiste in Segoe MDL2 Assets (solo "Folder"/E8B7 e "FolderOpen"/E838,
+>     nessuno dei due è la sagoma larga attesa). Rimosso l'uso di font glyph.
+>   - **Bug 3 — GUID COM sbagliato**: `IShellItemImageFactory` in `GetBestIcon` aveva il
+>     GUID mistyped (`...8a20b1a396a3` invece di `...8a59c30c463b`), quindi l'estrazione
+>     dell'icona "jumbo" di Windows falliva SEMPRE silenziosamente — mascherato per i file
+>     dal fallback `Icon.ExtractAssociatedIcon` (che funziona su file ma non su cartelle),
+>     quindi le cartelle non avevano mai avuto un'icona reale. Corretto il GUID: ora
+>     `TryGenerateDiskFolderIcon` (nuovo metodo, per "folder" = cartella reale su disco)
+>     estrae davvero l'icona gialla di Explorer.
+>   - **Nuovo: template PNG reale per le pagine**: su richiesta esplicita, l'icona delle
+>     pagine DisplayPad (`TryGenerateFolderIcon`, azione "dp_folder", nessun path reale)
+>     ora usa l'asset originale `BaseCampLinux/resources/DPFolder.png` (copiato in
+>     `K2.Core/Assets/dp_folder_template.png`, embedded resource), ritagliato sulla sagoma
+>     e ricolorato dal blu originale all'accento K2 via remap sul canale blu (l'asset non
+>     ha alpha, sfondo nero pieno). **Bug GDI+ trovato nel farlo**: `Bitmap(Stream)` può
+>     restare legato pigramente allo stream sottostante — chiudere lo `stream` subito dopo
+>     la costruzione (con `using`) causava un "Out of memory" fuorviante al primo uso reale
+>     del bitmap; risolto clonando (`new Bitmap(lazy)`) per staccarlo dallo stream prima
+>     che venga chiuso. Icona-pagina e icona-cartella-reale condividono ora lo stesso
+>     riquadro (`IconBox`: quadrato 56% del tile, offset 8% dall'alto) così le due
+>     compaiono alla stessa dimensione/allineamento sulla griglia.
+>   - **Nuovo: azione "Pagina" nel dialog "Configura azione"**: prima l'unico modo per
+>     creare un tasto "dp_folder" era il menu tasto destro "Crea cartella" — il dialog
+>     standard non sapeva nulla di "dp_folder" (rischio concreto: aprendolo su un tasto
+>     già assegnato a una pagina, il combo tipo-azione ripiombava su "Nessuna" e salvare
+>     avrebbe cancellato l'azione). Aggiunta voce "Pagina" (`ButtonActionDialog.Page.cs`,
+>     nuovo file) con combo pagine esistenti + "Nuova pagina" + campo nome editabile
+>     (rinomina la pagina esistente se cambiato, anche a parità di ID pagina — segnalato
+>     al chiamante via `PageIconNeedsRefresh` perché rigeneri l'icona con la didascalia
+>     aggiornata). Aggiunto `IActionHost.ListPages/CreatePage/RenamePage/SupportsPages`
+>     (K2.Core) con implementazione reale solo in `DisplayPadActionHost`; no-op/vuoto per
+>     MacroPad/Everest/K2.DisplayPad standalone (nessun concetto di "pagina" lì — la voce
+>     non compare proprio nel combo, non solo vuota, a differenza di "macro"). Aggiunto
+>     `DisplayPadStore.ListPages`/`RenamePage` (query `DISTINCT ActionValue` su
+>     `ActionType='dp_folder'` scoped per device+profilo).
+>   - **Rimozione azione pulisce anche l'icona**: `BtnRemoveAction_Click` in
+>     `DpKeyConfigDialog`/`NdkKeyConfigDialog`, e i menu tasto destro
+>     `DpMnuRemoveAction_Click`/`NdkMnuRemoveAction_Click`, ora azzerano anche l'immagine
+>     (prima restava l'icona vecchia orfana). Rimossa la voce ridondante "Rimuovi icona"
+>     dal menu tasto destro (DisplayPad ed Everest) — resta solo aggiungi/modifica.
+>   - **Angoli arrotondati anteprima**: `CropEditor` (usato da `DpKeyConfigDialog`,
+>     `CellConfigDialog`, e via `ImageCropDialog` da Everest) ora clippa il viewport con
+>     angoli arrotondati (stesso raggio della guida "mostra contorno tasto" già presente)
+>     solo per il caso 1×1 (tasto singolo) — resta rettangolare per la vista fullscreen
+>     multi-tasto, dove un unico raggio su più tasti non avrebbe senso.
+>   - **Bug lista "recenti" cartelle/eseguibili**: `AppSettings.RecentFolderPaths`/
+>     `RecentExecPaths` restituiscono sempre la STESSA istanza `List<string>` (mutata
+>     in-place) — riassegnare `ListBox.ItemsSource` a quel riferimento identico è un
+>     no-op per WPF (niente `INotifyCollectionChanged`), quindi il tasto rimuoveva
+>     davvero il percorso dalle impostazioni ma la lista visibile non si aggiornava mai.
+>     Fix: `.ToList()` ad ogni refresh per forzare un riferimento nuovo. Ristilizzata la
+>     lista in dark (stesso schema del tema, prima bianca di default WPF) e il tasto
+>     rimozione ora è un'icona cestino (stesso glifo Segoe MDL2 già usato altrove)
+>     visibile solo in hover sulla riga.
+>   - **Verificato**: `build-check.bat` pulito (0 errori/0 warning) su entrambe le
+>     solution, ripetuto ad ogni step. **Da verificare dall'utente su hardware**: aspetto
+>     reale delle icone-pagina e icone-cartella su un DisplayPad fisico a rotazione ≠0°
+>     (verificato solo via rendering diretto lato PC in questa sessione).
+>
+> Previous: 2026-07-08 (DisplayPad: fix icone perse alla riconnessione USB):
+>   - **Richiesta utente**: "serve che quando si ricollega un dispositivo vengano
+>     ricaricati i profili... se ad esempio ricollego un DisplayPad, resta senza icone".
+>   - **Root cause** in `MainWindow.DisplayPad.cs` → `DpRefreshDevices()`: il flag
+>     `currentlyOnDp` (ero già sulla tab del DisplayPad?) veniva calcolato leggendo
+>     `TcDevices.SelectedItem` **dopo** `RemoveDeviceTabs("dp_")` — che però rimuove e
+>     ricrea le tab `dp_*`, quindi WPF sposta automaticamente la selezione altrove PRIMA
+>     di quel controllo. Risultato: al replug il branch che ri-seleziona la tab e triggera
+>     `DpActivateDevice`/`DpReloadAndPreloadProfile` (re-upload icone) non scattava mai —
+>     la memoria icone on-board del device non sopravvive a uno scollegamento USB, quindi
+>     senza quel re-upload il pannello fisico resta vuoto.
+>   - **Fix**: il flag (rinominato `wasOnDpTab`) è ora catturato in cima al metodo, PRIMA
+>     di `RemoveDeviceTabs`. Nessun'altra logica toccata: `DpSwitchProfile`/`DpActivateDevice`
+>     restano invariati, si accendono di nuovo correttamente sul reconnect.
+>   - **Verificato solo per il MacroPad** (per esclusione, non serviva fix): `RefreshDevices()`
+>     in `MainWindow.xaml.cs` non fa gestione dinamica di tab per-device (unica tab statica)
+>     e richiama sempre `CbDevice_SelectionChanged` se il pannello è visibile — nessun bug
+>     analogo lì.
+>   - **Verificato**: `build-check.bat` pulito (0 errori/0 warning, dopo aver killato
+>     un'istanza fantasma di K2.App che teneva bloccata `K2.Core.dll`). **Da verificare
+>     dall'utente su hardware**: scollega/ricollega un DisplayPad mentre la sua tab è
+>     attiva e conferma che le icone tornano.
+>
+> Previous: 2026-07-08 (DisplayPad: icona auto-generata per le cartelle create da UI):
+>   - **Richiesta utente**: "quando aggiungi una pagina, aggiungi un'icona con una freccia
+>     o qualcosa del genere e il nome della pagina. Segui le regole delle icone generate
+>     da cartelle" — `DpMnuCreateFolder_Click` (feature "Create folder" appena introdotta
+>     dalla sessione precedente) creava la sotto-pagina e assegnava l'azione `dp_folder`
+>     ma lasciava il tasto senza immagine (tile vuoto).
+>   - **`MainWindow.DisplayPad.cs`**: nuovo helper `DpAutoIconCachePath(kind, sourceValue,
+>     deviceRotation)` — stesso schema hash/cache-root di `DpKeyConfigDialog.AutoIconCachePath`
+>     (root `DpAutoIconDir`, così `EffectiveDpRotation` riconosce il risultato come già
+>     pre-ruotato). `DpMnuCreateFolder_Click` ora genera l'icona via
+>     `IconImageGenerator.TryGenerateFolderIcon(name, ...)` — stesso glifo+didascalia già
+>     usato per l'azione "folder" (Open Folder) — e la carica con `DpUploadAndPersist`;
+>     fallback a `SaveButton` diretto se la generazione fallisse (azione comunque persistita).
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` pulito (0 errori/0
+>     warning). **Da verificare dall'utente**: aspetto reale del tile su hardware dopo la
+>     creazione di una cartella.
+>   - **Non toccato in questa sessione**: `DpMnuSetBack_Click` (tasto "Imposta Back") resta
+>     senza icona auto-generata — l'utente ha chiesto esplicitamente solo il caso "aggiungi
+>     una pagina"; possibile follow-up simmetrico se richiesto.
+>
+> Previous: 2026-07-08 (Macro: aggiunta duplicazione macro):
+>   - **Richiesta utente**: "aggiungi una funzione di duplicazione delle macro".
+>   - **`Models/KeyboardMacro.cs`**: `MacroInput.Clone()` (copia indipendente
+>     di un singolo evento registrato) e `MacroDefinition.Clone(newName)`
+>     (copia completa — stesse impostazioni Devices/Delay/Playback, `Inputs`
+>     copiato in profondità via `List.ConvertAll(i => i.Clone())` così
+>     riordinare/eliminare righe sulla copia non tocca mai la macro
+>     sorgente; `Id`=0, lasciato assegnare dall'insert).
+>   - **UI**: nuovo bottone "Duplica" nella Macro Library, tra New e Delete
+>     (`BtnMacroDuplicate_Click` in `MainWindow.Macro.cs`) — clona la macro
+>     selezionata come "{Nome} (copia)", la inserisce nello store e la
+>     seleziona subito. Bloccato durante la registrazione, stesso pattern
+>     delle altre guardie introdotte nella sessione precedente (no `IsEnabled`,
+>     solo controllo funzionale).
+>   - **Localizzazione**: nuove chiavi `macro_duplicate`/`macro_duplicate_name`
+>     tradotte in EN+IT.
+>   - **Verificato**: `build-check.bat` pulito (0 errori/0 warning) su
+>     entrambe le solution. **Da verificare dall'utente**: comportamento su
+>     hardware/UI reale (duplicazione con Inputs registrati, assegnazioni
+>     non copiate — corretto, dato che "Assigned to" è per-nome-macro e la
+>     copia ha un nome diverso).
+>
+> Previous: 2026-07-08 (2 richieste utente: font/dimensione nell'editor testo-su-icona,
+> pulsante "Indietro" per le sottopagine DisplayPad):
+>   - **Font e dimensione nel testo generato su icona**: `TextIconGenerator.DrawFittedText`
+>     (K2.Core) aveva "Segoe UI" e la formula di partenza `size*0.42f` cablati. Aggiunti
+>     parametri opzionali `fontFamily`/`fontSize` a `TryRenderTextIcon`/`TryGenerateTextIcon`
+>     (default `null` = comportamento di prima, invariato per compatibilità coi call site
+>     esistenti). `fontSize` è trattato come dimensione di PARTENZA per il loop di shrink
+>     esistente (mai ingrandito, solo rimpicciolito se il testo non ci sta) — così una
+>     scelta manuale non può mai causare overflow/clipping. Gestita anche la (rara) eccezione
+>     GDI+ quando un font non ha una variante Bold (`Font` la lancia solo per lo stile, non
+>     per un nome di famiglia sconosciuto, che invece sostituisce silenziosamente) — fallback
+>     a `FontStyle.Regular` invece di far fallire l'intera generazione. UI in
+>     `TextIconDialog.xaml(.cs)`: nuova `ComboBox` famiglia (popolata da
+>     `Fonts.SystemFontFamilies`, default "Segoe UI" se presente) + `CheckBox` "Dimensione
+>     automatica" (default, comportamento di prima) + `Slider` (8..size*0.9) abilitato solo
+>     quando l'auto-fit è disattivato. **Stesso gotcha RadioButton/ToggleButton già visto
+>     per `RbBgSolid`**: `ChkAutoSize IsChecked="True"` e la coercizione di `Slider.Value`
+>     al nuovo `Minimum` durante `InitializeComponent()` fanno scattare `Checked`/
+>     `ValueChanged` PRIMA che i controlli fratelli dichiarati più sotto nello stesso XAML
+>     (`SldFontSize`, `LblFontSizeValue`) siano collegati — entrambi gli handler hanno una
+>     guardia `if (... is null) return;` per tollerarlo, stesso pattern del fix precedente.
+>     Nuove chiavi loc `txt_font_label`, `txt_font_size_auto` (EN+IT).
+>   - **Pulsante "Indietro" per le sottopagine DisplayPad**: l'utente segnalava "se elimino
+>     il tasto Back dentro una cartella, come torno indietro?". Verificato: esiste già dalla
+>     sessione del 2026-06-29 un pulsante `BtnDpBack` + breadcrumb (`LblDpBreadcrumb`) nella
+>     toolbar del tab DisplayPad (K2.App), del tutto INDIPENDENTE da qualsiasi tasto fisico/
+>     software configurato con l'azione "dp_back" — mostrato/nascosto automaticamente da
+>     `UpdateDpBreadcrumb()` in base a `_currentDpPageId` (0 = pagina radice → nascosto,
+>     altrimenti visibile), quindi resta sempre disponibile per uscire da una sottopagina
+>     anche senza alcun tasto Back configurato al suo interno. Nessun bug trovato nella
+>     logica. Per eliminare ogni dubbio di scarsa visibilità, ristilizzato da
+>     `K2IconButton` (grigio, si confondeva) a `K2IconAccentButton` (colore accento) —
+>     unico pulsante non-debug visibile nella toolbar quando si è dentro una cartella.
+>   - **Verificato**: `dotnet build` pulito (0 errori/0 warning) su entrambe le solution.
+>     **Nota sessione**: durante la rebuild, `K2.App.exe` risultava già in esecuzione
+>     (l'utente lo stava testando) e bloccava la copia di `K2.Core.dll` (MSB3027) — killato
+>     con lo stesso approccio di `stop-k2.bat` prima di ricompilare.
+>
+> Previous: 2026-07-08 (4 richieste utente: crash "Aggiungi testo", doppia rotazione
 > cartella+testo, assegnazione macro a qualsiasi tasto, creazione cartelle DisplayPad da UI):
 >   - **Crash "Aggiungi testo"**: `TextIconDialog` (K2.Core) ha `RbBgSolid IsChecked="True"`
 >     in XAML — WPF invoca il suo evento `Checked` SINCRONAMENTE durante

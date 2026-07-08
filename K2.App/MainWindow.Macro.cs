@@ -160,6 +160,17 @@ public partial class MainWindow
         LbMacros.SelectedItem = m;
     }
 
+    private void BtnMacroDuplicate_Click(object sender, RoutedEventArgs e)
+    {
+        var m = SelectedMacro;
+        if (m is null || _macroStore is null || _macroRecorder?.IsRecording == true) return;
+        var copy = m.Clone(Loc.Get("macro_duplicate_name", m.Name));
+        copy.Order = _macros.Count;
+        copy.Id = _macroStore.Insert(copy);
+        _macros.Add(copy);
+        LbMacros.SelectedItem = copy;
+    }
+
     private void BtnMacroDelete_Click(object sender, RoutedEventArgs e)
     {
         var m = SelectedMacro;

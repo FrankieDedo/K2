@@ -4,31 +4,34 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace K2.Core;
 
 /// <summary>
 /// Generates per-key button images automatically when a key's action is "exec" (the
-/// target executable's own icon, at the best resolution Windows has for it) or "folder"
-/// (a flat folder glyph with the folder's name as a caption) — used so DisplayPad tiles
-/// and Everest numpad display keys get a meaningful picture without the user having to
-/// manually pick one. Square canvas, matches the K2 theme's dark background/accent.
+/// target executable's own icon, at the best resolution Windows has for it), "folder"
+/// (a real on-disk folder — Windows' own Explorer icon for it, plus its name as a
+/// caption, see <see cref="TryGenerateDiskFolderIcon"/>), or a DisplayPad "page" created
+/// from the UI (a virtual folder with no filesystem path — a hand-drawn folder glyph,
+/// see <see cref="TryGenerateFolderIcon"/>) — used so DisplayPad tiles and Everest
+/// numpad display keys get a meaningful picture without the user having to manually
+/// pick one. Square canvas, matches the K2 theme's dark background/accent.
 /// </summary>
 public static class IconImageGenerator
 {
     private static readonly Color BackgroundColor = ColorTranslator.FromHtml("#1A1A1E");
     private static readonly Color FolderBackgroundColor = Color.Black;
     private static readonly Color AccentColor     = ColorTranslator.FromHtml("#900000");
-    private const string SegoeMdl2 = "Segoe MDL2 Assets";
-    private const string FolderGlyph = ""; // "OpenFolderHorizontal" glyph
 
     /// <summary>
     /// Renders <paramref name="execPath"/>'s associated icon centered on a size×size
-    /// dark canvas, saved as PNG. See <see cref="TryGenerateFolderIcon"/> for the
-    /// <paramref name="deviceRotationDegrees"/> counter-rotation convention.
+    /// dark canvas, saved as PNG, upright — same convention as any other image file in
+    /// K2: the device's physical-mounting counter-rotation is applied later, at upload
+    /// time, not baked in here (see <see cref="TryGenerateFolderIcon"/>).
     /// </summary>
-    public static bool TryGenerateExecIcon(string execPath, int size, string outputPngPath, int deviceRotationDegrees = 0)
+    public static bool TryGenerateExecIcon(string execPath, int size, string outputPngPath)
     {
         try
         {
@@ -47,7 +50,40 @@ public static class IconImageGenerator
                 g.DrawImage(icon, offset, offset, iconSize, iconSize);
             }
 
-            ApplyDeviceCounterRotation(canvas, deviceRotationDegrees);
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
+            canvas.Save(outputPngPath, ImageFormat.Png);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Renders Base Camp's own DisplayPad folder tile art (<c>Assets/dp_folder_template.png</c>,
+    /// embedded — see <see cref="LoadFolderTemplate"/>) tinted to the K2 accent color, plus
+    /// <paramref name="name"/> as a caption, on a size×size black canvas, saved as PNG,
+    /// upright — for a DisplayPad "page" created from the UI (action "dp_folder"): a
+    /// virtual folder with no real filesystem path behind it, so there is no Windows icon
+    /// to extract (see <see cref="TryGenerateDiskFolderIcon"/> for an actual on-disk
+    /// folder). Falls back to a plain caption-only tile if the template can't be loaded.
+    /// </summary>
+    public static bool TryGenerateFolderIcon(string name, int size, string outputPngPath)
+    {
+        try
+        {
+            using var canvas = new Bitmap(size, size);
+            using (var g = Graphics.FromImage(canvas))
+            {
+                g.SmoothingMode = SmoothingMode.HighQuality;
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                g.Clear(FolderBackgroundColor);
+
+                DrawFolderTemplate(g, size);
+                DrawCaption(g, size, name);
+            }
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
             canvas.Save(outputPngPath, ImageFormat.Png);
@@ -60,55 +96,34 @@ public static class IconImageGenerator
     }
 
     /// <summary>
-    /// Renders a flat folder glyph + the folder's display name on a size×size black
-    /// canvas, saved as PNG. <paramref name="deviceRotationDegrees"/> (0/90/180/270) is
-    /// the PHYSICAL mounting rotation of the target device/tile (e.g. DisplayPad's
-    /// configured orientation) — when non-zero, the same device counter-rotation
-    /// convention used everywhere else in K2 (see <c>IconRotator.ImageAngleCw</c> /
-    /// the satellite's <c>ResolveForUpload</c>: 90°→image rotated 270°, 270°→90°,
-    /// 180°→180°) is baked directly into the generated file, so it comes out already
-    /// upright for a viewer looking at the physically-rotated device. Callers that bake
-    /// this in must upload the result WITHOUT applying the device rotation again (it
-    /// would double-rotate).
+    /// Renders <paramref name="folderPath"/>'s own Windows Explorer icon (same
+    /// shell lookup as <see cref="TryGenerateExecIcon"/> — <see cref="GetBestIcon"/>
+    /// works for directories too) + its name as a caption below, on a size×size black
+    /// canvas, saved as PNG, upright — for a "folder" action pointing at a real
+    /// on-disk directory. Falls back to <see cref="TryGenerateFolderIcon"/>'s hand-drawn
+    /// glyph if the shell can't produce an icon for the path (e.g. it no longer exists).
     /// </summary>
-    public static bool TryGenerateFolderIcon(string folderPath, int size, string outputPngPath, int deviceRotationDegrees = 0)
+    public static bool TryGenerateDiskFolderIcon(string folderPath, int size, string outputPngPath)
     {
+        string name = SafeFolderName(folderPath);
         try
         {
-            string name = SafeFolderName(folderPath);
+            using var icon = GetBestIcon(folderPath, size);
+            if (icon is null) return TryGenerateFolderIcon(name, size, outputPngPath);
 
             using var canvas = new Bitmap(size, size);
             using (var g = Graphics.FromImage(canvas))
             {
                 g.SmoothingMode = SmoothingMode.HighQuality;
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
                 g.Clear(FolderBackgroundColor);
 
-                float glyphSize = size * 0.5f;
-                using (var glyphFont = new Font(SegoeMdl2, glyphSize, FontStyle.Regular, GraphicsUnit.Pixel))
-                using (var glyphBrush = new SolidBrush(AccentColor))
-                {
-                    var glyphBounds = g.MeasureString(FolderGlyph, glyphFont);
-                    float gx = (size - glyphBounds.Width) / 2f;
-                    float gy = size * 0.12f;
-                    g.DrawString(FolderGlyph, glyphFont, glyphBrush, gx, gy);
-                }
+                var (offsetX, offsetY, iconSize) = IconBox(size);
+                g.DrawImage(icon, offsetX, offsetY, iconSize, iconSize);
 
-                float labelSize = Math.Max(9f, size * 0.13f);
-                using var labelFont = new Font("Segoe UI", labelSize, FontStyle.Regular, GraphicsUnit.Pixel);
-                using var labelBrush = new SolidBrush(Color.White);
-                var rect = new RectangleF(size * 0.06f, size * 0.68f, size * 0.88f, size * 0.28f);
-                using var format = new StringFormat
-                {
-                    Alignment = StringAlignment.Center,
-                    LineAlignment = StringAlignment.Near,
-                    Trimming = StringTrimming.EllipsisCharacter,
-                    FormatFlags = StringFormatFlags.LineLimit,
-                };
-                g.DrawString(name, labelFont, labelBrush, rect, format);
+                DrawCaption(g, size, name);
             }
-
-            ApplyDeviceCounterRotation(canvas, deviceRotationDegrees);
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
             canvas.Save(outputPngPath, ImageFormat.Png);
@@ -120,22 +135,131 @@ public static class IconImageGenerator
         }
     }
 
-    /// <summary>
-    /// Same convention as <c>IconRotator.ImageAngleCw</c>/the satellite's
-    /// <c>ResolveForUpload</c>: the angle baked into the image is the OPPOSITE of the
-    /// device's mounting rotation, so (device rotation) + (image pre-rotation) cancel
-    /// out to an upright result for the viewer.
-    /// </summary>
-    private static void ApplyDeviceCounterRotation(Bitmap canvas, int deviceRotationDegrees)
+    /// <summary>Folder name caption, centered below the icon area — shared layout
+    /// between <see cref="TryGenerateFolderIcon"/> and <see cref="TryGenerateDiskFolderIcon"/>.</summary>
+    private static void DrawCaption(Graphics g, int size, string name)
     {
-        var flip = deviceRotationDegrees switch
+        float labelSize = Math.Max(9f, size * 0.13f);
+        using var labelFont = new Font("Segoe UI", labelSize, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var labelBrush = new SolidBrush(Color.White);
+        var rect = new RectangleF(size * 0.06f, size * 0.68f, size * 0.88f, size * 0.28f);
+        using var format = new StringFormat
         {
-            90  => RotateFlipType.Rotate270FlipNone,
-            180 => RotateFlipType.Rotate180FlipNone,
-            270 => RotateFlipType.Rotate90FlipNone,
-            _   => RotateFlipType.RotateNoneFlipNone,
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Near,
+            Trimming = StringTrimming.EllipsisCharacter,
+            FormatFlags = StringFormatFlags.LineLimit,
         };
-        if (flip != RotateFlipType.RotateNoneFlipNone) canvas.RotateFlip(flip);
+        g.DrawString(name, labelFont, labelBrush, rect, format);
+    }
+
+    /// <summary>Tight crop of the shape within <c>dp_folder_template.png</c>'s 294×294
+    /// canvas (measured once from the source asset, plus a little anti-aliasing padding) —
+    /// everything outside this is empty black margin.</summary>
+    private static readonly Rectangle FolderTemplateCrop = new(56, 76, 182, 148);
+
+    /// <summary>Icon area shared by both folder-tile flavors — a real on-disk folder's
+    /// Windows icon (<see cref="TryGenerateDiskFolderIcon"/>) and this hand-tinted
+    /// template (<see cref="TryGenerateFolderIcon"/>) — so a "page" tile and a "real
+    /// folder" tile line up at the same size/position on the DisplayPad grid instead of
+    /// one looking smaller/lower than the other.</summary>
+    private static (float Left, float Top, float Size) IconBox(int size)
+    {
+        float iconSize = size * 0.56f;
+        return ((size - iconSize) / 2f, size * 0.08f, iconSize);
+    }
+
+    /// <summary>
+    /// Draws Base Camp's own folder-tile art (see <see cref="LoadFolderTemplate"/>),
+    /// cropped to its shape and tinted to <see cref="AccentColor"/>, into the same
+    /// square <see cref="IconBox"/> <see cref="TryGenerateDiskFolderIcon"/> uses for a
+    /// real folder's Windows icon (letterboxed within it, since the folder shape itself
+    /// is wider than tall) — see <see cref="TryGenerateFolderIcon"/>.
+    /// </summary>
+    private static void DrawFolderTemplate(Graphics g, int size)
+    {
+        using var template = LoadFolderTemplate();
+        if (template is null) return; // caption-only fallback — see TryGenerateFolderIcon
+
+        using var cropped = template.Clone(FolderTemplateCrop, template.PixelFormat);
+        using var tinted = TintFromBlueChannel(cropped, AccentColor);
+
+        var (boxLeft, boxTop, boxSize) = IconBox(size);
+
+        float shapeAspect = (float)FolderTemplateCrop.Width / FolderTemplateCrop.Height;
+        float drawW = boxSize, drawH = drawW / shapeAspect;
+        if (drawH > boxSize) { drawH = boxSize; drawW = drawH * shapeAspect; }
+        float drawX = boxLeft + (boxSize - drawW) / 2f;
+        float drawY = boxTop + (boxSize - drawH) / 2f;
+
+        g.DrawImage(tinted, drawX, drawY, drawW, drawH);
+    }
+
+    /// <summary>Loads the embedded <c>Assets/dp_folder_template.png</c> (Base Camp's own
+    /// DisplayPad folder-tile art — solid black background, the shape drawn in a fixed
+    /// blue), or null if the resource can't be found/read.</summary>
+    private static Bitmap? LoadFolderTemplate()
+    {
+        try
+        {
+            using var stream = Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("K2.Core.Assets.dp_folder_template.png");
+            if (stream is null) return null;
+
+            // Bitmap(Stream) can lazily reference the stream for later pixel access
+            // (a well-known GDI+ gotcha) — copy-construct to fully detach before the
+            // `using` above disposes it out from under the caller.
+            using var lazy = new Bitmap(stream);
+            return new Bitmap(lazy);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Recolors a black-background/solid-blue source image to black-background/<paramref name="accent"/>,
+    /// using the source's own blue channel as a per-pixel coverage mask (it varies smoothly
+    /// from 0 at the background to 255 at the shape's fill, including anti-aliased edges) —
+    /// avoids depending on alpha transparency, which <c>dp_folder_template.png</c> doesn't have.
+    /// </summary>
+    private static Bitmap TintFromBlueChannel(Bitmap source, Color accent)
+    {
+        var result = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
+        var rect = new Rectangle(0, 0, source.Width, source.Height);
+        var src32 = source.PixelFormat == PixelFormat.Format32bppArgb
+            ? source : source.Clone(rect, PixelFormat.Format32bppArgb);
+        try
+        {
+            var srcData = src32.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            var dstData = result.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                int bytes = Math.Abs(srcData.Stride) * source.Height;
+                var buf = new byte[bytes];
+                Marshal.Copy(srcData.Scan0, buf, 0, bytes);
+                for (int i = 0; i < bytes; i += 4)
+                {
+                    double coverage = buf[i] / 255.0; // Format32bppArgb byte order: B,G,R,A
+                    buf[i]     = (byte)(accent.B * coverage);
+                    buf[i + 1] = (byte)(accent.G * coverage);
+                    buf[i + 2] = (byte)(accent.R * coverage);
+                    buf[i + 3] = 255;
+                }
+                Marshal.Copy(buf, 0, dstData.Scan0, bytes);
+            }
+            finally
+            {
+                src32.UnlockBits(srcData);
+                result.UnlockBits(dstData);
+            }
+        }
+        finally
+        {
+            if (!ReferenceEquals(src32, source)) src32.Dispose();
+        }
+        return result;
     }
 
     private static string SafeFolderName(string folderPath)
@@ -215,7 +339,7 @@ public static class IconImageGenerator
     }
 
     [ComImport]
-    [Guid("bcc18b79-ba16-442f-80c4-8a20b1a396a3")]
+    [Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IShellItemImageFactory
     {

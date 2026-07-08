@@ -1380,9 +1380,12 @@
                         <Button x:Name="BtnDpClose"   Content="{loc:Get close_driver}"   Margin="8,0,0,0" Click="BtnDpClose_Click"
                                 Style="{StaticResource K2IconButton}" Tag="&#xE711;" Visibility="Collapsed"/>
                         <Separator x:Name="SepDpOpenDbg" Margin="10,0" Visibility="Collapsed"/>
-                        <!-- Folder navigation (visible only when inside a sub-page) -->
+                        <!-- Folder navigation: interface-only, independent of any physical/software
+                             key's "Back" action — always available to leave a sub-page even if the
+                             user removes/never assigns a Back key inside it. Visible only when inside
+                             a sub-page (toggled by UpdateDpBreadcrumb); accent-styled so it isn't missed. -->
                         <Button x:Name="BtnDpBack" Content="{loc:Get dp_back}"
-                                Margin="0,0,0,0" Style="{StaticResource K2IconButton}" Tag="&#xE72B;"
+                                Margin="0,0,0,0" Style="{StaticResource K2IconAccentButton}" Tag="&#xE72B;"
                                 Click="BtnDpBack_Click" Visibility="Collapsed"/>
                         <TextBlock x:Name="LblDpBreadcrumb" Text="" VerticalAlignment="Center"
                                    Margin="6,0,0,0" Foreground="#9A9AA2" FontStyle="Italic"/>
@@ -1583,8 +1586,9 @@
                             </Grid.RowDefinitions>
                             <TextBlock Grid.Row="0" Text="{loc:Get macro_library}" Style="{StaticResource K2SideGroupHeader}"/>
                             <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,6">
-                                <Button x:Name="BtnMacroNew"    Content="{loc:Get macro_new}"    Padding="8,2" Margin="0,0,4,0" Click="BtnMacroNew_Click"    Style="{StaticResource K2IconButton}" Tag="&#xE710;"/>
-                                <Button x:Name="BtnMacroDelete" Content="{loc:Get delete}"       Padding="8,2" Click="BtnMacroDelete_Click" Style="{StaticResource K2IconButton}" Tag="&#xE74D;"/>
+                                <Button x:Name="BtnMacroNew"       Content="{loc:Get macro_new}"       Padding="8,2" Margin="0,0,4,0" Click="BtnMacroNew_Click"       Style="{StaticResource K2IconButton}" Tag="&#xE710;"/>
+                                <Button x:Name="BtnMacroDuplicate" Content="{loc:Get macro_duplicate}" Padding="8,2" Margin="0,0,4,0" Click="BtnMacroDuplicate_Click" Style="{StaticResource K2IconButton}" Tag="&#xE8C8;"/>
+                                <Button x:Name="BtnMacroDelete"    Content="{loc:Get delete}"          Padding="8,2" Click="BtnMacroDelete_Click"    Style="{StaticResource K2IconButton}" Tag="&#xE74D;"/>
                             </WrapPanel>
                             <Border Grid.Row="2" Background="#111115" CornerRadius="6" Padding="4">
                                 <ListBox x:Name="LbMacros"

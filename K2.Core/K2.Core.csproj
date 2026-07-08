@@ -54,6 +54,14 @@
     </Content>
   </ItemGroup>
 
+  <!-- Folder-icon template: Base Camp's own DisplayPad "open folder" tile art
+       (Mountain Base Camp/BaseCampLinux resources — see IconImageGenerator.cs),
+       embedded so TryGenerateFolderIcon can tint+composite it without depending
+       on a font glyph or any file on disk. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\dp_folder_template.png" />
+  </ItemGroup>
+
   <!-- Roboto font (SIL OFL 1.1, see Fonts/LICENSE.Roboto.txt): embedded as
        Resource so K2Theme.xaml can reference it via pack URI regardless of
        whether Roboto is installed on the end-user's machine. License text

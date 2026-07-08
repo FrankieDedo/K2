@@ -50,4 +50,18 @@ internal sealed class DisplayPadActionHost : IActionHost
     IReadOnlyList<string> IActionHost.ListMacroNames() => _win.ListAllMacroNames();
 
     void IActionHost.PlayMacro(string macroName) => _win.PlayMacroByName(macroName);
+
+    IReadOnlyList<(int PageId, string Name)> IActionHost.ListPages() =>
+        _win._activeDpDeviceId is int id
+            ? _win.DpListPages(id, ((IActionHost)this).CurrentProfile)
+            : System.Array.Empty<(int, string)>();
+
+    int? IActionHost.CreatePage(string name) =>
+        _win._activeDpDeviceId is int id
+            ? _win.DpCreatePage(id, ((IActionHost)this).CurrentProfile, name)
+            : null;
+
+    void IActionHost.RenamePage(int pageId, string name) => _win.DpRenamePage(pageId, name);
+
+    bool IActionHost.SupportsPages => true;
 }

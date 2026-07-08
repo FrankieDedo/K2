@@ -286,6 +286,36 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
     public void SetFolderName(int pageId, string name) =>
         SetSetting($"folder.{pageId}.name", name.Trim());
 
+    /// <summary>Renames an existing page — thin, named wrapper over <see cref="SetFolderName"/>
+    /// used by the "Page" action type's rename flow in <c>ButtonActionDialog</c>.</summary>
+    public void RenamePage(int pageId, string name) => SetFolderName(pageId, name);
+
+    /// <summary>All DisplayPad sub-pages reachable from this device+profile via a
+    /// "dp_folder" key (i.e. anything <see cref="AllocatePageId"/> could collide with) —
+    /// used to populate the "assign existing page" picker in <c>ButtonActionDialog</c>.
+    /// Falls back to "Page {id}" for a page whose name was never set.</summary>
+    public List<(int PageId, string Name)> ListPages(int deviceId, int profile)
+    {
+        var ids = new List<int>();
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = @"SELECT DISTINCT ActionValue FROM Buttons
+                                WHERE DeviceId=$d AND Profile=$p AND ActionType='dp_folder'";
+            cmd.Parameters.AddWithValue("$d", deviceId);
+            cmd.Parameters.AddWithValue("$p", profile);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+                if (!r.IsDBNull(0) && int.TryParse(r.GetString(0), out int pageId))
+                    ids.Add(pageId);
+        }
+
+        var result = new List<(int, string)>();
+        foreach (int pageId in ids)
+            result.Add((pageId, GetFolderName(pageId) ?? $"Page {pageId}"));
+        result.Sort((a, b) => string.Compare(a.Item2, b.Item2, StringComparison.CurrentCultureIgnoreCase));
+        return result;
+    }
+
     // ---------- fullscreen image (whole 2×6 panel, per device+profile+page) ----------
 
     /// <summary>Fullscreen image assigned to a page, if any. Null if none or the file no

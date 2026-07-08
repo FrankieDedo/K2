@@ -34,6 +34,18 @@ public sealed class MacroInput
     [JsonPropertyName("text")]
     public string? Text { get; set; }
 
+    /// <summary>Independent copy — so editing a duplicated macro's inputs
+    /// (reorder/delete) never touches the source macro's list.</summary>
+    public MacroInput Clone() => new()
+    {
+        Type = Type,
+        Key = Key,
+        DelayMs = DelayMs,
+        X = X,
+        Y = Y,
+        Text = Text
+    };
+
     /// <summary>
     /// Parses BaseCamp's own macro-recording JSON (produced by its Electron/
     /// iohook-based recorder) — a different shape from <see cref="MacroDefinition.InputsToJson"/>'s
@@ -154,6 +166,26 @@ public sealed class MacroDefinition
     /// <summary>Serializes Inputs to JSON (for saving to the DB).</summary>
     public string InputsToJson() =>
         JsonSerializer.Serialize(Inputs, _jsonOpts);
+
+    /// <summary>Independent copy under <paramref name="newName"/> — <c>Id</c> is
+    /// left at 0 (the caller inserts it and gets a fresh one back), Inputs is a
+    /// deep copy so reordering/deleting rows on the duplicate never touches
+    /// the source macro.</summary>
+    public MacroDefinition Clone(string newName) => new()
+    {
+        Name = newName,
+        RecordMouse = RecordMouse,
+        RecordKeyboard = RecordKeyboard,
+        RecordMouseMovement = RecordMouseMovement,
+        DelayOption = DelayOption,
+        CustomDelayMs = CustomDelayMs,
+        PlaybackOption = PlaybackOption,
+        RepeatCount = RepeatCount,
+        Inputs = Inputs.ConvertAll(i => i.Clone()),
+        IsActive = IsActive,
+        Order = Order,
+        ModifiedAt = DateTime.Now
+    };
 
     /// <summary>Deserializes Inputs from JSON (for loading from the DB).</summary>
     public static List<MacroInput> InputsFromJson(string? json)

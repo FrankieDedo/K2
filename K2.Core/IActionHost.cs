@@ -87,4 +87,28 @@ public interface IActionHost
 
     /// <summary>Plays back the macro named <paramref name="macroName"/> (see <see cref="ListMacroNames"/>).</summary>
     void PlayMacro(string macroName);
+
+    /// <summary>
+    /// DisplayPad sub-pages ("dp_folder" targets) existing for the currently selected
+    /// device+profile, used to populate the "Page" action type's picker in
+    /// <see cref="ButtonActionDialog"/> (both to assign an existing page and to show/rename
+    /// the current one). Hosts with no DisplayPad-page concept (MacroPad, Everest, the
+    /// standalone K2.DisplayPad app) return an empty list.
+    /// </summary>
+    IReadOnlyList<(int PageId, string Name)> ListPages();
+
+    /// <summary>
+    /// Creates a new DisplayPad sub-page named <paramref name="name"/> for the currently
+    /// selected device+profile and returns its page ID, or null on a host with no
+    /// DisplayPad-page concept (see <see cref="ListPages"/>).
+    /// </summary>
+    int? CreatePage(string name);
+
+    /// <summary>Renames an existing page (no-op on hosts with no DisplayPad-page concept).</summary>
+    void RenamePage(int pageId, string name);
+
+    /// <summary>True only for a host with a real DisplayPad-page concept (see <see cref="ListPages"/>) —
+    /// <see cref="ButtonActionDialog"/> hides the "Page" action type entirely for hosts that
+    /// return false, rather than showing it non-functional/empty like "macro" does.</summary>
+    bool SupportsPages { get; }
 }

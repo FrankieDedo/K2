@@ -9,6 +9,34 @@
         ShowInTaskbar="False"
         ResizeMode="CanResize"
         Style="{DynamicResource K2WindowStyle}">
+    <Window.Resources>
+        <!-- Recent-paths list rows (exec/folder panels): dark background matching the rest
+             of the dialog — the stock ListBox/ListBoxItem chrome otherwise forces a
+             white/system background regardless of Background set on the instance (same fix
+             as K2.App's MacroLibraryItemStyle/LbMacros). -->
+        <Style x:Key="RecentPathItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1E1E26"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2A2A33"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
     <Grid Margin="14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -29,6 +57,7 @@
             <ComboBoxItem Content="{loc:Get act_url}"              Tag="url"/>
             <ComboBoxItem Content="{loc:Get act_exec}"   Tag="exec"/>
             <ComboBoxItem Content="{loc:Get act_folder}"           Tag="folder"/>
+            <ComboBoxItem Content="{loc:Get act_page}"             Tag="dp_folder"/>
             <ComboBoxItem Content="{loc:Get act_browser}"          Tag="browser"/>
             <ComboBoxItem Content="{loc:Get act_profile}"        Tag="profile"/>
             <ComboBoxItem Content="{loc:Get act_oscmd}"        Tag="oscmd"/>
@@ -91,20 +120,41 @@
 
                 <TextBlock Grid.Row="2" Text="{loc:Get recent_paths}" Margin="0,0,0,4" Foreground="#9A9AA2"/>
                 <ListBox x:Name="LstExecRecent" Grid.Row="3"
+                         ItemContainerStyle="{StaticResource RecentPathItemStyle}"
                          SelectionChanged="LstExecRecent_SelectionChanged">
+                    <ListBox.Template>
+                        <ControlTemplate TargetType="ListBox">
+                            <Border Background="{StaticResource K2SurfaceDarkBrush}"
+                                    BorderBrush="{StaticResource K2BorderBrush}" BorderThickness="1"
+                                    CornerRadius="4">
+                                <ScrollViewer Padding="2" CanContentScroll="False">
+                                    <ItemsPresenter/>
+                                </ScrollViewer>
+                            </Border>
+                        </ControlTemplate>
+                    </ListBox.Template>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid>
+                            <Grid x:Name="RowRoot">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{Binding}" VerticalAlignment="Center"
+                                           Foreground="{StaticResource K2TextBrush}"
                                            TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
-                                <Button Grid.Column="1" Content="✕" Padding="6,0" FontSize="11"
+                                <Button x:Name="BtnRemove" Grid.Column="1" Padding="6,2"
+                                        FontFamily="Segoe MDL2 Assets" FontSize="13" Content="&#xE74D;"
+                                        Background="Transparent" BorderThickness="0" Foreground="#B0B0B8"
+                                        Cursor="Hand" Visibility="Collapsed"
                                         ToolTip="{loc:Get remove_recent}"
                                         Click="BtnExecRecentRemove_Click" Tag="{Binding}"/>
                             </Grid>
+                            <DataTemplate.Triggers>
+                                <Trigger SourceName="RowRoot" Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="BtnRemove" Property="Visibility" Value="Visible"/>
+                                </Trigger>
+                            </DataTemplate.Triggers>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
@@ -136,23 +186,62 @@
 
                 <TextBlock Grid.Row="2" Text="{loc:Get recent_paths}" Margin="0,0,0,4" Foreground="#9A9AA2"/>
                 <ListBox x:Name="LstFolderRecent" Grid.Row="3"
+                         ItemContainerStyle="{StaticResource RecentPathItemStyle}"
                          SelectionChanged="LstFolderRecent_SelectionChanged">
+                    <ListBox.Template>
+                        <ControlTemplate TargetType="ListBox">
+                            <Border Background="{StaticResource K2SurfaceDarkBrush}"
+                                    BorderBrush="{StaticResource K2BorderBrush}" BorderThickness="1"
+                                    CornerRadius="4">
+                                <ScrollViewer Padding="2" CanContentScroll="False">
+                                    <ItemsPresenter/>
+                                </ScrollViewer>
+                            </Border>
+                        </ControlTemplate>
+                    </ListBox.Template>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid>
+                            <Grid x:Name="RowRoot">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{Binding}" VerticalAlignment="Center"
+                                           Foreground="{StaticResource K2TextBrush}"
                                            TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
-                                <Button Grid.Column="1" Content="✕" Padding="6,0" FontSize="11"
+                                <Button x:Name="BtnRemove" Grid.Column="1" Padding="6,2"
+                                        FontFamily="Segoe MDL2 Assets" FontSize="13" Content="&#xE74D;"
+                                        Background="Transparent" BorderThickness="0" Foreground="#B0B0B8"
+                                        Cursor="Hand" Visibility="Collapsed"
                                         ToolTip="{loc:Get remove_recent}"
                                         Click="BtnFolderRecentRemove_Click" Tag="{Binding}"/>
                             </Grid>
+                            <DataTemplate.Triggers>
+                                <Trigger SourceName="RowRoot" Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="BtnRemove" Property="Visibility" Value="Visible"/>
+                                </Trigger>
+                            </DataTemplate.Triggers>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+            </Grid>
+
+            <!-- DisplayPad page (sub-navigation) panel -->
+            <Grid x:Name="PagePanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="{loc:Get page_pick_label}" Margin="0,0,0,4"/>
+                <ComboBox  x:Name="CbPage" Grid.Row="1" Margin="0,0,0,10"
+                           SelectionChanged="CbPage_SelectionChanged"/>
+
+                <TextBlock Grid.Row="2" Text="{loc:Get page_name_label}" Margin="0,0,0,4"/>
+                <TextBox   x:Name="TxtPageName" Grid.Row="3" VerticalContentAlignment="Center"/>
             </Grid>
 
             <!-- Open browser panel -->

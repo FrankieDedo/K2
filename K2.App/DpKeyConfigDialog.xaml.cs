@@ -37,9 +37,6 @@ public partial class DpKeyConfigDialog : Window
 
     // ---- State ----------------------------------------------------------
     private readonly int _keyIndex;
-    /// <summary>Physical mounting rotation of the DisplayPad this key lives on (0/90/180/270)
-    /// — passed in so an auto-generated image (exec/folder) can be pre-counter-rotated.</summary>
-    private readonly int _deviceRotation;
     /// <summary>Current image path in the dialog (not yet cropped/rotated on disk —
     /// for GIFs it stays the original file, for static images it's the source loaded
     /// into the CropEditor).</summary>
@@ -67,13 +64,11 @@ public partial class DpKeyConfigDialog : Window
         int keyIndex,
         string? currentImagePath,
         string? currentActionType,
-        string? currentActionValue,
-        int deviceRotation = 0)
+        string? currentActionValue)
     {
         InitializeComponent();
 
         _keyIndex       = keyIndex;
-        _deviceRotation = deviceRotation;
         _pendingPath = currentImagePath;
         _originalPath = currentImagePath;
         ActionType   = currentActionType;
@@ -125,24 +120,14 @@ public partial class DpKeyConfigDialog : Window
 
     /// <summary>
     /// Opens the shared "insert text" editor (<see cref="TextIconDialog"/>): plain text
-    /// on a solid color, or overlaid on the image currently loaded in this dialog. If the
-    /// base image being overlaid is itself an auto-generated exec/folder icon (already
-    /// counter-rotated for the device, see <see cref="TryAutoGenerateKeyImage"/>), the
-    /// composited result is promoted into the same auto-icon cache so it keeps being
-    /// recognized as pre-rotated — otherwise <c>EffectiveDpRotation</c> in
-    /// <c>MainWindow.DisplayPad.cs</c> would treat it as a normal image and apply the
-    /// device counter-rotation a second time on upload, over-rotating the tile.
+    /// on a solid color, or overlaid on the image currently loaded in this dialog.
     /// </summary>
     private void BtnAddText_Click(object sender, RoutedEventArgs e)
     {
-        bool baseWasPreRotated = IsAutoIcon(_pendingPath);
-
         var dlg = new TextIconDialog(DpHidNative.IconSize, _pendingPath) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
-        _pendingPath = baseWasPreRotated && dlg.NewImagePath is not null
-            ? PromoteToAutoIconCache(dlg.NewImagePath)
-            : dlg.NewImagePath;
+        _pendingPath = dlg.NewImagePath;
         _rotation       = 0;
         Rb0.IsChecked   = true;
         _previewRotate.Angle = 0;
@@ -220,30 +205,48 @@ public partial class DpKeyConfigDialog : Window
                       ? null : dlg.ActionType;
         ActionValue = ActionType is null ? null : dlg.ActionValue;
 
+        if (ActionType == "dp_folder") _dpFolderName = dlg.ResolvedPageName;
+
+        // A page rename keeps ActionType/ActionValue unchanged (same page id) but still
+        // needs the icon's caption regenerated — dlg.PageIconNeedsRefresh is how the
+        // "Page" action type surfaces that (see ButtonActionDialog.Page.cs).
         if (ActionType != oldType || ActionValue != oldValue)
-            TryAutoGenerateKeyImage();
+            TryAutoGenerateKeyImage(dlg.ResolvedPageName);
+        else if (ActionType == "dp_folder" && dlg.PageIconNeedsRefresh)
+            TryAutoGenerateKeyImage(dlg.ResolvedPageName);
 
         RefreshActionSummary();
     }
 
+    /// <summary>Page name resolved the last time the "Page" action type was configured in
+    /// this dialog session — used by <see cref="RefreshActionSummary"/> since <see cref="ActionValue"/>
+    /// for "dp_folder" is just the page id, not a human-readable name.</summary>
+    private string? _dpFolderName;
+
     /// <summary>
-    /// When the action just assigned/changed is "exec" or "folder", auto-generate the
-    /// key's picture (the executable's own icon, or a folder glyph + name) instead of
-    /// requiring the user to manually pick an image — mirrors <see cref="BtnLoadImage_Click"/>
-    /// but with a generated source instead of a user-picked file. The result is saved under
-    /// <see cref="MainWindow.DpAutoIconDir"/>, which every upload path in <c>MainWindow.DisplayPad.cs</c>
-    /// recognizes (via <c>EffectiveDpRotation</c>) to skip the device counter-rotation it
-    /// already has baked in — otherwise it would get rotated a second time on every reload.
+    /// When the action just assigned/changed is "exec", "folder" or "dp_folder" (a
+    /// DisplayPad page), auto-generate the key's picture (the executable's own icon, a
+    /// disk folder's own Windows icon, or a hand-drawn folder glyph + page name) instead
+    /// of requiring the user to manually pick an image — mirrors <see cref="BtnLoadImage_Click"/>
+    /// but with a generated source instead of a user-picked file. Generated upright, like
+    /// any other image; the device's mounting rotation is applied at upload time same as
+    /// everything else (see <c>MainWindow.DisplayPad.cs</c>'s upload paths).
     /// </summary>
-    private void TryAutoGenerateKeyImage()
+    /// <param name="pageName">Resolved page name (see <c>ButtonActionDialog.ResolvedPageName</c>) —
+    /// only used/required when <see cref="ActionType"/> is "dp_folder".</param>
+    private void TryAutoGenerateKeyImage(string? pageName = null)
     {
         if (string.IsNullOrWhiteSpace(ActionValue)) return;
-        if (ActionType != "exec" && ActionType != "folder") return;
+        if (ActionType != "exec" && ActionType != "folder" && ActionType != "dp_folder") return;
 
-        string dest = AutoIconCachePath(ActionType!, ActionValue!, _deviceRotation);
-        bool ok = ActionType == "exec"
-            ? IconImageGenerator.TryGenerateExecIcon(ActionValue!, DpHidNative.IconSize, dest, _deviceRotation)
-            : IconImageGenerator.TryGenerateFolderIcon(ActionValue!, DpHidNative.IconSize, dest, _deviceRotation);
+        string dest = AutoIconCachePath(ActionType!, ActionValue!);
+        bool ok = ActionType switch
+        {
+            "exec"      => IconImageGenerator.TryGenerateExecIcon(ActionValue!, DpHidNative.IconSize, dest),
+            "folder"    => IconImageGenerator.TryGenerateDiskFolderIcon(ActionValue!, DpHidNative.IconSize, dest),
+            "dp_folder" => IconImageGenerator.TryGenerateFolderIcon(pageName ?? ActionValue!, DpHidNative.IconSize, dest),
+            _           => false,
+        };
         if (!ok) return;
 
         _pendingPath    = dest;
@@ -254,14 +257,14 @@ public partial class DpKeyConfigDialog : Window
         UpdateRotationAvailability();
     }
 
-    private static string AutoIconCachePath(string kind, string sourceValue, int deviceRotation)
+    private static string AutoIconCachePath(string kind, string sourceValue)
     {
         Directory.CreateDirectory(AutoIconCacheRoot);
 
         long mtime = 0;
         if (kind == "exec") { try { mtime = File.GetLastWriteTimeUtc(sourceValue).Ticks; } catch { } }
         byte[] hash = System.Security.Cryptography.SHA1.HashData(
-            System.Text.Encoding.UTF8.GetBytes($"{kind}|{sourceValue}|{mtime}|r{deviceRotation}"));
+            System.Text.Encoding.UTF8.GetBytes($"{kind}|{sourceValue}|{mtime}"));
         return Path.Combine(AutoIconCacheRoot, Convert.ToHexString(hash).ToLowerInvariant() + $"_{kind}.png");
     }
 
@@ -270,23 +273,16 @@ public partial class DpKeyConfigDialog : Window
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "K2.DisplayPad", "auto_icons");
 
-    private static bool IsAutoIcon(string? path) =>
-        !string.IsNullOrEmpty(path) && path.StartsWith(AutoIconCacheRoot, StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>Copies a composited image (e.g. text over an already pre-rotated auto-icon)
-    /// into the auto-icon cache so it keeps being recognized as pre-rotated.</summary>
-    private static string PromoteToAutoIconCache(string sourcePath)
-    {
-        Directory.CreateDirectory(AutoIconCacheRoot);
-        string dest = Path.Combine(AutoIconCacheRoot, Path.GetFileName(sourcePath));
-        File.Copy(sourcePath, dest, overwrite: true);
-        return dest;
-    }
-
+    /// <summary>Removing the action also clears the key's picture — a picture with no
+    /// action behind it is just a stale, misleading tile (this covers both auto-generated
+    /// and manually-loaded images alike, same as removing the action from the context
+    /// menu directly — see <c>MainWindow.DisplayPad.cs</c>'s <c>DpMnuRemoveAction_Click</c>).</summary>
     private void BtnRemoveAction_Click(object sender, RoutedEventArgs e)
     {
         ActionType  = null;
         ActionValue = null;
+        _pendingPath = null;
+        RefreshImagePreview();
         RefreshActionSummary();
     }
 
@@ -304,6 +300,7 @@ public partial class DpKeyConfigDialog : Window
             "keys"    => $"Keys: {val}",
             "exec"    => $"Run: {Path.GetFileName(val)}",
             "folder"  => $"Folder: {val}",
+            "dp_folder" => $"Page: {_dpFolderName ?? val}",
             "url"     => $"URL: {val}",
             "browser" => $"Browser: {val}",
             "profile" => $"Profile: {val}",

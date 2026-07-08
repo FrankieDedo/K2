@@ -25,6 +25,22 @@ public partial class ButtonActionDialog : Window
         _host = host;
         LblHeader.Text = Loc.Get("dlg_button_label").Replace("#?", $"#{buttonIndex}");
 
+        // Hide the "Page" type entirely (not just non-functional/empty like "macro") on
+        // hosts with no DisplayPad-page concept — a MacroPad/Everest key can never
+        // meaningfully navigate a DisplayPad page.
+        if (_host?.SupportsPages != true)
+        {
+            var pageItem = CbType.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == "dp_folder");
+            if (pageItem is not null) CbType.Items.Remove(pageItem);
+        }
+
+        // Set BEFORE SetType(): assigning CbType.SelectedItem below fires
+        // CbType_SelectionChanged synchronously, which cascades into UpdatePanels() ->
+        // EnsurePagePanel() — that needs _originalPageId already resolved to pre-select
+        // the right page in the combo.
+        if (currentType == "dp_folder")
+            _originalPageId = int.TryParse(currentValue, out int pid) ? pid : (int?)null;
+
         SetType(currentType ?? "none");
 
         if (currentType == "pyscript")
@@ -105,6 +121,7 @@ public partial class ButtonActionDialog : Window
             "url"      => ("URL to open:",                 "https://example.com"),
             "exec"     => ("Executable / file path:",      @"C:\Program Files\App\app.exe"),
             "folder"   => ("Folder path:",                 @"C:\Users\Francesco\Documents"),
+            "dp_folder"=> ("Page:",                        ""),
             "browser"  => ("Initial URL (optional):",      "https://duckduckgo.com"),
             "profile"  => ("Target profile:",              "Next | Previous | 1..5"),
             "oscmd"    => ("System command:",               "Calculator | Task Manager | Lock | Sleep | Hibernate | Shutdown"),
@@ -131,15 +148,17 @@ public partial class ButtonActionDialog : Window
         bool py      = tag == "pyscript";
         bool exec    = tag == "exec";
         bool folder  = tag == "folder";
+        bool page    = tag == "dp_folder";
         bool browser = tag == "browser";
         bool profile = tag == "profile";
         bool combo   = tag is "oscmd" or "media" or "mouse" or "macro";
         bool keys    = tag == "keys";
-        bool std     = !py && !exec && !folder && !browser && !profile && !combo && !keys;
+        bool std     = !py && !exec && !folder && !page && !browser && !profile && !combo && !keys;
 
         PyPanel.Visibility       = py      ? Visibility.Visible : Visibility.Collapsed;
         ExecPanel.Visibility     = exec    ? Visibility.Visible : Visibility.Collapsed;
         FolderPanel.Visibility   = folder  ? Visibility.Visible : Visibility.Collapsed;
+        PagePanel.Visibility     = page    ? Visibility.Visible : Visibility.Collapsed;
         BrowserPanel.Visibility  = browser ? Visibility.Visible : Visibility.Collapsed;
         ProfilePanel.Visibility  = profile ? Visibility.Visible : Visibility.Collapsed;
         ComboPanel.Visibility    = combo   ? Visibility.Visible : Visibility.Collapsed;
@@ -148,6 +167,7 @@ public partial class ButtonActionDialog : Window
 
         if (exec) RefreshExecPanel();
         if (folder) RefreshFolderPanel();
+        if (page) EnsurePagePanel();
         if (browser) EnsureBrowserChoicesPopulated();
         if (profile) EnsureProfileRows();
         if (combo) EnsureComboPanel(tag);
@@ -218,6 +238,10 @@ public partial class ButtonActionDialog : Window
         {
             ActionValue = TxtFolderPath.Text?.Trim() ?? "";
             if (ActionValue.Length > 0) AppSettings.AddRecentFolderPath(ActionValue);
+        }
+        else if (tag == "dp_folder")
+        {
+            ActionValue = SavePageSpec();
         }
         else if (tag == "browser")
         {

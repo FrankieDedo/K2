@@ -57,6 +57,10 @@
   <string name="act_url">Apri URL</string>
   <string name="act_exec">Apri programma / file</string>
   <string name="act_folder">Apri cartella</string>
+  <string name="act_page">Pagina</string>
+  <string name="page_pick_label">Pagina:</string>
+  <string name="page_name_label">Nome pagina:</string>
+  <string name="page_new_option">— Nuova pagina —</string>
   <string name="act_browser">Apri browser</string>
   <string name="act_profile">Cambia profilo</string>
   <string name="act_oscmd">Comando di sistema</string>
@@ -248,6 +252,8 @@
   <string name="keyboard_macro">Macro tastiera</string>
   <string name="macro_library">Libreria macro</string>
   <string name="macro_new">Nuova</string>
+  <string name="macro_duplicate">Duplica</string>
+  <string name="macro_duplicate_name">{0} (copia)</string>
   <string name="macro_delete">Elimina</string>
   <string name="macro_record">Registra</string>
   <string name="macro_record_stop">■ Ferma</string>
@@ -352,6 +358,8 @@
   <string name="dp_add_text">Aggiungi testo…</string>
   <string name="txt_dialog_title">Inserisci testo</string>
   <string name="txt_label">Testo:</string>
+  <string name="txt_font_label">Carattere:</string>
+  <string name="txt_font_size_auto">Dimensione automatica</string>
   <string name="txt_bg_solid">Sfondo a tinta unita</string>
   <string name="txt_bg_image">Sopra l'immagine caricata</string>
   <string name="txt_bg_color">Sfondo:</string>

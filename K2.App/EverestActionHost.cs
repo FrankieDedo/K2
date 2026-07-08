@@ -91,4 +91,10 @@ internal sealed class EverestActionHost : IActionHost
     IReadOnlyList<string> IActionHost.ListMacroNames() => _listMacroNames();
 
     void IActionHost.PlayMacro(string macroName) => _playMacro(macroName);
+
+    // Everest has no DisplayPad-page concept — see IActionHost.ListPages remarks.
+    IReadOnlyList<(int PageId, string Name)> IActionHost.ListPages() => Array.Empty<(int, string)>();
+    int? IActionHost.CreatePage(string name) => null;
+    void IActionHost.RenamePage(int pageId, string name) { }
+    bool IActionHost.SupportsPages => false;
 }

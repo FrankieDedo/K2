@@ -173,7 +173,22 @@ internal sealed class CropEditor
     {
         _gridRows = Math.Max(1, rows);
         _gridCols = Math.Max(1, cols);
+        UpdateViewportClip();
         RebuildGridOverlay();
+    }
+
+    /// <summary>Single-key preview: clips the actual picture to the same rounded corners as
+    /// the physical key bezel (matches DpKeyButtonStyle's CornerRadius="9" on the live tile,
+    /// and the "show key outline" hint) — so the preview never shows square corners poking
+    /// out past where the real button's rounded edge would cut them off. Left rectangular
+    /// for a multi-key grid (fullscreen dialog): one blanket radius over several keys
+    /// wouldn't reflect each key's own bezel or the gaps between them.</summary>
+    private void UpdateViewportClip()
+    {
+        double vw = _viewport.Width, vh = _viewport.Height;
+        _viewport.Clip = _gridRows == 1 && _gridCols == 1 && vw > 0 && vh > 0
+            ? new RectangleGeometry(new Rect(0, 0, vw, vh), Math.Min(vw, vh) * 0.12, Math.Min(vw, vh) * 0.12)
+            : null;
     }
 
     private void ResizeViewport()
@@ -188,6 +203,7 @@ internal sealed class CropEditor
         _zoomSlider.Width = vw;
         _gridOverlay.Width = vw;
         _gridOverlay.Height = vh;
+        UpdateViewportClip();
         RebuildGridOverlay();
     }
 

@@ -18,6 +18,8 @@
             <RowDefinition Height="10"/>
             <RowDefinition Height="Auto"/>  <!-- text input -->
             <RowDefinition Height="10"/>
+            <RowDefinition Height="Auto"/>  <!-- font family + size -->
+            <RowDefinition Height="10"/>
             <RowDefinition Height="Auto"/>  <!-- background mode -->
             <RowDefinition Height="8"/>
             <RowDefinition Height="Auto"/>  <!-- colors -->
@@ -47,6 +49,33 @@
         </StackPanel>
 
         <StackPanel Grid.Row="6">
+            <TextBlock Text="{loc:Get txt_font_label}"
+                       Foreground="#AAA" FontSize="11" Margin="0,0,0,4"/>
+            <ComboBox x:Name="CbFontFamily" Margin="0,0,0,8"
+                      SelectionChanged="Font_Changed"/>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="30"/>
+                </Grid.ColumnDefinitions>
+                <CheckBox x:Name="ChkAutoSize" Grid.Column="0"
+                          Content="{loc:Get txt_font_size_auto}"
+                          IsChecked="True"
+                          Checked="AutoSize_Changed" Unchecked="AutoSize_Changed"
+                          VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <Slider x:Name="SldFontSize" Grid.Column="1"
+                        Minimum="8" Maximum="80" IsEnabled="False"
+                        VerticalAlignment="Center"
+                        ValueChanged="SldFontSize_ValueChanged"/>
+                <TextBlock x:Name="LblFontSizeValue" Grid.Column="2"
+                           TextAlignment="Right" VerticalAlignment="Center"
+                           Foreground="#AAA"/>
+            </Grid>
+        </StackPanel>
+
+        <StackPanel Grid.Row="8">
             <RadioButton x:Name="RbBgSolid" GroupName="TxtBgMode"
                          Content="{loc:Get txt_bg_solid}"
                          IsChecked="True" Checked="BgMode_Changed"
@@ -56,7 +85,7 @@
                          Checked="BgMode_Changed"/>
         </StackPanel>
 
-        <WrapPanel Grid.Row="8" Orientation="Horizontal">
+        <WrapPanel Grid.Row="10" Orientation="Horizontal">
             <TextBlock Text="{loc:Get txt_bg_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
             <Button x:Name="BtnBgColor" Width="40" Height="22"
                     Background="#1A1A1E" BorderThickness="2" BorderBrush="#3A3A40"
@@ -67,7 +96,7 @@
                     Click="BtnTextColor_Click"/>
         </WrapPanel>
 
-        <StackPanel Grid.Row="10"
+        <StackPanel Grid.Row="12"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right">
             <Button Content="{loc:Get ok}"

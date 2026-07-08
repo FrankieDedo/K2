@@ -58,6 +58,10 @@
   <string name="act_url">Open URL</string>
   <string name="act_exec">Open program / file</string>
   <string name="act_folder">Open folder</string>
+  <string name="act_page">Page</string>
+  <string name="page_pick_label">Page:</string>
+  <string name="page_name_label">Page name:</string>
+  <string name="page_new_option">— New page —</string>
   <string name="act_browser">Open browser</string>
   <string name="act_profile">Switch profile</string>
   <string name="act_oscmd">System command</string>
@@ -249,6 +253,8 @@
   <string name="keyboard_macro">Keyboard Macro</string>
   <string name="macro_library">Macro Library</string>
   <string name="macro_new">New</string>
+  <string name="macro_duplicate">Duplicate</string>
+  <string name="macro_duplicate_name">{0} (copy)</string>
   <string name="macro_delete">Delete</string>
   <string name="macro_record">Record</string>
   <string name="macro_record_stop">■ Stop</string>
@@ -353,6 +359,8 @@
   <string name="dp_add_text">Add text…</string>
   <string name="txt_dialog_title">Insert text</string>
   <string name="txt_label">Text:</string>
+  <string name="txt_font_label">Font:</string>
+  <string name="txt_font_size_auto">Auto-fit size</string>
   <string name="txt_bg_solid">Solid color background</string>
   <string name="txt_bg_image">On top of the loaded image</string>
   <string name="txt_bg_color">Background:</string>

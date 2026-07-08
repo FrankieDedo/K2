@@ -54,23 +54,22 @@ public partial class MainWindow
 
     /// <summary>
     /// Cache folder for images auto-generated from an action (exec icon / folder glyph,
-    /// see <see cref="DpKeyConfigDialog.TryAutoGenerateKeyImage"/>) — these already have
-    /// the device's counter-rotation baked in at generation time, so every upload path
-    /// below must skip <see cref="_dpRotation"/> for them (else they'd be rotated twice).
-    /// Matches <c>DpKeyConfigDialog.AutoIconCachePath</c>'s cache root exactly.
+    /// see <see cref="DpKeyConfigDialog.TryAutoGenerateKeyImage"/>) — generated upright,
+    /// like any other image; rotated for the device's mounting the same way at upload
+    /// time (<see cref="_dpRotation"/>), no special-casing needed.
     /// </summary>
     private static readonly string DpAutoIconDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "K2.DisplayPad", "auto_icons");
 
-    /// <summary>Rotation to pass to an upload call for <paramref name="imagePath"/>: 0 for an
-    /// auto-generated (already pre-rotated) icon, <see cref="_dpRotation"/> for anything else —
-    /// checked by path so it's correct on EVERY upload (initial assignment, profile reload,
-    /// press-visual re-render, rotation-setting change...), not just the one that created it.</summary>
-    private int EffectiveDpRotation(string? imagePath) =>
-        !string.IsNullOrEmpty(imagePath) &&
-        imagePath.StartsWith(DpAutoIconDir, StringComparison.OrdinalIgnoreCase)
-            ? 0 : _dpRotation;
+    /// <summary>Cache path for an auto-generated icon, under <see cref="DpAutoIconDir"/>.</summary>
+    private static string DpAutoIconCachePath(string kind, string sourceValue)
+    {
+        Directory.CreateDirectory(DpAutoIconDir);
+        byte[] hash = System.Security.Cryptography.SHA1.HashData(
+            System.Text.Encoding.UTF8.GetBytes($"{kind}|{sourceValue}"));
+        return Path.Combine(DpAutoIconDir, Convert.ToHexString(hash).ToLowerInvariant() + $"_{kind}.png");
+    }
 
     // ---- Folder / sub-page navigation ----
     private int _currentDpPageId = 0;
@@ -1197,7 +1196,7 @@ public partial class MainWindow
         if (!IsDpKeyBindingSectionActive) return;
 
         // Unified dialog: image + action
-        var dlg = new DpKeyConfigDialog(key.Index, key.ImagePath, key.ActionType, key.ActionValue, _dpRotation) { Owner = this };
+        var dlg = new DpKeyConfigDialog(key.Index, key.ImagePath, key.ActionType, key.ActionValue) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
         // Update action
@@ -1231,7 +1230,7 @@ public partial class MainWindow
 
     private void DpUploadAndPersist(int id, int profile, DisplayPadKey key, string path)
     {
-        int rotation = EffectiveDpRotation(path);
+        int rotation = _dpRotation;
         bool ok;
         if (DpGifAnimator.IsAnimatedGif(path))
         {
@@ -1272,8 +1271,6 @@ public partial class MainWindow
         miRa.Click += DpMnuRemoveAction_Click;
         var miChImg = new MenuItem { Header = Loc.Get("dp_change_image") };
         miChImg.Click += DpMnuChangeImage_Click;
-        var miRi = new MenuItem { Header = Loc.Get("dp_remove_image") };
-        miRi.Click += DpMnuRemoveImage_Click;
         var miFolder = new MenuItem { Header = Loc.Get("dp_create_folder") };
         miFolder.Click += DpMnuCreateFolder_Click;
         var miBack = new MenuItem { Header = Loc.Get("dp_set_back") };
@@ -1282,7 +1279,6 @@ public partial class MainWindow
         menu.Items.Add(miRa);
         menu.Items.Add(new Separator());
         menu.Items.Add(miChImg);
-        menu.Items.Add(miRi);
         menu.Items.Add(new Separator());
         menu.Items.Add(miFolder);
         menu.Items.Add(miBack);
@@ -1309,13 +1305,19 @@ public partial class MainWindow
         }
     }
 
+    /// <summary>Removing the action also clears the key's picture — a picture with no
+    /// action behind it is just a stale, misleading tile (same behavior as the unified
+    /// config dialog's "Remove action" button).</summary>
     private void DpMnuRemoveAction_Click(object sender, RoutedEventArgs e)
     {
         if (!IsDpKeyBindingSectionActive) return;
         if (DpKeyFromMenu(sender) is not DisplayPadKey key) return;
         if (DpSelectedDeviceId() is not int id) return;
         key.ActionType = null; key.ActionValue = null;
-        _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, key.ImagePath, null, null);
+        DpGifAnimator.Stop(id, key.Index);
+        key.ImagePath = null;
+        _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, null, null, null);
+        DpClearKeyOnDevice(id, key.Index);
     }
 
     private void DpMnuChangeImage_Click(object sender, RoutedEventArgs e)
@@ -1341,17 +1343,6 @@ public partial class MainWindow
         DpUploadAndPersist(id, DpCurrentProfile(), key, picked);
     }
 
-    private void DpMnuRemoveImage_Click(object sender, RoutedEventArgs e)
-    {
-        if (!IsDpKeyBindingSectionActive) return;
-        if (DpKeyFromMenu(sender) is not DisplayPadKey key) return;
-        if (DpSelectedDeviceId() is not int id) return;
-        DpGifAnimator.Stop(id, key.Index);
-        key.ImagePath = null;
-        _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, null, key.ActionType, key.ActionValue);
-        DpClearKeyOnDevice(id, key.Index);
-    }
-
     /// <summary>
     /// Creates a brand-new folder sub-page and binds this key to navigate into it —
     /// the in-app equivalent of Base Camp's "Create Folder" button, which until now K2
@@ -1375,9 +1366,37 @@ public partial class MainWindow
 
         key.ActionType  = "dp_folder";
         key.ActionValue = pageId.ToString();
-        _dpStore.SaveButton(id, profile, _currentDpPageId, key.Index, key.ImagePath, key.ActionType, key.ActionValue);
+
+        // Auto-generate the tile's picture — same glyph+caption convention already used
+        // for the "folder" (Open Folder) action, see IconImageGenerator.TryGenerateFolderIcon —
+        // so a freshly created page is never left with a blank, actionless-looking tile.
+        string dest = DpAutoIconCachePath("dpfolder", name);
+        if (IconImageGenerator.TryGenerateFolderIcon(name, DpHidNative.IconSize, dest))
+            DpUploadAndPersist(id, profile, key, dest);
+        else
+            _dpStore.SaveButton(id, profile, _currentDpPageId, key.Index, key.ImagePath, key.ActionType, key.ActionValue);
+
         DpLog($"[ACT] key #{key.Index} <- dp_folder \"{name}\" (page {pageId})");
     }
+
+    /// <summary>Facade for <see cref="DisplayPadActionHost"/>'s <c>IActionHost.ListPages</c> —
+    /// see <see cref="DisplayPadStore.ListPages"/>.</summary>
+    internal IReadOnlyList<(int PageId, string Name)> DpListPages(int deviceId, int profile) =>
+        _dpStore.ListPages(deviceId, profile);
+
+    /// <summary>Facade for <see cref="DisplayPadActionHost"/>'s <c>IActionHost.CreatePage</c> —
+    /// same allocate+name convention as <see cref="DpMnuCreateFolder_Click"/>, minus the
+    /// icon (the "Page" action type in <c>ButtonActionDialog</c> leaves icon generation to
+    /// the key config dialog that opened it, same as "exec"/"folder").</summary>
+    internal int DpCreatePage(int deviceId, int profile, string name)
+    {
+        int pageId = _dpStore.AllocatePageId(deviceId, profile);
+        _dpStore.SetFolderName(pageId, name);
+        return pageId;
+    }
+
+    /// <summary>Facade for <see cref="DisplayPadActionHost"/>'s <c>IActionHost.RenamePage</c>.</summary>
+    internal void DpRenamePage(int pageId, string name) => _dpStore.RenamePage(pageId, name);
 
     /// <summary>Binds this key to navigate back to the parent page — the in-app equivalent
     /// of Base Camp's "Back" button (see <see cref="DpMnuCreateFolder_Click"/> remarks).</summary>
@@ -1410,6 +1429,15 @@ public partial class MainWindow
     {
         int? prevActive = _activeDpDeviceId;
         var previousIds = _dpDeviceIds.ToList();
+        // Must be captured BEFORE RemoveDeviceTabs below tears down the DisplayPad tab(s):
+        // removing the currently-selected tab makes WPF auto-move TcDevices.SelectedItem to
+        // whatever tab is now adjacent, so reading the tag afterwards (as this used to do)
+        // always saw a non-"dp_" tag on reconnect and skipped the re-select/reload branch —
+        // the device came back online but its tab was silently left unselected and its icons
+        // were never re-uploaded (the hardware's on-board icon memory does not survive a
+        // USB replug, so a real re-upload — not just a UI refresh — is required here).
+        bool wasOnDpTab = (TcDevices.SelectedItem as TabItem)?.Tag is string curDpTag
+                           && curDpTag.StartsWith("dp_");
         _dpDevices.Clear(); _dpDeviceIds.Clear(); _dpDeviceLabels.Clear();
 
         var ids = _dpClient.DeviceIds();
@@ -1455,12 +1483,11 @@ public partial class MainWindow
             var tab = new TabItem { Header = item.Label, Tag = $"dp_{item.SdkId}" };
             TcDevices.Items.Insert(insertIdx++, tab);
         }
-        // Only steer the top-level selection to a DisplayPad tab if the user is
-        // already on one — a background device refresh (e.g. a plug event arriving
-        // after startup) must not steal focus away from whatever tab is active.
-        string? selTag = (TcDevices.SelectedItem as TabItem)?.Tag as string;
-        bool currentlyOnDp = selTag != null && selTag.StartsWith("dp_");
-        if (items.Count > 0 && currentlyOnDp)
+        // Only steer the top-level selection to a DisplayPad tab if the user was
+        // already on one (see wasOnDpTab above) — a background device refresh (e.g.
+        // a plug event arriving after startup) must not steal focus away from
+        // whatever tab is active.
+        if (items.Count > 0 && wasOnDpTab)
         {
             int targetId = prevActive.HasValue && items.Any(x => x.SdkId == prevActive.Value)
                            ? prevActive.Value : items[0].SdkId;
@@ -1501,7 +1528,7 @@ public partial class MainWindow
         if (DpSelectedDeviceId() is not int id) return;
         int profile = DpCurrentProfile();
         int pageId = _currentDpPageId;
-        int rotation = _dpRotation; // fullscreen images are never auto-generated action icons
+        int rotation = _dpRotation;
         foreach (var k in _dpKeys) { k.ImagePath = null; k.ActionType = null; k.ActionValue = null; }
         var rows = _dpStore.LoadPage(id, profile, pageId);
         DpLog($"[DB] loaded {rows.Count} records for device={id} profile={profile} page={pageId}");
@@ -1571,10 +1598,9 @@ public partial class MainWindow
                 foreach (var (btnIndex, imagePath) in toUpload)
                 {
                     if (ct.IsCancellationRequested) return;
-                    int imgRotation = EffectiveDpRotation(imagePath);
                     if (persistent)
-                        _dpClient.UploadImageToProfile(id, imagePath, btnIndex, profile, imgRotation);
-                    _dpClient.UploadImage(id, imagePath, btnIndex, imgRotation);
+                        _dpClient.UploadImageToProfile(id, imagePath, btnIndex, profile, rotation);
+                    _dpClient.UploadImage(id, imagePath, btnIndex, rotation);
                 }
                 // Animated GIFs start AFTER the static batch + blank settle — same order BC
                 // uses (normal icon loop first, UploadGIFImage right after).
@@ -1781,7 +1807,7 @@ public partial class MainWindow
         if (DpGifAnimator.IsAnimatedGif(imgPath)) return;
         if (_dpFullscreenByDevice.TryGetValue(id, out bool fs) && fs) return;
 
-        int rotation = EffectiveDpRotation(imgPath);
+        int rotation = _dpRotation;
         var previous = _dpUploadChain.TryGetValue(id, out var p) ? p : Task.CompletedTask;
         var next = previous.ContinueWith(_ => _dpClient.UploadImage(id, imgPath, btnIndex, rotation, pressed),
             TaskScheduler.Default);

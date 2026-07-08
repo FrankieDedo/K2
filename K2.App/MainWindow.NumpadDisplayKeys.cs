@@ -267,11 +267,7 @@ public partial class MainWindow
         var miRa = new MenuItem { Header = Loc.Get("dp_remove_action") };
         miRa.Click += NdkMnuRemoveAction_Click;
 
-        var miRi = new MenuItem { Header = Loc.Get("dp_remove_image") };
-        miRi.Click += NdkMnuRemoveImage_Click;
-
         menu.Items.Add(miRa);
-        menu.Items.Add(miRi);
         return menu;
     }
 
@@ -279,23 +275,17 @@ public partial class MainWindow
         sender is MenuItem mi && mi.Parent is ContextMenu cm
             && cm.PlacementTarget is Button { Tag: int idx } ? idx : -1;
 
+    /// <summary>Removing the action also clears the key's picture — same behavior as
+    /// the unified config dialog's "Remove action" button.</summary>
     private void NdkMnuRemoveAction_Click(object sender, RoutedEventArgs e)
     {
         int idx = NdkIndexFromMenu(sender);
         if (idx < 0) return;
         _ndkActions[idx] = (null, null);
-        SaveNdkKey(idx);
-        LogEverest($"[NDK] key={idx} action removed");
-    }
-
-    private void NdkMnuRemoveImage_Click(object sender, RoutedEventArgs e)
-    {
-        int idx = NdkIndexFromMenu(sender);
-        if (idx < 0) return;
         _ndkImagePaths[idx] = null;
         NdkClearThumbnail(idx);
         SaveNdkKey(idx);
-        LogEverest($"[NDK] key={idx} image removed");
+        LogEverest($"[NDK] key={idx} action removed");
     }
 
     // ─────────────────────── Display key action execution ───────────────────────

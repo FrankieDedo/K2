@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -24,6 +25,9 @@ public partial class TextIconDialog : Window
     private readonly string? _baseImagePath;
     private System.Drawing.Color _bgColor = System.Drawing.ColorTranslator.FromHtml("#1A1A1E");
     private System.Drawing.Color _textColor = System.Drawing.Color.White;
+    private string _fontFamily = "Segoe UI";
+    private bool _autoSize = true;
+    private double _manualFontSize = 24;
 
     /// <param name="size">Target icon size in pixels (102 for DisplayPad, 72 for Everest numpad display keys).</param>
     /// <param name="baseImagePath">Currently loaded key image, if any — enables the "on image" background mode.</param>
@@ -38,12 +42,64 @@ public partial class TextIconDialog : Window
         ApplyColorButton(BtnBgColor, _bgColor);
         ApplyColorButton(BtnTextColor, _textColor);
 
+        PopulateFontFamilies();
+        _manualFontSize = Math.Round(size * 0.42);
+        SldFontSize.Minimum = 8;
+        SldFontSize.Maximum = Math.Max(9, size * 0.9);
+        SldFontSize.Value = _manualFontSize;
+
         RefreshPreview();
+    }
+
+    /// <summary>Populates the font picker from the fonts installed on this PC, defaulting
+    /// to "Segoe UI" (the previous fixed look) when present.</summary>
+    private void PopulateFontFamilies()
+    {
+        var families = Fonts.SystemFontFamilies
+            .Select(f => f.Source)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct()
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        CbFontFamily.ItemsSource = families;
+        CbFontFamily.SelectedItem = families.Contains(_fontFamily) ? _fontFamily : families.FirstOrDefault();
     }
 
     private void TxtInput_TextChanged(object sender, TextChangedEventArgs e) => RefreshPreview();
 
     private void BgMode_Changed(object sender, RoutedEventArgs e) => RefreshPreview();
+
+    private void Font_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (CbFontFamily.SelectedItem is string f) _fontFamily = f;
+        RefreshPreview();
+    }
+
+    /// <summary>
+    /// ChkAutoSize has IsChecked="True" in XAML, so WPF fires this Checked event
+    /// synchronously during InitializeComponent() (same RadioButton/ToggleButton gotcha as
+    /// TextIconDialog's own RbBgSolid) — at that point SldFontSize, declared later in the
+    /// XAML, isn't wired up yet.
+    /// </summary>
+    private void AutoSize_Changed(object sender, RoutedEventArgs e)
+    {
+        if (SldFontSize is null) return;
+        _autoSize = ChkAutoSize.IsChecked == true;
+        SldFontSize.IsEnabled = !_autoSize;
+        RefreshPreview();
+    }
+
+    /// <summary>Slider.Value gets coerced up to a new Minimum during InitializeComponent()
+    /// (RangeBase re-coerces Value when Minimum/Maximum change), firing this before
+    /// LblFontSizeValue — declared later in the XAML — is wired up.</summary>
+    private void SldFontSize_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (LblFontSizeValue is null) return;
+        _manualFontSize = e.NewValue;
+        LblFontSizeValue.Text = ((int)Math.Round(e.NewValue)).ToString();
+        RefreshPreview();
+    }
 
     private void BtnBgColor_Click(object sender, RoutedEventArgs e)
     {
@@ -85,12 +141,15 @@ public partial class TextIconDialog : Window
     // has been wired up — so this must tolerate RbBgImage still being null.
     private bool UseImageBackground => RbBgImage?.IsChecked == true && _baseImagePath is not null;
 
+    private float? CurrentFontSize => _autoSize ? null : (float)_manualFontSize;
+
     private void RefreshPreview()
     {
         using var bmp = TextIconGenerator.TryRenderTextIcon(
             TxtInput.Text, _size, _textColor,
             UseImageBackground ? (System.Drawing.Color?)null : _bgColor,
-            UseImageBackground ? _baseImagePath : null);
+            UseImageBackground ? _baseImagePath : null,
+            _fontFamily, CurrentFontSize);
 
         ImgPreview.Source = bmp is null ? null : ToBitmapSource(bmp);
     }
@@ -120,7 +179,8 @@ public partial class TextIconDialog : Window
         bool ok = TextIconGenerator.TryGenerateTextIcon(
             TxtInput.Text, _size, dest, _textColor,
             UseImageBackground ? (System.Drawing.Color?)null : _bgColor,
-            UseImageBackground ? _baseImagePath : null);
+            UseImageBackground ? _baseImagePath : null,
+            _fontFamily, CurrentFontSize);
 
         if (!ok)
         {

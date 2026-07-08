@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -19,7 +20,13 @@ public partial class ButtonActionDialog
     private void RefreshExecPanel()
     {
         RefreshExecIcon();
-        LstExecRecent.ItemsSource = AppSettings.RecentExecPaths;
+        // .ToList(): AppSettings.RecentExecPaths returns the SAME underlying List<string>
+        // instance every call (mutated in place by Add/RemoveRecent) — a plain List<string>
+        // doesn't implement INotifyCollectionChanged, so re-assigning ItemsSource to that
+        // identical reference is a no-op for WPF (it only re-renders on a reference change
+        // or a collection-changed notification). A fresh copy each time forces the refresh —
+        // this was why "remove recent" looked like it did nothing.
+        LstExecRecent.ItemsSource = AppSettings.RecentExecPaths.ToList();
     }
 
     private void RefreshExecIcon()
@@ -84,7 +91,8 @@ public partial class ButtonActionDialog
 
     private void RefreshFolderPanel()
     {
-        LstFolderRecent.ItemsSource = AppSettings.RecentFolderPaths;
+        // .ToList(): see RefreshExecPanel remarks — same fix, same underlying bug.
+        LstFolderRecent.ItemsSource = AppSettings.RecentFolderPaths.ToList();
     }
 
     private void BtnFolderBrowse_Click(object sender, RoutedEventArgs e)

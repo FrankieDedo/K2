@@ -144,10 +144,14 @@ public partial class NdkKeyConfigDialog : Window
         RefreshActionSummary();
     }
 
+    /// <summary>Removing the action also clears the key's picture — see the equivalent
+    /// note in <c>DpKeyConfigDialog.BtnRemoveAction_Click</c>.</summary>
     private void BtnRemoveAction_Click(object sender, RoutedEventArgs e)
     {
         ActionType  = null;
         ActionValue = null;
+        _pendingPath = null;
+        RefreshImagePreview();
         RefreshActionSummary();
     }
 
@@ -164,7 +168,7 @@ public partial class NdkKeyConfigDialog : Window
         string dest = AutoIconCachePath(ActionType!, ActionValue!);
         bool ok = ActionType == "exec"
             ? IconImageGenerator.TryGenerateExecIcon(ActionValue!, IconSize, dest)
-            : IconImageGenerator.TryGenerateFolderIcon(ActionValue!, IconSize, dest);
+            : IconImageGenerator.TryGenerateDiskFolderIcon(ActionValue!, IconSize, dest);
         if (!ok) return;
 
         _pendingPath = dest;

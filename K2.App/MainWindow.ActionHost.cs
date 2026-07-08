@@ -71,6 +71,14 @@ public partial class MainWindow : IActionHost
 
     void IActionHost.PlayMacro(string macroName) => PlayMacroByName(macroName);
 
+    // MacroPad keys have no DisplayPad-page concept ("dp_folder" navigates the currently
+    // displayed DisplayPad's own page state, not something a MacroPad key can target) —
+    // see IActionHost.ListPages remarks.
+    IReadOnlyList<(int PageId, string Name)> IActionHost.ListPages() => System.Array.Empty<(int, string)>();
+    int? IActionHost.CreatePage(string name) => null;
+    void IActionHost.RenamePage(int pageId, string name) { }
+    bool IActionHost.SupportsPages => false;
+
     private int SafeSdkVersion()
     {
         try { return _macroPad.SdkVersion(); } catch { return 0; }

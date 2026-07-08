@@ -79,4 +79,12 @@ public partial class MainWindow : IActionHost
     IReadOnlyList<string> IActionHost.ListMacroNames() => System.Array.Empty<string>();
 
     void IActionHost.PlayMacro(string macroName) => Log($"[EXEC] macro: not supported in standalone K2.DisplayPad (\"{macroName}\")");
+
+    // The standalone K2.DisplayPad has no "page/folder sub-navigation" concept either
+    // (that only exists in the unified K2.App shell's DisplayPad tab) — see
+    // IActionHost.ListPages remarks.
+    IReadOnlyList<(int PageId, string Name)> IActionHost.ListPages() => System.Array.Empty<(int, string)>();
+    int? IActionHost.CreatePage(string name) => null;
+    void IActionHost.RenamePage(int pageId, string name) { }
+    bool IActionHost.SupportsPages => false;
 }
