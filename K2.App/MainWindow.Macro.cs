@@ -10,7 +10,6 @@ using System.Windows.Controls;
 using K2.App.Models;
 using K2.App.Services;
 using K2.Core;
-using Microsoft.Win32;
 
 namespace K2.App;
 
@@ -24,6 +23,7 @@ public partial class MainWindow
     private readonly ObservableCollection<MacroAssignment> _macroAssignments = new();
     private bool _macroLoading;
     private bool _macroShowPressRelease = true;
+    private MacroDefinition? _recordingMacro;
 
     // ─────────────────────── Init ───────────────────────
 
@@ -33,6 +33,7 @@ public partial class MainWindow
         {
             _macroStore = new MacroStore();
             _macroRecorder = new MacroRecorder();
+            _macroRecorder.InputRecorded += OnMacroInputRecorded;
             _macroPlayer = new MacroPlayer();
 
             _macroPlayer.PlaybackStarted += () => Dispatcher.Invoke(() =>
@@ -78,11 +79,32 @@ public partial class MainWindow
     private MacroDefinition? SelectedMacro =>
         LbMacros.SelectedItem as MacroDefinition;
 
+    /// <summary>Called when the Macro section is opened (<c>BtnMacroTab_Click</c>) —
+    /// always jumps to the first macro in the library. No-op while a recording
+    /// is in progress, so opening the tab mid-capture can't yank the selection
+    /// out from under the recorder.</summary>
+    internal void SelectFirstMacro()
+    {
+        if (_macroRecorder?.IsRecording == true) return;
+        if (_macros.Count > 0)
+            LbMacros.SelectedIndex = 0;
+    }
+
     // ─────────────────────── Event handlers ───────────────────────
 
     private void LbMacros_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_macroLoading) return;
+        if (_macroRecorder?.IsRecording == true)
+        {
+            // Can't switch macros mid-recording — Stop() assigns the capture
+            // to whichever macro is selected at that point. Revert silently
+            // rather than disabling the list (no visual state change).
+            _macroLoading = true;
+            LbMacros.SelectedItem = _recordingMacro;
+            _macroLoading = false;
+            return;
+        }
         var m = SelectedMacro;
         SpMacroSettings.Visibility = m is null ? Visibility.Collapsed : Visibility.Visible;
         if (m is null) return;
@@ -92,6 +114,8 @@ public partial class MainWindow
         {
             TxtMacroName.Text = m.Name;
             CkMacroMouse.IsChecked = m.RecordMouse;
+            CkMacroMouseMovement.IsChecked = m.RecordMouseMovement;
+            CkMacroMouseMovement.IsEnabled = m.RecordMouse;
             CkMacroKeyboard.IsChecked = m.RecordKeyboard;
 
             switch (m.DelayOption)
@@ -123,7 +147,7 @@ public partial class MainWindow
 
     private void BtnMacroNew_Click(object sender, RoutedEventArgs e)
     {
-        if (_macroStore is null) return;
+        if (_macroStore is null || _macroRecorder?.IsRecording == true) return;
         var m = new MacroDefinition
         {
             Name = $"Macro {_macros.Count + 1}",
@@ -137,7 +161,7 @@ public partial class MainWindow
     private void BtnMacroDelete_Click(object sender, RoutedEventArgs e)
     {
         var m = SelectedMacro;
-        if (m is null || _macroStore is null) return;
+        if (m is null || _macroStore is null || _macroRecorder?.IsRecording == true) return;
         _macroStore.Delete(m.Id);
         _macros.Remove(m);
         SpMacroSettings.Visibility = Visibility.Collapsed;
@@ -159,6 +183,7 @@ public partial class MainWindow
             // Stop recording
             var inputs = _macroRecorder.Stop();
             m.Inputs = inputs;
+            _recordingMacro = null;
             TblMacroInputCount.Text = Loc.Get("macro_actions_count", inputs.Count);
             BtnMacroRecord.Content = Loc.Get("macro_start_recording");
             RebuildInputRows();
@@ -171,10 +196,32 @@ public partial class MainWindow
             // Start recording
             bool mouse = CkMacroMouse.IsChecked == true;
             bool keyboard = CkMacroKeyboard.IsChecked == true;
-            _macroRecorder.Start(mouse, keyboard);
+            bool mouseMovement = CkMacroMouseMovement.IsChecked == true;
+            _recordingMacro = m;
+            _macroInputRows.Clear();
+            TblMacroInputCount.Text = Loc.Get("macro_actions_count", 0);
+            _macroRecorder.SetOwnerWindow(_hWnd);
+            _macroRecorder.Start(mouse, keyboard, mouseMovement);
             BtnMacroRecord.Content = Loc.Get("macro_record_stop");
             LogEverest("[MACRO] Recording started" + (mouse ? " (with mouse)" : ""));
         }
+    }
+
+    /// <summary>Live feed for the INPUTS list while recording — appends each
+    /// captured input as it happens. Runs on the UI thread: the low-level
+    /// keyboard/mouse hooks fire on the thread that installed them, which is
+    /// always the UI thread here (recording is only ever started from a
+    /// button click).</summary>
+    private void OnMacroInputRecorded(MacroInput input)
+    {
+        if (_macroRecorder is null) return;
+        int index = _macroRecorder.Inputs.Count - 1;
+        if (index < 0) return;
+        var row = BuildInputRow(input, index);
+        _macroInputRows.Add(row);
+        TblMacroInputCount.Text = Loc.Get("macro_actions_count", _macroRecorder.Inputs.Count);
+        if (LvMacroInputs.Items.Count > 0)
+            LvMacroInputs.ScrollIntoView(LvMacroInputs.Items[^1]);
     }
 
     private void BtnMacroPlay_Click(object sender, RoutedEventArgs e)
@@ -217,6 +264,7 @@ public partial class MainWindow
     private void CkMacroDevice_Click(object sender, RoutedEventArgs e)
     {
         if (_macroLoading) return;
+        CkMacroMouseMovement.IsEnabled = CkMacroMouse.IsChecked == true;
         SaveCurrentMacro();
     }
 
@@ -263,7 +311,8 @@ public partial class MainWindow
 
     private void BtnMacroInputDelete_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { Tag: MacroInputRow row }) return;
+        if (_macroRecorder?.IsRecording == true) return;
+        if (sender is not Button { CommandParameter: MacroInputRow row }) return;
         var m = SelectedMacro;
         if (m is null || row.SourceIndex < 0 || row.SourceIndex >= m.Inputs.Count) return;
         m.Inputs.RemoveAt(row.SourceIndex);
@@ -274,7 +323,8 @@ public partial class MainWindow
 
     private void BtnMacroInputMoveUp_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { Tag: MacroInputRow row }) return;
+        if (_macroRecorder?.IsRecording == true) return;
+        if (sender is not Button { CommandParameter: MacroInputRow row }) return;
         var m = SelectedMacro;
         if (m is null || row.SourceIndex <= 0 || row.SourceIndex >= m.Inputs.Count) return;
         (m.Inputs[row.SourceIndex - 1], m.Inputs[row.SourceIndex]) =
@@ -285,7 +335,8 @@ public partial class MainWindow
 
     private void BtnMacroInputMoveDown_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { Tag: MacroInputRow row }) return;
+        if (_macroRecorder?.IsRecording == true) return;
+        if (sender is not Button { CommandParameter: MacroInputRow row }) return;
         var m = SelectedMacro;
         if (m is null || row.SourceIndex < 0 || row.SourceIndex >= m.Inputs.Count - 1) return;
         (m.Inputs[row.SourceIndex + 1], m.Inputs[row.SourceIndex]) =
@@ -296,20 +347,19 @@ public partial class MainWindow
 
     private void BtnMacroImportBC_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new OpenFileDialog
+        if (_macroRecorder?.IsRecording == true) return;
+        string? dbPath = BaseCampDbImporter.FindBaseCampDb();
+        if (dbPath is null)
         {
-            Title = "Select BaseCamp.db",
-            Filter = "SQLite database (*.db)|*.db|All files (*.*)|*.*",
-            InitialDirectory = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                "Mountain", "BaseCamp", "resources", "bin")
-        };
-
-        if (dlg.ShowDialog() != true) return;
+            LogEverest("[MACRO] BaseCamp.db not found.");
+            MessageBox.Show(Loc.Get("dp_bc_db_not_found"), Loc.Get("error"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
 
         try
         {
-            var bcMacros = MacroStore.ReadFromBaseCampDb(dlg.FileName);
+            var bcMacros = MacroStore.ReadFromBaseCampDb(dbPath);
             if (bcMacros.Count == 0)
             {
                 MessageBox.Show(Loc.Get("macro_none_in_bc"),
@@ -348,15 +398,26 @@ public partial class MainWindow
         if (int.TryParse(TxtMacroRepeatN.Text, out int rn))
             m.RepeatCount = rn;
         m.RecordMouse = CkMacroMouse.IsChecked == true;
+        m.RecordMouseMovement = CkMacroMouseMovement.IsChecked == true;
         m.RecordKeyboard = CkMacroKeyboard.IsChecked == true;
         m.ModifiedAt = DateTime.Now;
         _macroStore.Update(m);
     }
 
-    /// <summary>Rebuilds the recorded-inputs list shown in the INPUTS section.</summary>
+    /// <summary>Rebuilds the recorded-inputs list shown in the INPUTS section.
+    /// While recording, rebuilds from the recorder's own live capture instead
+    /// of <c>SelectedMacro.Inputs</c> (which is stale until <c>Stop()</c>
+    /// returns) — so toggling "Show press/release" mid-recording doesn't
+    /// blank out the list that's being filled in real time.</summary>
     private void RebuildInputRows()
     {
         _macroInputRows.Clear();
+        if (_macroRecorder?.IsRecording == true)
+        {
+            for (int i = 0; i < _macroRecorder.Inputs.Count; i++)
+                _macroInputRows.Add(BuildInputRow(_macroRecorder.Inputs[i], i));
+            return;
+        }
         var m = SelectedMacro;
         if (m is null) return;
         for (int i = 0; i < m.Inputs.Count; i++)

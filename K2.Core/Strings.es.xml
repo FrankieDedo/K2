@@ -56,6 +56,7 @@
   <string name="exec_path_label">Executable / file path:</string>
   <string name="folder_path_label">Folder path:</string>
   <string name="recent_paths">Recent:</string>
+  <string name="remove_recent">Remove from recent</string>
   <string name="browser_other">Other…</string>
   <string name="browser_url_label">Initial URL (optional):</string>
   <string name="profile_targets_label">Switch these profiles:</string>
@@ -168,7 +169,7 @@
   <string name="macro_playback_toggle">Alternar</string>
   <string name="macro_record_mouse">Grabar ratón</string>
   <string name="macro_actions_count">{0} acciones</string>
-  <string name="macro_import_bc">Importar desde BaseCamp.db</string>
+  <string name="macro_import_bc">Importar desde Base Camp</string>
   <string name="macro_select_first">Selecciona o crea un macro antes de grabar.</string>
   <string name="macro_no_actions">El macro no tiene acciones grabadas.</string>
   <string name="macro_none_in_bc">No se encontraron macros en la base de datos de BaseCamp.</string>
@@ -271,7 +272,7 @@
   <string name="dp_rotate_image">Rotar imagen:</string>
   <string name="dp_action_section">Acción</string>
   <string name="dp_change_image">Cambiar imagen…</string>
-  <string name="import_bc">Importar BC</string>
+  <string name="import_bc">Importar de Base Camp</string>
   <string name="export">Exportar</string>
   <string name="dp_export_bc">Exportar (Base Camp)…</string>
   <string name="dp_export_k2">Exportar (K2)…</string>

@@ -138,7 +138,11 @@ public sealed class MacroPlayer
 
     private static void SendMouseClick(int x, int y, int button, bool up)
     {
-        SendMouseMove(x, y);
+        // x/y == -1 means "no recorded position" (e.g. imported from BaseCamp
+        // click-repeat macros) — click wherever the cursor already is instead
+        // of warping it to (-1,-1)/(0,0).
+        if (x >= 0 && y >= 0)
+            SendMouseMove(x, y);
         var input = new INPUT { type = INPUT_MOUSE };
         if (button == 1) // left
             input.U.mi.dwFlags = up ? MOUSEEVENTF_LEFTUP : MOUSEEVENTF_LEFTDOWN;

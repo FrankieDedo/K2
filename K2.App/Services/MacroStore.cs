@@ -36,19 +36,41 @@ public sealed class MacroStore : IDisposable
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = @"
 CREATE TABLE IF NOT EXISTS Macros (
-    Id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    Name            TEXT    NOT NULL DEFAULT '',
-    RecordMouse     INTEGER NOT NULL DEFAULT 0,
-    RecordKeyboard  INTEGER NOT NULL DEFAULT 1,
-    DelayOption     TEXT    NOT NULL DEFAULT 'Recorded',
-    CustomDelayMs   INTEGER NOT NULL DEFAULT 50,
-    PlaybackOption  TEXT    NOT NULL DEFAULT 'Once',
-    RepeatCount     INTEGER NOT NULL DEFAULT 1,
-    InputsJson      TEXT    NOT NULL DEFAULT '[]',
-    IsActive        INTEGER NOT NULL DEFAULT 1,
-    MacroOrder      INTEGER NOT NULL DEFAULT 0,
-    ModifiedAt      TEXT    NOT NULL DEFAULT ''
+    Id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    Name                 TEXT    NOT NULL DEFAULT '',
+    RecordMouse          INTEGER NOT NULL DEFAULT 0,
+    RecordKeyboard       INTEGER NOT NULL DEFAULT 1,
+    RecordMouseMovement  INTEGER NOT NULL DEFAULT 0,
+    DelayOption          TEXT    NOT NULL DEFAULT 'Recorded',
+    CustomDelayMs        INTEGER NOT NULL DEFAULT 50,
+    PlaybackOption       TEXT    NOT NULL DEFAULT 'Once',
+    RepeatCount          INTEGER NOT NULL DEFAULT 1,
+    InputsJson           TEXT    NOT NULL DEFAULT '[]',
+    IsActive             INTEGER NOT NULL DEFAULT 1,
+    MacroOrder           INTEGER NOT NULL DEFAULT 0,
+    ModifiedAt           TEXT    NOT NULL DEFAULT ''
 )";
+        cmd.ExecuteNonQuery();
+
+        // Migration: older DBs were created before RecordMouseMovement existed.
+        if (!ColumnExists("Macros", "RecordMouseMovement"))
+            Exec("ALTER TABLE Macros ADD COLUMN RecordMouseMovement INTEGER NOT NULL DEFAULT 0");
+    }
+
+    private bool ColumnExists(string table, string column)
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = $"PRAGMA table_info({table})";
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            if (r.GetString(1) == column) return true;
+        return false;
+    }
+
+    private void Exec(string sql)
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = sql;
         cmd.ExecuteNonQuery();
     }
 
@@ -78,9 +100,9 @@ CREATE TABLE IF NOT EXISTS Macros (
     {
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = @"
-INSERT INTO Macros(Name, RecordMouse, RecordKeyboard, DelayOption, CustomDelayMs,
+INSERT INTO Macros(Name, RecordMouse, RecordKeyboard, RecordMouseMovement, DelayOption, CustomDelayMs,
     PlaybackOption, RepeatCount, InputsJson, IsActive, MacroOrder, ModifiedAt)
-VALUES ($name, $rm, $rk, $delay, $cd, $play, $rep, $json, $act, $ord, $mod);
+VALUES ($name, $rm, $rk, $rmm, $delay, $cd, $play, $rep, $json, $act, $ord, $mod);
 SELECT last_insert_rowid()";
         BindParams(cmd, m);
         return Convert.ToInt32(cmd.ExecuteScalar());
@@ -91,7 +113,7 @@ SELECT last_insert_rowid()";
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = @"
 UPDATE Macros SET Name=$name, RecordMouse=$rm, RecordKeyboard=$rk,
-    DelayOption=$delay, CustomDelayMs=$cd, PlaybackOption=$play,
+    RecordMouseMovement=$rmm, DelayOption=$delay, CustomDelayMs=$cd, PlaybackOption=$play,
     RepeatCount=$rep, InputsJson=$json, IsActive=$act,
     MacroOrder=$ord, ModifiedAt=$mod
 WHERE Id=$id";
@@ -175,6 +197,7 @@ WHERE Id=$id";
             Name           = r.GetString(r.GetOrdinal("Name")),
             RecordMouse    = r.GetInt32(r.GetOrdinal("RecordMouse")) != 0,
             RecordKeyboard = r.GetInt32(r.GetOrdinal("RecordKeyboard")) != 0,
+            RecordMouseMovement = r.GetInt32(r.GetOrdinal("RecordMouseMovement")) != 0,
             CustomDelayMs  = r.GetInt32(r.GetOrdinal("CustomDelayMs")),
             RepeatCount    = r.GetInt32(r.GetOrdinal("RepeatCount")),
             IsActive       = r.GetInt32(r.GetOrdinal("IsActive")) != 0,
@@ -211,6 +234,7 @@ WHERE Id=$id";
         cmd.Parameters.AddWithValue("$name",  m.Name);
         cmd.Parameters.AddWithValue("$rm",    m.RecordMouse ? 1 : 0);
         cmd.Parameters.AddWithValue("$rk",    m.RecordKeyboard ? 1 : 0);
+        cmd.Parameters.AddWithValue("$rmm",   m.RecordMouseMovement ? 1 : 0);
         cmd.Parameters.AddWithValue("$delay", m.DelayOption.ToString());
         cmd.Parameters.AddWithValue("$cd",    m.CustomDelayMs);
         cmd.Parameters.AddWithValue("$play",  m.PlaybackOption.ToString());

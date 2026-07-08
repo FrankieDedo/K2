@@ -56,6 +56,7 @@
   <string name="exec_path_label">Executable / file path:</string>
   <string name="folder_path_label">Folder path:</string>
   <string name="recent_paths">Recent:</string>
+  <string name="remove_recent">Remove from recent</string>
   <string name="browser_other">Other…</string>
   <string name="browser_url_label">Initial URL (optional):</string>
   <string name="profile_targets_label">Switch these profiles:</string>
@@ -168,7 +169,7 @@
   <string name="macro_playback_toggle">切换</string>
   <string name="macro_record_mouse">录制鼠标</string>
   <string name="macro_actions_count">{0} 个动作</string>
-  <string name="macro_import_bc">从 BaseCamp.db 导入</string>
+  <string name="macro_import_bc">从 Base Camp 导入</string>
   <string name="macro_select_first">请在录制前选择或创建宏。</string>
   <string name="macro_no_actions">该宏没有已录制的动作。</string>
   <string name="macro_none_in_bc">在 BaseCamp 数据库中未找到宏。</string>
@@ -271,7 +272,7 @@
   <string name="dp_rotate_image">旋转图片：</string>
   <string name="dp_action_section">动作</string>
   <string name="dp_change_image">更改图片…</string>
-  <string name="import_bc">导入 BC</string>
+  <string name="import_bc">从 Base Camp 导入</string>
   <string name="export">导出</string>
   <string name="dp_export_bc">导出（Base Camp）…</string>
   <string name="dp_export_k2">导出（K2）…</string>

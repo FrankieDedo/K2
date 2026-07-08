@@ -239,6 +239,7 @@ public partial class MainWindow : Window
         TcDevices.SelectedIndex = -1;
         SetSettingsTabActive(false);
         SetMacroTabActive(true);
+        SelectFirstMacro();
     }
 
     private void SetSettingsTabActive(bool active)

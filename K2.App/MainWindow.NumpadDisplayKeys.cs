@@ -1,7 +1,8 @@
 // MainWindow.NumpadDisplayKeys.cs — partial class: 4 Everest numpad display keys.
-// DisplayPad-style interface: click → load image, right-click → configure action.
-// Images are uploaded via EverestImageUploader (72×72 RGB565) and actions are
-// saved in EverestStore as "ndk.{keyIndex}.imagePath" / "ndk.{keyIndex}.actionType" etc.
+// Unified interface (matches DisplayPad): a single click opens NdkKeyConfigDialog,
+// which combines image + action in one window. Right-click keeps quick "remove"
+// shortcuts only. Images are uploaded via EverestImageUploader (72×72 RGB565) and
+// actions are saved in EverestStore as "ndk.{keyIndex}.imagePath"/"actionType" etc.
 
 using System;
 using System.IO;
@@ -11,7 +12,6 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using K2.Core;
-using Microsoft.Win32;
 
 namespace K2.App;
 
@@ -86,7 +86,7 @@ public partial class MainWindow
                 Padding = new Thickness(2),
                 Cursor = Cursors.Hand,
                 Tag = keyIndex,
-                ToolTip = $"Display Key {i + 1} (click: image, right-click: action)",
+                ToolTip = $"Display Key {i + 1} (click: configure image + action)",
                 ContextMenu = BuildNdkContextMenu(),
             };
 
@@ -165,35 +165,40 @@ public partial class MainWindow
         }
     }
 
-    // ─────────────────────── Click: load image ───────────────────────
+    // ─────────────────────── Click: unified image + action dialog ───────────────────────
 
     private void NdkButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: int keyIndex }) return;
-        if (_everest is null || !_everest.IsOpen)
+
+        var dlg = new NdkKeyConfigDialog(
+            keyIndex, _ndkImagePaths[keyIndex], _ndkActions[keyIndex].Type, _ndkActions[keyIndex].Value, _evActionHost)
+        { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+
+        _ndkActions[keyIndex] = (dlg.ActionType, dlg.ActionValue);
+
+        if (dlg.ImageChanged)
         {
-            LogEverest("[NDK] Everest not connected.");
-            return;
+            if (!string.IsNullOrEmpty(dlg.NewImagePath) && File.Exists(dlg.NewImagePath))
+            {
+                NdkApplyImage(keyIndex, dlg.NewImagePath!);
+            }
+            else if (dlg.NewImagePath is null)
+            {
+                _ndkImagePaths[keyIndex] = null;
+                NdkClearThumbnail(keyIndex);
+            }
         }
 
-        var dlg = new OpenFileDialog
-        {
-            Title = $"Choose image for Display Key {keyIndex + 1}  (72×72 px)",
-            Filter = "Images (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|All files|*.*"
-        };
-        if (dlg.ShowDialog(this) != true) return;
-
-        string picked = dlg.FileName;
-        string? cropped = ImageCropDialog.Show(this, picked, 72, 72, Loc.Get("crop_title", 72, 72));
-        if (cropped is not null) picked = cropped;
-
-        NdkApplyImage(keyIndex, picked);
+        SaveNdkKey(keyIndex);
+        LogEverest($"[NDK] key={keyIndex} <- action={dlg.ActionType ?? "none"}, image {(dlg.ImageChanged ? "changed" : "unchanged")}");
     }
 
     /// <summary>
-    /// Uploads <paramref name="imagePath"/> (already 72×72 — either user-cropped via
-    /// <see cref="NdkButton_Click"/> or auto-generated via <see cref="TryAutoGenerateNdkImage"/>)
-    /// to display key <paramref name="keyIndex"/>, persists it, and refreshes the thumbnail.
+    /// Uploads <paramref name="imagePath"/> (already 72×72 — either user-cropped or
+    /// auto-generated, both via <see cref="NdkKeyConfigDialog"/>) to display key
+    /// <paramref name="keyIndex"/>, persists it, and refreshes the thumbnail.
     /// </summary>
     private void NdkApplyImage(int keyIndex, string imagePath)
     {
@@ -245,33 +250,6 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>
-    /// When the action just assigned/changed on a display key is "exec" or "folder",
-    /// auto-generate its picture (the executable's own icon, or a folder glyph + name)
-    /// instead of requiring the user to manually pick+crop an image.
-    /// </summary>
-    private void TryAutoGenerateNdkImage(int keyIndex, string actionType, string actionValue)
-    {
-        if (string.IsNullOrWhiteSpace(actionValue)) return;
-        if (actionType != "exec" && actionType != "folder") return;
-
-        string cacheRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "K2.App", "auto_icons");
-        Directory.CreateDirectory(cacheRoot);
-
-        long mtime = 0;
-        if (actionType == "exec") { try { mtime = File.GetLastWriteTimeUtc(actionValue).Ticks; } catch { } }
-        byte[] hash = System.Security.Cryptography.SHA1.HashData(
-            System.Text.Encoding.UTF8.GetBytes($"{actionType}|{actionValue}|{mtime}|72"));
-        string dest = Path.Combine(cacheRoot, Convert.ToHexString(hash).ToLowerInvariant() + $"_{actionType}.png");
-
-        bool ok = actionType == "exec"
-            ? IconImageGenerator.TryGenerateExecIcon(actionValue, 72, dest)
-            : IconImageGenerator.TryGenerateFolderIcon(actionValue, 72, dest);
-        if (ok) NdkApplyImage(keyIndex, dest);
-    }
-
     /// <summary>Sends SetDisplayKeyPic with the current slots.</summary>
     private void NdkRefreshDevicePicSlots()
     {
@@ -286,18 +264,13 @@ public partial class MainWindow
     {
         var menu = new ContextMenu();
 
-        var miCfg = new MenuItem { Header = Loc.Get("dp_configure_action") };
-        miCfg.Click += NdkMnuConfigureAction_Click;
-
         var miRa = new MenuItem { Header = Loc.Get("dp_remove_action") };
         miRa.Click += NdkMnuRemoveAction_Click;
 
         var miRi = new MenuItem { Header = Loc.Get("dp_remove_image") };
         miRi.Click += NdkMnuRemoveImage_Click;
 
-        menu.Items.Add(miCfg);
         menu.Items.Add(miRa);
-        menu.Items.Add(new Separator());
         menu.Items.Add(miRi);
         return menu;
     }
@@ -305,30 +278,6 @@ public partial class MainWindow
     private static int NdkIndexFromMenu(object sender) =>
         sender is MenuItem mi && mi.Parent is ContextMenu cm
             && cm.PlacementTarget is Button { Tag: int idx } ? idx : -1;
-
-    private void NdkMnuConfigureAction_Click(object sender, RoutedEventArgs e)
-    {
-        int idx = NdkIndexFromMenu(sender);
-        if (idx < 0) return;
-
-        var dlg = new ButtonActionDialog(
-            idx, _ndkActions[idx].Type, _ndkActions[idx].Value, _evActionHost)
-        { Owner = this };
-
-        if (dlg.ShowDialog() == true)
-        {
-            var (oldType, oldValue) = _ndkActions[idx];
-            string? aType = string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none"
-                ? null : dlg.ActionType;
-            string? aValue = aType is null ? null : dlg.ActionValue;
-            _ndkActions[idx] = (aType, aValue);
-            SaveNdkKey(idx);
-            LogEverest($"[NDK] key={idx} action <- {aType ?? "none"}");
-
-            if (aType is not null && (aType != oldType || aValue != oldValue))
-                TryAutoGenerateNdkImage(idx, aType, aValue ?? "");
-        }
-    }
 
     private void NdkMnuRemoveAction_Click(object sender, RoutedEventArgs e)
     {

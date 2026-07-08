@@ -9,7 +9,327 @@
 > mappa stabile in `_PROJECT_MAP.md`. Consultare qui solo per il contesto
 > di una modifica specifica passata (grep per parola chiave/data).
 
-> Last updated: 2026-07-07 (ButtonActionDialog: selettori dedicati per azione + icone automatiche):
+> Last updated: 2026-07-08 (Macro: 3 fix — click Stop registrato, icone righe, lista estesa):
+>   - **Segnalazione utente**: "la sezione delle macro diventa bianca quando
+>     registro", "estendi la lista delle macro come le sezioni dei
+>     dispositivi", "quando clicco stop il click del mouse viene ancora
+>     registrato" (nonostante il fix precedente).
+>   - **"Diventa bianca" durante la registrazione**: causato dal precedente
+>     `SetMacroEditingEnabled(false)`, che metteva `IsEnabled=false` su
+>     `LbMacros` (ListBox non ri-templata, quindi torna al chrome disabilitato
+>     di default di WPF — tipicamente un grigio/bianco di sistema che ignora
+>     il `Background` impostato a mano) insieme ad altri controlli, per
+>     evitare che l'utente rompesse lo stato live durante la cattura.
+>     Rimosso del tutto l'approccio "disabilita visivamente": ora i controlli
+>     restano sempre abilitati (nessun cambio di colore) e la protezione è
+>     puramente funzionale — guardie `_macroRecorder?.IsRecording` in
+>     `BtnMacroNew_Click`/`BtnMacroDelete_Click`/`BtnMacroImportBC_Click`/
+>     `BtnMacroInput{Delete,MoveUp,MoveDown}_Click`; il cambio di selezione
+>     macro (`LbMacros_SelectionChanged`) durante la registrazione viene
+>     silenziosamente annullato (torna alla macro in registrazione, tracciata
+>     in un nuovo campo `_recordingMacro`) invece di essere bloccato via
+>     `IsEnabled`. `RebuildInputRows()` ora, se `_macroRecorder.IsRecording`,
+>     ricostruisce dalla cattura live del recorder invece che da
+>     `SelectedMacro.Inputs` (stale finché non arriva `Stop()`) — così il
+>     toggle "Show press/release" durante la registrazione non svuota più la
+>     lista, senza bisogno di disabilitarlo.
+>   - **Estendi lista macro come le sezioni**: la sidebar "SECTIONS" dei
+>     pannelli device riempie tutta l'altezza della colonna perché è un
+>     `Border`/`Grid` (che si stira per riempire la cella), mentre la Macro
+>     Library usava uno `StackPanel` (che si dimensiona sempre al contenuto,
+>     ignora `VerticalAlignment=Stretch` per via di come `StackPanel`
+>     misura/arrangia) con `ListBox Height="280"` fissa. Convertito in `Grid`
+>     con righe Auto/Auto/`*`/Auto (header, New/Delete, card lista, Importa)
+>     e rimossa l'altezza fissa dalla `ListBox` — la card della lista ora
+>     riempie tutto lo spazio verticale disponibile nella colonna, come la
+>     sidebar SECTIONS.
+>   - **Click sullo Stop ancora registrato — causa del fallimento del fix
+>     precedente**: il controllo introdotto la volta scorsa usava solo
+>     `WindowFromPoint` (hit-test per z-order) + `GetWindowThreadProcessId`;
+>     su una finestra WPF con chrome custom/composizione (vedi `WindowChrome`
+>     in `K2Theme.xaml`), l'hit-test per z-order può non risolvere in modo
+>     affidabile alla vera HWND dell'app. Aggiunto un controllo primario più
+>     robusto e indipendente dallo z-order: confronto diretto punto-dentro-
+>     rettangolo contro l'HWND reale della finestra (`GetWindowRect` su
+>     `_hWnd`, già presente in `MainWindow` — impostato in
+>     `OnSourceInitialized`, letto da `MainWindow.Macro.cs` al momento di
+>     avviare la registrazione via nuovo `MacroRecorder.SetOwnerWindow(hwnd)`).
+>     I due controlli sono in OR: se il bounding-rect matcha già la
+>     registrazione viene scartata, altrimenti fa comunque fede il vecchio
+>     controllo via `WindowFromPoint` come seconda rete di sicurezza.
+>   - **Verificato**: `build-check.bat` pulito (0 errori/0 warning) su
+>     entrambe le solution dopo ogni step. Avviato `K2.App.exe` in locale
+>     (con `stop-basecamp.bat` prima) — nessun errore XAML, nessun
+>     `[MACRO] Init error`. **Da verificare dall'utente**: che la sezione
+>     macro non cambi più colore durante la registrazione, che la card della
+>     lista macro riempia l'altezza disponibile, e soprattutto — essendo il
+>     secondo tentativo — che il click sullo Stop non finisca più nella
+>     macro registrata.
+>
+> Previous: 2026-07-08 (Rimozione voci dai "Recenti" in Open program/file e Open folder):
+>   - **Richiesta utente**: poter rimuovere singole voci dalle liste "Recenti" nei
+>     pannelli "Apri programma/file" e "Apri cartella" di `ButtonActionDialog`.
+>   - **`AppSettings.cs`**: nuovi `RemoveRecentExecPath`/`RemoveRecentFolderPath`
+>     (accanto ai già esistenti `AddRecent*`).
+>   - **`ButtonActionDialog.xaml`**: `ItemTemplate` su `LstExecRecent`/
+>     `LstFolderRecent` — riga con testo + pulsante "✕" (tooltip localizzato,
+>     nuova chiave `remove_recent`) che rimuove quella voce e aggiorna la lista,
+>     senza chiudere il dialog.
+>   - **Localizzazione**: `remove_recent` in EN/IT tradotta, altre 8 lingue con
+>     placeholder inglese (stesso pattern già usato in questa sessione).
+>   - **Verificato**: `build-check.bat` pulito (0 errori/0 warning).
+>
+> Previous: 2026-07-08 (Icona cartella: trovata e risolta la vera causa della mancata counter-rotation):
+>   - **Segnalazione utente** (dopo il fix sfondo nero/parametro rotazione della sessione
+>     precedente): "la funzione dell'icona con cartella adesso ruota correttamente
+>     nell'interfaccia, ma sul display non viene controruotata. Inoltre il testo non
+>     viene lasciato così com'è." Confermato: il testo sotto al lato lungo della
+>     cartella, composto PRIMA della rotazione (così com'era già implementato), è la
+>     geometria corretta — il problema non era la generazione ma l'upload.
+>   - **Causa radice trovata**: il bypass `ImagePreRotated` (che al primo upload
+>     evitava la doppia rotazione passando `rotation=0`) era un flag SOLO TRANSITORIO
+>     nell'istanza del dialog — mai persistito. Qualsiasi RI-upload successivo dello
+>     STESSO file (`key.ImagePath`, ormai il PNG già pre-ruotato) tramite un percorso
+>     diverso dal salvataggio iniziale — `DpReloadCurrentProfile` (cambio pagina/
+>     profilo/dispositivo, avvio app), `DpUploadPressVisual` (rimbalzo visivo ad ogni
+>     pressione fisica del tasto), il caricamento profilo dello standalone
+>     `MainWindow.xaml.cs::ReloadCurrentProfile` — ignorava completamente il bypass e
+>     riapplicava `_dpRotation`/`_rotation` come per qualsiasi altra immagine,
+>     ruotando due volte un file già corretto. Bastava aprire una tab diversa e
+>     tornare indietro per vedere l'icona sbagliata.
+>   - **Fix**: eliminato il flag transitorio `ImagePreRotated`. Al suo posto, un
+>     controllo basato sul PERCORSO del file, valido ovunque e per sempre (non solo
+>     al momento della creazione): `MainWindow.DisplayPad.cs::EffectiveDpRotation(path)`
+>     (K2.App) e `MainWindow.xaml.cs::EffectiveRotation(path)` (K2.DisplayPad
+>     standalone) restituiscono rotazione zero se il path ricade sotto la cartella
+>     cache delle icone auto-generate (`%LOCALAPPDATA%\K2.DisplayPad\auto_icons\`,
+>     stessa usata da `DpKeyConfigDialog`/`CellConfigDialog::AutoIconCachePath`),
+>     altrimenti la rotazione normale del dispositivo. Applicato a TUTTI i punti che
+>     chiamano `_dpClient.UploadImage(ToProfile)`/`_service.UploadImage(ToProfile)`
+>     con la rotazione del device: upload iniziale, `DpReloadCurrentProfile` (per
+>     immagine, non più un'unica rotazione catturata per l'intero batch),
+>     `DpUploadPressVisual`, `ReloadCurrentProfile` dello standalone.
+>   - **Bug collaterale corretto**: la cache key di `AutoIconCachePath` non includeva
+>     la rotazione del device — due DisplayPad con rotazioni diverse ma la stessa
+>     azione cartella/exec avrebbero potuto collidere sullo stesso file PNG. Ora la
+>     rotazione fa parte della chiave hash.
+>   - **Verificato**: `build-check.bat` pulito (0 errori/0 warning, entrambe le
+>     solution). **Da verificare su hardware dall'utente**: che l'icona cartella
+>     ora resti correttamente controruotata anche dopo un cambio pagina/profilo,
+>     un riavvio di K2, o la pressione fisica del tasto (non solo subito dopo
+>     l'assegnazione).
+>
+> Previous: 2026-07-08 (Editor "Aggiungi testo" per DisplayPad e Everest display key):
+>   - **Richiesta utente**: poter inserire testo semplice su un tasto, colorando lo
+>     sfondo oppure scrivendo sopra un'icona già caricata, sia per il DisplayPad
+>     che per i display key dell'Everest (numpad).
+>   - **Nuovo `K2.Core/TextIconGenerator.cs`**: motore di rendering puro
+>     System.Drawing (nessuna dipendenza WPF, stesso stile di
+>     `IconImageGenerator.cs`). `TryRenderTextIcon`/`TryGenerateTextIcon`
+>     disegnano il testo centrato su un canvas size×size, con auto-fit del
+>     font (word-wrap, shrink finché non entra nel riquadro) e un contorno
+>     automatico bianco/nero (in base alla luminanza del colore testo) per
+>     restare leggibile sia su sfondo tinta unita sia sopra un'immagine.
+>   - **Nuovo `K2.Core/TextIconDialog.xaml(.cs)`**: piccolo editor condiviso —
+>     casella di testo, due modalità di sfondo ("Sfondo a tinta unita" /
+>     "Sopra l'immagine caricata", quest'ultima disabilitata se il tasto non
+>     ha ancora un'immagine), color picker (WinForms `ColorDialog`, stesso
+>     pattern già in uso per l'illuminazione RGB) per sfondo e testo, anteprima
+>     live 140×140 rigenerata ad ogni modifica (in memoria, nessun file
+>     temporaneo su disco). Vive in `K2.Core` (non in K2.App/K2.DisplayPad)
+>     perché entrambe le app lo referenziano.
+>   - **Integrazione**: nuovo pulsante "Aggiungi testo…" (chiave loc
+>     `dp_add_text`) accanto a "Rimuovi immagine" in tutti e tre i dialog
+>     immagine+azione: `K2.App/DpKeyConfigDialog` (DisplayPad, 102×102, dentro
+>     la shell unificata), `K2.App/NdkKeyConfigDialog` (Everest numpad display
+>     key, 72×72), `K2.DisplayPad/Dialogs/CellConfigDialog` (DisplayPad
+>     standalone x64). Il risultato è trattato come un'immagine caricata
+>     manualmente (rotazione utente resettata a 0°, nessun flag di
+>     pre-rotazione device: il testo non è legato alla rotazione fisica come
+>     le icone auto-generate exec/folder).
+>   - **Localizzazione**: nuove chiavi (`dp_add_text`, `txt_dialog_title`,
+>     `txt_label`, `txt_bg_solid`, `txt_bg_image`, `txt_bg_color`,
+>     `txt_color`, `txt_generate_failed`) tradotte in `Strings.xml` (EN) e
+>     `Strings.it.xml` (IT); le altre 8 lingue non toccate, fallback automatico
+>     su EN via `Loc.cs` (comportamento già esistente per chiavi mancanti).
+>   - **Verificato**: `build-check.bat` pulito (0 errori/0 warning, entrambe le
+>     solution). **Da verificare su UI/hardware dall'utente**: aspetto reale
+>     dell'editor, leggibilità del contorno testo su vari colori, risultato
+>     sui tile DisplayPad (102×102) e sui display key Everest (72×72).
+>
+> Previous: 2026-07-08 (Macro: fix import da BaseCamp.db + libreria macro restyle):
+>   - **Segnalazione utente**: "le macro non vengono importate correttamente da
+>     basecamp.db". Causa radice trovata estraendo l'HTML/JS compilato
+>     dell'editor macro di Base Camp direttamente da `BaseCamp.UI.exe`
+>     (single-file .NET bundle, self-contained: nessun sorgente/.cshtml su
+>     disco). Tecnica: le stringhe letterali dei `WriteLiteral(...)` Razor
+>     restano leggibili come UTF-16LE nel binario compilato — bastano
+>     `open(path,'rb')` + ricerca del pattern `"testo".encode('utf-16-le')`
+>     + decode di una finestra di byte attorno al match, senza bisogno di
+>     parsare il formato bundle .NET (nessun tool `node`/`asar` necessario:
+>     nessuna delle view sta in `app.asar`, che è solo lo shell Electron).
+>     Verificato con successo contro il `BaseCamp.db` reale dell'utente
+>     (`C:\Program Files (x86)\Mountain Base Camp\resources\bin\BaseCamp.db`,
+>     13 macro reali) — non solo indovinato.
+>   - **Bug 1 — Delay/Playback sempre sbagliati**: `MacroDefinition.FromBaseCamp`
+>     mappava `DelayOption`/`PlaybackOption` su keyword semantiche mai esistite
+>     in BC ("nodelay"/"custom"/"repeatn"/...) — i valori reali salvati nel DB
+>     sono id posizionali delle tab pill: `delay-one`="Record delay",
+>     `delay-two`="Custom" (quella col campo ms), `delay-three`="No delay";
+>     `play-one`="Play once", `play-two`="Hold" (mentre premuto — il nostro
+>     `WhileHeld`), `play-three`="Repeat" (dal tooltip BC: "will continue to
+>     execute your macro from the moment the assigned button is pressed until
+>     it is pressed again" — un **toggle** press-per-avviare/press-per-fermare,
+>     cioè il nostro `Toggle`, NON "ripeti N volte": BC non ha proprio quel
+>     concetto per le macro tastiera, colonna `RepeatCount` non esiste nello
+>     schema `Macros` di BaseCamp.db). Ogni macro importata cadeva quindi
+>     sempre sul default (Recorded/Once) indipendentemente dall'impostazione
+>     reale in BC.
+>   - **Bug 2 — tasti registrati sempre "vuoti" (il problema più grosso)**:
+>     `MacroInput` deserializzava l'`InputsJson` di BC con lo stesso modello
+>     usato per il nostro formato nativo (proprietà `"key"`), ma il recorder
+>     di BC (Electron + iohook/uiohook, vedi `uiohook.dll` in
+>     `resources/bin`) serializza eventi tastiera come `{rawcode, keycode,
+>     type, delay, altKey, shiftKey, ctrlKey, metaKey}` — **nessuna proprietà
+>     "key"** — quindi `Key` restava sempre 0 per ogni tasto di ogni macro
+>     importata (verificato: BC stesso usa `event.rawcode` — non `keycode`,
+>     che è l'id cross-platform interno di iohook — per il lookup nome-tasto
+>     via `GetKeyTextBaseOnRawCode`/`keyCodes_*[event.rawcode]`; `rawcode` è
+>     il VK code nativo Windows, stesso valore già catturato da
+>     `MacroRecorder.cs` per le registrazioni K2). Anche gli eventi mouse
+>     usano `"button"` non `"key"` (1=sinistro, 2=destro, 3=centrale — stessa
+>     numerazione 1/2 già usata da K2, verificato via lo switch
+>     `btnText`/`ButtonType` nel JS compilato). Nuovo
+>     `MacroInput.ListFromBaseCampJson()` parsa il formato reale di BC
+>     (gestisce anche `"delay"` serializzato come stringa, es. `"delay":"1"`,
+>     osservato nei dati reali); scarta gli eventi `"mousewheel"` (nessun
+>     supporto scroll in `MacroPlayer`) invece di importarli come azioni
+>     rotte/azzerate. Verificato contro dati reali: macro "À" (Alt+Numpad
+>     0192 per il carattere accentato, rawcode 164/96/97/105/98 = LAlt/
+>     Numpad0/1/9/2, esatti), macro "TEST" (8 click sinistri con delay
+>     90/260/90/85/85/55/55/0ms — combaciano esattamente con lo screenshot
+>     di Base Camp usato a inizio conversazione per il redesign del pannello
+>     Macro), macro "AUTORUN" (un solo tasto W, PlaybackOption=play-three →
+>     ora mappato a Toggle, coerente con un macro "tieni premuto W finché
+>     non ripremi" per l'omonimo autorun di gioco).
+>   - **Bug 3 (minore, scoperto verificando)**: i click di BC spesso non
+>     registrano x/y (macro "clicca dove si trova già il cursore", non
+>     "clicca in un punto fisso") — prima venivano importati come (0,0),
+>     causando un salto del cursore all'angolo in alto a sinistra durante il
+>     replay. `ListFromBaseCampJson` ora usa `-1` come sentinella "nessuna
+>     posizione registrata"; `MacroPlayer.SendMouseClick` salta lo spostamento
+>     del cursore quando x o y sono negativi (limite noto: su setup
+>     multi-monitor con un monitor a sinistra del primario, coordinate K2
+>     native legittimamente negative verrebbero trattate come "nessuna
+>     posizione" — edge case raro, non affrontato).
+>   - **Macro Library restyle**: la sezione ora usa lo stesso look della
+>     sidebar "SECTIONS" dei pannelli device (card scura arrotondata
+>     `#111115`, voce evidenziata in accent quando selezionata — nuovo style
+>     `MacroLibraryItemStyle` per `ListBoxItem`, analogo a `SectionTabStyle`
+>     ma basato su `IsSelected` invece di `IsChecked`). Bottoni New/Delete
+>     spostati SOPRA la card lista, bottone "Importa da BaseCamp.db" resta
+>     SOTTO, come richiesto.
+>   - **Fix — click del mouse sullo Stop finiva nella macro**: con "Record
+>     mouse" ora default attivo, fermare la registrazione cliccando il
+>     bottone Stop registrava anche quel click (l'hook `WH_MOUSE_LL` cattura
+>     il down/up del bottone Stop PRIMA che il `Click` handler chiami
+>     `Stop()`, essendo un hook globale sincrono che precede il routing
+>     WPF). `MacroRecorder.MouseHookCallback` ora ignora i click il cui
+>     punto schermo ricade su una finestra del processo K2 stesso
+>     (`WindowFromPoint`+`GetWindowThreadProcessId` confrontato con
+>     `Environment.ProcessId`) — cattura solo i click su altre applicazioni,
+>     coerente con lo scopo di una macro (interagire con l'esterno, non con
+>     se stessa).
+>   - **Fix — icone vuote sulle righe Inputs**: i tre bottoni per-riga
+>     (sposta su/giù, elimina) riusavano `Tag` sia per il glyph icona
+>     (letto dal template di `MacroRowIconButton`) sia per passare la riga
+>     `MacroInputRow` all'handler `Click` — un solo `Tag` non può fare
+>     entrambe le cose, quindi il template mostrava il `ToString()`
+>     dell'oggetto riga invece del glyph (di fatto vuoto/illeggibile nel
+>     font icone). Spostato il riferimento alla riga su
+>     `CommandParameter="{Binding}"` (letto dagli handler via pattern
+>     matching `Button { CommandParameter: MacroInputRow row }`), lasciando
+>     `Tag` libero per il solo glyph. Verificato anche il glyph della
+>     colonna tipo-azione (tastiera/mouse/testo): i code point scelti
+>     esistono davvero nel cmap Windows-Unicode di `segmdl2.ttf` (controllo
+>     con `fontTools`), quindi non era quello il problema.
+>   - **Verificato**: `build-check.bat` pulito (0 errori/0 warning) su
+>     entrambe le solution dopo ogni step; avviato `K2.App.exe` in locale
+>     (con `stop-basecamp.bat` prima, stavolta) — nessun errore XAML/
+>     `[MACRO] Init error`, crash nativo 0xE06D7363 nella stessa identica
+>     fase di init hardware (Everest SaveFlash) osservato anche a Base Camp
+>     chiuso: conferma che è un problema nativo pre-esistente scorrelato dal
+>     lavoro di questa sessione, non qualcosa introdotto qui. **Da
+>     verificare dall'utente**: re-importare da BaseCamp.db, verificare che
+>     le icone delle righe Inputs si vedano, che il click sullo Stop non
+>     compaia più nella macro registrata.
+>
+> Previous: 2026-07-07 (Everest numpad display key: dialog unificato immagine+azione):
+>   - **Segnalazione utente**: "il problema dei tasti display è che se clicchi
+>     sull'interfaccia dovrebbe fare l'azione 'configure action'" — il vecchio
+>     comportamento (click sinistro = solo immagine, click destro = solo azione,
+>     in un menu contestuale) era poco scopribile, disallineato dal DisplayPad
+>     dove un solo click apre un dialog unico con immagine+azione insieme.
+>   - **Nuovo `K2.App/NdkKeyConfigDialog.xaml(.cs)`**: dialog unificato per i 4
+>     numpad display key Everest, ricalcato su `DpKeyConfigDialog`/
+>     `CellConfigDialog` (preview immagine 120×120 + "Carica immagine…"/"Rimuovi
+>     immagine" a sinistra, riepilogo azione + "Configura azione…"/"Rimuovi
+>     azione" a destra, OK/Annulla). Niente crop editor inline (mantiene il
+>     popup `ImageCropDialog.Show` già esistente per gli NDK, 72×72, coerente
+>     con quanto già in `TODO.md`). L'auto-generazione icona per azioni
+>     exec/folder (v. sessioni precedenti) è ora dentro questo dialog
+>     (`TryAutoGenerateImage`), non più in `MainWindow.NumpadDisplayKeys.cs`.
+>   - **`MainWindow.NumpadDisplayKeys.cs`**: `NdkButton_Click` ora apre
+>     `NdkKeyConfigDialog` invece del solo `OpenFileDialog`; applica sia
+>     l'azione che l'immagine (via `NdkApplyImage`, invariato) al ritorno.
+>     Rimossi `NdkMnuConfigureAction_Click` e la voce "Configura azione…" dal
+>     menu contestuale (ridondanti col click singolo) — il tasto destro resta
+>     solo per "Rimuovi azione"/"Rimuovi immagine" come scorciatoie rapide.
+>   - **Nota**: questo risolve solo l'assegnazione via UI. Il bug per cui il
+>     tasto FISICO poi non esegue l'azione (perché `HandleNumpadDisplayKeyPress`
+>     non ha chiamanti — v. voce separata in `TODO.md`) resta aperto, richiede
+>     cattura hardware del matrixId dei 4 tasti e non è stato toccato in questa
+>     sessione.
+>   - **Verificato**: `build-check.bat` pulito (0/0). **Da verificare su
+>     hardware/UI dall'utente**: aspetto e funzionamento reale del nuovo dialog.
+>
+> Previous: 2026-07-07 (Icona cartella auto-generata: sfondo nero + counter-rotation DisplayPad):
+>   - **Bug segnalato dall'utente** (testato su hardware reale): sull'icona cartella
+>     auto-generata (v. sessione precedente) su un DisplayPad montato ruotato, il
+>     testo del nome cartella risultava corretto ma il glyph/icona appariva
+>     orientato con la rotazione del dispositivo invece che con la counter-rotation.
+>     Inoltre richiesto sfondo nero puro invece del grigio scuro tema K2 (`#1A1A1E`).
+>   - **`IconImageGenerator.cs`**: `TryGenerateFolderIcon` ora usa sfondo
+>     `Color.Black` puro (solo per la cartella, l'icona "exec" resta sul grigio
+>     scuro tema, nessuna lamentela su quella). Entrambi i generatori
+>     (`TryGenerateExecIcon`/`TryGenerateFolderIcon`) accettano ora un parametro
+>     opzionale `deviceRotationDegrees` (0/90/180/270): se diverso da zero,
+>     applicano la STESSA convenzione di counter-rotation già usata ovunque nel
+>     progetto (`IconRotator.ImageAngleCw` in K2.DisplayPad, `ResolveForUpload`
+>     nel satellite: 90°→immagine ruotata 270°, 180°→180°, 270°→90°) direttamente
+>     sul bitmap generato, PRIMA del salvataggio su PNG.
+>   - **Evitare la doppia rotazione**: dato che la pipeline di upload
+>     (`_dpClient.UploadImageToProfile(..., rotation)` sia nel backend nativo
+>     che nel satellite SDK) applica GIÀ una counter-rotation automatica ad ogni
+>     immagine caricata in base alla rotazione configurata del device, un'immagine
+>     auto-generata con la rotazione già "cotta dentro" verrebbe ruotata due
+>     volte. Fix: nuova proprietà `ImagePreRotated` su `DpKeyConfigDialog`
+>     (K2.App) e `CellConfigDialog` (K2.DisplayPad standalone), true quando
+>     l'immagine appena generata ha già la counter-rotation applicata; i chiamanti
+>     (`MainWindow.DisplayPad.cs`/`MainWindow.xaml.cs`) passano rotazione=0/None
+>     all'upload in quel caso invece della rotazione normale del device. Un
+>     caricamento manuale successivo (`BtnLoadImage_Click`) resetta sempre
+>     `ImagePreRotated=false`. `DpKeyConfigDialog`/`CellConfigDialog` ricevono ora
+>     la rotazione del device come parametro del costruttore (`_dpRotation`/
+>     `(int)_rotation` passati dal chiamante).
+>   - **Verificato**: `build-check.bat` pulito (0/0). **Da verificare su
+>     hardware dall'utente**: che l'icona cartella ora appaia effettivamente
+>     upright su un DisplayPad ruotato (90/180/270), sfondo nero visibile
+>     correttamente, nessuna regressione sull'icona "exec" (che non ha ricevuto
+>     lo sfondo nero, solo il parametro di rotazione, non ancora testata con
+>     rotazione != 0).
+>
+> Previous: 2026-07-07 (ButtonActionDialog: selettori dedicati per azione + icone automatiche):
 >   - **Obiettivo**: sostituire il generico textbox "Value:" con controlli
 >     dedicati per tipo di azione (stesse azioni assegnabili su tutti i
 >     device, dialog condiviso in `K2.Core`), e generare automaticamente
@@ -304,6 +624,26 @@
 >     `settings_disable_alt_tab`, `settings_indicator_leds`,
 >     `settings_enable_core_led`, `settings_factory_reset`,
 >     `settings_factory_reset_confirm`).
+>   - **Bug trovato e fisso nella stessa sessione**: la combo "Layout" nel
+>     nuovo pannello Settings mostrava il `ToString()` grezzo del record
+>     (`"LayoutChoice { Layout = IsoIt, Label = ... }"`) invece dell'etichetta,
+>     perché al momento di `InitKeyboardLayoutSelector()` il pannello
+>     `PnlSecSettings` è ancora `Visibility="Collapsed"` (sezione di default è
+>     "Key Binding") — stesso bug già noto e documentato per `RotationChoice`
+>     in `MainWindow.Keys.cs` (combo rotazione MacroPad). Fix: aggiunto
+>     `public override string ToString() => Label;` a `LayoutChoice` come
+>     fallback (stesso pattern, non un `ItemTemplate` alternativo). **Verificato
+>     visivamente**: lanciato `K2.App.exe`, navigato a Everest → Settings via
+>     UI Automation (`AutomationId` `TabEverest`/`RbSecSettings`), screenshot
+>     prima/dopo — combo ora mostra "Italian — ISO" correttamente.
+>   - **Nota per sessioni future**: su questa macchina (multi-monitor, finestra
+>     K2 su monitor secondario a offset X grande) i click via UI Automation
+>     `SelectionItemPattern.Select()` su un secondo elemento in rapida
+>     successione hanno causato un click reale fuori bersaglio (aperto un
+>     file-picker "Choose image for Display Key 1" invece di navigare a RGB &
+>     Lighting) — probabile problema di coordinate/DPI. Meglio navigare un
+>     elemento alla volta con pause e screenshot di verifica intermedi, non
+>     incatenare più `Select()` senza controllo.
 >   - **Verificato**: `build-check.bat`/`dotnet build K2.sln x86` puliti, 0
 >     errori/0 warning. **Da verificare su hardware**: che `SetGameMode`/
 >     `SetIndicatorLed`/`ResetFlash` producano davvero l'effetto atteso sulla

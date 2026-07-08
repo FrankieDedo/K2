@@ -53,6 +53,10 @@
                         Margin="0,4,0,0"
                         Click="BtnRemoveImage_Click"/>
 
+                <Button Content="{loc:Get dp_add_text}"
+                        Margin="0,4,0,0"
+                        Click="BtnAddText_Click"/>
+
                 <!-- Rotation selector -->
                 <TextBlock Text="{loc:Get dp_rotate_image}"
                            Margin="0,10,0,4"

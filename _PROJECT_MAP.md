@@ -389,6 +389,21 @@ Tutto ciò che deriva dai binari di Base Camp. Solo per sviluppo locale.
   passa il risultato ai `tools/dotnet_*.py` esistenti. Non serve `node`/`asar`
   per questo (serve solo per leggere `app.asar`, i file statici .js/.cshtml
   compilati non ci sono dentro).
+  **Scorciatoia più veloce per singole stringhe/etichette** (non serve
+  isolare l'assembly): i letterali `WriteLiteral("...")` generati dalla
+  compilazione Razor restano leggibili come testo **UTF-16LE** dentro il
+  binario così com'è. Basta `open(path,'rb').read()`, cercare
+  `"testo noto".encode('utf-16-le')` col pattern che si sta cercando
+  (un'etichetta UI, un tooltip, un id HTML) e decodificare come
+  `utf-16-le` una finestra di ~1-3 KB di byte attorno al match
+  (`errors='replace'` per i byte non testuali) — salta fuori l'HTML/JS
+  circostante leggibile, comprese le classi/id/value dei controlli.
+  Usato per trovare id/valori reali (`delay-one`/`delay-two`/`delay-three`,
+  `play-one`/`play-two`/`play-three`) dell'editor macro, mai esposti nei
+  DLL decompilati. **Attenzione ai falsi positivi**: id generici come
+  `play-two`/`play-four` sono riusati altrove per feature diverse (es. un
+  D-pad di navigazione immagini) — verificare il testo/HTML circostante,
+  non solo l'id, prima di fidarsi del match.
 - `tools/parse_usb_pcap.py <file.pcapng>` — parser pcap-ng minimo (link_type
   USBPcap 249), nessuna dipendenza. Filtra i pacchetti USB OUT non-vuoti
   e stampa hex dump. Usato per confrontare i comandi HID che Base Camp

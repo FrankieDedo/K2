@@ -75,6 +75,7 @@
   <string name="exec_path_label">Percorso eseguibile / file:</string>
   <string name="folder_path_label">Percorso cartella:</string>
   <string name="recent_paths">Recenti:</string>
+  <string name="remove_recent">Rimuovi dai recenti</string>
   <string name="browser_other">Altro…</string>
   <string name="browser_url_label">URL iniziale (opzionale):</string>
   <string name="profile_targets_label">Cambia questi profili:</string>
@@ -263,6 +264,7 @@
   <string name="macro_repeat_short">Ripeti</string>
   <string name="macro_times_suffix">volte</string>
   <string name="macro_record_mouse">Registra mouse</string>
+  <string name="macro_record_mouse_movement">Registra movimento mouse</string>
   <string name="macro_record_keyboard">Registra tastiera</string>
   <string name="macro_section_devices">Dispositivi</string>
   <string name="macro_section_inputs">Input</string>
@@ -275,7 +277,7 @@
   <string name="macro_move_down">Sposta giù</string>
   <string name="macro_delete_input">Rimuovi</string>
   <string name="macro_actions_count">{0} azioni</string>
-  <string name="macro_import_bc">Importa da BaseCamp.db</string>
+  <string name="macro_import_bc">Importa da Base Camp</string>
   <string name="macro_select_first">Seleziona o crea una macro prima di registrare.</string>
   <string name="macro_no_actions">La macro non ha azioni registrate.</string>
   <string name="macro_none_in_bc">Nessuna macro trovata nel database BaseCamp.</string>
@@ -342,6 +344,14 @@
   <string name="dp_remove_action">Rimuovi azione</string>
   <string name="dp_change_image">Cambia immagine…</string>
   <string name="dp_remove_image">Rimuovi immagine</string>
+  <string name="dp_add_text">Aggiungi testo…</string>
+  <string name="txt_dialog_title">Inserisci testo</string>
+  <string name="txt_label">Testo:</string>
+  <string name="txt_bg_solid">Sfondo a tinta unita</string>
+  <string name="txt_bg_image">Sopra l'immagine caricata</string>
+  <string name="txt_bg_color">Sfondo:</string>
+  <string name="txt_color">Testo:</string>
+  <string name="txt_generate_failed">Impossibile generare l'immagine di testo.</string>
   <string name="dp_open_bc_profile">Apri profilo BaseCamp</string>
   <string name="dp_filter_bc_xml">Profilo BaseCamp (*.xml)|*.xml|Tutti i file|*.*</string>
   <string name="dp_bc_db_not_found">BaseCamp.db non trovato. Imposta K2_BASECAMP_DB o installa Base Camp.</string>
@@ -349,7 +359,7 @@
   <string name="dp_no_matching_devices">Nessun dispositivo connesso corrisponde ai profili nel DB.</string>
   <string name="dp_import_confirm">Importare {0} profili su {1} dispositivi?</string>
   <string name="dp_imported">Importati {0} profili ({1} tasti) da Base Camp.</string>
-  <string name="import_bc">Importa BC</string>
+  <string name="import_bc">Importa da Base Camp</string>
   <!-- Esporta -->
   <string name="export">Esporta</string>
   <string name="dp_export_bc">Esporta (Base Camp)…</string>

@@ -31,6 +31,25 @@ public partial class MainWindow : Window
     private RotationOption[] _rotationOptions = Array.Empty<RotationOption>();
     private bool _suppressRotationUpdate;
 
+    /// <summary>
+    /// Cache folder for images auto-generated from an action (exec icon / folder glyph,
+    /// see <see cref="CellConfigDialog.TryAutoGenerateCellImage"/>) — these already have
+    /// the device's counter-rotation baked in at generation time, so every upload path
+    /// below must skip <see cref="_rotation"/> for them (else they'd be rotated twice).
+    /// Matches <c>CellConfigDialog.AutoIconCachePath</c>'s cache root exactly.
+    /// </summary>
+    private static readonly string AutoIconDir = System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "K2.DisplayPad", "auto_icons");
+
+    /// <summary>Rotation to pass to an upload call for <paramref name="imagePath"/>: None for
+    /// an auto-generated (already pre-rotated) icon, <see cref="_rotation"/> for anything else —
+    /// checked by path so it's correct on EVERY upload, not just the one that created it.</summary>
+    private DisplayRotation EffectiveRotation(string? imagePath) =>
+        !string.IsNullOrEmpty(imagePath) &&
+        imagePath.StartsWith(AutoIconDir, StringComparison.OrdinalIgnoreCase)
+            ? DisplayRotation.None : _rotation;
+
     private readonly Dictionary<int, int> _matrixToIndex = new();
     private int _mapAwaitingIndex = -1;
 
@@ -247,7 +266,7 @@ public partial class MainWindow : Window
         if (sender is not Button btn || btn.Tag is not ButtonCell cell) return;
         if (CbDevice.SelectedItem is not int id) { Log("[WARN] Select a device first."); return; }
 
-        var dlg = new CellConfigDialog(cell.Index, cell.ImagePath, cell.ActionType, cell.ActionValue) { Owner = this };
+        var dlg = new CellConfigDialog(cell.Index, cell.ImagePath, cell.ActionType, cell.ActionValue, (int)_rotation) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
         cell.ActionType  = dlg.ActionType;
@@ -275,13 +294,14 @@ public partial class MainWindow : Window
 
     private void UploadAndPersist(int id, int profile, ButtonCell cell, string path)
     {
+        var rotation = EffectiveRotation(path);
         try
         {
             // Upload uses the pre-rotated image; the store keeps the
             // ORIGINAL path, so the preview is upright and can be re-rotated
             // if the device's rotation changes in the future.
-            string up = IconRotator.ResolveForUpload(path, _rotation);
-            string rotNote = up != path ? $" [rot {DisplayPadLayout.Label(_rotation)}]" : "";
+            string up = IconRotator.ResolveForUpload(path, rotation);
+            string rotNote = up != path ? $" [rot {DisplayPadLayout.Label(rotation)}]" : "";
             Log($"UploadImageToProfile(id={id}, slot={profile}, btn={cell.Index}, path=\"{path}\"{rotNote})");
             bool ok = _service.UploadImageToProfile(id, up, cell.Index, profile);
             if (!ok)
@@ -399,8 +419,9 @@ public partial class MainWindow : Window
                 {
                     // Re-upload to the FW profile to make sure icons stay
                     // persistent even after a device restart, rotated
-                    // according to the device's current mounting.
-                    string up = IconRotator.ResolveForUpload(r.ImagePath, _rotation);
+                    // according to the device's current mounting (auto-generated
+                    // icons already have this baked in — see EffectiveRotation).
+                    string up = IconRotator.ResolveForUpload(r.ImagePath, EffectiveRotation(r.ImagePath));
                     bool ok = _service.UploadImageToProfile(id, up, r.ButtonIndex, profile);
                     if (!ok)
                     {

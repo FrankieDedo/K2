@@ -1,0 +1,83 @@
+<Window x:Class="K2.Core.TextIconDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core"
+        Title="{loc:Get txt_dialog_title}"
+        Width="340" SizeToContent="Height"
+        MinWidth="340"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Style="{DynamicResource K2WindowStyle}">
+
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- header -->
+            <RowDefinition Height="10"/>
+            <RowDefinition Height="Auto"/>  <!-- preview -->
+            <RowDefinition Height="10"/>
+            <RowDefinition Height="Auto"/>  <!-- text input -->
+            <RowDefinition Height="10"/>
+            <RowDefinition Height="Auto"/>  <!-- background mode -->
+            <RowDefinition Height="8"/>
+            <RowDefinition Height="Auto"/>  <!-- colors -->
+            <RowDefinition Height="14"/>
+            <RowDefinition Height="Auto"/>  <!-- buttons -->
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="LblHeader" Grid.Row="0"
+                   Text="{loc:Get txt_dialog_title}"
+                   FontSize="16" FontWeight="Bold"/>
+
+        <Border Grid.Row="2" Width="140" Height="140"
+                HorizontalAlignment="Center"
+                Background="#222228"
+                BorderBrush="#444" BorderThickness="1"
+                CornerRadius="4">
+            <Image x:Name="ImgPreview" Stretch="Uniform" Margin="4"/>
+        </Border>
+
+        <StackPanel Grid.Row="4">
+            <TextBlock Text="{loc:Get txt_label}"
+                       Foreground="#AAA" FontSize="11" Margin="0,0,0,4"/>
+            <TextBox x:Name="TxtInput"
+                     AcceptsReturn="True" TextWrapping="Wrap"
+                     Height="56" MaxLength="60"
+                     TextChanged="TxtInput_TextChanged"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="6">
+            <RadioButton x:Name="RbBgSolid" GroupName="TxtBgMode"
+                         Content="{loc:Get txt_bg_solid}"
+                         IsChecked="True" Checked="BgMode_Changed"
+                         Margin="0,0,0,4"/>
+            <RadioButton x:Name="RbBgImage" GroupName="TxtBgMode"
+                         Content="{loc:Get txt_bg_image}"
+                         Checked="BgMode_Changed"/>
+        </StackPanel>
+
+        <WrapPanel Grid.Row="8" Orientation="Horizontal">
+            <TextBlock Text="{loc:Get txt_bg_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <Button x:Name="BtnBgColor" Width="40" Height="22"
+                    Background="#1A1A1E" BorderThickness="2" BorderBrush="#3A3A40"
+                    Click="BtnBgColor_Click" Margin="0,0,16,0"/>
+            <TextBlock Text="{loc:Get txt_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <Button x:Name="BtnTextColor" Width="40" Height="22"
+                    Background="White" BorderThickness="2" BorderBrush="#3A3A40"
+                    Click="BtnTextColor_Click"/>
+        </WrapPanel>
+
+        <StackPanel Grid.Row="10"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right">
+            <Button Content="{loc:Get ok}"
+                    IsDefault="True"
+                    MinWidth="72"
+                    Click="BtnOk_Click"
+                    Margin="0,0,8,0"/>
+            <Button Content="{loc:Get cancel}"
+                    IsCancel="True"
+                    MinWidth="72"/>
+        </StackPanel>
+    </Grid>
+</Window>

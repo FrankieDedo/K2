@@ -37,6 +37,9 @@ public partial class DpKeyConfigDialog : Window
 
     // ---- State ----------------------------------------------------------
     private readonly int _keyIndex;
+    /// <summary>Physical mounting rotation of the DisplayPad this key lives on (0/90/180/270)
+    /// — passed in so an auto-generated image (exec/folder) can be pre-counter-rotated.</summary>
+    private readonly int _deviceRotation;
     /// <summary>Current image path in the dialog (not yet cropped/rotated on disk —
     /// for GIFs it stays the original file, for static images it's the source loaded
     /// into the CropEditor).</summary>
@@ -64,11 +67,13 @@ public partial class DpKeyConfigDialog : Window
         int keyIndex,
         string? currentImagePath,
         string? currentActionType,
-        string? currentActionValue)
+        string? currentActionValue,
+        int deviceRotation = 0)
     {
         InitializeComponent();
 
-        _keyIndex    = keyIndex;
+        _keyIndex       = keyIndex;
+        _deviceRotation = deviceRotation;
         _pendingPath = currentImagePath;
         _originalPath = currentImagePath;
         ActionType   = currentActionType;
@@ -116,6 +121,23 @@ public partial class DpKeyConfigDialog : Window
     {
         _pendingPath = null;
         RefreshImagePreview();
+    }
+
+    /// <summary>
+    /// Opens the shared "insert text" editor (<see cref="TextIconDialog"/>): plain text
+    /// on a solid color, or overlaid on the image currently loaded in this dialog.
+    /// </summary>
+    private void BtnAddText_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new TextIconDialog(DpHidNative.IconSize, _pendingPath) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+
+        _pendingPath    = dlg.NewImagePath;
+        _rotation       = 0;
+        Rb0.IsChecked   = true;
+        _previewRotate.Angle = 0;
+        RefreshImagePreview();
+        UpdateRotationAvailability();
     }
 
     private void RotRadio_Checked(object sender, RoutedEventArgs e)
@@ -198,20 +220,23 @@ public partial class DpKeyConfigDialog : Window
     /// When the action just assigned/changed is "exec" or "folder", auto-generate the
     /// key's picture (the executable's own icon, or a folder glyph + name) instead of
     /// requiring the user to manually pick an image — mirrors <see cref="BtnLoadImage_Click"/>
-    /// but with a generated source instead of a user-picked file.
+    /// but with a generated source instead of a user-picked file. The result is saved under
+    /// <see cref="MainWindow.DpAutoIconDir"/>, which every upload path in <c>MainWindow.DisplayPad.cs</c>
+    /// recognizes (via <c>EffectiveDpRotation</c>) to skip the device counter-rotation it
+    /// already has baked in — otherwise it would get rotated a second time on every reload.
     /// </summary>
     private void TryAutoGenerateKeyImage()
     {
         if (string.IsNullOrWhiteSpace(ActionValue)) return;
         if (ActionType != "exec" && ActionType != "folder") return;
 
-        string dest = AutoIconCachePath(ActionType!, ActionValue!);
+        string dest = AutoIconCachePath(ActionType!, ActionValue!, _deviceRotation);
         bool ok = ActionType == "exec"
-            ? IconImageGenerator.TryGenerateExecIcon(ActionValue!, DpHidNative.IconSize, dest)
-            : IconImageGenerator.TryGenerateFolderIcon(ActionValue!, DpHidNative.IconSize, dest);
+            ? IconImageGenerator.TryGenerateExecIcon(ActionValue!, DpHidNative.IconSize, dest, _deviceRotation)
+            : IconImageGenerator.TryGenerateFolderIcon(ActionValue!, DpHidNative.IconSize, dest, _deviceRotation);
         if (!ok) return;
 
-        _pendingPath  = dest;
+        _pendingPath    = dest;
         _rotation     = 0;
         Rb0.IsChecked = true;
         _previewRotate.Angle = 0;
@@ -219,7 +244,7 @@ public partial class DpKeyConfigDialog : Window
         UpdateRotationAvailability();
     }
 
-    private static string AutoIconCachePath(string kind, string sourceValue)
+    private static string AutoIconCachePath(string kind, string sourceValue, int deviceRotation)
     {
         string cacheRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -229,7 +254,7 @@ public partial class DpKeyConfigDialog : Window
         long mtime = 0;
         if (kind == "exec") { try { mtime = File.GetLastWriteTimeUtc(sourceValue).Ticks; } catch { } }
         byte[] hash = System.Security.Cryptography.SHA1.HashData(
-            System.Text.Encoding.UTF8.GetBytes($"{kind}|{sourceValue}|{mtime}"));
+            System.Text.Encoding.UTF8.GetBytes($"{kind}|{sourceValue}|{mtime}|r{deviceRotation}"));
         return Path.Combine(cacheRoot, Convert.ToHexString(hash).ToLowerInvariant() + $"_{kind}.png");
     }
 

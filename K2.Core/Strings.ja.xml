@@ -56,6 +56,7 @@
   <string name="exec_path_label">Executable / file path:</string>
   <string name="folder_path_label">Folder path:</string>
   <string name="recent_paths">Recent:</string>
+  <string name="remove_recent">Remove from recent</string>
   <string name="browser_other">Other…</string>
   <string name="browser_url_label">Initial URL (optional):</string>
   <string name="profile_targets_label">Switch these profiles:</string>
@@ -168,7 +169,7 @@
   <string name="macro_playback_toggle">トグル</string>
   <string name="macro_record_mouse">マウスを記録</string>
   <string name="macro_actions_count">{0} アクション</string>
-  <string name="macro_import_bc">BaseCamp.db からインポート</string>
+  <string name="macro_import_bc">Base Camp からインポート</string>
   <string name="macro_select_first">記録する前にマクロを選択または作成してください。</string>
   <string name="macro_no_actions">このマクロには記録されたアクションがありません。</string>
   <string name="macro_none_in_bc">BaseCamp データベースにマクロが見つかりませんでした。</string>
@@ -271,7 +272,7 @@
   <string name="dp_rotate_image">画像を回転:</string>
   <string name="dp_action_section">アクション</string>
   <string name="dp_change_image">画像を変更…</string>
-  <string name="import_bc">BC をインポート</string>
+  <string name="import_bc">Base Camp からインポート</string>
   <string name="export">エクスポート</string>
   <string name="dp_export_bc">エクスポート (Base Camp)…</string>
   <string name="dp_export_k2">エクスポート (K2)…</string>

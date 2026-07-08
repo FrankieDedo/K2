@@ -412,6 +412,39 @@
             </Setter>
         </Style>
 
+        <!-- Macro editor: library list item, styled like the device "SECTIONS"
+             sidebar (accent-highlight-when-selected) instead of a plain ListBox. -->
+        <Style x:Key="MacroLibraryItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="#9A9AA2"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="10,9"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderThickness="3,0,0,0" BorderBrush="Transparent"
+                                CornerRadius="0,4,4,0" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1E1E26"/>
+                                <Setter Property="Foreground" Value="#DCDCE0"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource K2AccentBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource K2AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource K2AccentTextBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Macro editor: press/release chevron indicator on each input row -->
         <Style x:Key="MacroPressIndicatorStyle" TargetType="TextBlock">
             <Setter Property="Text" Value=""/>
@@ -1066,7 +1099,7 @@
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE8E5;"
                                         Click="BtnEvImportXml_Click"/>
                                 <Button x:Name="BtnEvImportBc" Content="{loc:Get import_bc}"
-                                        Style="{StaticResource K2SideActionAccentButton}" Tag="&#xE8B5;"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8B5;"
                                         Click="BtnEvImportBc_Click"/>
 
                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
@@ -1275,7 +1308,7 @@
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE8E5;"
                                         Click="BtnMpImportXml_Click"/>
                                 <Button x:Name="BtnMpImportBc" Content="{loc:Get import_bc}"
-                                        Style="{StaticResource K2SideActionAccentButton}" Tag="&#xE8B5;"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8B5;"
                                         Click="BtnMpImportBc_Click"/>
 
                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
@@ -1467,7 +1500,7 @@
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE8E5;"
                                         Click="BtnDpImportXml_Click"/>
                                 <Button x:Name="BtnDpImportBc" Content="{loc:Get dp_import_bc}"
-                                        Style="{StaticResource K2SideActionAccentButton}" Tag="&#xE896;"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE896;"
                                         Click="BtnDpImportBc_Click"/>
 
                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
@@ -1537,22 +1570,34 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- Macro library (always visible) -->
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Text="{loc:Get macro_library}" Style="{StaticResource K2SideGroupHeader}"/>
-                            <ListBox x:Name="LbMacros" Height="280"
-                                     Background="#1E1E20" Foreground="White"
-                                     SelectionChanged="LbMacros_SelectionChanged"
-                                     DisplayMemberPath="Name"/>
-                            <WrapPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <!-- Macro library (always visible) — same look as the device
+                             "SECTIONS" sidebar: dark rounded card, accent-highlighted
+                             selection, stretching to fill the column's full height.
+                             New/Delete above the card, Import below it. -->
+                        <Grid Grid.Column="0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="{loc:Get macro_library}" Style="{StaticResource K2SideGroupHeader}"/>
+                            <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,6">
                                 <Button x:Name="BtnMacroNew"    Content="{loc:Get macro_new}"    Padding="8,2" Margin="0,0,4,0" Click="BtnMacroNew_Click"    Style="{StaticResource K2IconButton}" Tag="&#xE710;"/>
-                                <Button x:Name="BtnMacroDelete" Content="{loc:Get delete}"       Padding="8,2" Margin="0,0,4,0" Click="BtnMacroDelete_Click" Style="{StaticResource K2IconButton}" Tag="&#xE74D;"/>
+                                <Button x:Name="BtnMacroDelete" Content="{loc:Get delete}"       Padding="8,2" Click="BtnMacroDelete_Click" Style="{StaticResource K2IconButton}" Tag="&#xE74D;"/>
                             </WrapPanel>
-                            <Button x:Name="BtnMacroImportBC" Content="{loc:Get macro_import_bc}"
+                            <Border Grid.Row="2" Background="#111115" CornerRadius="6" Padding="4">
+                                <ListBox x:Name="LbMacros"
+                                         Background="Transparent" BorderThickness="0"
+                                         ItemContainerStyle="{StaticResource MacroLibraryItemStyle}"
+                                         SelectionChanged="LbMacros_SelectionChanged"
+                                         DisplayMemberPath="Name"/>
+                            </Border>
+                            <Button Grid.Row="3" x:Name="BtnMacroImportBC" Content="{loc:Get macro_import_bc}"
                                     Padding="8,2" Margin="0,6,0,0" Click="BtnMacroImportBC_Click"
                                     Style="{StaticResource K2IconButton}" Tag="&#xE8B5;"
                                     HorizontalAlignment="Left"/>
-                        </StackPanel>
+                        </Grid>
 
                         <!-- Selected macro editor -->
                         <Grid x:Name="SpMacroSettings" Grid.Column="2" Visibility="Collapsed">
@@ -1582,6 +1627,8 @@
                                     <TextBlock Text="{loc:Get macro_section_devices}" Style="{StaticResource K2SideGroupHeader}"/>
                                     <CheckBox x:Name="CkMacroMouse" Content="{loc:Get macro_record_mouse}"
                                               Margin="0,0,0,6" Click="CkMacroDevice_Click"/>
+                                    <CheckBox x:Name="CkMacroMouseMovement" Content="{loc:Get macro_record_mouse_movement}"
+                                              Margin="20,0,0,6" FontSize="12" Click="CkMacroDevice_Click"/>
                                     <CheckBox x:Name="CkMacroKeyboard" Content="{loc:Get macro_record_keyboard}"
                                               Margin="0,0,0,18" Click="CkMacroDevice_Click"/>
 
@@ -1593,8 +1640,8 @@
                                                  Style="{StaticResource MacroOptionRowStyle}" Checked="RbMacroDelay_Checked">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="{loc:Get macro_delay_custom}" VerticalAlignment="Center"/>
-                                            <TextBox x:Name="TxtMacroCustomDelay" Width="38" Margin="8,0,4,0"
-                                                     Background="#2A2A2E" Foreground="White"
+                                            <TextBox x:Name="TxtMacroCustomDelay" Width="66" Margin="8,0,4,0"
+                                                     Padding="5,2" Background="#2A2A2E" Foreground="White"
                                                      TextChanged="TxtMacroCustomDelay_TextChanged"/>
                                             <TextBlock Text="ms" VerticalAlignment="Center" Opacity="0.7"/>
                                         </StackPanel>
@@ -1614,8 +1661,8 @@
                                                  Style="{StaticResource MacroOptionRowStyle}" Checked="RbMacroPlayback_Checked">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="{loc:Get macro_repeat_short}" VerticalAlignment="Center"/>
-                                            <TextBox x:Name="TxtMacroRepeatN" Width="38" Margin="8,0,4,0"
-                                                     Background="#2A2A2E" Foreground="White"
+                                            <TextBox x:Name="TxtMacroRepeatN" Width="66" Margin="8,0,4,0"
+                                                     Padding="5,2" Background="#2A2A2E" Foreground="White"
                                                      TextChanged="TxtMacroRepeatN_TextChanged"/>
                                             <TextBlock Text="{loc:Get macro_times_suffix}" VerticalAlignment="Center" Opacity="0.7"/>
                                         </StackPanel>
@@ -1696,11 +1743,11 @@
                                                                        Foreground="#68686E" FontSize="11"
                                                                        VerticalAlignment="Center" Margin="10,0,0,0"/>
                                                             <StackPanel Grid.Column="5" Orientation="Horizontal" Margin="10,0,0,0">
-                                                                <Button Tag="{Binding}" Content="&#xE70E;" Click="BtnMacroInputMoveUp_Click"
+                                                                <Button Tag="&#xE70E;" CommandParameter="{Binding}" Click="BtnMacroInputMoveUp_Click"
                                                                         Style="{StaticResource MacroRowIconButton}" ToolTip="{loc:Get macro_move_up}"/>
-                                                                <Button Tag="{Binding}" Content="&#xE70D;" Click="BtnMacroInputMoveDown_Click"
+                                                                <Button Tag="&#xE70D;" CommandParameter="{Binding}" Click="BtnMacroInputMoveDown_Click"
                                                                         Style="{StaticResource MacroRowIconButton}" ToolTip="{loc:Get macro_move_down}"/>
-                                                                <Button Tag="{Binding}" Content="&#xE74D;" Click="BtnMacroInputDelete_Click"
+                                                                <Button Tag="&#xE74D;" CommandParameter="{Binding}" Click="BtnMacroInputDelete_Click"
                                                                         Style="{StaticResource MacroRowIconButton}" ToolTip="{loc:Get macro_delete_input}"/>
                                                             </StackPanel>
                                                         </Grid>

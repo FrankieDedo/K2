@@ -76,6 +76,7 @@
   <string name="exec_path_label">Executable / file path:</string>
   <string name="folder_path_label">Folder path:</string>
   <string name="recent_paths">Recent:</string>
+  <string name="remove_recent">Remove from recent</string>
   <string name="browser_other">Other…</string>
   <string name="browser_url_label">Initial URL (optional):</string>
   <string name="profile_targets_label">Switch these profiles:</string>
@@ -264,6 +265,7 @@
   <string name="macro_repeat_short">Repeat</string>
   <string name="macro_times_suffix">times</string>
   <string name="macro_record_mouse">Record mouse</string>
+  <string name="macro_record_mouse_movement">Record mouse movement</string>
   <string name="macro_record_keyboard">Record keyboard</string>
   <string name="macro_section_devices">Devices</string>
   <string name="macro_section_inputs">Inputs</string>
@@ -276,7 +278,7 @@
   <string name="macro_move_down">Move down</string>
   <string name="macro_delete_input">Remove</string>
   <string name="macro_actions_count">{0} actions</string>
-  <string name="macro_import_bc">Import from BaseCamp.db</string>
+  <string name="macro_import_bc">Import from Base Camp</string>
   <string name="macro_select_first">Select or create a macro before recording.</string>
   <string name="macro_no_actions">The macro has no recorded actions.</string>
   <string name="macro_none_in_bc">No macros found in the BaseCamp database.</string>
@@ -343,6 +345,14 @@
   <string name="dp_remove_action">Remove action</string>
   <string name="dp_change_image">Change image…</string>
   <string name="dp_remove_image">Remove image</string>
+  <string name="dp_add_text">Add text…</string>
+  <string name="txt_dialog_title">Insert text</string>
+  <string name="txt_label">Text:</string>
+  <string name="txt_bg_solid">Solid color background</string>
+  <string name="txt_bg_image">On top of the loaded image</string>
+  <string name="txt_bg_color">Background:</string>
+  <string name="txt_color">Text:</string>
+  <string name="txt_generate_failed">Could not generate the text image.</string>
   <string name="dp_open_bc_profile">Open BaseCamp profile</string>
   <string name="dp_filter_bc_xml">BaseCamp profile (*.xml)|*.xml|All files|*.*</string>
   <string name="dp_bc_db_not_found">BaseCamp.db not found. Set K2_BASECAMP_DB or install Base Camp.</string>
@@ -350,7 +360,7 @@
   <string name="dp_no_matching_devices">No connected device matches the profiles in the DB.</string>
   <string name="dp_import_confirm">Import {0} profiles to {1} devices?</string>
   <string name="dp_imported">Imported {0} profiles ({1} keys) from Base Camp.</string>
-  <string name="import_bc">Import BC</string>
+  <string name="import_bc">Import from Base Camp</string>
   <!-- Export -->
   <string name="export">Export</string>
   <string name="dp_export_bc">Export (Base Camp)…</string>

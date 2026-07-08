@@ -72,6 +72,14 @@ public partial class ButtonActionDialog
             TxtExecPath.Text = path;
     }
 
+    private void BtnExecRecentRemove_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string path }) return;
+        e.Handled = true;
+        AppSettings.RemoveRecentExecPath(path);
+        RefreshExecPanel();
+    }
+
     // ---- Open folder ---------------------------------------------------
 
     private void RefreshFolderPanel()
@@ -97,5 +105,13 @@ public partial class ButtonActionDialog
     {
         if (LstFolderRecent.SelectedItem is string path)
             TxtFolderPath.Text = path;
+    }
+
+    private void BtnFolderRecentRemove_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string path }) return;
+        e.Handled = true;
+        AppSettings.RemoveRecentFolderPath(path);
+        RefreshFolderPanel();
     }
 }

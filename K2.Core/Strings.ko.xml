@@ -56,6 +56,7 @@
   <string name="exec_path_label">Executable / file path:</string>
   <string name="folder_path_label">Folder path:</string>
   <string name="recent_paths">Recent:</string>
+  <string name="remove_recent">Remove from recent</string>
   <string name="browser_other">Other…</string>
   <string name="browser_url_label">Initial URL (optional):</string>
   <string name="profile_targets_label">Switch these profiles:</string>
@@ -168,7 +169,7 @@
   <string name="macro_playback_toggle">토글</string>
   <string name="macro_record_mouse">마우스 녹화</string>
   <string name="macro_actions_count">{0}개 동작</string>
-  <string name="macro_import_bc">BaseCamp.db에서 가져오기</string>
+  <string name="macro_import_bc">Base Camp에서 가져오기</string>
   <string name="macro_select_first">녹화하기 전에 매크로를 선택하거나 만드세요.</string>
   <string name="macro_no_actions">이 매크로에는 녹화된 동작이 없습니다.</string>
   <string name="macro_none_in_bc">BaseCamp 데이터베이스에서 매크로를 찾을 수 없습니다.</string>
@@ -271,7 +272,7 @@
   <string name="dp_rotate_image">이미지 회전:</string>
   <string name="dp_action_section">동작</string>
   <string name="dp_change_image">이미지 변경…</string>
-  <string name="import_bc">BC 가져오기</string>
+  <string name="import_bc">Base Camp에서 가져오기</string>
   <string name="export">내보내기</string>
   <string name="dp_export_bc">내보내기 (Base Camp)…</string>
   <string name="dp_export_k2">내보내기 (K2)…</string>

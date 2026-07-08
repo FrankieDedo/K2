@@ -90,7 +90,23 @@
 
                 <TextBlock Grid.Row="2" Text="{loc:Get recent_paths}" Margin="0,0,0,4" Foreground="#9A9AA2"/>
                 <ListBox x:Name="LstExecRecent" Grid.Row="3"
-                         SelectionChanged="LstExecRecent_SelectionChanged"/>
+                         SelectionChanged="LstExecRecent_SelectionChanged">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
+                                <Button Grid.Column="1" Content="✕" Padding="6,0" FontSize="11"
+                                        ToolTip="{loc:Get remove_recent}"
+                                        Click="BtnExecRecentRemove_Click" Tag="{Binding}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
             </Grid>
 
             <!-- Open folder panel -->
@@ -119,7 +135,23 @@
 
                 <TextBlock Grid.Row="2" Text="{loc:Get recent_paths}" Margin="0,0,0,4" Foreground="#9A9AA2"/>
                 <ListBox x:Name="LstFolderRecent" Grid.Row="3"
-                         SelectionChanged="LstFolderRecent_SelectionChanged"/>
+                         SelectionChanged="LstFolderRecent_SelectionChanged">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
+                                <Button Grid.Column="1" Content="✕" Padding="6,0" FontSize="11"
+                                        ToolTip="{loc:Get remove_recent}"
+                                        Click="BtnFolderRecentRemove_Click" Tag="{Binding}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
             </Grid>
 
             <!-- Open browser panel -->

@@ -399,7 +399,16 @@ public partial class MainWindow
 
     // ---- Layout selector helpers ------------------------------------------
 
-    private sealed record LayoutChoice(KeyboardLayoutType Layout, string Label);
+    private sealed record LayoutChoice(KeyboardLayoutType Layout, string Label)
+    {
+        // Fallback for the closed ComboBox: when the control's ancestor is still
+        // Visibility="Collapsed" at the time ItemsSource/DisplayMemberPath are set
+        // (the "Settings" section is not the default one shown), WPF may render
+        // the closed box via ToString() instead of DisplayMemberPath. Matching
+        // ToString() to the label keeps it correct either way (see RotationChoice
+        // in MainWindow.Keys.cs for the same pattern).
+        public override string ToString() => Label;
+    }
 
     private void InitKeyboardLayoutSelector()
     {
@@ -547,13 +556,14 @@ public partial class MainWindow
         // (elsewhere the keyboard overlay is just a visual reference for other panels).
         if (!IsEvKeyBindingSectionActive) return;
 
-        // Get or create the key entry
+        // Get or create the key entry. A newly created key is only added
+        // in-memory (not persisted) until it's actually given an action below.
+        bool isNewKey = !_evByMatrix.ContainsKey(matrixId);
         if (!_evByMatrix.TryGetValue(matrixId, out var key))
         {
             key = new EverestKey(matrixId);
             _evKeys.Add(key);
             _evByMatrix[matrixId] = key;
-            _evStore.SaveKey(new EverestKeyRecord(EvCurrentProfile(), matrixId, null, null, null));
             LogEverest($"[CAP ] new key 0x{matrixId:X2} added via overlay click");
         }
 
@@ -561,15 +571,22 @@ public partial class MainWindow
 
         // Open action dialog directly
         var dlg = new ButtonActionDialog(key.KeyMatrix, key.ActionType, key.ActionValue, _evActionHost) { Owner = this };
-        if (dlg.ShowDialog() != true) return;
+        if (dlg.ShowDialog() != true)
+        {
+            // Cancelled: discard a key that was only just created and never configured.
+            if (isNewKey && key.ActionType is null)
+            {
+                _evKeys.Remove(key);
+                _evByMatrix.Remove(matrixId);
+            }
+            return;
+        }
 
         key.ActionType  = string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none"
                           ? null : dlg.ActionType;
         key.ActionValue = key.ActionType is null ? null : dlg.ActionValue;
 
-        _evStore.SaveKey(new EverestKeyRecord(
-            EvCurrentProfile(), key.KeyMatrix, key.Label, key.ActionType, key.ActionValue));
-        LogEverest($"[ACT ] key 0x{key.KeyMatrix:X2} <- type={key.ActionType ?? "none"}");
+        EvPersistOrDiscardKey(key);
     }
 
     /// <summary>Highlights/un-highlights a key in the overlay when physically pressed.</summary>
@@ -1090,9 +1107,7 @@ public partial class MainWindow
                           ? null : dlg.ActionType;
         key.ActionValue = key.ActionType is null ? null : dlg.ActionValue;
 
-        _evStore.SaveKey(new EverestKeyRecord(
-            EvCurrentProfile(), key.KeyMatrix, key.Label, key.ActionType, key.ActionValue));
-        LogEverest($"[ACT ] key 0x{key.KeyMatrix:X2} <- type={key.ActionType ?? "none"}");
+        EvPersistOrDiscardKey(key);
     }
 
     private void BtnEvRemove_Click(object sender, RoutedEventArgs e)
@@ -1102,6 +1117,27 @@ public partial class MainWindow
         _evByMatrix.Remove(key.KeyMatrix);
         _evStore.RemoveKey(EvCurrentProfile(), key.KeyMatrix);
         LogEverest($"[KEY ] key 0x{key.KeyMatrix:X2} removed");
+    }
+
+    /// <summary>
+    /// Persists a key's current action, or — if it has no action assigned —
+    /// discards it entirely (list + DB) instead of keeping an empty entry.
+    /// </summary>
+    private void EvPersistOrDiscardKey(EverestKey key)
+    {
+        if (key.ActionType is null)
+        {
+            _evKeys.Remove(key);
+            _evByMatrix.Remove(key.KeyMatrix);
+            _evStore.RemoveKey(EvCurrentProfile(), key.KeyMatrix);
+            LogEverest($"[KEY ] key 0x{key.KeyMatrix:X2} emptied, removed");
+        }
+        else
+        {
+            _evStore.SaveKey(new EverestKeyRecord(
+                EvCurrentProfile(), key.KeyMatrix, key.Label, key.ActionType, key.ActionValue));
+            LogEverest($"[ACT ] key 0x{key.KeyMatrix:X2} <- type={key.ActionType}");
+        }
     }
 
     // ============================================================
@@ -1158,11 +1194,11 @@ public partial class MainWindow
             }
             else
             {
+                // Only added in-memory (not persisted) until it's actually
+                // given an action via BtnEvConfig_Click.
                 var k = new EverestKey(matrix);
                 _evKeys.Add(k);
                 _evByMatrix[matrix] = k;
-                _evStore.SaveKey(new EverestKeyRecord(
-                    EvCurrentProfile(), matrix, null, null, null));
                 LvEvKeys.SelectedItem = k;
                 LogEverest($"[CAP ] new key 0x{matrix:X2} added");
                 LblStatus.Text = $"Key 0x{matrix:X2} captured. Configure its action.";

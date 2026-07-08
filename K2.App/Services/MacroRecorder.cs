@@ -18,6 +18,8 @@ public sealed class MacroRecorder : IDisposable
     private readonly Stopwatch _sw = new();
     private bool _recording;
     private bool _recordMouse;
+    private bool _recordMouseMovement;
+    private IntPtr _ownerHwnd;
 
     // Win32 hook delegates (must stay alive to prevent GC)
     private readonly LowLevelKeyboardProc _kbProc;
@@ -34,10 +36,16 @@ public sealed class MacroRecorder : IDisposable
         _mouseProc = MouseHookCallback;
     }
 
-    public void Start(bool recordMouse = false, bool recordKeyboard = true)
+    /// <summary>K2's own main window handle — clicks landing inside its
+    /// bounds (e.g. the "Stop" button) are excluded from the recording.
+    /// Call before <see cref="Start"/> with the caller's up-to-date HWND.</summary>
+    public void SetOwnerWindow(IntPtr hwnd) => _ownerHwnd = hwnd;
+
+    public void Start(bool recordMouse = false, bool recordKeyboard = true, bool recordMouseMovement = false)
     {
         if (_recording) return;
         _recordMouse = recordMouse;
+        _recordMouseMovement = recordMouseMovement;
         _inputs.Clear();
         _sw.Restart();
 
@@ -109,9 +117,14 @@ public sealed class MacroRecorder : IDisposable
                 WM_LBUTTONUP   => "mouseup",
                 WM_RBUTTONDOWN => "mousedown",
                 WM_RBUTTONUP   => "mouseup",
-                WM_MOUSEMOVE   => "mousemove",
+                WM_MOUSEMOVE   => _recordMouseMovement ? "mousemove" : null,
                 _ => null
             };
+            // Clicks on K2's own window (e.g. the "Stop" button that ends the
+            // recording) must not end up inside the macro — only capture
+            // clicks aimed at other applications.
+            if (type != null && IsOverOwnWindow(hookStruct.pt.x, hookStruct.pt.y))
+                type = null;
             if (type != null)
             {
                 int button = msg switch
@@ -138,6 +151,28 @@ public sealed class MacroRecorder : IDisposable
 
     public void Dispose() => Stop();
 
+    /// <summary>True if the given screen point belongs to a window owned by
+    /// this process (i.e. K2's own UI) — used to keep clicks on the recorder
+    /// panel itself (Stop button included) out of the recorded macro.
+    /// Checks two ways and ORs them: a direct bounding-rect test against
+    /// <see cref="_ownerHwnd"/> (reliable even for a custom-chrome/layered
+    /// WPF window, where Z-order hit-testing via WindowFromPoint can miss)
+    /// plus a WindowFromPoint + owning-process check as a second opinion.</summary>
+    private bool IsOverOwnWindow(int x, int y)
+    {
+        if (_ownerHwnd != IntPtr.Zero &&
+            GetWindowRect(_ownerHwnd, out RECT r) &&
+            x >= r.Left && x < r.Right && y >= r.Top && y < r.Bottom)
+        {
+            return true;
+        }
+
+        IntPtr hwnd = WindowFromPoint(new POINT { x = x, y = y });
+        if (hwnd == IntPtr.Zero) return false;
+        GetWindowThreadProcessId(hwnd, out uint pid);
+        return pid == (uint)Environment.ProcessId;
+    }
+
     // ─────────────────────── Win32 ───────────────────────
 
     private const int WH_KEYBOARD_LL = 13;
@@ -157,6 +192,9 @@ public sealed class MacroRecorder : IDisposable
 
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT { public int x, y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MSLLHOOKSTRUCT
@@ -182,4 +220,14 @@ public sealed class MacroRecorder : IDisposable
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(POINT p);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 }

@@ -52,6 +52,26 @@ public partial class MainWindow
     private bool _dpSuppressRotation;
     private int _dpRotation; // 0, 90, 270
 
+    /// <summary>
+    /// Cache folder for images auto-generated from an action (exec icon / folder glyph,
+    /// see <see cref="DpKeyConfigDialog.TryAutoGenerateKeyImage"/>) — these already have
+    /// the device's counter-rotation baked in at generation time, so every upload path
+    /// below must skip <see cref="_dpRotation"/> for them (else they'd be rotated twice).
+    /// Matches <c>DpKeyConfigDialog.AutoIconCachePath</c>'s cache root exactly.
+    /// </summary>
+    private static readonly string DpAutoIconDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "K2.DisplayPad", "auto_icons");
+
+    /// <summary>Rotation to pass to an upload call for <paramref name="imagePath"/>: 0 for an
+    /// auto-generated (already pre-rotated) icon, <see cref="_dpRotation"/> for anything else —
+    /// checked by path so it's correct on EVERY upload (initial assignment, profile reload,
+    /// press-visual re-render, rotation-setting change...), not just the one that created it.</summary>
+    private int EffectiveDpRotation(string? imagePath) =>
+        !string.IsNullOrEmpty(imagePath) &&
+        imagePath.StartsWith(DpAutoIconDir, StringComparison.OrdinalIgnoreCase)
+            ? 0 : _dpRotation;
+
     // ---- Folder / sub-page navigation ----
     private int _currentDpPageId = 0;
     private string? _currentDpFolderName = null;
@@ -1177,7 +1197,7 @@ public partial class MainWindow
         if (!IsDpKeyBindingSectionActive) return;
 
         // Unified dialog: image + action
-        var dlg = new DpKeyConfigDialog(key.Index, key.ImagePath, key.ActionType, key.ActionValue) { Owner = this };
+        var dlg = new DpKeyConfigDialog(key.Index, key.ImagePath, key.ActionType, key.ActionValue, _dpRotation) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
         // Update action
@@ -1211,23 +1231,24 @@ public partial class MainWindow
 
     private void DpUploadAndPersist(int id, int profile, DisplayPadKey key, string path)
     {
+        int rotation = EffectiveDpRotation(path);
         bool ok;
         if (DpGifAnimator.IsAnimatedGif(path))
         {
             // Animated GIFs are always played live (per-frame SetIconPacket-style upload,
             // see DpGifAnimator) — there is no firmware-persistent equivalent, same as BC.
-            DpGifAnimator.StartOrUpdate(_dpClient, DpLogAsync, id, key.Index, path, _dpRotation);
+            DpGifAnimator.StartOrUpdate(_dpClient, DpLogAsync, id, key.Index, path, rotation);
             ok = true;
             DpLog($"[GIF] key #{key.Index} <- {Path.GetFileName(path)}");
         }
         else
         {
             DpGifAnimator.Stop(id, key.Index);
-            ok = _dpClient.UploadImageToProfile(id, path, key.Index, profile, _dpRotation);
+            ok = _dpClient.UploadImageToProfile(id, path, key.Index, profile, rotation);
             if (!ok)
             {
                 DpLog($"  Upload persistent FAIL, trying live");
-                ok = _dpClient.UploadImage(id, path, key.Index, _dpRotation);
+                ok = _dpClient.UploadImage(id, path, key.Index, rotation);
             }
         }
         if (ok)
@@ -1432,7 +1453,7 @@ public partial class MainWindow
         if (DpSelectedDeviceId() is not int id) return;
         int profile = DpCurrentProfile();
         int pageId = _currentDpPageId;
-        int rotation = _dpRotation;
+        int rotation = _dpRotation; // fullscreen images are never auto-generated action icons
         foreach (var k in _dpKeys) { k.ImagePath = null; k.ActionType = null; k.ActionValue = null; }
         var rows = _dpStore.LoadPage(id, profile, pageId);
         DpLog($"[DB] loaded {rows.Count} records for device={id} profile={profile} page={pageId}");
@@ -1502,9 +1523,10 @@ public partial class MainWindow
                 foreach (var (btnIndex, imagePath) in toUpload)
                 {
                     if (ct.IsCancellationRequested) return;
+                    int imgRotation = EffectiveDpRotation(imagePath);
                     if (persistent)
-                        _dpClient.UploadImageToProfile(id, imagePath, btnIndex, profile, rotation);
-                    _dpClient.UploadImage(id, imagePath, btnIndex, rotation);
+                        _dpClient.UploadImageToProfile(id, imagePath, btnIndex, profile, imgRotation);
+                    _dpClient.UploadImage(id, imagePath, btnIndex, imgRotation);
                 }
                 // Animated GIFs start AFTER the static batch + blank settle — same order BC
                 // uses (normal icon loop first, UploadGIFImage right after).
@@ -1711,7 +1733,7 @@ public partial class MainWindow
         if (DpGifAnimator.IsAnimatedGif(imgPath)) return;
         if (_dpFullscreenByDevice.TryGetValue(id, out bool fs) && fs) return;
 
-        int rotation = _dpRotation;
+        int rotation = EffectiveDpRotation(imgPath);
         var previous = _dpUploadChain.TryGetValue(id, out var p) ? p : Task.CompletedTask;
         var next = previous.ContinueWith(_ => _dpClient.UploadImage(id, imgPath, btnIndex, rotation, pressed),
             TaskScheduler.Default);

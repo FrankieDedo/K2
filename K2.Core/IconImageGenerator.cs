@@ -18,12 +18,17 @@ namespace K2.Core;
 public static class IconImageGenerator
 {
     private static readonly Color BackgroundColor = ColorTranslator.FromHtml("#1A1A1E");
+    private static readonly Color FolderBackgroundColor = Color.Black;
     private static readonly Color AccentColor     = ColorTranslator.FromHtml("#900000");
     private const string SegoeMdl2 = "Segoe MDL2 Assets";
     private const string FolderGlyph = ""; // "OpenFolderHorizontal" glyph
 
-    /// <summary>Renders <paramref name="execPath"/>'s associated icon centered on a size×size dark canvas, saved as PNG.</summary>
-    public static bool TryGenerateExecIcon(string execPath, int size, string outputPngPath)
+    /// <summary>
+    /// Renders <paramref name="execPath"/>'s associated icon centered on a size×size
+    /// dark canvas, saved as PNG. See <see cref="TryGenerateFolderIcon"/> for the
+    /// <paramref name="deviceRotationDegrees"/> counter-rotation convention.
+    /// </summary>
+    public static bool TryGenerateExecIcon(string execPath, int size, string outputPngPath, int deviceRotationDegrees = 0)
     {
         try
         {
@@ -42,6 +47,8 @@ public static class IconImageGenerator
                 g.DrawImage(icon, offset, offset, iconSize, iconSize);
             }
 
+            ApplyDeviceCounterRotation(canvas, deviceRotationDegrees);
+
             Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
             canvas.Save(outputPngPath, ImageFormat.Png);
             return true;
@@ -52,8 +59,19 @@ public static class IconImageGenerator
         }
     }
 
-    /// <summary>Renders a flat folder glyph + the folder's display name on a size×size dark canvas, saved as PNG.</summary>
-    public static bool TryGenerateFolderIcon(string folderPath, int size, string outputPngPath)
+    /// <summary>
+    /// Renders a flat folder glyph + the folder's display name on a size×size black
+    /// canvas, saved as PNG. <paramref name="deviceRotationDegrees"/> (0/90/180/270) is
+    /// the PHYSICAL mounting rotation of the target device/tile (e.g. DisplayPad's
+    /// configured orientation) — when non-zero, the same device counter-rotation
+    /// convention used everywhere else in K2 (see <c>IconRotator.ImageAngleCw</c> /
+    /// the satellite's <c>ResolveForUpload</c>: 90°→image rotated 270°, 270°→90°,
+    /// 180°→180°) is baked directly into the generated file, so it comes out already
+    /// upright for a viewer looking at the physically-rotated device. Callers that bake
+    /// this in must upload the result WITHOUT applying the device rotation again (it
+    /// would double-rotate).
+    /// </summary>
+    public static bool TryGenerateFolderIcon(string folderPath, int size, string outputPngPath, int deviceRotationDegrees = 0)
     {
         try
         {
@@ -64,7 +82,7 @@ public static class IconImageGenerator
             {
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                g.Clear(BackgroundColor);
+                g.Clear(FolderBackgroundColor);
 
                 float glyphSize = size * 0.5f;
                 using (var glyphFont = new Font(SegoeMdl2, glyphSize, FontStyle.Regular, GraphicsUnit.Pixel))
@@ -90,6 +108,8 @@ public static class IconImageGenerator
                 g.DrawString(name, labelFont, labelBrush, rect, format);
             }
 
+            ApplyDeviceCounterRotation(canvas, deviceRotationDegrees);
+
             Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
             canvas.Save(outputPngPath, ImageFormat.Png);
             return true;
@@ -98,6 +118,24 @@ public static class IconImageGenerator
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Same convention as <c>IconRotator.ImageAngleCw</c>/the satellite's
+    /// <c>ResolveForUpload</c>: the angle baked into the image is the OPPOSITE of the
+    /// device's mounting rotation, so (device rotation) + (image pre-rotation) cancel
+    /// out to an upright result for the viewer.
+    /// </summary>
+    private static void ApplyDeviceCounterRotation(Bitmap canvas, int deviceRotationDegrees)
+    {
+        var flip = deviceRotationDegrees switch
+        {
+            90  => RotateFlipType.Rotate270FlipNone,
+            180 => RotateFlipType.Rotate180FlipNone,
+            270 => RotateFlipType.Rotate90FlipNone,
+            _   => RotateFlipType.RotateNoneFlipNone,
+        };
+        if (flip != RotateFlipType.RotateNoneFlipNone) canvas.RotateFlip(flip);
     }
 
     private static string SafeFolderName(string folderPath)

@@ -210,7 +210,21 @@ public static class AppSettings
 
     public static void AddRecentFolderPath(string path) => AddRecent(_data.RecentFolderPaths, path);
 
+    public static void RemoveRecentExecPath(string path) => RemoveRecent(_data.RecentExecPaths, path);
+
+    public static void RemoveRecentFolderPath(string path) => RemoveRecent(_data.RecentFolderPaths, path);
+
     private const int MaxRecentPaths = 10;
+
+    private static void RemoveRecent(List<string> list, string path)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (list.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase)) > 0)
+                Save();
+        }
+    }
 
     private static void AddRecent(List<string> list, string path)
     {
