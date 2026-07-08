@@ -157,12 +157,17 @@ platform (x86 or x64).
   stile Base Camp: libreria macro a sx; colonna Devices/Delay/Playback
   (RadioButton "a pillola", stile `MacroOptionRowStyle`) impilata; lista
   Inputs registrati (`MacroInputRow`) al centro; sezione **Assigned to**
-  a destra dei comandi (query `GetKeysByAction` su MacroPadStore/EverestStore
-  per `ActionType=="macro"` — oggi popolata solo da import BaseCamp.db, non
-  c'è ancora un modo di assegnare "macro" a un tasto da `ButtonActionDialog`).
-  CRUD macro, registrazione (MacroRecorder, con recordKeyboard/recordMouse
-  separati), riproduzione (MacroPlayer), import da BaseCamp.db. Persistenza
-  in MacroStore (tabella Macros in everest.db).
+  a destra dei comandi (query `GetKeysByAction` su MacroPadStore/EverestStore/
+  DisplayPadStore per `ActionType=="macro"`). `ButtonActionDialog` espone
+  "Play macro" come tipo di azione assegnabile a QUALSIASI tasto di
+  QUALSIASI device (MacroPad/Everest/DisplayPad, dentro K2.App) — il picker
+  legge `IActionHost.ListMacroNames()`, l'esecuzione passa da
+  `ButtonActionEngine`'s case `"macro"` → `IActionHost.PlayMacro(name)` →
+  `MainWindow.ListAllMacroNames()`/`PlayMacroByName()` in questo file (lo
+  standalone K2.DisplayPad, senza libreria macro, implementa entrambi come
+  no-op). CRUD macro, registrazione (MacroRecorder, con recordKeyboard/
+  recordMouse separati), riproduzione (MacroPlayer), import da BaseCamp.db.
+  Persistenza in MacroStore (tabella Macros in everest.db).
 - `MainWindow.Layout.cs` — partial Everest: layout dinamico tastiera. Riposiziona
   dock (CvsEvDock) e numpad (CvsEvNumpad) a sx/dx del corpo tastiera in base a
   byMMDockPlug/byNumpadPlug (0=nascosto, 1=sx, 2=dx).

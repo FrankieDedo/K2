@@ -66,6 +66,7 @@
   <string name="act_keys">Keys (Ctrl+Shift+A)</string>
   <string name="act_command">Shell command</string>
   <string name="act_text">Paste text</string>
+  <string name="act_macro">Play macro</string>
   <string name="act_pyscript">Python Script</string>
   <string name="py_file">File .py</string>
   <string name="py_inline">Inline code</string>
@@ -345,6 +346,10 @@
   <string name="dp_remove_action">Remove action</string>
   <string name="dp_change_image">Change image…</string>
   <string name="dp_remove_image">Remove image</string>
+  <string name="dp_create_folder">Create folder page…</string>
+  <string name="dp_create_folder_title">Create folder page</string>
+  <string name="dp_create_folder_prompt">Folder name:</string>
+  <string name="dp_set_back">Set as Back button</string>
   <string name="dp_add_text">Add text…</string>
   <string name="txt_dialog_title">Insert text</string>
   <string name="txt_label">Text:</string>

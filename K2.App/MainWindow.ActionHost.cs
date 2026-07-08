@@ -67,6 +67,10 @@ public partial class MainWindow : IActionHost
             TryExecuteAction(_keys[index]);
     }
 
+    IReadOnlyList<string> IActionHost.ListMacroNames() => ListAllMacroNames();
+
+    void IActionHost.PlayMacro(string macroName) => PlayMacroByName(macroName);
+
     private int SafeSdkVersion()
     {
         try { return _macroPad.SdkVersion(); } catch { return 0; }

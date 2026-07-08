@@ -202,7 +202,9 @@ public partial class MainWindow
             switchProfile:        EvSwitchProfile,
             configuredPythonPath: () => _evStore.GetSetting("python.exePath"),
             listAllProfileTargets: ListAllProfileTargets,
-            switchProfileByKey:    SwitchProfileByKey);
+            switchProfileByKey:    SwitchProfileByKey,
+            listMacroNames:        ListAllMacroNames,
+            playMacro:             PlayMacroByName);
 
         _evEngine = new ButtonActionEngine(_evActionHost);
         _evEngine.Start();

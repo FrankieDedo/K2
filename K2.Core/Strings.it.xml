@@ -65,6 +65,7 @@
   <string name="act_keys">Tasti (Ctrl+Shift+A)</string>
   <string name="act_command">Comando shell</string>
   <string name="act_text">Incolla testo</string>
+  <string name="act_macro">Riproduci macro</string>
   <string name="act_pyscript">Script Python</string>
   <string name="py_file">File .py</string>
   <string name="py_inline">Codice inline</string>
@@ -344,6 +345,10 @@
   <string name="dp_remove_action">Rimuovi azione</string>
   <string name="dp_change_image">Cambia immagine…</string>
   <string name="dp_remove_image">Rimuovi immagine</string>
+  <string name="dp_create_folder">Crea pagina cartella…</string>
+  <string name="dp_create_folder_title">Crea pagina cartella</string>
+  <string name="dp_create_folder_prompt">Nome cartella:</string>
+  <string name="dp_set_back">Imposta come pulsante Indietro</string>
   <string name="dp_add_text">Aggiungi testo…</string>
   <string name="txt_dialog_title">Inserisci testo</string>
   <string name="txt_label">Testo:</string>

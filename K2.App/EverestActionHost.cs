@@ -26,6 +26,8 @@ internal sealed class EverestActionHost : IActionHost
     private readonly Func<string?> _configuredPythonPath;
     private readonly Func<IReadOnlyList<ProfileTargetOption>> _listAllProfileTargets;
     private readonly Action<string, string> _switchProfileByKey;
+    private readonly Func<IReadOnlyList<string>> _listMacroNames;
+    private readonly Action<string> _playMacro;
 
     public EverestActionHost(
         Dispatcher dispatcher,
@@ -37,7 +39,9 @@ internal sealed class EverestActionHost : IActionHost
         Action<string> switchProfile,
         Func<string?> configuredPythonPath,
         Func<IReadOnlyList<ProfileTargetOption>> listAllProfileTargets,
-        Action<string, string> switchProfileByKey)
+        Action<string, string> switchProfileByKey,
+        Func<IReadOnlyList<string>> listMacroNames,
+        Action<string> playMacro)
     {
         _dispatcher             = dispatcher;
         _log                    = log;
@@ -49,6 +53,8 @@ internal sealed class EverestActionHost : IActionHost
         _configuredPythonPath   = configuredPythonPath;
         _listAllProfileTargets  = listAllProfileTargets;
         _switchProfileByKey     = switchProfileByKey;
+        _listMacroNames         = listMacroNames;
+        _playMacro              = playMacro;
     }
 
     Dispatcher IActionHost.Dispatcher => _dispatcher;
@@ -81,4 +87,8 @@ internal sealed class EverestActionHost : IActionHost
     IReadOnlyList<HostButton> IActionHost.GetButtons() => _getButtons();
 
     void IActionHost.PressButton(int index) => _pressButton(index);
+
+    IReadOnlyList<string> IActionHost.ListMacroNames() => _listMacroNames();
+
+    void IActionHost.PlayMacro(string macroName) => _playMacro(macroName);
 }

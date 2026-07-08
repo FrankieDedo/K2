@@ -63,6 +63,7 @@ public partial class ButtonActionDialog
         "oscmd" => "act_oscmd",
         "media" => "act_media",
         "mouse" => "act_mouse",
+        "macro" => "act_macro",
         _       => "dlg_value",
     };
 
@@ -87,8 +88,20 @@ public partial class ButtonActionDialog
     private void PopulateCombo(string tag, string? selectValue)
     {
         CbComboValue.Items.Clear();
-        foreach (var opt in OptionsFor(tag))
-            CbComboValue.Items.Add(new ComboBoxItem { Content = Loc.Get(opt.LocKey), Tag = opt.Value });
+
+        if (tag == "macro")
+        {
+            // Dynamic list (not a fixed enum like oscmd/media/mouse): the macro library
+            // is owned by the host app (K2.App), so K2.Core asks it via IActionHost rather
+            // than referencing MacroStore directly. Names are shown as-is (no Loc lookup).
+            foreach (var name in _host?.ListMacroNames() ?? System.Array.Empty<string>())
+                CbComboValue.Items.Add(new ComboBoxItem { Content = name, Tag = name });
+        }
+        else
+        {
+            foreach (var opt in OptionsFor(tag))
+                CbComboValue.Items.Add(new ComboBoxItem { Content = Loc.Get(opt.LocKey), Tag = opt.Value });
+        }
 
         var match = CbComboValue.Items.OfType<ComboBoxItem>()
             .FirstOrDefault(i => string.Equals((string?)i.Tag, selectValue, System.StringComparison.OrdinalIgnoreCase));

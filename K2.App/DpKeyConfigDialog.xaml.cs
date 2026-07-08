@@ -125,14 +125,24 @@ public partial class DpKeyConfigDialog : Window
 
     /// <summary>
     /// Opens the shared "insert text" editor (<see cref="TextIconDialog"/>): plain text
-    /// on a solid color, or overlaid on the image currently loaded in this dialog.
+    /// on a solid color, or overlaid on the image currently loaded in this dialog. If the
+    /// base image being overlaid is itself an auto-generated exec/folder icon (already
+    /// counter-rotated for the device, see <see cref="TryAutoGenerateKeyImage"/>), the
+    /// composited result is promoted into the same auto-icon cache so it keeps being
+    /// recognized as pre-rotated — otherwise <c>EffectiveDpRotation</c> in
+    /// <c>MainWindow.DisplayPad.cs</c> would treat it as a normal image and apply the
+    /// device counter-rotation a second time on upload, over-rotating the tile.
     /// </summary>
     private void BtnAddText_Click(object sender, RoutedEventArgs e)
     {
+        bool baseWasPreRotated = IsAutoIcon(_pendingPath);
+
         var dlg = new TextIconDialog(DpHidNative.IconSize, _pendingPath) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
-        _pendingPath    = dlg.NewImagePath;
+        _pendingPath = baseWasPreRotated && dlg.NewImagePath is not null
+            ? PromoteToAutoIconCache(dlg.NewImagePath)
+            : dlg.NewImagePath;
         _rotation       = 0;
         Rb0.IsChecked   = true;
         _previewRotate.Angle = 0;
@@ -246,16 +256,31 @@ public partial class DpKeyConfigDialog : Window
 
     private static string AutoIconCachePath(string kind, string sourceValue, int deviceRotation)
     {
-        string cacheRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "K2.DisplayPad", "auto_icons");
-        Directory.CreateDirectory(cacheRoot);
+        Directory.CreateDirectory(AutoIconCacheRoot);
 
         long mtime = 0;
         if (kind == "exec") { try { mtime = File.GetLastWriteTimeUtc(sourceValue).Ticks; } catch { } }
         byte[] hash = System.Security.Cryptography.SHA1.HashData(
             System.Text.Encoding.UTF8.GetBytes($"{kind}|{sourceValue}|{mtime}|r{deviceRotation}"));
-        return Path.Combine(cacheRoot, Convert.ToHexString(hash).ToLowerInvariant() + $"_{kind}.png");
+        return Path.Combine(AutoIconCacheRoot, Convert.ToHexString(hash).ToLowerInvariant() + $"_{kind}.png");
+    }
+
+    /// <summary>Matches <c>MainWindow.DpAutoIconDir</c> exactly.</summary>
+    private static readonly string AutoIconCacheRoot = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "K2.DisplayPad", "auto_icons");
+
+    private static bool IsAutoIcon(string? path) =>
+        !string.IsNullOrEmpty(path) && path.StartsWith(AutoIconCacheRoot, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Copies a composited image (e.g. text over an already pre-rotated auto-icon)
+    /// into the auto-icon cache so it keeps being recognized as pre-rotated.</summary>
+    private static string PromoteToAutoIconCache(string sourcePath)
+    {
+        Directory.CreateDirectory(AutoIconCacheRoot);
+        string dest = Path.Combine(AutoIconCacheRoot, Path.GetFileName(sourcePath));
+        File.Copy(sourcePath, dest, overwrite: true);
+        return dest;
     }
 
     private void BtnRemoveAction_Click(object sender, RoutedEventArgs e)
@@ -287,6 +312,7 @@ public partial class DpKeyConfigDialog : Window
             "mouse"   => $"Mouse: {val}",
             "text"    => $"Text: {val}",
             "command" => $"Command: {val}",
+            "macro"   => $"Macro: {val}",
             "pyscript"=> "Python script",
             _         => $"{ActionType}: {val}",
         };

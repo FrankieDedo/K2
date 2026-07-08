@@ -159,6 +159,51 @@ ON CONFLICT(DeviceId, Profile, PageId, ButtonIndex) DO UPDATE SET
     public IReadOnlyList<DpButtonRecord> LoadProfile(int deviceId, int profile)
         => LoadPage(deviceId, profile, 0);
 
+    /// <summary>
+    /// Allocates a fresh, unused page ID for a new folder sub-page on this device/profile
+    /// (0 is always the root page). Computed fresh from the current DB state — the max of
+    /// any page a button already lives on, and the max "dp_folder" ActionValue pointing at
+    /// a page (which may still be completely empty, e.g. right after creation) — rather than
+    /// a persisted counter, so it can never collide with page IDs brought in by a BaseCamp.db
+    /// import (which uses BC's own arbitrary page IDs).
+    /// </summary>
+    public int AllocatePageId(int deviceId, int profile)
+    {
+        int max = 0;
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT MAX(PageId) FROM Buttons WHERE DeviceId=$d AND Profile=$p";
+            cmd.Parameters.AddWithValue("$d", deviceId);
+            cmd.Parameters.AddWithValue("$p", profile);
+            if (cmd.ExecuteScalar() is long l) max = (int)l;
+        }
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = @"SELECT MAX(CAST(ActionValue AS INTEGER)) FROM Buttons
+                                WHERE DeviceId=$d AND Profile=$p AND ActionType='dp_folder'";
+            cmd.Parameters.AddWithValue("$d", deviceId);
+            cmd.Parameters.AddWithValue("$p", profile);
+            if (cmd.ExecuteScalar() is long l && l > max) max = (int)l;
+        }
+        return max + 1;
+    }
+
+    /// <summary>Every key currently configured with the given action (e.g. macro assignment lookup).</summary>
+    public List<(int DeviceId, int Profile, int PageId, int ButtonIndex)> GetKeysByAction(string actionType, string actionValue)
+    {
+        var result = new List<(int, int, int, int)>();
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = @"SELECT DeviceId, Profile, PageId, ButtonIndex FROM Buttons
+                            WHERE ActionType=$t AND ActionValue=$v
+                            ORDER BY DeviceId, Profile, PageId, ButtonIndex";
+        cmd.Parameters.AddWithValue("$t", actionType);
+        cmd.Parameters.AddWithValue("$v", actionValue);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            result.Add((r.GetInt32(0), r.GetInt32(1), r.GetInt32(2), r.GetInt32(3)));
+        return result;
+    }
+
     public void ClearProfile(int deviceId, int profile)
     {
         using var cmd = _conn.CreateCommand();

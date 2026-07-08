@@ -9,7 +9,58 @@
 > mappa stabile in `_PROJECT_MAP.md`. Consultare qui solo per il contesto
 > di una modifica specifica passata (grep per parola chiave/data).
 
-> Last updated: 2026-07-08 (Macro: 3 fix — click Stop registrato, icone righe, lista estesa):
+> Last updated: 2026-07-08 (4 richieste utente: crash "Aggiungi testo", doppia rotazione
+> cartella+testo, assegnazione macro a qualsiasi tasto, creazione cartelle DisplayPad da UI):
+>   - **Crash "Aggiungi testo"**: `TextIconDialog` (K2.Core) ha `RbBgSolid IsChecked="True"`
+>     in XAML — WPF invoca il suo evento `Checked` SINCRONAMENTE durante
+>     `InitializeComponent()` (classico gotcha dei RadioButton), ma a quel punto
+>     `RbBgImage` (dichiarato più sotto nello stesso XAML) non è ancora stato
+>     collegato al field — è `null`. `BgMode_Changed` → `RefreshPreview()` →
+>     `UseImageBackground` dereferenziava `RbBgImage.IsChecked` → `NullReferenceException`
+>     non gestita → crash prima ancora di mostrare il dialog. Fix: `RbBgImage?.IsChecked`.
+>   - **Doppia rotazione icona cartella+testo**: quando una cartella viene creata su un
+>     DisplayPad ruotato (90/270°), `TryGenerateFolderIcon` bake-a la counter-rotation nel
+>     PNG e lo salva sotto `auto_icons/` — `EffectiveDpRotation` riconosce quel path e
+>     salta la rotazione device al successivo upload (altrimenti raddoppierebbe). Ma
+>     "Aggiungi testo" componeva il testo SOPRA quell'icona già ruotata e salvava il
+>     risultato in `text_icons/` (percorso diverso, non riconosciuto) — al prossimo
+>     upload la rotazione device veniva riapplicata su pixel già ruotati. Fix in
+>     `DpKeyConfigDialog`/`CellConfigDialog::BtnAddText_Click`: se l'immagine di base
+>     era già un auto-icon, il risultato composito viene promosso (copiato) nella stessa
+>     cache `auto_icons/` invece di restare in `text_icons/`.
+>   - **Assegnazione macro a qualsiasi tasto**: prima d'ora `ActionType=="macro"` esisteva
+>     solo come dato residuo dell'import da BaseCamp.db — `ButtonActionEngine` non aveva
+>     nemmeno un `case "macro"` (un tasto così importato non faceva NULLA alla pressione).
+>     Aggiunto: `IActionHost.ListMacroNames()`/`PlayMacro(name)` (K2.Core, nuovi membri
+>     dell'interfaccia); `ButtonActionEngine` esegue `_host.PlayMacro(value)` sul case
+>     "macro"; `ButtonActionDialog` ha un nuovo tipo azione "Play macro" (combo dinamica,
+>     riusa il pattern `ComboPanel` di oscmd/media/mouse ma popolata da
+>     `_host.ListMacroNames()` invece di un enum fisso). In K2.App: `MainWindow.Macro.cs`
+>     espone `ListAllMacroNames()`/`PlayMacroByName()` (cerca in `_macroStore`, riproduce
+>     via `_macroPlayer.Play`), implementati dai 3 `IActionHost` adapter (MainWindow per
+>     MacroPad, `EverestActionHost`, `DisplayPadActionHost`). Lo standalone K2.DisplayPad
+>     (senza libreria macro) implementa entrambi come no-op/lista vuota. Aggiunto anche
+>     `DisplayPadStore.GetKeysByAction` (mancava, a differenza di MacroPadStore/EverestStore)
+>     e la sezione "Assigned to" del pannello Macro ora include anche il DisplayPad, non
+>     solo MacroPad/Everest.
+>   - **Creazione cartelle DisplayPad da UI**: la navigazione a sotto-pagina
+>     (`_currentDpPageId`/`dp_folder`/`dp_back`) esisteva già dalla sessione del 2026-06-29
+>     ma era raggiungibile SOLO importando un profilo BaseCamp/XML — nessun modo di
+>     crearla da zero in-app. Aggiunto `DisplayPadStore.AllocatePageId(deviceId, profile)`
+>     (calcola un pageId libero dal MAX corrente su `Buttons`/`ActionValue` dei
+>     "dp_folder" esistenti, niente contatore persistito — non collide mai con gli ID
+>     arbitrari di un import BC) + due voci nel context-menu dei tasti DisplayPad
+>     (`BuildDpKeyContextMenu`): "Create folder page…" (prompt nome via
+>     `ShowRenameDialog`, alloca pageId, salva `dp_folder`) e "Set as Back button"
+>     (salva `dp_back`). Nuove chiavi loc `dp_create_folder`, `dp_create_folder_title`,
+>     `dp_create_folder_prompt`, `dp_set_back` (EN+IT).
+>   - **Verificato**: `dotnet build` pulito (0 errori/0 warning) su entrambe le solution
+>     dopo ogni fix. **Da verificare dall'utente su hardware**: crash testo risolto,
+>     icona cartella+testo non più doppio-ruotata su DisplayPad ruotato, macro assegnata
+>     a un tasto (MacroPad/Everest/DisplayPad) si riproduce alla pressione, creazione di
+>     una cartella dal context-menu e navigazione al suo interno.
+>
+> Previous: 2026-07-08 (Macro: 3 fix — click Stop registrato, icone righe, lista estesa):
 >   - **Segnalazione utente**: "la sezione delle macro diventa bianca quando
 >     registro", "estendi la lista delle macro come le sezioni dei
 >     dispositivi", "quando clicco stop il click del mouse viene ancora
@@ -57,6 +108,20 @@
 >     I due controlli sono in OR: se il bounding-rect matcha già la
 >     registrazione viene scartata, altrimenti fa comunque fede il vecchio
 >     controllo via `WindowFromPoint` come seconda rete di sicurezza.
+>   - **Seguito — "diventa ancora bianca" / "non si è allungata" (persistevano
+>     dopo il fix sopra)**: causa reale trovata in `LbMacros` stessa (la
+>     ListBox della Macro Library), non nel codice C#: usava ancora il
+>     **template di default di WPF**, che ha un proprio stato visivo
+>     "disabilitato" con uno sfondo chiaro/di sistema che ignora il
+>     `Background` impostato a mano (motivo per cui poteva restare bianca
+>     indipendentemente dal fatto che il codice non tocchi più `IsEnabled`),
+>     e un chrome a dimensione fissa che non si stira dentro una riga `*`
+>     come farebbe un semplice `ScrollViewer`. Sostituito con lo stesso
+>     template minimale già usato per `LvMacroInputs`
+>     (`ScrollViewer`+`ItemsPresenter`, nessun VisualState "disabled"): ora
+>     lo sfondo non può cambiare per nessuna ragione legata a `IsEnabled`, e
+>     la lista riempie correttamente tutta l'altezza disponibile nella
+>     colonna, come la sidebar SECTIONS.
 >   - **Verificato**: `build-check.bat` pulito (0 errori/0 warning) su
 >     entrambe le solution dopo ogni step. Avviato `K2.App.exe` in locale
 >     (con `stop-basecamp.bat` prima) — nessun errore XAML, nessun

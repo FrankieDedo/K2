@@ -37,6 +37,7 @@
             <ComboBoxItem Content="{loc:Get act_keys}"   Tag="keys"/>
             <ComboBoxItem Content="{loc:Get act_command}"         Tag="command"/>
             <ComboBoxItem Content="{loc:Get act_text}"            Tag="text"/>
+            <ComboBoxItem Content="{loc:Get act_macro}"            Tag="macro"/>
             <ComboBoxItem Content="{loc:Get act_pyscript}"         Tag="pyscript"/>
         </ComboBox>
 

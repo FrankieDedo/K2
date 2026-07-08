@@ -49,7 +49,7 @@ public partial class ButtonActionDialog : Window
             LoadProfileSpec(ProfileTargetPayload.Parse(currentValue)
                 ?? LegacyProfileSpec(currentValue));
         }
-        else if (currentType is "oscmd" or "media" or "mouse")
+        else if (currentType is "oscmd" or "media" or "mouse" or "macro")
         {
             LoadComboSpec(currentType, currentValue ?? "");
         }
@@ -113,6 +113,7 @@ public partial class ButtonActionDialog : Window
             "keys"     => ("Shortcut (human syntax):",     "Ctrl + Shift + A   |   Ctrl + F4"),
             "command"  => ("Command line:",                "cmd /c echo hello"),
             "text"     => ("Text to paste:",               "hello world"),
+            "macro"    => ("Macro:",                        ""),
             "pyscript" => ("Python Script",                ""),
             _          => ("No action",                    "")
         };
@@ -132,7 +133,7 @@ public partial class ButtonActionDialog : Window
         bool folder  = tag == "folder";
         bool browser = tag == "browser";
         bool profile = tag == "profile";
-        bool combo   = tag is "oscmd" or "media" or "mouse";
+        bool combo   = tag is "oscmd" or "media" or "mouse" or "macro";
         bool keys    = tag == "keys";
         bool std     = !py && !exec && !folder && !browser && !profile && !combo && !keys;
 
@@ -226,7 +227,7 @@ public partial class ButtonActionDialog : Window
         {
             ActionValue = SaveProfileSpec().ToJson();
         }
-        else if (tag is "oscmd" or "media" or "mouse")
+        else if (tag is "oscmd" or "media" or "mouse" or "macro")
         {
             ActionValue = SaveComboSpec();
         }

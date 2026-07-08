@@ -1274,11 +1274,18 @@ public partial class MainWindow
         miChImg.Click += DpMnuChangeImage_Click;
         var miRi = new MenuItem { Header = Loc.Get("dp_remove_image") };
         miRi.Click += DpMnuRemoveImage_Click;
+        var miFolder = new MenuItem { Header = Loc.Get("dp_create_folder") };
+        miFolder.Click += DpMnuCreateFolder_Click;
+        var miBack = new MenuItem { Header = Loc.Get("dp_set_back") };
+        miBack.Click += DpMnuSetBack_Click;
         menu.Items.Add(miCfg);
         menu.Items.Add(miRa);
         menu.Items.Add(new Separator());
         menu.Items.Add(miChImg);
         menu.Items.Add(miRi);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miFolder);
+        menu.Items.Add(miBack);
         return menu;
     }
 
@@ -1343,6 +1350,47 @@ public partial class MainWindow
         key.ImagePath = null;
         _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, null, key.ActionType, key.ActionValue);
         DpClearKeyOnDevice(id, key.Index);
+    }
+
+    /// <summary>
+    /// Creates a brand-new folder sub-page and binds this key to navigate into it —
+    /// the in-app equivalent of Base Camp's "Create Folder" button, which until now K2
+    /// only ever produced via BaseCamp.db/XML import (see <see cref="BaseCampDbImporter"/>).
+    /// Prompts for a display name, allocates a fresh page ID (<see cref="DisplayPadStore.AllocatePageId"/>),
+    /// and saves "dp_folder" with that ID as the action — <see cref="OnDpKey"/>/<see cref="DpKeyButton_Click"/>
+    /// already know how to navigate into it (<see cref="DpNavigateToPage"/>).
+    /// </summary>
+    private void DpMnuCreateFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (!IsDpKeyBindingSectionActive) return;
+        if (DpKeyFromMenu(sender) is not DisplayPadKey key) return;
+        if (DpSelectedDeviceId() is not int id) return;
+
+        string? name = ShowRenameDialog("", Loc.Get("dp_create_folder_title"), Loc.Get("dp_create_folder_prompt"));
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        int profile = DpCurrentProfile();
+        int pageId = _dpStore.AllocatePageId(id, profile);
+        _dpStore.SetFolderName(pageId, name);
+
+        key.ActionType  = "dp_folder";
+        key.ActionValue = pageId.ToString();
+        _dpStore.SaveButton(id, profile, _currentDpPageId, key.Index, key.ImagePath, key.ActionType, key.ActionValue);
+        DpLog($"[ACT] key #{key.Index} <- dp_folder \"{name}\" (page {pageId})");
+    }
+
+    /// <summary>Binds this key to navigate back to the parent page — the in-app equivalent
+    /// of Base Camp's "Back" button (see <see cref="DpMnuCreateFolder_Click"/> remarks).</summary>
+    private void DpMnuSetBack_Click(object sender, RoutedEventArgs e)
+    {
+        if (!IsDpKeyBindingSectionActive) return;
+        if (DpKeyFromMenu(sender) is not DisplayPadKey key) return;
+        if (DpSelectedDeviceId() is not int id) return;
+
+        key.ActionType  = "dp_back";
+        key.ActionValue = null;
+        _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, key.ImagePath, key.ActionType, key.ActionValue);
+        DpLog($"[ACT] key #{key.Index} <- dp_back");
     }
 
     /// <summary>

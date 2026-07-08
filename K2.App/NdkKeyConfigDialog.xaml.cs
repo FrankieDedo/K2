@@ -207,6 +207,7 @@ public partial class NdkKeyConfigDialog : Window
             "mouse"    => $"Mouse: {val}",
             "text"     => $"Text: {val}",
             "command"  => $"Command: {val}",
+            "macro"    => $"Macro: {val}",
             "pyscript" => "Python script",
             _          => $"{ActionType}: {val}",
         };

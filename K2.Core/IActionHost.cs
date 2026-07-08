@@ -76,4 +76,15 @@ public interface IActionHost
 
     /// <summary>Executes the action configured on button <paramref name="index"/>.</summary>
     void PressButton(int index);
+
+    /// <summary>
+    /// Names of the macros available to assign as a "macro" action (used to populate
+    /// <see cref="ButtonActionDialog"/>'s macro picker). K2.App (unified shell) returns the
+    /// shared macro library; hosts with no macro concept (the standalone K2.DisplayPad)
+    /// return an empty list.
+    /// </summary>
+    IReadOnlyList<string> ListMacroNames();
+
+    /// <summary>Plays back the macro named <paramref name="macroName"/> (see <see cref="ListMacroNames"/>).</summary>
+    void PlayMacro(string macroName);
 }

@@ -4,7 +4,9 @@
 // Handles recording, playback, and persistence of macros.
 
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using K2.App.Models;
@@ -469,13 +471,11 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// Scans the MacroPad and Everest key stores for keys whose action is
-    /// this macro (ActionType == "macro", ActionValue == macro name — the
-    /// same convention <see cref="BaseCampDbImporter"/> uses when importing
-    /// "Macro" bindings from BaseCamp.db). K2 doesn't yet let a user pick
-    /// "Macro" as an action type from <c>ButtonActionDialog</c>, so today
-    /// this only surfaces assignments brought in via BC import — the query
-    /// is ready for when direct in-app assignment is added.
+    /// Scans the MacroPad, Everest and DisplayPad key stores for keys whose action is
+    /// this macro (ActionType == "macro", ActionValue == macro name — the same convention
+    /// <see cref="BaseCampDbImporter"/> uses when importing "Macro" bindings from
+    /// BaseCamp.db, and that <see cref="ButtonActionDialog"/>'s "macro" action type now
+    /// also writes when assigned directly in-app).
     /// </summary>
     private void RefreshMacroAssignments()
     {
@@ -518,7 +518,62 @@ public partial class MainWindow
             LogEverest($"[MACRO] Assignment lookup (Everest) failed: {ex.Message}");
         }
 
+        try
+        {
+            foreach (var (deviceId, profile, pageId, keyIndex) in _dpStore.GetKeysByAction("macro", m.Name))
+            {
+                string profileName = _dpStore.GetProfileName(deviceId, profile) ?? Loc.Get("profile_n", profile);
+                string page = pageId == 0 ? "" : $" · {_dpStore.GetFolderName(pageId) ?? $"Page {pageId}"}";
+                _macroAssignments.Add(new MacroAssignment
+                {
+                    KeyLabel = $"D{keyIndex + 1}",
+                    Subtitle = $"{Loc.Get("tab_displaypad")} #{deviceId} · {profileName}{page}"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            LogEverest($"[MACRO] Assignment lookup (DisplayPad) failed: {ex.Message}");
+        }
+
         TblMacroNotAssigned.Visibility = _macroAssignments.Count == 0
             ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // ─────────────────────── IActionHost bridge (macro playback) ───────────────────────
+
+    /// <summary>Macro names available to <see cref="ButtonActionDialog"/>'s "macro" action
+    /// picker — see <see cref="IActionHost.ListMacroNames"/>.</summary>
+    internal IReadOnlyList<string> ListAllMacroNames() =>
+        _macroStore is null
+            ? Array.Empty<string>()
+            : _macroStore.GetAll()
+                .Select(m => m.Name)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .ToList();
+
+    /// <summary>Plays back the macro named <paramref name="macroName"/> — see
+    /// <see cref="IActionHost.PlayMacro"/>, invoked by <see cref="ButtonActionEngine"/>
+    /// when a key's action is "macro".</summary>
+    internal void PlayMacroByName(string macroName)
+    {
+        if (_macroStore is null || _macroPlayer is null)
+        {
+            LogEverest($"[MACRO] not ready, can't play \"{macroName}\"");
+            return;
+        }
+        var macro = _macroStore.GetAll().FirstOrDefault(m => m.Name == macroName);
+        if (macro is null)
+        {
+            LogEverest($"[MACRO] \"{macroName}\" not found");
+            return;
+        }
+        if (macro.Inputs.Count == 0)
+        {
+            LogEverest($"[MACRO] \"{macroName}\" has no recorded actions");
+            return;
+        }
+        _macroPlayer.Play(macro);
+        LogEverest($"[MACRO] Playback: {macro.Name} ({macro.Inputs.Count} actions)");
     }
 }

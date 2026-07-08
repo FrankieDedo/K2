@@ -11,9 +11,9 @@ namespace K2.Core;
 ///
 /// Handles device-agnostic actions directly (url, exec, folder, browser,
 /// command, keys, text, oscmd, media, mouse, multi, createfolder, back,
-/// pyscript) and delegates device-specific ones (profile switching) to
-/// the <see cref="IActionHost"/>. Also encapsulates the Python bridge
-/// (<see cref="PyBridge"/>).
+/// pyscript) and delegates device-specific ones (profile switching, macro
+/// playback) to the <see cref="IActionHost"/>. Also encapsulates the Python
+/// bridge (<see cref="PyBridge"/>).
 /// </summary>
 public sealed class ButtonActionEngine : IDisposable
 {
@@ -152,6 +152,12 @@ public sealed class ButtonActionEngine : IDisposable
 
             case "pyscript":
                 RunPyScript(value, buttonIndex);
+                break;
+
+            case "macro":
+                if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] macro without payload"); break; }
+                _host.PlayMacro(value);
+                Log($"[EXEC] macro -> {value}");
                 break;
 
             case "pcinfo":

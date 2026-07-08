@@ -47,4 +47,7 @@ internal sealed class DisplayPadActionHost : IActionHost
                                      _win._dpKeys[index].ActionValue, index);
     }
 
+    IReadOnlyList<string> IActionHost.ListMacroNames() => _win.ListAllMacroNames();
+
+    void IActionHost.PlayMacro(string macroName) => _win.PlayMacroByName(macroName);
 }

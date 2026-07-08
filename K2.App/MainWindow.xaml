@@ -1591,7 +1591,22 @@
                                          Background="Transparent" BorderThickness="0"
                                          ItemContainerStyle="{StaticResource MacroLibraryItemStyle}"
                                          SelectionChanged="LbMacros_SelectionChanged"
-                                         DisplayMemberPath="Name"/>
+                                         DisplayMemberPath="Name">
+                                    <!-- Bare-bones template (no default WPF/Fluent chrome): the
+                                         stock ListBox template has its own "disabled" visual state
+                                         that paints a system-light/white background regardless of
+                                         the Background set above, and its fixed-size chrome doesn't
+                                         stretch to fill a "*" row the way this bare ScrollViewer
+                                         does. Same technique as LvMacroInputs below. -->
+                                    <ListBox.Template>
+                                        <ControlTemplate TargetType="ListBox">
+                                            <ScrollViewer Background="Transparent" Padding="2"
+                                                          CanContentScroll="False">
+                                                <ItemsPresenter/>
+                                            </ScrollViewer>
+                                        </ControlTemplate>
+                                    </ListBox.Template>
+                                </ListBox>
                             </Border>
                             <Button Grid.Row="3" x:Name="BtnMacroImportBC" Content="{loc:Get macro_import_bc}"
                                     Padding="8,2" Margin="0,6,0,0" Click="BtnMacroImportBC_Click"

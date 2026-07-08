@@ -80,7 +80,10 @@ public partial class TextIconDialog : Window
     private static void ApplyColorButton(Button btn, System.Drawing.Color c) =>
         btn.Background = new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B));
 
-    private bool UseImageBackground => RbBgImage.IsChecked == true && _baseImagePath is not null;
+    // RbBgSolid's IsChecked="True" in XAML fires its Checked event synchronously
+    // during InitializeComponent(), before RbBgImage (declared later in the XAML)
+    // has been wired up — so this must tolerate RbBgImage still being null.
+    private bool UseImageBackground => RbBgImage?.IsChecked == true && _baseImagePath is not null;
 
     private void RefreshPreview()
     {

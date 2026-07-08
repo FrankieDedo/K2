@@ -73,4 +73,10 @@ public partial class MainWindow : IActionHost
         if (index >= 0 && index < _cells.Length)
             TryExecuteAction(_cells[index]);
     }
+
+    // The standalone K2.DisplayPad has no macro library (that concept lives in the
+    // unified K2.App shell) — no macros to offer, and nothing to play back.
+    IReadOnlyList<string> IActionHost.ListMacroNames() => System.Array.Empty<string>();
+
+    void IActionHost.PlayMacro(string macroName) => Log($"[EXEC] macro: not supported in standalone K2.DisplayPad (\"{macroName}\")");
 }
