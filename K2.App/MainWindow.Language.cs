@@ -36,6 +36,12 @@ public partial class MainWindow
 
     private static void RestartApp()
     {
+        // Release the single-instance lock BEFORE launching the replacement process:
+        // this process hasn't exited yet at this point, so without releasing it here
+        // the new process would see the mutex still held and immediately bail out as
+        // "already running", leaving no instance running.
+        App.ReleaseSingleInstanceLockForRestart();
+
         // Environment.ProcessPath is reliable on .NET 6+ (returns K2.App.exe, not dotnet.exe)
         var exe = Environment.ProcessPath
                ?? Process.GetCurrentProcess().MainModule?.FileName;

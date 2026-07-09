@@ -10,7 +10,8 @@
   <!-- ═══════════════════════════════════════════════════════════════
        COMMON / SHARED
        ═══════════════════════════════════════════════════════════════ -->
-  <string name="app_title">K2 — Mountain Device Console</string>
+  <string name="app_title">K2</string>
+  <string name="app_already_running">Another instance of K2 is already running.</string>
   <string name="driver_not_opened">Driver not opened.</string>
   <string name="open_driver">Open driver</string>
   <string name="close_driver">Close driver</string>
@@ -174,7 +175,7 @@
   <string name="ev_sdk_log">SDK Log</string>
 
   <!-- RGB Lighting -->
-  <string name="rgb_lighting">RGB Lighting</string>
+  <string name="rgb_lighting">Lighting</string>
   <string name="rgb_effect">Effect:</string>
   <string name="rgb_speed">Speed:</string>
   <string name="rgb_direction">Direction:</string>
@@ -246,6 +247,21 @@
   <string name="settings_disable_alt_tab">Disable Alt + Tab</string>
   <string name="settings_indicator_leds">Indicator LEDs</string>
   <string name="settings_enable_core_led">Enable Core indicator LEDs</string>
+  <string name="settings_keyboard_color">Keyboard color</string>
+  <string name="color_silver">Silver</string>
+  <string name="color_black">Black</string>
+  <string name="settings_keycap_group">Keycap appearance (on-screen preview)</string>
+  <string name="settings_keycap_color">Keycap color</string>
+  <string name="settings_keycap_black">Black</string>
+  <string name="settings_keycap_white">White</string>
+  <string name="settings_keycap_custom">Custom</string>
+  <string name="settings_keycap_text_color">Text color</string>
+  <string name="settings_keycap_style">Keycap type</string>
+  <string name="settings_keycap_style_normal">Normal (halo around the key)</string>
+  <string name="settings_keycap_style_translucent">Translucent (halo + colored legend)</string>
+  <string name="settings_keycap_style_pudding">Pudding (colored border, keycap-colored center)</string>
+  <string name="settings_keycap_style_reverse_pudding">Reverse pudding (keycap-colored border, colored center)</string>
+  <string name="settings_keycap_hint">Cosmetic only — changes how the on-screen preview here in K2 matches the LED colors to your keycaps, it does not affect the RGB effect sent to the keyboard.</string>
   <string name="settings_factory_reset">Reset to factory default</string>
   <string name="settings_factory_reset_confirm">This resets the keyboard's Game Mode, indicator LEDs and lighting effects to factory defaults. Continue?</string>
 
@@ -356,6 +372,11 @@
   <string name="dp_create_folder_title">Create folder page</string>
   <string name="dp_create_folder_prompt">Folder name:</string>
   <string name="dp_set_back">Set as Back button</string>
+  <string name="dp_pages">Pages</string>
+  <string name="dp_no_pages">No folder pages created yet.</string>
+  <string name="dp_delete_page">Delete</string>
+  <string name="dp_delete_page_title">Delete page</string>
+  <string name="dp_delete_page_confirm">Delete page "{0}"? Any key that opens it will stop working.</string>
   <string name="dp_add_text">Add text…</string>
   <string name="txt_dialog_title">Insert text</string>
   <string name="txt_label">Text:</string>

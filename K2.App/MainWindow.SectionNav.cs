@@ -22,7 +22,9 @@
 // icon button next to Settings — see BtnMacroTab_Click in MainWindow.xaml.cs.
 //
 // MacroPad section panels: PnlMpSecKeyBinding (keys configured on the grid above),
-//   PnlMpSecOrientation (rotation), PnlMpSecLed (RGB lighting)
+//   PnlMpSecOrientation (rotation), PnlMpSecLed (RGB lighting), PnlMpSecSettings
+//   (keycap appearance — same color/style controls as Everest's PnlSecSettings,
+//   see MainWindow.MacroKeycapAppearance.cs)
 // DisplayPad section panels: PnlDpSecKeyBinding (keys configured on the grid above),
 //   PnlDpSecRotation (rotation + icon rotate)
 //
@@ -37,9 +39,11 @@
 // DpKeyButton_Click and their context-menu equivalents). Elsewhere the click is
 // a no-op (or, for DisplayPad folders, still just navigates).
 //
-// Everest LED preview gate: the real-time LED color overlay (MainWindow.LedPreview.cs)
-// is only meaningful while looking at "RGB & Lighting" — ShowEvSection toggles
-// _ledPoller.EverestEnabled accordingly so it isn't polled/painted elsewhere.
+// LED preview gate: the real-time LED color overlay (MainWindow.LedPreview.cs) is only
+// meaningful while looking at "RGB & Lighting" (Everest) / "LED Lighting" (MacroPad) —
+// ShowEvSection/ShowMpSection toggle _ledPoller.EverestEnabled/MacroPadEnabled accordingly
+// so it isn't polled/painted elsewhere. For MacroPad this also avoids a key looking stuck
+// gray after a physical press (see UpdateMpLedPreviewActive for the full explanation).
 
 using System.Windows;
 using System.Windows.Controls;
@@ -109,6 +113,7 @@ public partial class MainWindow
             nameof(RbMpSecKeyBinding)  => PnlMpSecKeyBinding,
             nameof(RbMpSecOrientation) => PnlMpSecOrientation,
             nameof(RbMpSecLed)         => PnlMpSecLed,
+            nameof(RbMpSecSettings)    => PnlMpSecSettings,
             _                          => null
         };
 
@@ -123,6 +128,10 @@ public partial class MainWindow
 
         panel.Visibility = Visibility.Visible;
         _activeMpSection = panel;
+
+        // LED color preview is only useful (and only polled) while looking at LED Lighting —
+        // mirrors ShowEvSection/UpdateEverestLedPreviewActive.
+        UpdateMpLedPreviewActive(panel == PnlMpSecLed);
     }
 
     /// <summary>True while the MacroPad "Key Binding" section is the active one —
@@ -145,6 +154,7 @@ public partial class MainWindow
         {
             nameof(RbDpSecKeyBinding) => PnlDpSecKeyBinding,
             nameof(RbDpSecRotation)   => PnlDpSecRotation,
+            nameof(RbDpSecPages)      => PnlDpSecPages,
             _                         => null
         };
 
@@ -159,6 +169,12 @@ public partial class MainWindow
 
         panel.Visibility = Visibility.Visible;
         _activeDpSection = panel;
+
+        // The page list can go stale (created/renamed from the "Page" action type in
+        // ButtonActionDialog, which has no direct handle back to this list) — cheap enough
+        // to just recompute it every time this section becomes the active one.
+        if (panel == PnlDpSecPages)
+            RefreshDpPagesList();
     }
 
     /// <summary>True while the DisplayPad "Key Binding" section is the active one —

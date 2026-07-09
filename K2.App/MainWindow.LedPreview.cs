@@ -14,9 +14,11 @@ namespace K2.App;
 /// (Everest + MacroPad). Replicates Base Camp's behavior where a semi-transparent
 /// overlay on each key shows the current LED color, updated via periodic SDK polling.
 ///
-/// Implementation: instead of a Canvas Rectangle overlay (which would render above the
-/// text label), we use the named "LedTint" Border inside each button's ControlTemplate.
-/// That Border sits below the ContentPresenter, so text is always above the LED color.
+/// Both devices use the keycap-appearance-aware path (MainWindow.KeycapAppearance.cs for
+/// Everest, MainWindow.MacroKeycapAppearance.cs for MacroPad): depending on the selected
+/// keycap style, the live color drives the LedHalo glow layer, the legend color, or the
+/// Face's Background/BorderBrush (Pudding/Reverse Pudding) — see
+/// ApplyEverestLedColor/ApplyMacroPadLedColor.
 ///
 /// MAPPING NOTE:
 ///   Button.Tag contains VK codes (used for SDK callbacks), but GetColorData
@@ -33,11 +35,11 @@ public partial class MainWindow
     /// </summary>
     private int _everestCrashCount;
 
-    /// <summary>Maps ledIndex (GetColorData) → LedTint border for the Everest preview.</summary>
-    private readonly Dictionary<int, Border> _evKeyTints = new();
+    /// <summary>Maps ledIndex (GetColorData) → the Button + LedHalo border for the Everest preview.</summary>
+    private readonly Dictionary<int, KeyVisual> _evKeyVisuals = new();
 
-    /// <summary>Maps key index (0..11) → LedTint border for the MacroPad preview.</summary>
-    private readonly Dictionary<int, Border> _mpKeyTints = new();
+    /// <summary>Maps key index (0..11) → the Button + LedHalo border for the MacroPad preview.</summary>
+    private readonly Dictionary<int, KeyVisual> _mpKeyVisuals = new();
 
     private int _evColorLogCount;  // log only the first N ticks for diagnostics
 
@@ -53,21 +55,26 @@ public partial class MainWindow
         _ledPoller.MacroPadColorsUpdated += OnMacroPadColorsUpdated;
         _ledPoller.SdkCrashDetected += OnSdkCrashDetected;
 
-        // Capture LedTint borders from Everest buttons
-        BuildEverestLedTints(CvsEvKeyboard, LedMatrixMapping.EverestKeyboard);
-        BuildEverestLedTints(CvsEvNumpad, LedMatrixMapping.EverestNumpad);
+        // Capture Button + LedHalo border from Everest buttons
+        BuildEverestKeyVisuals(CvsEvKeyboard, LedMatrixMapping.EverestKeyboard);
+        BuildEverestKeyVisuals(CvsEvNumpad, LedMatrixMapping.EverestNumpad);
+        ApplyKeycapAppearanceToAllKeys();
 
-        // Capture LedTint borders from MacroPad buttons
-        BuildMacroPadLedTints();
+        // Capture Button + LedHalo border from MacroPad buttons
+        BuildMacroPadKeyVisuals();
+        ApplyMacroKeycapAppearanceToAllKeys();
 
-        App.WriteLog($"[LED] LedTint borders  Everest: {_evKeyTints.Count}  MacroPad: {_mpKeyTints.Count}");
+        App.WriteLog($"[LED] Everest key visuals: {_evKeyVisuals.Count}  MacroPad key visuals: {_mpKeyVisuals.Count}");
     }
 
     /// <summary>Starts LED polling (call when the lighting tab is visible).</summary>
     private void StartLedPreview()
     {
         if (_ledPoller == null) return;
-        _ledPoller.MacroPadEnabled = _macroPad.IsOpen;
+        // Gated to the "LED Lighting" section, same as Everest (UpdateMpLedPreviewActive) —
+        // see that method's doc comment for why unconditional polling caused keys to look
+        // stuck gray after a physical press.
+        _ledPoller.MacroPadEnabled = _activeMpSection == PnlMpSecLed && _macroPad.IsOpen;
         if (CurrentDeviceId() is int id)
             _ledPoller.MacroPadSlot = (uint)id;
 
@@ -94,34 +101,38 @@ public partial class MainWindow
             _everest.SetBacklight(true);
         }
 
-        // MacroPad: same Everest sequence (GetFWLayout + SetSyncEffect + AP + backlight)
+        // MacroPad: matches Base Camp's actual sequence, reverse-engineered from
+        // BaseCamp.UI.dll (MacroPadOperations.getDefaultLighting / MacroPadController.
+        // GetColorData — extracted 2026-07-09 from the Electron/.NET UI bundle, see
+        // K2/_reference/BaseCamp_decompiled_UI/). BC calls SetSyncEffect(id, true, 50)
+        // ONCE when the lighting page loads, then polls GetColorData in a plain loop
+        // (300ms sleep) with NO other priming call. In particular BC never calls
+        // GetFWLayout, APEnable or SetBacklight for MacroPad color streaming — those
+        // were copied here from the Everest flow (which genuinely needs them) and are
+        // suspected to be why the on-screen preview never lit up: APEnable especially
+        // toggles the device into a different (AP/firmware-update) mode that likely
+        // stops normal HID color reporting. SetBacklight was also removed because BC
+        // doesn't force it here either — forcing it on every StartLedPreview call was
+        // clobbering the user's own backlight ON/OFF setting (BtnMacroLightOn/Off).
         if (_macroPad.IsOpen && CurrentDeviceId() is int mpId)
         {
             uint uid = (uint)mpId;
 
-            try
-            {
-                int mpLayout = 0;
-                bool fl = MacroPadSdkNative.GetFWLayout(ref mpLayout, uid);
-                App.WriteLog($"[LED] MP GetFWLayout({uid}) -> {fl}  layout={mpLayout}");
-            }
-            catch (Exception ex) { App.WriteLog("[LED] MP GetFWLayout threw: " + ex); }
-
-            _macroPad.APEnable(uid, true);
+            // Same per-slot init Everest does once after connect (GetFWInfo/GetFWLayout/
+            // EnableKeyFunc/APEnable(false)) — see MacroPadService.EnsureSlotInitialized.
+            // Idempotent: a no-op if SetEffect (or a previous preview start) already ran it.
+            _macroPad.EnsureSlotInitialized(uid);
 
             try
             {
-                bool sf = MacroPadSdkNative.SetSyncEffect(false, 50, uid);
                 bool st = MacroPadSdkNative.SetSyncEffect(true, 50, uid);
-                App.WriteLog($"[LED] MP SetSyncEffect({uid}) (false,50)->{sf}  (true,50)->{st}");
+                App.WriteLog($"[LED] MP SetSyncEffect({uid}) (true,50)->{st}");
             }
             catch (Exception ex) { App.WriteLog("[LED] MP SetSyncEffect threw: " + ex); }
-
-            _macroPad.SetBacklight(uid, true);
         }
 
         _ledPoller.Start();
-        App.WriteLog($"[LED] StartLedPreview  ev={_ledPoller.EverestEnabled} mp={_ledPoller.MacroPadEnabled}  tints={_evKeyTints.Count}+{_mpKeyTints.Count}");
+        App.WriteLog($"[LED] StartLedPreview  ev={_ledPoller.EverestEnabled} mp={_ledPoller.MacroPadEnabled}  visuals={_evKeyVisuals.Count}+{_mpKeyVisuals.Count}");
     }
 
     /// <summary>Stops polling (when leaving the tab or closing).</summary>
@@ -142,15 +153,43 @@ public partial class MainWindow
         if (_ledPoller == null) return;
         _ledPoller.EverestEnabled = active && _everest.IsOpen;
         if (!active)
-            foreach (var kv in _evKeyTints)
-                kv.Value.Background = Brushes.Transparent;
+            foreach (var kv in _evKeyVisuals)
+                ResetEverestKeyToOff(kv.Value);
+    }
+
+    /// <summary>
+    /// Enables/disables the MacroPad half of the LED color preview, mirroring
+    /// <see cref="UpdateEverestLedPreviewActive"/>. Called from
+    /// <see cref="ShowMpSection"/> whenever the active MacroPad section changes.
+    /// <para>
+    /// Added 2026-07-09: previously MacroPad polling ran unconditionally
+    /// whenever the device was open, regardless of which section was visible.
+    /// That polling writes the "LED off" (gray) color to a key's Background/
+    /// BorderBrush via <c>SetCurrentValue</c> when the effect isn't actually
+    /// lighting it (see <see cref="ApplyMacroPadLedColor"/> for Pudding/Reverse
+    /// Pudding styles) — if a 120ms poll tick landed WHILE a key's
+    /// <c>IsHighlighted</c> style trigger was active (physical key press), the
+    /// gray value became the new "current value" once the trigger deactivated
+    /// on release, so the key visibly stayed gray after being pressed. Gating
+    /// to the LED Lighting section shrinks that window to only while the user
+    /// is actually looking at the panel; <see cref="OnMacroPadColorsUpdated"/>
+    /// additionally skips highlighted keys as a second line of defense.
+    /// </para>
+    /// </summary>
+    private void UpdateMpLedPreviewActive(bool active)
+    {
+        if (_ledPoller == null) return;
+        _ledPoller.MacroPadEnabled = active && _macroPad.IsOpen;
+        if (!active)
+            foreach (var kv in _mpKeyVisuals)
+                ResetMacroPadKeyToOff(kv.Value);
     }
 
     // ==================================================================
-    // LedTint collection — Everest
+    // Key visual collection — Everest
     // ==================================================================
 
-    private void BuildEverestLedTints(Canvas canvas, Dictionary<int, int> vkToLedMap)
+    private void BuildEverestKeyVisuals(Canvas canvas, Dictionary<int, int> vkToLedMap)
     {
         foreach (UIElement child in canvas.Children)
         {
@@ -158,23 +197,23 @@ public partial class MainWindow
             if (!vkToLedMap.TryGetValue(vk, out int ledIndex)) continue;
 
             btn.ApplyTemplate();
-            if (btn.Template?.FindName("LedTint", btn) is Border tint)
-                _evKeyTints[ledIndex] = tint; // last VK wins if multiple map to same ledIndex
+            if (btn.Template?.FindName("LedHalo", btn) is Border halo)
+                _evKeyVisuals[ledIndex] = new KeyVisual(btn, halo); // last VK wins if multiple map to same ledIndex
         }
     }
 
     // ==================================================================
-    // LedTint collection — MacroPad
+    // Key visual collection — MacroPad
     // ==================================================================
 
-    private void BuildMacroPadLedTints()
+    private void BuildMacroPadKeyVisuals()
     {
         for (int i = 0; i < _keyButtons.Length; i++)
         {
             var btn = _keyButtons[i];
             btn.ApplyTemplate();
-            if (btn.Template?.FindName("LedTint", btn) is Border tint)
-                _mpKeyTints[i] = tint;
+            if (btn.Template?.FindName("LedHalo", btn) is Border halo)
+                _mpKeyVisuals[i] = new KeyVisual(btn, halo);
         }
     }
 
@@ -190,18 +229,15 @@ public partial class MainWindow
             int nonZero = 0;
             for (int i = 0; i < colors.Length; i++)
                 if (colors[i].r != 0 || colors[i].g != 0 || colors[i].b != 0) nonZero++;
-            App.WriteLog($"[LED] EverestColors tick#{_evColorLogCount}: len={colors.Length} nonZero={nonZero} tints={_evKeyTints.Count}");
+            App.WriteLog($"[LED] EverestColors tick#{_evColorLogCount}: len={colors.Length} nonZero={nonZero} tints={_evKeyVisuals.Count}");
         }
-        foreach (var kv in _evKeyTints)
+        foreach (var kv in _evKeyVisuals)
         {
             int matrixId = kv.Key;
-            var tint = kv.Value;
             if (matrixId < 0 || matrixId >= colors.Length) continue;
 
             var c = colors[matrixId];
-            tint.Background = (c.r == 0 && c.g == 0 && c.b == 0)
-                ? Brushes.Transparent
-                : new SolidColorBrush(Color.FromArgb(128, c.r, c.g, c.b));
+            ApplyEverestLedColor(kv.Value, c.r, c.g, c.b);
         }
     }
 
@@ -217,12 +253,20 @@ public partial class MainWindow
 
             if (!LedMatrixMapping.MacroPad.TryGetValue(wMatrix, out int ledIndex)) continue;
             if (ledIndex < 0 || ledIndex >= colors.Length) continue;
-            if (!_mpKeyTints.TryGetValue(btnIndex, out var tint)) continue;
+            if (!_mpKeyVisuals.TryGetValue(btnIndex, out var v)) continue;
+
+            // Skip a key that's currently mid-physical-press: the IsHighlighted
+            // style trigger (MacroKeyStyle) is active right now and outranks
+            // whatever we'd write via SetCurrentValue, but the value we DO write
+            // becomes the new baseline the trigger reverts to on release — a
+            // poll landing here would otherwise leave the key looking "stuck"
+            // in the LED-off/gray color after the press ends (see
+            // UpdateMpLedPreviewActive for the full explanation).
+            if (btnIndex >= 0 && btnIndex < _keys.Length && _keys[btnIndex].IsHighlighted)
+                continue;
 
             var c = colors[ledIndex];
-            tint.Background = (c.r == 0 && c.g == 0 && c.b == 0)
-                ? Brushes.Transparent
-                : new SolidColorBrush(Color.FromArgb(128, c.r, c.g, c.b));
+            ApplyMacroPadLedColor(v, c.r, c.g, c.b);
         }
     }
 
@@ -235,10 +279,10 @@ public partial class MainWindow
         App.WriteLog("[UI] SDKDLL.dll crash detected — scheduling auto-recovery in 3s");
 
         // Clear residual LED colors
-        foreach (var kv in _evKeyTints)
-            kv.Value.Background = Brushes.Transparent;
-        foreach (var kv in _mpKeyTints)
-            kv.Value.Background = Brushes.Transparent;
+        foreach (var kv in _evKeyVisuals)
+            ResetEverestKeyToOff(kv.Value);
+        foreach (var kv in _mpKeyVisuals)
+            ResetMacroPadKeyToOff(kv.Value);
 
         LblStatus.Text = Loc.Get("ev_crash_recovering");
 

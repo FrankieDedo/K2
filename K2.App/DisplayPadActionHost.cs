@@ -65,3 +65,76 @@ internal sealed class DisplayPadActionHost : IActionHost
 
     bool IActionHost.SupportsPages => true;
 }
+
+/// <summary>
+/// <see cref="IActionHost"/> for a connected DisplayPad that is NOT the current foreground
+/// tab (see <c>MainWindow.DisplayPad.cs</c>'s <c>DpHandleBackgroundKey</c>/
+/// <c>DpActivateBackgroundDevice</c>). Unlike <see cref="DisplayPadActionHost"/> — which
+/// reflects whichever single device tab happens to be visible via <c>_activeDpDeviceId</c>
+/// and UI-bound controls — every member here is pinned to one fixed <see cref="_deviceId"/>
+/// and reads straight from the SQLite store, so an action fired by THIS pad's own physical
+/// key press never bleeds into whatever device the user is currently looking at.
+/// </summary>
+internal sealed class DisplayPadBackgroundActionHost : IActionHost
+{
+    private readonly MainWindow _win;
+    private readonly int _deviceId;
+
+    public DisplayPadBackgroundActionHost(MainWindow win, int deviceId)
+    {
+        _win = win;
+        _deviceId = deviceId;
+    }
+
+    Dispatcher IActionHost.Dispatcher => _win.Dispatcher;
+    void IActionHost.Log(string message) => _win.Dispatcher.Invoke(() => _win.DpLogPublic($"[bg {_deviceId}] {message}"));
+    int IActionHost.CurrentDevice => _deviceId;
+    int IActionHost.CurrentProfile => _win._dpStore.GetCurrentProfile(_deviceId);
+    int IActionHost.ProfileCount => 5;
+    int IActionHost.ButtonCount => 12;
+    int IActionHost.SdkVersion => 0;
+    string? IActionHost.ConfiguredPythonPath => null;
+
+    void IActionHost.SwitchProfile(string? targetKey, string target)
+    {
+        _win.Dispatcher.Invoke(() =>
+        {
+            // Self-target must explicitly name THIS device: passing null (like the foreground
+            // host does) would fall back to whichever tab the user has open (see DpSwitchProfile).
+            if (string.IsNullOrEmpty(targetKey)) _win.DpSwitchProfile(_deviceId, target);
+            else _win.SwitchProfileByKey(targetKey, target);
+        });
+    }
+
+    IReadOnlyList<ProfileTargetOption> IActionHost.ListProfileTargets() => _win.ListAllProfileTargets();
+
+    IReadOnlyList<HostButton> IActionHost.GetButtons()
+    {
+        int profile = _win._dpStore.GetCurrentProfile(_deviceId);
+        return _win._dpStore.LoadPage(_deviceId, profile, 0)
+            .Select(r => new HostButton(r.ButtonIndex, null,
+                !string.IsNullOrEmpty(r.ImagePath), r.ImagePath, r.ActionType, r.ActionValue))
+            .ToList();
+    }
+
+    void IActionHost.PressButton(int index)
+    {
+        int profile = _win._dpStore.GetCurrentProfile(_deviceId);
+        var row = _win._dpStore.LoadPage(_deviceId, profile, 0).FirstOrDefault(r => r.ButtonIndex == index);
+        if (row is not null) _win.DpEngineFor(_deviceId).Execute(row.ActionType, row.ActionValue, index);
+    }
+
+    IReadOnlyList<string> IActionHost.ListMacroNames() => _win.ListAllMacroNames();
+
+    void IActionHost.PlayMacro(string macroName) => _win.PlayMacroByName(macroName);
+
+    IReadOnlyList<(int PageId, string Name)> IActionHost.ListPages() =>
+        _win.DpListPages(_deviceId, ((IActionHost)this).CurrentProfile);
+
+    int? IActionHost.CreatePage(string name) =>
+        _win.DpCreatePage(_deviceId, ((IActionHost)this).CurrentProfile, name);
+
+    void IActionHost.RenamePage(int pageId, string name) => _win.DpRenamePage(pageId, name);
+
+    bool IActionHost.SupportsPages => true;
+}

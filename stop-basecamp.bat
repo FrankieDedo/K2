@@ -33,10 +33,10 @@ if errorlevel 1 (
 
 REM --- 1) Ferma il servizio Windows di Base Camp ---------------
 if "%IS_ADMIN%"=="1" (
-    echo [1/3] Stop servizio "BaseCamp Service"...
-    sc query "BaseCamp Service" >nul 2>&1
+    echo [1/3] Stop servizio "BaseCampService"...
+    sc query "BaseCampService" >nul 2>&1
     if not errorlevel 1 (
-        sc stop "BaseCamp Service" >nul 2>&1
+        sc stop "BaseCampService" >nul 2>&1
         if errorlevel 1 (
             echo       servizio gia' fermo o non fermabile.
         ) else (

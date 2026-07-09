@@ -9,7 +9,8 @@
   <!-- ═══════════════════════════════════════════════════════════════
        COMUNE / CONDIVISO
        ═══════════════════════════════════════════════════════════════ -->
-  <string name="app_title">K2 — Console Mountain</string>
+  <string name="app_title">K2</string>
+  <string name="app_already_running">Un'altra istanza di K2 è già in esecuzione.</string>
   <string name="driver_not_opened">Driver non aperto.</string>
   <string name="open_driver">Apri driver</string>
   <string name="close_driver">Chiudi driver</string>
@@ -173,7 +174,7 @@
   <string name="ev_sdk_log">Log SDK</string>
 
   <!-- Illuminazione RGB -->
-  <string name="rgb_lighting">Illuminazione RGB</string>
+  <string name="rgb_lighting">Illuminazione</string>
   <string name="rgb_effect">Effetto:</string>
   <string name="rgb_speed">Velocità:</string>
   <string name="rgb_direction">Direzione:</string>
@@ -245,6 +246,21 @@
   <string name="settings_disable_alt_tab">Disabilita Alt + Tab</string>
   <string name="settings_indicator_leds">LED indicatori</string>
   <string name="settings_enable_core_led">Abilita i LED indicatori Core</string>
+  <string name="settings_keyboard_color">Colore tastiera</string>
+  <string name="color_silver">Argento</string>
+  <string name="color_black">Nero</string>
+  <string name="settings_keycap_group">Aspetto keycap (anteprima a schermo)</string>
+  <string name="settings_keycap_color">Colore keycap</string>
+  <string name="settings_keycap_black">Nero</string>
+  <string name="settings_keycap_white">Bianco</string>
+  <string name="settings_keycap_custom">Personalizzato</string>
+  <string name="settings_keycap_text_color">Colore testo</string>
+  <string name="settings_keycap_style">Tipo keycap</string>
+  <string name="settings_keycap_style_normal">Normale (alone intorno al tasto)</string>
+  <string name="settings_keycap_style_translucent">Traslucido (alone + lettere colorate)</string>
+  <string name="settings_keycap_style_pudding">Pudding (bordo colorato, centro del colore keycap)</string>
+  <string name="settings_keycap_style_reverse_pudding">Reverse pudding (bordo del colore keycap, centro colorato)</string>
+  <string name="settings_keycap_hint">Solo estetico — cambia come l'anteprima a schermo qui in K2 abbina i colori LED ai tasti, non modifica l'effetto RGB inviato alla tastiera.</string>
   <string name="settings_factory_reset">Ripristina impostazioni di fabbrica</string>
   <string name="settings_factory_reset_confirm">Questo ripristina Modalità gioco, LED indicatori ed effetti di illuminazione della tastiera alle impostazioni di fabbrica. Continuare?</string>
 
@@ -355,6 +371,11 @@
   <string name="dp_create_folder_title">Crea pagina cartella</string>
   <string name="dp_create_folder_prompt">Nome cartella:</string>
   <string name="dp_set_back">Imposta come pulsante Indietro</string>
+  <string name="dp_pages">Pagine</string>
+  <string name="dp_no_pages">Nessuna pagina cartella creata finora.</string>
+  <string name="dp_delete_page">Elimina</string>
+  <string name="dp_delete_page_title">Elimina pagina</string>
+  <string name="dp_delete_page_confirm">Eliminare la pagina "{0}"? I tasti che la aprono smetteranno di funzionare.</string>
   <string name="dp_add_text">Aggiungi testo…</string>
   <string name="txt_dialog_title">Inserisci testo</string>
   <string name="txt_label">Testo:</string>

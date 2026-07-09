@@ -231,9 +231,24 @@ internal static class MacroPadSdkNative
     /// <summary>
     /// "ChangeEffect" payload for the main presets. Pack=1, 62 bytes total.
     /// Identical to the Everest's EffData struct (same firmware family).
+    /// <para>
+    /// <b>2026-07-09 fix:</b> was previously declared with
+    /// <c>[MarshalAs(UnmanagedType.ByValArray)] FWColor[] colorLv</c> /
+    /// <c>byte[] byData</c> — a non-blittable struct that P/Invoke marshals by
+    /// copying into a temporary native buffer on every call. Wave/Tornado
+    /// (which use the sibling <see cref="BlockData"/>, declared with INLINE
+    /// fields + a <c>fixed</c> buffer — a truly blittable, pass-by-value
+    /// struct) worked; every other effect via <c>ChangeEffect</c> did not
+    /// (confirmed by the user: not even "Off" did anything) — <c>ChangeEffect</c>
+    /// returned <c>true</c> but the wire data was stale, exactly the "P/Invoke
+    /// returns True, wire stale" failure mode already documented for the
+    /// Everest's <c>BlockData</c> history (see <c>EverestSdkNative.cs</c>).
+    /// Switched to the same inline-field/<c>unsafe fixed</c> layout as the
+    /// Everest's (now working) <c>EffData</c> struct.
+    /// </para>
     /// </summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    public struct EffData
+    public unsafe struct EffData
     {
         public byte byEffectIndex;   // EffectIndex
         public byte byAll;            // 1 = applies to all keys
@@ -243,50 +258,185 @@ internal static class MacroPadSdkNative
         public byte byDirection;      // DirectionT (forced to 255: see getChangeEffect)
         public byte byWidth;          // wave width (forced to 255: see getChangeEffect)
 
-        /// <summary>Main effect colors (max 3).</summary>
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 3)]
-        public FWColor[] colorLv;
+        /// <summary>Main effect colors (3 inline RGB triplets).</summary>
+        public FWColor colorLv0;
+        public FWColor colorLv1;
+        public FWColor colorLv2;
 
         /// <summary>Effect background color.</summary>
         public FWColor bkColor;
 
-        /// <summary>Firmware command parameter tail (43 bytes, zeros for presets).</summary>
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 43)]
-        public byte[] byData;
+        /// <summary>Firmware command parameter tail (43 bytes, zero for presets).
+        /// Inline <c>fixed</c> buffer -&gt; blittable struct.</summary>
+        public fixed byte byData[43];
 
         /// <summary>
         /// Creates an <see cref="EffData"/> exactly replicating Base Camp's
-        /// <c>MacroPadSDK::getChangeEffect</c> (CIL dump):
-        /// <c>byWidth=255</c> and <c>byDirection=255</c> always, <c>bySpeed</c>
-        /// = enum value (0/1/2), <c>byAll=1</c>, <c>byData</c> = 43 zeros.
-        /// For <see cref="EffectIndex.Off"/>: colors and background at zero.
+        /// <c>MacroPadSDK::getChangeEffect</c> (CIL dump, re-verified 2026-07-09
+        /// against the extracted <c>BaseCamp.UI.dll</c>):
+        /// <c>byWidth=255</c> and <c>byDirection=255</c> always, <c>byAll=1</c>,
+        /// <c>byData</c> = 43 zeros. <c>bySpeed</c> is the RAW <c>Lighting.Speed</c>
+        /// byte (0..100-ish scale, DB default 60) — NOT a 3-value enum — except
+        /// for <see cref="EffectIndex.Static"/>/<see cref="EffectIndex.Off"/>,
+        /// where BC forces <c>bySpeed=255</c> ("no speed" marker). Rainbow
+        /// (<c>byRandColor</c>) is <c>2</c> in BC (not <c>1</c>) when the effect's
+        /// color "Type" is random — <see cref="ChangeBlockEffect"/> uses the same
+        /// convention. For <see cref="EffectIndex.Off"/>: colors and background
+        /// at zero.
         /// </summary>
         public static EffData New(EffectIndex eff,
                                    FWColor c1, FWColor? c2 = null, FWColor? c3 = null,
                                    FWColor? background = null,
-                                   SpeedT speed = SpeedT.Normal,
+                                   byte speed = 60,
                                    BrightT bright = BrightT.B100,
                                    bool randomColor = false)
         {
-            bool isOff  = eff == EffectIndex.Off;
+            bool isOff   = eff == EffectIndex.Off;
+            bool noSpeed = isOff || eff == EffectIndex.Static;
             FWColor zero = default;
-            var colors = isOff
-                ? new[] { zero, zero, zero }
-                : new[] { c1, c2 ?? zero, c3 ?? zero };
+
+            // From decompiled BC (getChangeEffect): Reactive/Yeti/Matrix put the
+            // 2nd color in bkColor (byRandColor stays 0); Breath (and anything
+            // else with a 2nd color) puts it in colorLv1 with byRandColor=16.
+            // Mirrors EverestSdkNative.EffData.New's usesBkColor logic exactly
+            // (same firmware family).
+            bool usesBkColor = eff == EffectIndex.ReactiveA
+                             || eff == EffectIndex.ReactiveB
+                             || eff == EffectIndex.ReactiveC
+                             || eff == EffectIndex.Yeti
+                             || eff == EffectIndex.Matrix;
+
+            bool hasTwoColors = !isOff && !randomColor && c2.HasValue;
+
+            byte randColor;
+            if (randomColor) randColor = 2;
+            else if (hasTwoColors && !usesBkColor) randColor = 16; // 0x10: multi-color gradient
+            else randColor = 0;
+
+            FWColor lv0 = isOff ? zero : c1;
+            FWColor lv1, bk;
+            if (hasTwoColors && usesBkColor)
+            {
+                lv1 = zero;
+                bk  = c2!.Value;
+            }
+            else if (hasTwoColors)
+            {
+                lv1 = c2!.Value;
+                bk  = isOff ? zero : (background ?? zero);
+            }
+            else
+            {
+                lv1 = zero;
+                bk  = isOff ? zero : (background ?? zero);
+            }
 
             return new EffData
             {
                 byEffectIndex = (byte)eff,
                 byAll         = 1,
-                bySpeed       = (byte)speed,
+                bySpeed       = noSpeed ? (byte)255 : speed,
                 byLightness   = (byte)bright,
-                byRandColor   = randomColor ? (byte)1 : (byte)0,
+                byRandColor   = randColor,
                 byDirection   = 0xFF,
                 byWidth       = 0xFF,
-                colorLv       = colors,
-                bkColor       = isOff ? zero : (background ?? zero),
-                byData        = new byte[43],
+                colorLv0      = lv0,
+                colorLv1      = lv1,
+                colorLv2      = isOff ? zero : (c3 ?? zero),
+                bkColor       = bk,
             };
+        }
+    }
+
+    // =======================================================================
+    // Block effect (Wave / Tornado) — ChangeBlockEffect(BlockData, ID)
+    // =======================================================================
+    // Discovered 2026-07-09 by decompiling BaseCamp.UI.dll (MacroPadDLLHelper.
+    // getChangeBlockEffect, MacroPadOperations.SetMacroPadLighting): exactly
+    // like the Everest keyboard (EverestSdkNative.BlockData — same firmware
+    // family, same magic numbers), the MacroPad's Wave (EffMenuIndex=Colorwave)
+    // and Tornado (EffMenuIndex=Tornado) presets do NOT go through ChangeEffect
+    // — Base Camp routes them through ChangeBlockEffect instead. Direction byte
+    // codes verified identical to Everest's: Wave 4-way {0,2,4,6}, Tornado
+    // CW/CCW {9,10}. This was never ported to the MacroPad module before —
+    // ChangeEffect was called unconditionally for every effect including Wave
+    // (the UI's default selection), which is the most likely reason the LED
+    // effects never appeared to do anything on the MacroPad.
+
+    /// <summary>Firmware "block" color triplet: position/level + RGB (4 bytes).
+    /// Identical layout to the Everest's <c>FWBColor</c>.</summary>
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct FWBColor
+    {
+        public byte pos, r, g, b;
+        public FWBColor(byte pos, byte r, byte g, byte b) { this.pos = pos; this.r = r; this.g = g; this.b = b; }
+    }
+
+    /// <summary>
+    /// "ChangeBlockEffect" payload for block effects (Wave/Tornado).
+    /// Pack=1, 62 bytes — identical layout to the Everest's <c>BlockData</c>
+    /// (same Mountain firmware family).
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public unsafe struct BlockData
+    {
+        public byte byEffectIndex;
+        public byte byAll;
+        public byte bySpeed;
+        public byte byLightness;
+        public byte byRandColor;
+        public byte byDirection;
+        public byte byWidth;
+        public byte byBlockNum;
+
+        public FWBColor colorLv0;   // colorLv[2]
+        public FWBColor colorLv1;
+        public FWBColor undefA0;    // undef[5]
+        public FWBColor undefA1;
+        public FWBColor undefA2;
+        public FWBColor undefA3;
+        public FWBColor undefA4;
+        public FWColor  bkColor;    // 3 byte
+        public fixed byte tail[23]; // undef2[23]
+
+        /// <summary>
+        /// Builds a BlockData replicating Base Camp's wire format, ported
+        /// byte-for-byte from <c>MacroPadDLLHelper::getChangeBlockEffect</c>
+        /// (same encoding as the Everest's <c>BlockData.New</c>):
+        /// <c>byWidth=2</c> always; 1 color -&gt; byRand=0/byBlockNum=1;
+        /// 2 colors -&gt; byRand=16(0x10)/byBlockNum=1; rainbow -&gt;
+        /// byRand=2/byBlockNum=0. <paramref name="direction"/> must already be
+        /// one of the firmware's valid codes (Wave: 0/2/4/6, Tornado: 9/10).
+        /// </summary>
+        public static BlockData New(MacroPadSdkNative.EffectIndex eff, byte direction, byte speed, byte lightness,
+                                     FWColor c1, FWColor? c2 = null, bool rainbow = false)
+        {
+            var d = new BlockData
+            {
+                byEffectIndex = (byte)eff,
+                byAll         = 0,
+                bySpeed       = speed,
+                byLightness   = lightness,
+                byDirection   = direction,
+                bkColor       = default,
+            };
+
+            if (rainbow)
+            {
+                d.byRandColor = 2; d.byWidth = 2; d.byBlockNum = 0;
+            }
+            else if (c2 is { } s)
+            {
+                d.byRandColor = 16; d.byWidth = 2; d.byBlockNum = 1;
+                d.colorLv0 = new FWBColor(0, c1.r, c1.g, c1.b);
+                d.colorLv1 = new FWBColor(0, s.r,  s.g,  s.b);
+            }
+            else
+            {
+                d.byRandColor = 0; d.byWidth = 2; d.byBlockNum = 1;
+                d.colorLv0 = new FWBColor(0, c1.r, c1.g, c1.b);
+            }
+            return d;
         }
     }
 
@@ -303,6 +453,12 @@ internal static class MacroPadSdkNative
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool ChangeEffect(EffData data, uint ID);
+
+    /// <summary>Applies a "block" effect (Wave/Tornado) to the given device slot.
+    /// See <see cref="BlockData"/> — ChangeEffect rejects these two indices.</summary>
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool ChangeBlockEffect(BlockData data, uint ID);
 
     /// <summary>Resets the current effects to the firmware default.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]

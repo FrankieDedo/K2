@@ -100,7 +100,63 @@ public sealed class MacroPadService : IDisposable
         _opened = false;
         // _keyCallback stays referenced as long as the service is alive: the SDK
         // might still have the pointer registered.
+        _initializedSlots.Clear();
         App.WriteLog("[MacroPad.Close] driver closed");
+    }
+
+    // ---- per-slot DLL state init ----------------------------------------
+
+    private readonly HashSet<uint> _initializedSlots = new();
+
+    /// <summary>
+    /// Replicates, per device slot, the initialization calls Base Camp makes
+    /// after a MacroPad connects — mirrors <c>EverestService.InitDllState</c>
+    /// (same doc comment there: "Even though we don't use the returned data,
+    /// the DLL's internal side effects prepare the state for ChangeEffect/
+    /// ChangeBlockEffect"). MacroPad never had an equivalent: <c>Open()</c>
+    /// only called <c>OpenUSBDriver</c>. Idempotent per slot (cheap to call
+    /// before every effect apply). Added 2026-07-09 after two rounds of
+    /// decompile-based fixes (ChangeBlockEffect routing, blittable EffData)
+    /// left Wave/Tornado working but every other preset — "Off" included —
+    /// still doing nothing: the remaining common factor with Everest's own
+    /// history is exactly this missing one-time init.
+    /// </summary>
+    internal void EnsureSlotInitialized(uint id)
+    {
+        if (!_initializedSlots.Add(id)) return;
+
+        try
+        {
+            var fwInfo = new MacroPadSdkNative.FWInfo();
+            bool fi = MacroPadSdkNative.GetFWInfo(ref fwInfo, id);
+            App.WriteLog($"[MacroPad.Init] id={id} GetFWInfo -> {fi} profile={fwInfo.currentlyProfileIndex} " +
+                         $"effectMode={fwInfo.byEffectModeIndex} effectMenu={fwInfo.byEffectMenuIndex}");
+        }
+        catch (Exception ex) { App.WriteLog("[MacroPad.Init] GetFWInfo threw: " + ex); }
+
+        try
+        {
+            int layout = 0;
+            bool fl = MacroPadSdkNative.GetFWLayout(ref layout, id);
+            App.WriteLog($"[MacroPad.Init] id={id} GetFWLayout -> {fl} layout={layout}");
+        }
+        catch (Exception ex) { App.WriteLog("[MacroPad.Init] GetFWLayout threw: " + ex); }
+
+        try
+        {
+            bool ek = MacroPadSdkNative.EnableKeyFunc(true, id);
+            App.WriteLog($"[MacroPad.Init] id={id} EnableKeyFunc(true) -> {ek}");
+        }
+        catch (Exception ex) { App.WriteLog("[MacroPad.Init] EnableKeyFunc threw: " + ex); }
+
+        // Forces the firmware out of AP mode (may have been left in AP from a
+        // previous K2/BC session) — same rationale as Everest's InitDllState.
+        try
+        {
+            bool ap = MacroPadSdkNative.APEnable(false, id);
+            App.WriteLog($"[MacroPad.Init] id={id} APEnable(false) -> {ap}");
+        }
+        catch (Exception ex) { App.WriteLog("[MacroPad.Init] APEnable(false) threw: " + ex); }
     }
 
     /// <summary>Switches the MacroPad's active profile. Calls native SwitchProfile(profile, 0, id).</summary>
@@ -268,52 +324,100 @@ public sealed class MacroPadService : IDisposable
         Off       = (byte)MacroPadSdkNative.EffectIndex.Off,
     }
 
-    /// <summary>Effect speed.</summary>
-    public enum Speed : byte { Slow = 0, Normal = 1, Fast = 2 }
-
-    /// <summary>Rotation/scroll direction.</summary>
+    /// <summary>Rotation/scroll direction (kept for source compatibility; the actual
+    /// wire codes are effect-specific — see <see cref="MainWindow.MacroLed"/>'s CapsFor).</summary>
     public enum Direction : byte { ClockWise = 0, CounterClockWise = 1 }
 
     /// <summary>
     /// Applies a lighting preset to the given device slot.
-    /// <para>As with the Everest: <c>ChangeEffect</c> requires the device to be in
-    /// NORMAL (non-AP) mode, so <c>APEnable(false)</c> is forced first; afterwards
-    /// <c>SaveFlash</c> is called to make the preset persistent on the slot.</para>
+    /// <para>
+    /// Reverse-engineered 2026-07-09 from the extracted <c>BaseCamp.UI.dll</c>
+    /// (<c>MacroPadOperations.SetMacroPadLighting</c> / <c>MacroPadDLLHelper.
+    /// getChangeEffect</c> / <c>getChangeBlockEffect</c>) — see
+    /// <c>K2/_reference/BaseCamp_decompiled_UI/</c>. Two findings fixed here:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><b>Wave and Tornado are NOT firmware presets applied via
+    ///   <c>ChangeEffect</c></b> — Base Camp routes them through
+    ///   <c>ChangeBlockEffect</c> (<see cref="MacroPadSdkNative.BlockData"/>)
+    ///   instead, exactly like the Everest keyboard. Wave happens to be the
+    ///   UI's default selection, so this was very likely why "nothing seemed
+    ///   to happen".</item>
+    ///   <item>Base Camp never calls <c>APEnable</c> around this — that call
+    ///   (previously here, copied from the Everest module) doesn't appear
+    ///   anywhere in the MacroPad lighting code path of <c>BaseCamp.UI.dll</c>
+    ///   and has been removed.</item>
+    /// </list>
+    /// <c>SaveFlash</c> is still called after every apply to make the preset
+    /// persistent on the slot (Base Camp does the same in <c>SetMacroPadLighting</c>).
     /// </summary>
+    /// <param name="speedByte">Raw firmware speed 0..100 (DB default 60). Ignored
+    /// (forced to 255, "N/A") for Static/Off — see <see cref="MacroPadSdkNative.EffData.New"/>.</param>
+    /// <param name="directionByte">Raw firmware direction byte, effect-specific
+    /// (Wave: 0/2/4/6, Tornado: 9/10). Only meaningful for Wave/Tornado.</param>
     public bool SetEffect(uint id, Effect effect,
                           (byte r, byte g, byte b) primary,
                           (byte r, byte g, byte b)? secondary = null,
                           (byte r, byte g, byte b)? tertiary = null,
                           (byte r, byte g, byte b)? background = null,
-                          Speed speed = Speed.Normal,
                           int brightness = 100,
-                          bool randomColor = false)
+                          bool randomColor = false,
+                          byte speedByte = 60,
+                          int directionByte = -1)
     {
-        // ChangeEffect is a firmware preset: the device stores it and renders it
-        // from its own runtime. AP mode (SW mode) is only for per-key
-        // streaming, so it must be turned off before the command.
-        try
-        {
-            bool offOk = MacroPadSdkNative.APEnable(false, id);
-            App.WriteLog($"[MacroPad.SetEffect] APEnable(false,id={id}) prep -> {offOk}");
-        }
-        catch (Exception ex2) { App.WriteLog("[MacroPad.SetEffect] APEnable(false) prep threw: " + ex2); }
+        EnsureSlotInitialized(id);
 
         MacroPadSdkNative.FWColor C((byte, byte, byte) c) => new(c.Item1, c.Item2, c.Item3);
         var bright = QuantizeBrightness(brightness);
+
+        if (effect == Effect.Wave || effect == Effect.Tornado)
+        {
+            byte dirB = (byte)(directionByte >= 0 ? directionByte : 0);
+            MacroPadSdkNative.FWColor? c2b = secondary is { } s ? C(s) : null;
+            var block = MacroPadSdkNative.BlockData.New(
+                eff:       (MacroPadSdkNative.EffectIndex)effect,
+                direction: dirB,
+                speed:     speedByte,
+                lightness: (byte)bright,
+                c1:        C(primary),
+                c2:        c2b,
+                rainbow:   randomColor);
+            try
+            {
+                bool okB = MacroPadSdkNative.ChangeBlockEffect(block, id);
+                App.WriteLog($"[MacroPad.SetEffect] BLOCK id={id} eff={effect} dir={dirB} speed={speedByte} " +
+                             $"bright={bright} rainbow={randomColor} -> {okB}");
+                App.WriteLog("[MacroPad.SetEffect] DUMP BlockData(62B): " + DumpBlockData(block));
+
+                try
+                {
+                    bool flashOk = MacroPadSdkNative.SaveFlash(6, id); // 6 = ALL_PROFILE
+                    App.WriteLog($"[MacroPad.SetEffect] SaveFlash(ALL,id={id}) (commit) -> {flashOk}");
+                }
+                catch (Exception ex2) { App.WriteLog("[MacroPad.SetEffect] SaveFlash threw: " + ex2); }
+
+                return okB;
+            }
+            catch (Exception ex)
+            {
+                App.WriteLog("[MacroPad.SetEffect] ChangeBlockEffect threw: " + ex);
+                return false;
+            }
+        }
+
         var data = MacroPadSdkNative.EffData.New(
             eff:        (MacroPadSdkNative.EffectIndex)effect,
             c1:         C(primary),
-            c2:         secondary is { } s ? C(s) : null,
+            c2:         secondary is { } s2 ? C(s2) : null,
             c3:         tertiary  is { } t ? C(t) : null,
             background: background is { } bg ? C(bg) : null,
-            speed:      (MacroPadSdkNative.SpeedT)speed,
+            speed:      speedByte,
             bright:     bright,
             randomColor: randomColor);
         try
         {
             bool ok = MacroPadSdkNative.ChangeEffect(data, id);
-            App.WriteLog($"[MacroPad.SetEffect] id={id} eff={effect} speed={speed} bright={bright} -> {ok}");
+            App.WriteLog($"[MacroPad.SetEffect] id={id} eff={effect} speed={speedByte} bright={bright} -> {ok}");
             App.WriteLog("[MacroPad.SetEffect] DUMP EffData(62B): " + DumpEffData(data));
 
             try
@@ -332,7 +436,7 @@ public sealed class MacroPadService : IDisposable
         }
     }
 
-    /// <summary>Hex-dump of the struct's 62 bytes (diagnostics).</summary>
+    /// <summary>Hex-dump of the EffData struct's bytes (diagnostics).</summary>
     private static string DumpEffData(MacroPadSdkNative.EffData d)
     {
         int sz = Marshal.SizeOf<MacroPadSdkNative.EffData>();
@@ -345,6 +449,23 @@ public sealed class MacroPadService : IDisposable
             return $"{sz}B = " + BitConverter.ToString(buf);
         }
         finally { Marshal.FreeHGlobal(p); }
+    }
+
+    /// <summary>Hex-dump of the BlockData struct's bytes (diagnostics). Uses
+    /// <c>sizeof()</c>/pointer walk, not <c>Marshal.SizeOf</c>, because the
+    /// struct has a <c>fixed byte</c> buffer (mirrors EverestService.DumpBlockData).</summary>
+    private static unsafe string DumpBlockData(MacroPadSdkNative.BlockData d)
+    {
+        int sz = sizeof(MacroPadSdkNative.BlockData);
+        byte* src = (byte*)&d;
+        var sb = new System.Text.StringBuilder(sz * 3 + 10);
+        sb.Append($"{sz}B = ");
+        for (int i = 0; i < sz; i++)
+        {
+            if (i > 0) sb.Append('-');
+            sb.Append(src[i].ToString("X2"));
+        }
+        return sb.ToString();
     }
 
     /// <summary>Resets the slot's effects to the firmware default.</summary>

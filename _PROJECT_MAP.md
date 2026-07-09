@@ -196,13 +196,29 @@ platform (x86 or x64).
 - `Services/MacroPadSdkNative.cs` — P/Invoke raw su `MacroPadSDK.dll` (apertura,
   device, callback tasti, AP, + **illuminazione LED**: enum `EffectIndex`/
   `SpeedT`/`DirectionT`/`BrightT`, struct `FWColor`/`EffData` (62B, identica
-  all'Everest), `ChangeEffect`/`ResetEffects`/`SetSyncEffect`/
-  `SetSyncAcrossProfiles`/`GetSyncAcrossProfiles`/`SetMainBrightness`/
-  `EnableKeyFunc`/`SaveFlash` — **tutte con `uint ID` finale** = slot device)
+  all'Everest) + **`FWBColor`/`BlockData`/`ChangeBlockEffect`** (porting 2026-07-09
+  da `EverestSdkNative.BlockData`, stessa famiglia firmware — Wave/Tornado NON
+  passano da `ChangeEffect`, lo rifiuta: vanno su `ChangeBlockEffect`, scoperto
+  via decompile di `BaseCamp.UI.dll`, vedi CHANGELOG 2026-07-09), `ChangeEffect`/
+  `ChangeBlockEffect`/`ResetEffects`/`SetSyncEffect`/`SetSyncAcrossProfiles`/
+  `GetSyncAcrossProfiles`/`SetMainBrightness`/`EnableKeyFunc`/`SaveFlash` —
+  **tutte con `uint ID` finale** = slot device. **`EffData` è `unsafe struct`
+  con campi inline** (`colorLv0/1/2` + `fixed byte byData[43]`), NON
+  `[MarshalAs(ByValArray)] FWColor[]`/`byte[]` — quella versione era
+  blittable-solo-in-apparenza: `ChangeEffect` tornava `true` ma il wire restava
+  stale, nessun effetto (nemmeno "Off") funzionava finché non è stata allineata
+  al layout della `EffData` dell'Everest (già corretto in una sessione
+  precedente, mai riportato sul MacroPad). Vedi CHANGELOG 2026-07-09,
+  seconda entry. **Qualsiasi nuova struct P/Invoke passata by-value a
+  `MacroPadSDK.dll`/`SDKDLL.dll` deve usare questo schema** (campi inline +
+  `fixed`), mai array marshalati.)
 - `Services/MacroPadService.cs` — facade .NET con eventi tipizzati + facade
   effetti LED per-slot (`SetEffect`/`ResetEffects`/`SetSyncAcrossProfiles`/
-  `SetBacklight`/`SaveFlash`); enum `Effect`/`Speed`/`Direction`. Logica
-  provata Everest: no AP mode attorno a `ChangeEffect`, `SaveFlash` commit.
+  `SetBacklight`/`SaveFlash`); enum `Effect`, `speedByte`/`directionByte` int
+  (allineato a `EverestService.SetEffect`, non più enum `Speed` a 3 valori).
+  `SetEffect` instrada Wave/Tornado su `ChangeBlockEffect`, il resto su
+  `ChangeEffect`; **nessun `APEnable` intorno** (verificato: Base Camp non lo
+  chiama mai per il MacroPad in `BaseCamp.UI.dll`, a differenza dell'Everest).
 - `Services/MacroPadStore.cs` — SQLite azioni tasti + mappa matrice (MacroPad)
 - `Services/EverestSdkNative.cs` — P/Invoke raw su `SDKDLL.dll` (la nativa
   della tastiera Everest Max): apertura, info device, AP, profilo, callback,
@@ -418,6 +434,20 @@ Tutto ciò che deriva dai binari di Base Camp. Solo per sviluppo locale.
   i pacchetti HID di Base Camp con USBPcap+Wireshark (necessario per
   capire perche' K2.App `ChangeEffect` non disegna sulla tastiera).
 - `_reference/usb_dumps/` — destinazione dei `.pcapng` catturati.
+- `_reference/BaseCamp_decompiled_UI/BaseCamp.UI.dll` — assembly estratto
+  (2026-07-09) da `BaseCamp.UI.exe` con la tecnica sopra. A differenza di
+  `BaseCamp_decompiled/` (solo librerie referenziate: Data/Repository/
+  Utility/...), questo contiene i **Controllers ASP.NET Core** con la logica
+  di business vera e propria (es. `MacroPadController`, `EverestController`,
+  `MacroPadOperations`, `EverestOperations`) — il livello sopra ai wrapper
+  P/Invoke `BaseCamp.Service.Helpers.*SDK` di `BaseCamp.Service.exe`. Usare
+  gli stessi `tools/dotnet_method_calls.py --callers <needle>` /
+  `<Class.Method>` per rintracciare sequenze UI-driven (es. cosa succede
+  quando l'utente apre un pannello, non solo quale P/Invoke esiste).
+  Nota tecnica: `find_method`/`--callers` fanno match diretto sul nome
+  metodo — per i costruttori statici passare il nome esatto `.cctor` (con
+  il punto) via script inline, non tramite `find_method` (che spezza su
+  `.` e si rompe).
 - `README.md` — marker "non distribuire"
 
 ## Profili

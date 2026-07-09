@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -12,16 +13,51 @@ public partial class App : Application
     public static readonly string LogPath = Path.Combine(
         AppContext.BaseDirectory, "K2.DisplayPad.log");
 
+    // Held for the process lifetime; released automatically by the OS on exit.
+    private static Mutex? _singleInstanceMutex;
+
+    // Set by the constructor; checked in OnStartup — NOT shown/handled in the
+    // constructor itself, because MessageBox.Show() there pumps the dispatcher and
+    // can trigger the StartupUri window (MainWindow.xaml) before App's resources
+    // (K2Theme.xaml, merged in App.xaml) are loaded, crashing on a missing
+    // StaticResource. See the equivalent fix/comment in K2.App/App.xaml.cs.
+    private static bool _singleInstanceGranted;
+
     public App()
     {
+        // Initialize localization before any UI is created.
+        Core.Loc.Init();
+
+        _singleInstanceGranted = AcquireSingleInstanceLock();
+
         DispatcherUnhandledException += OnDispatcherUnhandled;
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandled;
         TaskScheduler.UnobservedTaskException += OnUnobservedTask;
 
-        // Initialize localization before any UI is created.
-        Core.Loc.Init();
-
         WriteLog($"=== App start {DateTime.Now:O} pid={Environment.ProcessId} lang={Core.Loc.CurrentLang} ===");
+    }
+
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        if (!_singleInstanceGranted)
+        {
+            MessageBox.Show(Core.Loc.Get("app_already_running"), Core.Loc.Get("app_title"),
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            Shutdown();
+            return;
+        }
+
+        base.OnStartup(e); // creates/shows the StartupUri window (MainWindow.xaml)
+    }
+
+    /// <summary>
+    /// Acquires a named mutex so only one K2.DisplayPad instance can run per user session.
+    /// Returns false if another instance already holds it.
+    /// </summary>
+    private static bool AcquireSingleInstanceLock()
+    {
+        _singleInstanceMutex = new Mutex(initiallyOwned: true, name: "K2DisplayPad_SingleInstance_Mutex", out bool createdNew);
+        return createdNew;
     }
 
     private void OnDispatcherUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)

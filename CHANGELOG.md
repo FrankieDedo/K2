@@ -9,7 +9,922 @@
 > mappa stabile in `_PROJECT_MAP.md`. Consultare qui solo per il contesto
 > di una modifica specifica passata (grep per parola chiave/data).
 
-> Last updated: 2026-07-08 (DisplayPad: icone cartella/pagina — rotazione doppia, icone
+> Last updated: 2026-07-09 (Aggiunto controllo istanza singola per K2.App e K2.DisplayPad — bug trovato e fixato durante il test dal vivo: il MessageBox "già in esecuzione" non era visibile):
+>   - **Richiesta utente**: impedire l'apertura di più istanze contemporanee di K2.
+>   - **Implementazione**: `Mutex` con nome fisso (`K2App_SingleInstance_Mutex` / `K2DisplayPad_SingleInstance_Mutex`,
+>     nessun prefisso `Global\`, quindi valido per sessione utente) creato all'avvio in entrambi `K2.App/App.xaml.cs`
+>     e `K2.DisplayPad/App.xaml.cs`; nuova stringa loc `app_already_running` (EN in `Strings.xml`, IT in
+>     `Strings.it.xml`).
+>   - **Bug trovato testando dal vivo** (build in locale + `Start-Process` doppio + enumerazione finestre via
+>     P/Invoke `EnumWindows`, dato che qui non c'è modo di vedere una GUI a schermo): la prima versione
+>     chiamava `MessageBox.Show(...)` **dentro il costruttore di `App`**, prima che `Main()` chiamasse
+>     `InitializeComponent()`/`Run()`. `MessageBox.Show` di WPF pompa il Dispatcher per il proprio loop
+>     modale — e questo faceva scattare `OnStartup()` (quindi la creazione di `MainWindow`) mentre i
+>     resource dictionary del tema (`K2Theme.xaml`, merged in `App.xaml`) non erano ancora caricati:
+>     `MainWindow..cctor()` → `BuildRoundHotspotTemplate()` → `FindResource("K2HoverBrush")` falliva con
+>     `ResourceReferenceKeyNotFoundException` (wrappata in `XamlParseException`), **non gestita** perché
+>     anche `DispatcherUnhandledException` non era ancora agganciato a quel punto → crash silenzioso
+>     (nessuna finestra, nessun log, processo sparito in ~1-3s). Confermato leggendo l'Application event
+>     log di Windows (`Get-WinEvent -LogName Application`, provider ".NET Runtime", exception info completa).
+>   - **Fix**: il costruttore ora si limita ad acquisire il mutex e salvare il risultato in un campo statico
+>     (`_singleInstanceGranted`); il `MessageBox.Show` + `Shutdown()` sono spostati dentro `OnStartup()`
+>     (per `K2.App`, dopo `base.OnStartup(e)`; per `K2.DisplayPad`, che usa `StartupUri` invece di creare
+>     `MainWindow` a mano, l'`OnStartup` override salta del tutto `base.OnStartup(e)` se il lock non è
+>     stato acquisito, evitando che WPF crei la finestra da `StartupUri`). A quel punto i resource
+>     dictionary sono già mergiati e gli handler di eccezione già agganciati, quindi il dialog è sicuro.
+>   - **Verificato dal vivo**: doppio `Start-Process` + `EnumWindows` → seconda istanza resta viva con una
+>     finestra `visible=True` titolo "K2" (il MessageBox), invece di sparire senza traccia.
+>   - **Secondo bug trovato dall'utente**: dopo il fix sopra, il **restart per cambio lingua**
+>     (`MainWindow.Language.cs` → `RestartApp()`, agganciato a `Loc.RestartRequested`) smetteva di
+>     funzionare — l'utente riceveva il dialog "già in esecuzione" e doveva riaprire K2 a mano.
+>     **Causa**: `RestartApp()` lanciava il nuovo processo (`Process.Start`) e SOLO DOPO chiamava
+>     `Application.Current.Shutdown()` sul vecchio — ma il vecchio processo tiene il mutex finché non
+>     ha finito di spegnersi (non istantaneo), quindi il nuovo processo nasceva mentre il mutex era
+>     ancora posseduto dal vecchio, si vedeva come "seconda istanza" e usciva subito, lasciando
+>     l'utente senza nessuna istanza aperta.
+>   - **Fix**: aggiunto `App.ReleaseSingleInstanceLockForRestart()` (rilascia+`Dispose()` il mutex)
+>     chiamato in `RestartApp()` **prima** di `Process.Start`, cosi' il nuovo processo trova il mutex
+>     libero fin da subito. **Verificato dal vivo** con UI Automation (`System.Windows.Automation`,
+>     `InvokePattern` su `BtnLang` + MenuItem "Italiano"): il vecchio processo (pid X, log `lang=en`)
+>     sparisce e un nuovo processo (pid Y, log `lang=it`, `K2.lang`="it") parte regolarmente con la
+>     `MainWindow` reale (verificato cercando `BtnLang` nell'albero UIA della nuova finestra), non con
+>     il dialog bloccato.
+>
+> Previous: 2026-07-09 (SCOPERTA IMPORTANTE — BaseCampService gira come servizio Windows di background e interferisce con TUTTI i test K2, `stop-basecamp.bat` non lo fermava mai per un bug nel nome):
+>   - **Contesto**: dopo 3 round di fix "alla cieca" sul MacroPad (ChangeBlockEffect, EffData blittable,
+>     EnsureSlotInitialized) senza alcun miglioramento osservato, l'utente ha chiesto se potessi gestire
+>     io stesso Base Camp + cattura USB. Prima di rispondere ho controllato `K2.App.log` (esiste, da un
+>     run recente dell'utente) per capire lo stato reale.
+>   - **Trovato nel log** (riga 89): `[DP] [DpNative] *** WARNING: Base Camp processes are running and
+>     WILL corrupt native uploads (concurrent HID writers): BaseCamp.Service (pid 6712) — close Base
+>     Camp completely (including the tray icon / worker) ***` — **BaseCamp.Service.exe era ANCORA IN
+>     ESECUZIONE mentre l'utente testava K2.App per il MacroPad**, non solo per il DisplayPad (dove il
+>     warning esiste già). Verificato dal vivo con `tasklist`: PID 6712 attivo, sessione **"Services"**
+>     (non "Console") — è un vero **servizio Windows**, non un processo tray closable dalla UI di Base
+>     Camp. `Get-CimInstance Win32_Service` conferma: nome reale **`BaseCampService`** (nessuno spazio),
+>     `StartMode=Auto`, `State=Running`.
+>   - **BUG trovato in `stop-basecamp.bat`**: usava `sc query "BaseCamp Service"` / `sc stop "BaseCamp
+>     Service"` — **con lo spazio**, nome SBAGLIATO. Il nome reale del servizio è `BaseCampService`
+>     (senza spazio). Questo significa che lo script ha **sempre fallito silenziosamente** nel fermare
+>     il servizio (anche se lanciato come amministratore) — probabilmente da quando è stato scritto (fase
+>     DisplayPad). Se il servizio non viene fermato correttamente (kill del solo processo, senza `sc
+>     stop`), Windows SCM lo puo' far ripartire, quindi **BaseCampService è verosimilmente rimasto
+>     attivo durante gran parte, se non tutti, i test K2 fatti finora** (MacroPad E DisplayPad), a
+>     prescindere da "aver chiuso Base Camp" (chiudere la finestra/tray non ferma il servizio).
+>   - **Perché è plausibile la causa reale del MacroPad**: con BaseCamp.Service.exe ancora connesso allo
+>     stesso `MacroPadSDK.dll`/HID device, due host stanno scrivendo comandi concorrenti al firmware —
+>     esattamente lo scenario "concurrent HID writers" già diagnosticato (e loggato) per il DisplayPad.
+>     Spiegherebbe perfettamente "ChangeEffect torna true ma non succede nulla" (il servizio BC potrebbe
+>     ri-scrivere/sovrascrivere periodicamente il suo stato, o il device si confonde con due master) —
+>     un fattore MAI controllato nei 3 round di fix precedenti, che quindi potrebbero non essere mai
+>     stati testati in un ambiente pulito.
+>   - **Fix**: `stop-basecamp.bat` corretto (`BaseCampService` senza spazio) per gli step `sc query`/
+>     `sc stop`. **Non sono riuscito a fermare il servizio da qui**: la sessione Claude Code non ha
+>     privilegi amministratore (`sc stop`/`taskkill /PID 6712` → "Accesso negato" su entrambi) — un
+>     servizio Windows in sessione 0 richiede elevazione, che non ho. Risposta alla domanda dell'utente
+>     "non riesci a gestire tu Base Camp": posso lanciare/killare processi utente e tool a riga di
+>     comando (tshark, build, ecc.), ma NON posso interagire con GUI desktop arbitrarie (niente mouse/
+>     schermo su app Windows) né elevare privilegi — serve l'utente per: (1) fermare il servizio (ora
+>     che il bat è corretto, `stop-basecamp.bat` "Esegui come amministratore"), (2) cliccare dentro
+>     Base Camp per applicare un effetto durante una cattura USB.
+>   - **Prossimo passo raccomandato**: eseguire `stop-basecamp.bat` **come amministratore**, verificare
+>     con `tasklist` che `BaseCamp.Service.exe` sia sparito per davvero (non solo la finestra), POI
+>     riprovare gli effetti MacroPad in K2.App in un ambiente pulito, prima di investire tempo in una
+>     cattura USB — potrebbe risolversi da solo senza bisogno di ulteriori fix di codice.
+>
+> Previous: 2026-07-09 (Everest/MacroPad: hover meno "ingrigito" + fix pressione fisica tasto Everest non illuminava):
+>   - **Richiesta utente**: "puoi rendere meno ingrigito l'effetto hover sopra i keycap? Inoltre,
+>     quando premo un tasto sulla tastiera non si 'illumina' nell'interfaccia".
+>   - **Causa hover**: `KeyCapStyle`/`EverestKeyStyle` (`MainWindow.xaml`) sostituivano Face/Mount/
+>     SideGrad con un grigio piatto `#656565` su `IsMouseOver`, cancellando qualsiasi colore keycap
+>     configurato (nero/bianco/custom, stili Pudding/Reverse Pudding) sotto un grigio uniforme.
+>   - **Fix hover**: entrambi gli `IsMouseOver` Trigger ora impostano solo `Tint.Background` (il
+>     layer overlay già usato per il flash scuro di `IsPressed`, `#33000000`) a un bianco translucido
+>     `#26FFFFFF`, invece di sostituire Face/Mount/SideGrad — l'hover schiarisce il colore ATTUALE del
+>     tasto invece di sostituirlo con un grigio slegato dalla configurazione.
+>   - **Causa mancata illuminazione fisica (solo Everest)**: `EvHighlightKeyboardButton` (chiamata da
+>     `HandleEverestKey` ad ogni pressione fisica) faceva `btn.Background = teal` (assegnazione diretta
+>     → WPF "local value", precedenza massima) e poi `btn.ClearValue(Background)` al rilascio — che
+>     però ripristina il default dello Style (`#404040`), NON il colore keycap configurato
+>     dall'utente, "silenziando" per sempre l'aspetto keycap su quel tasto dopo la prima pressione
+>     (stesso bug di classe già risolto per `Mount`/hover in una sessione precedente, mai applicato
+>     qui). Stesso pattern in `EvHighlightMapTarget`/`EvEndMapping` (evidenziazione oro durante la
+>     mappatura guidata).
+>   - **Fix**: nuovo helper `SetKeyTint` (`MainWindow.KeycapAppearance.cs`) che pesca l'elemento
+>     `Tint` via `FindName` e ne imposta `Background` — un layer MAI toccato dal sistema di aspetto
+>     keycap, quindi flash/clear non entrano mai in conflitto con Background/BorderBrush (colore
+>     keycap/LED) e tornare a `Transparent` ripristina sempre esattamente il baseline giusto.
+>     `EvHighlightKeyboardButton`/`EvHighlightMapTarget`/`EvEndMapping` migrati da
+>     `Background=.../ClearValue`/`if (Content is TextBlock)` a `SetKeyTint`/`SetLegendForeground`
+>     (quest'ultimo già gestiva anche i tasti multi-legenda Panel/Grid, non solo TextBlock).
+>     MacroPad non toccato in questa entry: l'evidenziazione a pressione fisica lì usa un
+>     `DataTrigger` a livello di Style su `IsHighlighted` (bindato al ViewModel) — vedi però l'entry
+>     sotto per una regressione correlata (LED poll che sporca lo stesso `Background`) trovata da
+>     una sessione in parallelo sullo stesso repo.
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` e `dotnet build
+>     K2.DisplayPad.sln -c Debug -p:Platform=x64` puliti (0/0 ciascuno). **Da verificare
+>     dall'utente**: hover più leggero su tutti gli stili keycap, tasto Everest che si illumina
+>     (teal) alla pressione fisica e riprende il colore keycap corretto al rilascio.
+>
+> Previous: 2026-07-09 (MacroPad: fix regressione "tasto rimane grigio" dopo pressione fisica + tentativo EnsureSlotInitialized per ChangeEffect ancora rotto):
+>   - **Feedback utente**: "Niente, non funzionano ancora esattamente come prima. Nemmeno il led
+>     preview. Inoltre, quando premo un tasto sul device fisico poi a video rimane grigio." — il fix
+>     EffData (entry precedente) non ha cambiato nulla, e introduce una regressione nuova.
+>   - **Riconsiderazione onesta del fix EffData precedente**: confrontando byte-per-byte il vecchio
+>     layout (`[MarshalAs(ByValArray)] FWColor[3]` + `byte[43]`) col nuovo (campi inline + `fixed
+>     byte[43]`), occupano ESATTAMENTE gli stessi 62 byte nello stesso ordine — un array Pack=1 di
+>     struct blittable marshalato ByValArray produce lo stesso layout sul wire di campi inline
+>     equivalenti. Il fix della sessione precedente quasi certamente **non cambiava alcun byte
+>     inviato al firmware** — da qui il "non funzionano ancora esattamente come prima" (letterale: il
+>     comportamento non è cambiato perché il payload non è cambiato). Struct comunque tenuta (più
+>     coerente con `BlockData`/Everest, nessun downside), ma non è la causa.
+>   - **Causa regressione "tasto grigio dopo pressione fisica"**: il MacroPad LED preview poll (120ms,
+>     riattivato/mai disattivato da sezione — a differenza dell'Everest, che lo fa solo mentre la
+>     sezione "RGB & Lighting" è visibile) scriveva il colore "LED off" (`LedOffColor`, `#D0D0D0`
+>     grigio chiaro) su Background/BorderBrush del tasto via `SetCurrentValue` ad ogni tick, per gli
+>     stili keycap Pudding/Reverse Pudding. Se un tick del poll cade MENTRE il tasto è fisicamente
+>     premuto (`IsHighlighted=True`, style DataTrigger attivo su `MacroKeyStyle` che porta
+>     `Background` a `#900000` rosso), `SetCurrentValue` scrive comunque il grigio "sotto" al trigger
+>     attivo (senza essere visibile in quel momento) — al rilascio, quando il trigger si disattiva,
+>     WPF torna al valore corrente della proprietà, che ora è il grigio scritto dal poll invece del
+>     colore keycap giusto. Risultato: il tasto resta grigio dopo ogni pressione fisica, coerente con
+>     quanto riportato.
+>   - **Fix regressione**:
+>     1. **`MainWindow.LedPreview.cs`**: nuovo `UpdateMpLedPreviewActive(bool active)`, mirror di
+>        `UpdateEverestLedPreviewActive` — spegne/pulisce il poll MacroPad quando non si guarda la
+>        sezione "LED Lighting". `StartLedPreview()`: `_ledPoller.MacroPadEnabled` ora parte da
+>        `_activeMpSection == PnlMpSecLed` invece che da `_macroPad.IsOpen` incondizionato.
+>     2. **`MainWindow.SectionNav.cs::ShowMpSection`**: chiama `UpdateMpLedPreviewActive(panel ==
+>        PnlMpSecLed)`, esattamente come `ShowEvSection` fa per l'Everest.
+>     3. **`OnMacroPadColorsUpdated`**: seconda linea di difesa — salta l'update di un tasto se
+>        `_keys[btnIndex].IsHighlighted` è vero in quel momento (pressione fisica in corso), a
+>        prescindere dalla sezione attiva.
+>   - **Nuovo tentativo per ChangeEffect (Static/Breath/Reactive/Yeti/Matrix/Off ancora rotti)**:
+>     rianalizzando la storia dell'Everest (`EverestService.InitDllState`, commento: "Even though we
+>     don't use the returned data, the DLL's internal side effects prepare the state for
+>     ChangeEffect/ChangeBlockEffect") — l'Everest chiama UNA VOLTA, dopo `OpenUSBDriver`: `GetFWInfo`,
+>     `GetProfileEffectTable`, `GetExtendInfo`, `GetFWLayout`, `EnableKeyFunc(true)`, `APEnable(false)`.
+>     **Il MacroPad non ha MAI avuto un equivalente** — `MacroPadService.Open()` chiamava solo
+>     `SetKeyCallBack`+`OpenUSBDriver`. Dato che Wave/Tornado (via `ChangeBlockEffect`) funzionano SENZA
+>     alcun init dedicato, non è chiaro se questo sia davvero il fattore mancante per `ChangeEffect` —
+>     è un'ipotesi basata su analogia strutturale con l'Everest, non su una nuova evidenza dal
+>     decompilato UI (che per il MacroPad non mostra questa sequenza, essendo lato `BaseCamp.Service.exe`
+>     — il servizio background, mai estratto/decompilato in questa sessione — non lato UI).
+>   - **Fix tentativo**: nuovo `MacroPadService.EnsureSlotInitialized(uint id)` (idempotente per slot,
+>     `HashSet<uint>` cache, reset in `Close()`): `GetFWInfo`/`GetFWLayout`/`EnableKeyFunc(true)`/
+>     `APEnable(false)`, stessa sequenza dell'Everest ma per singolo slot MacroPad. Chiamato all'inizio
+>     di `SetEffect` e in `StartLedPreview` (prima di `SetSyncEffect`), così gira comunque indipendentemente
+>     da quale flusso parte per primo.
+>   - **Verificato**: build pulite (0/0) su entrambe le solution — un primo tentativo era fallito per
+>     `SetKeyTint` "non esiste nel contesto corrente" in `MainWindow.Everest.cs`, causato da uno stato
+>     transitorio di un'altra sessione in parallelo sullo stesso repo (non miei file, risolto da solo
+>     al retry, `SetKeyTint` è correttamente definito in `MainWindow.KeycapAppearance.cs`).
+>   - **Nota onesta per il prossimo giro**: due tentativi di fix mirati al decompilato UI-layer
+>     (rimozione APEnable per-apply, struct blittable) non hanno cambiato il comportamento osservato.
+>     Se anche `EnsureSlotInitialized` non risolve, la prossima mossa corretta per la regola di
+>     progetto ("prima sniff con USBPcap+Wireshark, poi eventuale decompile — non indovinare il
+>     bit-layout") è una **cattura USB reale** di Base Camp che applica un preset semplice (es. Static)
+>     al MacroPad, da confrontare byte-per-byte con l'hex-dump che K2 già logga (`DumpEffData` in
+>     `K2.App.log`, cerca `[MacroPad.SetEffect]`) — non ancora fatta, `_reference/usb_dumps/` ha solo
+>     catture Everest/DisplayPad. Vedi `_reference/USB_SNIFF_GUIDE.md`.
+>
+> Previous: 2026-07-09 (MacroPad: EffData non era blittable — ChangeEffect tornava true ma il wire restava stale; UI nasconde velocità/direzione se non supportate):
+>   - **Feedback utente dopo test su hardware**: "wave e tornado funzionano. Gli altri effetti no,
+>     nemmeno 'Off'." — conferma che il fix precedente (ChangeBlockEffect per Wave/Tornado, entry sotto)
+>     ha funzionato, ma isola il problema: TUTTO ciò che passa da `ChangeEffect` (il ramo non-block) è
+>     rotto, "Off" incluso — il caso più semplice possibile (nessun colore, nessuna velocità).
+>   - **Causa root**: `MacroPadSdkNative.EffData` era ancora dichiarata con
+>     `[MarshalAs(UnmanagedType.ByValArray)] FWColor[] colorLv` / `byte[] byData` — una struct NON
+>     blittable, che il marshaler P/Invoke di .NET converte copiandola in un buffer nativo temporaneo
+>     ad ogni chiamata. `BlockData` (funzionante) invece usa campi inline (`colorLv0`/`colorLv1`/
+>     `undefA0..4` come `FWBColor` dirette, non un array) + `fixed byte tail[23]` — una struct
+>     VERAMENTE blittable, passata by-value byte-per-byte. Root cause identica a un problema già
+>     documentato per l'Everest (`EverestSdkNative.cs`, storico "P/Invoke returns True, wire stale") —
+>     ma per l'Everest **solo `BlockData` aveva avuto questo trattamento**: la sua `EffData` era GIÀ
+>     stata silenziosamente riscritta con campi inline (`colorLv0/1/2` + `fixed byte byData[43]`) in una
+>     sessione precedente (visibile confrontando `EverestSdkNative.cs` con la vecchia versione di
+>     `MacroPadSdkNative.cs`, mai allineata). La versione MacroPad non era mai stata portata a questo
+>     schema: `ChangeEffect` tornava `true` (nessun errore) ma i byte che arrivavano al firmware erano
+>     quelli residui del comando precedente ("wire stale") — spiega perché letteralmente NULLA cambiava,
+>     "Off" compreso.
+>   - **Fix `MacroPadSdkNative.cs`**: `EffData` riscritta come `unsafe struct` con campi inline
+>     `colorLv0`/`colorLv1`/`colorLv2` (FWColor dirette) + `fixed byte byData[43]`, IDENTICA nel layout
+>     alla `EffData` ora-funzionante dell'Everest. `EffData.New` riscritta di conseguenza, portando
+>     anche la logica `usesBkColor` (Reactive/Yeti/Matrix mettono il 2° colore in `bkColor`, Breath in
+>     `colorLv1` con `byRandColor=16`) 1:1 da `EverestSdkNative.EffData.New` — stessa famiglia firmware,
+>     stesso comportamento decompilato.
+>   - **UI — richiesta utente**: "andrebbe tolta la combo di velocità e direzione per gli effetti che
+>     non ce l'hanno" (prima erano solo disabilitate/`IsEnabled=false`, restavano visibili grigie).
+>     `MainWindow.xaml`: le due `StackPanel` che contengono label+combo di Velocità (`PnlMpSpeed`) e
+>     Direzione (`PnlMpDirection`) hanno ora `x:Name`. `MainWindow.MacroLed.cs::UpdateMpCapabilities`:
+>     oltre a `IsEnabled`, imposta `Visibility=Collapsed` quando l'effetto selezionato non supporta il
+>     parametro (stessa logica estesa anche al checkbox Rainbow, stesso principio anche se non
+>     esplicitamente richiesto). Il layout del pannello si restringe/allarga a seconda dell'effetto
+>     scelto invece di mostrare controlli grigi inutilizzabili.
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` e `dotnet build
+>     K2.DisplayPad.sln -c Debug -p:Platform=x64` puliti (0/0 ciascuno) — richiesto `taskkill /F /PID
+>     <pid> /T` diretto (K2.App aperto per il test sul MacroPad, MSB3027). **Da verificare dall'utente
+>     su hardware fisico**: che Static/Breath/Reactive A-B-C/Yeti/Matrix/Off ora funzionino davvero (non
+>     solo che il P/Invoke torni true), che i colori vadano nel campo giusto (`bkColor` vs `colorLv1` a
+>     seconda dell'effetto) e che il pannello nasconda/mostri correttamente velocità/direzione/rainbow
+>     cambiando effetto. Nessun ambiente qui ha accesso al device USB.
+>
+> Previous: 2026-07-09 (MacroPad: effetti LED — Wave/Tornado erano rotti, ChangeBlockEffect mancante; pannello allineato a Everest):
+>   - **Richiesta utente**: dopo il fix della preview (entry sotto), l'utente ha riportato "non sembra
+>     succedere niente" — nessun cambiamento visibile sul MacroPad. Richiesta: allineare il pannello
+>     "LED Lighting" del MacroPad a quello RGB dell'Everest e far funzionare gli effetti basandosi sul
+>     decompilato di Base Camp.
+>   - **Causa root trovata**: dump IL di `MacroPadOperations.SetMacroPadLighting` /
+>     `MacroPadDLLHelper.getChangeEffect` / `getChangeBlockEffect` (stesso `BaseCamp.UI.dll` estratto
+>     nella sessione precedente). **Wave e Tornado NON sono preset applicati via `ChangeEffect`** — Base
+>     Camp li instrada su **`ChangeBlockEffect`** (struct `BlockData`, non `EffData`), esattamente come
+>     già scoperto per l'Everest il 2026-05-30 (`EverestSdkNative.BlockData`, mai riusato per il
+>     MacroPad). **Wave è l'effetto selezionato di default nel combo** (`CbMacroEffect.SelectedIndex=2`)
+>     — quindi la primissima cosa che l'utente vede aprendo il pannello è esattamente il caso rotto:
+>     `ChangeEffect` veniva chiamato comunque, il firmware la rifiuta/ignora (come per l'Everest,
+>     "ChangeEffect REJECTS indices 4/5/7"), niente cambia sui LED.
+>   - **Bug secondario, stesso file**: `bySpeed` veniva inviato come **enum 0/1/2** (`MacroPadService.
+>     Speed`), non come il vero byte firmware 0..100 che Base Camp manda (`Lighting.Speed`, default DB
+>     60; forzato a 255 solo per Static/Off — visto nel dump IL di `getChangeEffect`). Un valore 0/1/2
+>     su una scala 0-100 è ai limiti/fuori dal range utile atteso dal firmware — ulteriore causa
+>     probabile di animazioni percepite come "non funzionanti" anche per gli effetti che passano da
+>     `ChangeEffect`. **Terzo bug**: `byRandColor` per il rainbow veniva mandato come `1`, ma il dump IL
+>     mostra che BC usa **`2`** (`1` non corrisponde a nessun valore osservato: 0/2/16).
+>   - **Fix `MacroPadSdkNative.cs`**: `EffData.New` ora accetta `byte speed` (non più `SpeedT`), forza
+>     `bySpeed=255` per Static/Off (replica esatta della `getChangeEffect`), `byRandColor` rainbow=2
+>     (non 1). Aggiunti `FWBColor`/`BlockData`/`ChangeBlockEffect(BlockData,uint ID)` — porting diretto
+>     da `EverestSdkNative.BlockData` (stessa famiglia firmware, stesso layout 62B Pack=1), con
+>     `direction`/`speed`/`byRandColor`/`byBlockNum` verificati byte-per-byte identici via
+>     `getChangeBlockEffect`: direzione Wave 4-way `{0,2,4,6}`, Tornado CW/CCW `{9,10}` — stessi codici
+>     dell'Everest.
+>   - **Fix `MacroPadService.cs::SetEffect`**: firma allineata a `EverestService.SetEffect`
+>     (`speedByte`/`directionByte` invece dell'enum `Speed`/`Direction`). Ramo Wave/Tornado →
+>     `BlockData`+`ChangeBlockEffect`; tutti gli altri → `EffData`+`ChangeEffect` (invariato).
+>     **Rimossa la chiamata incondizionata `APEnable(false, id)`** prima di ogni apply: verificato con
+>     `--callers APEnable` su tutto `BaseCamp.UI.dll` che Base Camp non tocca mai l'AP mode per il
+>     MacroPad in questo percorso (zero risultati) — era un'altra assunzione copiata dall'Everest (che
+>     invece lo fa, ma solo se già in AP) mai confermata per il MacroPad, e potenzialmente un'altra
+>     causa del "nulla succede" se mette il device in una modalità diversa dal normale rendering preset.
+>   - **`MainWindow.MacroLed.cs` riscritto** per rispecchiare la struttura di `MainWindow.Everest.cs`
+>     (regione "RGB lighting panel"): nuovo `MacroCaps`/`CapsFor(Effect)` (tabella capacità per-effetto:
+>     Rainbow/Speed/direzione — stessi valori della tabella `EvCaps` dell'Everest, stessi effetti),
+>     combo velocità **5 posizioni** ("1 — slow".."5 — fast", scala 0/25/50/75/100) al posto delle 3
+>     vecchie (Slow/Normal/Fast → 0/1/2), gating dinamico di velocità/direzione/rainbow in base
+>     all'effetto selezionato (`UpdateMpCapabilities`, mirror di `UpdateEvCapabilities`),
+>     `DropDownOpened`/`DropDownClosed` per re-inviare l'effetto anche ri-selezionando la stessa voce
+>     (comportamento Everest). Rimosso l'enum `MacroPadService.Speed` (sostituito da `speedByte` int);
+>     `Direction` lasciato come alias non più usato internamente (commento aggiornato).
+>   - **`MainWindow.xaml`**: aggiunta `CkMacroRainbow` (riusa le chiavi di traduzione già esistenti
+>     `rgb_rainbow`/`rgb_rainbow_tip`, già usate dall'Everest — nessuna nuova stringa da tradurre),
+>     `DropDownOpened`/`DropDownClosed` sul combo effetto MacroPad.
+>   - **Persistenza**: nuova chiave Settings `macroled.rainbow` (stesso schema chiave-valore delle
+>     altre `macroled.*`, nessuna migrazione DB necessaria).
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` e `dotnet build
+>     K2.DisplayPad.sln -c Debug -p:Platform=x64` puliti (0/0 ciascuno). **Da verificare dall'utente su
+>     hardware fisico**: che Wave/Tornado ora animino davvero i LED del MacroPad (il caso che prima non
+>     faceva NULLA), che gli altri effetti (Static/Breath/Reactive/Yeti/Matrix/Off) continuino a
+>     funzionare con la nuova scala di velocità, e che il rainbow funzioni dove abilitato (Breath/Wave/
+>     Tornado). Nessun ambiente qui ha accesso al device USB.
+>
+> Previous: 2026-07-09 (DisplayPad: fix multi-device — solo il primo pad si attivava all'avvio di K2):
+>   - **Bug segnalato dall'utente** (con più DisplayPad collegati insieme, es. 2-4): "i displaypad non
+>     funzionano subito ma devo ancora entrare nelle loro pagine per attivarli" — profili/azioni devono
+>     rispondere sempre appena si apre K2, per tutti i dispositivi. Confermato dall'utente: già ricompilato
+>     con il fix del 2026-07-07 (che attiva solo il PRIMO device trovato, vedi entry sotto) e il problema
+>     persiste per i pad successivi.
+>   - **Causa**: tutto lo stato del modulo DisplayPad (`_dpKeys`, `_dpMatrixToIndex`, `_currentDpPageId`)
+>     rappresenta SOLO il device "foreground" (`_activeDpDeviceId`); `OnDpKey` scartava esplicitamente
+>     ogni evento tasto da un device diverso da quello attivo ("Only handle events from the currently
+>     selected device"). Il fix precedente attivava solo `items[0]` all'avvio — con 2+ pad collegati, il
+>     secondo/terzo restavano muti finché l'utente non apriva la loro tab (che chiama `DpActivateDevice`).
+>   - **Fix**: nuovo percorso "background" per i device NON foreground, che legge/esegue direttamente da
+>     `DisplayPadStore` invece che dai campi UI-bound. `MainWindow.DisplayPad.cs`: `DpActivateBackgroundDevice`/
+>     `DpUploadPageForDevice` (upload icone pagina corrente senza toccare `_dpKeys`/`CbDpProfile`),
+>     `DpHandleBackgroundKey` (matrix→index statico `DpDefaultMatrixToIndex`, azione letta da
+>     `_dpStore.LoadPage` per profilo/pagina correnti del device, esegue via nuovo `DpEngineFor(id)` —
+>     un `ButtonActionEngine` dedicato per device, creato pigramente al primo utilizzo), `DpBgNavigateToPage`/
+>     `DpBgNavigateBack` (navigazione cartelle per-device, `_dpBgPageId`/`_dpBgPageHistory`). `DpRefreshDevices`
+>     ora attiva in background OGNI device connesso diverso da `_activeDpDeviceId` (non solo il primo),
+>     saltando quelli già tracciati per evitare re-upload inutili ad ogni refresh; alla disconnessione
+>     dimentica lo stato background del device (se si ricollega va ri-attivato, la memoria immagini
+>     on-board non sopravvive al replug). Nuova classe `DisplayPadBackgroundActionHost` (`DisplayPadActionHost.cs`,
+>     `IActionHost` fissato su un device id esplicito, mai su `_activeDpDeviceId`): il self-target di
+>     "switch profile" passa `deviceId` esplicito a `DpSwitchProfile` invece di `null` (che altrimenti
+>     avrebbe risolto al device foreground, sbagliato).
+>   - **Bug correlato scoperto e risolto nello stesso punto**: `DpRequestRepaint(int id)` ignorava il
+>     parametro `id` e richiamava sempre `DpReloadAndPreloadProfile()` (che opera implicitamente su
+>     `DpSelectedDeviceId()`) — quindi qualsiasi switch-profilo cross-device (incluso quello già esistente
+>     via `SwitchProfileByKey`/azione "profile" con target esplicito da un altro device, es. MacroPad→
+>     DisplayPad) aggiornava il DB correttamente ma ridisegnava lo schermo del device SBAGLIATO (quello
+>     foreground). Ora `DpRequestRepaint` instrada a `DpReloadAndPreloadProfile` solo se `id` è davvero il
+>     tab visibile, altrimenti a `DpUploadPageForDevice`. Aggiunto anche il reset del cursore pagina
+>     per-device (`_dpBgPageId[id]=0`) nel branch non-attivo di `DpSwitchProfile`, mirror di
+>     `ResetDpNavigation()` per il foreground.
+>   - **Verificato**: `stop-k2.bat` + `dotnet build K2.sln -c Debug -p:Platform=x86` e
+>     `K2.DisplayPad.sln -c Debug -p:Platform=x64`, entrambi puliti (0 errori/0 warning). **Da verificare
+>     su hardware dall'utente**: con 2+ DisplayPad collegati, che TUTTI rispondano ai tasti fisici subito
+>     dopo l'avvio di K2 (non solo il primo), incluso cambio profilo/navigazione cartelle sul device non
+>     ancora aperto nella UI.
+>   - **Fix richiesto dall'utente lo stesso giorno, dopo il primo test**: "quando cambio profilo, se
+>     nel profilo ci sono icone vuote, non vengono ripulite sul dispositivo ma restano le icone del
+>     vecchio profilo" — riproducibile SOLO sul percorso background appena introdotto sopra:
+>     `DpUploadPageForDevice` caricava/uploadava solo i tasti CON immagine nel nuovo profilo, senza
+>     mai un `ResetPictures` preventivo, quindi un tasto vuoto nel profilo nuovo restava con l'icona
+>     del profilo precedente ancora disegnata sul pannello (il percorso foreground, invece, già lo
+>     faceva correttamente via `DpReloadCurrentProfile`'s `blankFirst`, per questo il bug non si vedeva
+>     lì). Aggiunto parametro `blankFirst` a `DpUploadPageForDevice` (stesso pattern del foreground:
+>     `_dpClient.ResetPictures(id)` dentro la continuation, prima degli upload), passato `true` solo
+>     dal branch background di `DpRequestRepaint` (switch-profilo vero e proprio) — non dalla
+>     navigazione cartelle (`DpBgNavigateToPage`/`DpBgNavigateBack`) né dall'attivazione iniziale
+>     (`DpActivateBackgroundDevice`), esattamente come il foreground non blanka in quei due casi.
+>     **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` pulito (0/0). **Da verificare su
+>     hardware dall'utente**: cambiando profilo su un DisplayPad NON foreground, i tasti vuoti nel
+>     nuovo profilo devono apparire vuoti (non più l'icona del profilo precedente).
+>
+> Previous: 2026-07-09 (MacroPad: fix sequenza LED preview live, riportata da Base Camp via decompile UI):
+>   - **Richiesta utente**: "dobbiamo trovare il modo di attivare la led preview su macropad. Analizza
+>     decompiled + linux e cerchiamo di riportare la funzione di base camp". La macchina/infrastruttura
+>     per la preview live (overlay colore reale letto dal device, non solo l'anteprima software statica)
+>     esisteva già dal 2026-06-08 (`LedColorPoller`, `MainWindow.LedPreview.cs`, `GetColorData` P/Invoke)
+>     ma per il MacroPad non era mai stata verificata su hardware — il codice in `StartLedPreview()`
+>     era "la stessa sequenza di Everest" (GetFWLayout + APEnable(true) + SetSyncEffect off→on +
+>     SetBacklight(true)), MAI confermata contro il comportamento reale di Base Camp.
+>   - **BaseCampLinux: vicolo cieco confermato**. `grep -ri macropad` sull'intero repo BaseCampLinux
+>     non trova NULLA — il progetto supporta solo Everest Max/60, Makalu, DisplayPad (confermato anche
+>     dal README). Non è quindi una fonte utilizzabile per il MacroPad, a differenza di quanto sperato.
+>   - **Nuova estrazione**: `BaseCamp.Service.exe` (già disponibile) espone solo il livello P/Invoke
+>     grezzo (`BaseCamp.Service.Helpers.MacroPadSDK.*`, via `dotnet_pinvoke_dump.py`) — la vera logica
+>     applicativa (quando/come viene chiamato `GetColorData`) vive in `BaseCamp.UI.exe`, MAI estratto
+>     prima d'ora. Estratto per la prima volta **`BaseCamp.UI.dll`** dal bundle self-contained
+>     (.NET single-file, tecnica già documentata in `_PROJECT_MAP.md`: cerca `b"BaseCamp.UI.dll"`
+>     ASCII nel manifest — non UTF-16LE, quello matcha solo le stringhe di version-resource — decodifica
+>     l'header `[offset:i64][size:i64][compressedSize:i64][type:u8][pathlen:u8]` che lo precede,
+>     slice `data[offset:offset+size]`), salvato in nuovo
+>     `K2/_reference/BaseCamp_decompiled_UI/BaseCamp.UI.dll` (11MB, escluso da git). Contiene i
+>     Controllers ASP.NET Core (`MacroPadController`, `MacroPadOperations`, ecc.) — riusabili con gli
+>     stessi `tools/dotnet_method_calls.py` già esistenti.
+>   - **Sequenza reale trovata** (`MacroPadController.<GetAnimationFromHW>d__22::MoveNext` +
+>     `<GetColorData>d__23::MoveNext`, entrambi async state machine dumpati via IL): Base Camp espone
+>     un endpoint WebSocket (`GetAnimationFromHW`) che il JS della UI apre quando il pannello lighting
+>     è visibile; il loop server-side è banale — **nessun priming**, solo
+>     `while (StartSyncColorForMacroPad && !IsAppMinimized) { GetColorData(client, ref color); se ok
+>     manda JSON dei colori sul socket; Thread.Sleep(300); }`. Il flag `StartSyncColorForMacroPad`
+>     (default `false`, verificato in `GlobalVariables::.cctor`) viene settato da un secondo endpoint
+>     HTTP, `MacroPadController.SyncColorFlagChanged(bool)`, chiamato dal JS quando il pannello si apre/
+>     chiude. **`SetSyncEffect(id, true, 50)` viene chiamato UNA volta sola**, non nel loop di
+>     streaming ma in `MacroPadOperations.getDefaultLighting` (al caricamento della pagina lighting,
+>     per applicare l'effetto salvato) — **senza** il toggle off→on che K2 faceva. Verificato con
+>     `--callers` su tutto `BaseCamp.UI.dll`: **zero chiamate** a `GetFWLayout`, `APEnable`,
+>     `EnableKeyFunc`/`SetBacklight` per il MacroPad in tutta la UI — a differenza di Everest, che le
+>     usa davvero (`EnableColorStream`/`GetFWLayout` sono specifiche Everest, copiate qui per analogia
+>     ma mai verificate).
+>   - **Fix in `MainWindow.LedPreview.cs::StartLedPreview()`**: rimossi `GetFWLayout`,
+>     `_macroPad.APEnable(uid, true)`, il toggle `SetSyncEffect(false,50)`+`(true,50)` e
+>     `_macroPad.SetBacklight(uid, true)`. Sostituiti con la singola chiamata
+>     `MacroPadSdkNative.SetSyncEffect(true, 50, uid)` che Base Camp effettivamente usa. Sospetto
+>     principale sul mancato funzionamento: `APEnable(true)` — stesso nome/famiglia di
+>     `StartFWUpdate`/`ResetDevice` nell'elenco P/Invoke, verosimilmente mette il device in una
+>     modalità (AP = firmware update?) diversa da quella di reporting HID normale, quindi
+>     `GetColorData` da lì in poi non riceve più nulla di significativo. Rimosso anche
+>     `SetBacklight(true)` perché sovrascriveva ad ogni avvio della preview l'impostazione backlight
+>     ON/OFF persistita dall'utente (`BtnMacroLightOn`/`BtnMacroLightOff` in `MainWindow.MacroLed.cs`,
+>     path separato e non toccato da questo fix) — anche Base Camp non lo fa in questo punto.
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` e `dotnet build
+>     K2.DisplayPad.sln -c Debug -p:Platform=x64` puliti (0/0 ciascuno) — richiesto `stop-k2.bat`
+>     (due istanze K2.App zombie, PID diversi da bat/taskkill diretto: il primo tentativo via
+>     `stop-k2.bat` non ha killato i processi per motivi non chiari, risolto con `taskkill /F /PID
+>     <pid> /T` diretto sui due PID riportati dall'errore MSB3027). **Da verificare dall'utente su
+>     hardware fisico**: che l'overlay LED del MacroPad ora si accenda/segua i colori reali quando la
+>     sezione "LED Lighting" del tab MacroPad è aperta — nessun ambiente qui ha accesso al device USB.
+>     Se ancora non funziona, prossimo passo è una cattura USB reale (`USBPcap+Wireshark`, vedi
+>     `_reference/USB_SNIFF_GUIDE.md`) di Base Camp che pilota il MacroPad — non ancora fatta,
+>     `_reference/usb_dumps/` ha solo catture Everest/DisplayPad.
+>
+> Previous: 2026-07-09 (MacroPad: portata la feature "aspetto keycap" di Everest, identica UX):
+>   - **Richiesta utente**: "aggiungiamo la gestione dei keycap esattamente come è per Everest anche
+>     per Macropad" — stessa impostazione colore keycap/testo (nero/bianco/personalizzato) e tipo
+>     keycap (Normal/Translucent/Pudding/Reverse Pudding) vista nelle ultime sessioni per Everest.
+>   - **Rifattorizzati come tipi condivisi** (in `MainWindow.KeycapAppearance.cs`, usati da entrambi
+>     i device): `EverestKeycapColorMode`→`KeycapColorMode`, `EverestKeycapStyle`→`KeycapStyle`,
+>     `EvKeyVisual`→`KeyVisual` (record struct Button+Halo), `EvDefaultBorderColor`→`LedOffColor`,
+>     `KeycapStyleChoice(s)` (già senza prefisso device). Chiavi di traduzione rinominate da
+>     `settings_ev_keycap_*` a `settings_keycap_*` (testo già generico, riusabile identico per
+>     entrambi i tab — nessuna nuova stringa introdotta).
+>   - **`MainWindow.xaml`**: `KeyCapStyle` (il ControlTemplate base usato SOLO da `MacroKeyStyle` —
+>     `EverestKeyStyle` lo eredita ma sovrascrive interamente `Template`, quindi non ne condivide il
+>     markup a runtime) ora ha lo stesso trattamento di `EverestKeyStyle`: aggiunto layer `LedHalo`,
+>     `Mount.Background` passato da letterale `#090909` a `{TemplateBinding BorderBrush}`, rimosso
+>     `LedTint` (il vecchio "wash" traslucido, ora sostituito dal meccanismo halo/pudding). Nuova
+>     sezione sidebar **Settings** nel tab MacroPad (`RbMpSecSettings`/`PnlMpSecSettings`, 4° sezione
+>     dopo Key Binding/Orientation/LED Lighting — prima non esisteva una sezione Impostazioni per
+>     MacroPad), stessi controlli della sezione Everest (radio colore/testo + swatch, combo stile).
+>   - **`MainWindow.MacroKeycapAppearance.cs`** (nuovo file, mirror di `MainWindow.KeycapAppearance.cs`):
+>     cache `_mpKeycap*`, `InitMpSettingsPanel`/`LoadMpKeycapAppearanceFromStore` (nuovo flag dedicato
+>     `_mpSettingsSuppress` — il MacroPad non aveva ancora una sezione Impostazioni unificata: Rotation
+>     e LED lighting hanno ciascuno il proprio flag/metodo separato), persistenza in `MacroPadStore`
+>     (stesse chiavi `settings.keycap_*` di Everest ma store diverso, nessuna collisione),
+>     `ApplyMacroKeycapAppearanceToAllKeys`/`ApplyMacroPadLedColor`/`ResetMacroPadKeyToOff` identici
+>     nella logica alla controparte Everest.
+>   - **`MainWindow.LedPreview.cs`**: `_mpKeyTints` (Dictionary&lt;int,Border&gt;) → `_mpKeyVisuals`
+>     (Dictionary&lt;int,KeyVisual&gt;, come Everest ma keyed per indice-tasto 0-11 invece che per
+>     ledIndex); `BuildMacroPadLedTints`→`BuildMacroPadKeyVisuals`; `OnMacroPadColorsUpdated` delega
+>     ora a `ApplyMacroPadLedColor` invece di scrivere `Background` direttamente.
+>   - **Bug potenziale individuato e corretto PRIMA che arrivasse a schermo**: `MacroKeyStyle` ha due
+>     `DataTrigger` (`HasAction`→bordo verde, `IsHighlighted`→sfondo rosso flash sul press fisico,
+>     entrambi già esistenti, non toccati da questa feature) che impostano `Background`/`BorderBrush`
+>     a livello di Style Trigger. Un'assegnazione diretta `button.Background = ...` da codice crea un
+>     WPF "local value", che ha precedenza SEMPRE maggiore di un qualunque Style Trigger — avrebbe
+>     quindi zittito per sempre sia l'indicatore "has action" sia il flash di pressione al primo
+>     cambio di impostazione keycap. Fix: nuovi helper `SetKeyBackground`/`SetKeyBorderBrush` in
+>     `MainWindow.KeycapAppearance.cs` che usano `Button.SetCurrentValue(...)` invece
+>     dell'assegnazione diretta — aggiorna il valore senza acquisire quella precedenza, quindi i due
+>     DataTrigger di `MacroKeyStyle` continuano a funzionare/sovrascrivere normalmente. Applicato
+>     anche lato Everest (che oggi non ha DataTrigger equivalenti) per coerenza tra le due
+>     implementazioni gemelle.
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` e `dotnet build
+>     K2.DisplayPad.sln -c Debug -p:Platform=x64` puliti (0 errori/0 warning ciascuno) — build dirette
+>     senza `build-check.bat`/pulizia bin-obj (nessun processo K2 residuo trovato questa volta).
+>     **Da verificare dall'utente**: aspetto a schermo dei 4 stili sul MacroPad con LED accesi/spenti,
+>     hover sui tasti, E soprattutto che l'indicatore verde "has action"/il flash rosso di pressione
+>     sui tasti MacroPad funzionino ancora dopo aver toccato le impostazioni keycap (il fix
+>     `SetCurrentValue` sopra non è stato ancora testato su hardware reale).
+>
+> Previous: 2026-07-09 (Everest: riga superiore angoli spostata su per non sovrapporsi a quella sotto; ENTER maiuscolo):
+>   - **Richiesta utente**: sui tasti con 3+ glifi, la riga superiore (shift/Shift+AltGr) si sovrappone
+>     a quella inferiore (base/AltGr) — alcune lettere scompaiono dietro quelle sotto. Inoltre "Enter"
+>     va messo tutto maiuscolo come gli altri tasti (SHIFT/CTRL/ALT).
+>   - **`BuildCornerLegend`**: la riga superiore (row 0, shift/Shift+AltGr) ora ha `Margin(0,-2,0,0)` —
+>     spostata su di 2px verso il bordo del tasto. Solo la riga superiore si muove: quella inferiore
+>     (base/AltGr) resta ancorata al fondo com'era, dato che è già a ridosso del bordo inferiore del
+>     tasto e non ha margine di manovra.
+>   - **`KeyboardLayout.cs`**: `"Enter"` → `"ENTER"` (sia il tasto Enter della tastiera principale
+>     che quello del numpad, quest'ultimo già cambiato in una sessione precedente).
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` pulito (0/0) al primo tentativo
+>     (nessuna istanza K2.App aperta questa volta). **Da verificare dall'utente**: se lo spostamento
+>     di 2px basta a separare le due righe sui tasti con più glifi.
+>
+> Previous: 2026-07-09 (Everest: CTRL alla stessa dimensione di ALT, più respiro orizzontale tra gli angoli accenti):
+>   - **Richiesta utente** (con 2 screenshot: K2 vs Base Camp reale): CTRL appariva molto più piccolo
+>     di ALT nella stessa riga; i glifi sui tasti accentati hanno ormai la dimensione giusta ma sono
+>     ancora troppo vicini tra loro, soprattutto in larghezza.
+>   - **Causa CTRL/ALT**: la soglia `longWord` (introdotta per rimpicciolire "HOME"/"ENTER"/"PAUSE")
+>     usava `kd.W <= 40`, che includeva anche la riga modificatori (`ModW`=38px, CTRL/ALT/FN) oltre ai
+>     tasti nav-cluster da 30px per cui era pensata. "CTRL" (4 caratteri) veniva quindi rimpicciolito
+>     a 5px mentre "ALT" (3 caratteri, sotto soglia) restava a 8px — da qui il disallineamento visivo.
+>     Soglia corretta a `kd.W <= 32` (esclude la riga da 38px, che ha già spazio a sufficienza).
+>   - **`BuildCornerLegend`**: spaziatore centrale aumentato (colonna 1→4px, riga 1→2px) — più
+>     orizzontale che verticale su richiesta esplicita, dato che il tasto è più largo che alto
+>     rispetto ai glifi. Dimensione font invariata (già confermata giusta dall'utente).
+>   - **Nota di sessione**: la solution è condivisa con un'altra sessione in corso in parallelo sulla
+>     feature "aspetto keycap" (`MainWindow.KeycapAppearance.cs`/`MainWindow.LedPreview.cs`,
+>     `EvKeyVisual`) — un primo tentativo di build era fallito per uno stato transitorio incoerente
+>     di quei file (non miei), risolto da solo al retry successivo una volta che l'altra sessione ha
+>     salvato in modo coerente.
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` pulito (0/0). **Da verificare
+>     dall'utente**: CTRL/ALT ora alla pari, spaziatura accenti sufficiente — nessun modo di fare
+>     screenshot WPF da qui.
+>
+> Previous: 2026-07-09 (Everest: aspetto keycap — ripristinato l'hover sul bordo inferiore dei tasti):
+>   - **Richiesta utente**: passando sopra i tasti con il mouse, il bordo inferiore ("Mount", la
+>     striscia scura visibile nel gap sotto la Face) non cambiava più colore — l'hover funzionava
+>     solo sul resto del tasto.
+>   - **Causa**: dalla sessione precedente, `Mount.Background` veniva impostato DIRETTAMENTE da
+>     codice (`v.Mount.Background = ...`) per ogni stile, per farlo seguire bordo/LED/colore keycap.
+>     Ma un valore assegnato da codice su un elemento del ControlTemplate è un "local value" — ha
+>     precedenza MAGGIORE del Trigger di hover dello stesso template (`TemplatedParent template
+>     trigger`), quindi lo zittiva permanentemente, per qualunque stile (non solo Pudding/Reverse
+>     Pudding come prima di introdurre bordi colorati anche su Normal/Translucent).
+>   - **Fix** (invece di gestire manualmente MouseEnter/Leave): notato che in OGNI ramo del codice
+>     `Mount.Background` veniva sempre impostato allo STESSO valore di `Button.BorderBrush` nello
+>     stesso istante — quindi `Mount` è ridondante come valore tracciato a parte. In
+>     `MainWindow.xaml`, `EverestKeyStyle`: `Mount.Background` ora è `{TemplateBinding BorderBrush}`
+>     invece del letterale `"#090909"` — segue automaticamente `Button.BorderBrush` (già impostato
+>     da codice esattamente come serve) SENZA che il codice tocchi `Mount` direttamente, quindi il
+>     Trigger di hover esistente (`Setter TargetName="Mount" Property="Background" Value="#656565"`,
+>     già presente, mai attivo per Mount da quando si è iniziato a colorarlo da codice) torna a
+>     funzionare, esattamente come già faceva per `Face`.
+>   - **`MainWindow.KeycapAppearance.cs`**: rimosso `Mount` da `EvKeyVisual` (ora solo
+>     `Button`+`Halo`) e tutte le assegnazioni `v.Mount.Background = ...` in
+>     `ApplyKeycapAppearanceToAllKeys`/`ApplyEverestLedColor` (ridondanti, non serve più settarlo
+>     esplicitamente). **`MainWindow.LedPreview.cs`**: `BuildEverestKeyVisuals` non cerca più
+>     l'elemento `Mount` via `FindName`.
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` pulito (0 errori/0 warning) —
+>     build diretta senza `build-check.bat` (un'altra sessione in parallelo aveva processi
+>     `dotnet.exe` attivi sullo stesso repo). **Da verificare dall'utente**: hover visibile su
+>     tutto il tasto, incluso il bordo inferiore, in tutti e 4 gli stili.
+>
+> Previous: 2026-07-09 (Everest: glifi multi-legenda ingranditi/spinti ai bordi, stack verticale per AltGr-only tipo E/€):
+>   - **Richiesta utente**: ingrandire ancora i caratteri dei tasti con più simboli, spaziarli
+>     spingendoli verso gli angoli, e per i tasti con SOLO AltGr (es. E/€) usare uno stack verticale
+>     (lettera base sopra, simbolo AltGr sotto) invece della griglia ad angoli.
+>   - **`MainWindow.xaml`** (`EverestKeyStyle` template): `ContentPresenter.Margin` 2px→**1px** — libera
+>     ~2px di area utile per TUTTI i tasti Everest (non solo quelli multi-legenda), aiuta anche le
+>     label lunghe come INS/DEL/HOME.
+>   - **`BuildCornerLegend`**: margine esterno e spaziatore centrale portati a **zero/1px** (prima
+>     1px/2px) — i glifi sono ora spinti fino ai veri angoli del tasto, usando tutto lo spazio fisico
+>     rimasto per la dimensione del font piuttosto che per il respiro tra loro.
+>   - **`BuildEverestKeyboardOverlay`**: nuova variabile `fsBig = fs + 1` usata per i casi multi-
+>     legenda (era `fs`, ora un filo più grande delle lettere normali, per "ingrandisci i glifi").
+>     Split del ramo AltGr in due:
+>     - **AltGr + shift (e/o Shift+AltGr)** → resta la griglia `BuildCornerLegend` (ora a `fsBig`).
+>     - **Solo AltGr, nessuno shift** (es. E→€, o le tante lettere DE con solo AltGr) → NUOVO: stack
+>       verticale a 2 righe, lettera base sopra (bianco, `fsBig`) e simbolo AltGr sotto (teal,
+>       `fsMulti+1`) — la griglia a 4 angoli per questo caso lasciava tutta la riga superiore vuota e
+>       schiacciava le due legende nei soli angoli inferiori, illeggibile. L'ordine è INVERTITO
+>       rispetto allo stack shift-only esistente (shift sopra/base sotto) perché sulle keycap reali
+>       il simbolo AltGr va tipicamente sotto la lettera base, non sopra.
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` pulito (0/0) — richiesto kill di
+>     un'istanza K2.App riaperta durante la sessione. **Nota per il prossimo giro**: lo spazio fisico
+>     dentro un tasto Everest da 30px è quasi del tutto esaurito con queste dimensioni (vedi nota
+>     nella entry precedente) — un ulteriore ingrandimento dei 4 angoli richiederebbe allargare
+>     fisicamente quei tasti specifici nella geometria (`KeyboardLayout.cs`), il che sposta le X dei
+>     tasti successivi nella stessa riga: più invasivo, da valutare solo se davvero necessario.
+>
+> Previous: 2026-07-09 (Everest: aspetto keycap — bordo/centro grigio chiaro quando i LED sono spenti):
+>   - **Richiesta utente**: nei tasti Pudding, il bordo quando i LED non sono attivi deve essere
+>     bianco leggermente grigio invece dello scuro usato finora; nei Reverse Pudding, lo stesso
+>     trattamento va al centro (Background) invece che al bordo.
+>   - **`MainWindow.KeycapAppearance.cs`**: rinominata la costante `EvDefaultBorderColor` (`#1D1D1D`,
+>     scura) in `EvLedOffColor` = `#D0D0D0` (bianco leggermente grigio) — stesso colore usato sia
+>     per il fallback "LED spento" del bordo/Mount di **Pudding** sia per quello del centro/Background
+>     di **Reverse Pudding** (prima, Reverse Pudding spento ricadeva sul colore keycap scelto anziché
+>     su un accento neutro dedicato). Aggiornati sia `ApplyKeycapAppearanceToAllKeys` (baseline
+>     statica, applicata subito dopo un cambio impostazione o un rebuild della tastiera) sia
+>     `ApplyEverestLedColor` (fallback per-tick quando il colore ricevuto dal poller è nero/spento),
+>     così restano sempre coerenti tra loro.
+>   - **Verificato**: build pulita (0 errori/0 warning) — questa volta senza rilanciare
+>     `build-check.bat` (che pulisce bin/obj di tutto il repo): un'altra sessione in parallelo aveva
+>     un processo `dotnet.exe` con lock su `K2.Core.dll`, quindi ho usato `dotnet build` diretto sui
+>     due file `.sln` senza toccare bin/obj, per non disturbare il suo build in corso.
+>     **Da verificare dall'utente**: aspetto a schermo di Pudding/Reverse Pudding con LED spenti.
+>
+> Previous: 2026-07-09 (Everest: fix regressione — spaziatore troppo largo tagliava le legende accenti; HOME rimpicciolito):
+>   - **Richiesta utente** (con screenshot): i tasti con 4 simboli non si leggono quasi più dopo
+>     l'ultima modifica, font minuscolo; "Home" resta l'unica parola singola che ancora non entra.
+>   - **Causa (mia regressione)**: nel giro precedente ho aumentato SIA la dimensione del font dei 4
+>     angoli (a `fs`, come le lettere normali) SIA lo spazio riservato a margine/spaziatore
+>     (Margin 3,2,3,2 + spaziatore colonna 7px/riga 6px) — ma l'area utile dentro un tasto da 30px è
+>     solo ~20px dopo bordi/margini del template. Aumentare contemporaneamente font E spaziatore ha
+>     lasciato pochissimo spazio reale per i glifi, che sono stati tagliati quasi a zero: esattamente
+>     il "font minuscolo/illeggibile" segnalato.
+>   - **`BuildCornerLegend`**: margine e spaziatore riportati a valori minimi (Margin 1px uniforme,
+>     spaziatore colonna/riga 2px) — bastano per leggere "non attaccati", non uno spazio generoso:
+>     con solo ~20px totali a disposizione per 2 colonne × 2 righe di testo a dimensione normale, non
+>     c'è margine per uno spaziatore ampio. La dimensione dei 4 angoli resta `fs` (invariata da
+>     questa sessione, come richiesto: uguale alle lettere normali).
+>   - **HOME**: soglia `longWord` abbassata da `Length >= 5` a `>= 4` — "HOME" ora rientra nel ramo a
+>     font extra-piccolo (stesso trattamento già applicato a "ENTER"/"PAUSE"); "END" (3 caratteri)
+>     resta escluso, non era mai stato segnalato come problema.
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` pulito (0/0), nessuna istanza
+>     K2.App aperta questa volta a bloccare la copia. **Da verificare dall'utente**: se ora i 4 angoli
+>     sono leggibili E abbastanza separati — attenzione: lo spazio fisico a disposizione è molto
+>     risicato (~20px), quindi il margine di manovra per ANCORA più spaziatura mantenendo la stessa
+>     dimensione del font è quasi esaurito; se serve ancora più aria l'unica strada resterebbe
+>     rimpicciolire un po' i 3 angoli modificatori (shift/AltGr/Shift+AltGr) rispetto al carattere
+>     base, come nel design originale di questa feature.
+>
+> Previous: 2026-07-09 (Everest: legende accenti a dimensione normale, INSERT/DELETE abbreviate invece di rimpicciolite ancora):
+>   - **Richiesta utente** (2° follow-up): i glifi degli accenti sono ora TROPPO piccoli — devono
+>     essere della stessa dimensione delle altre lettere, ma più distanziati; "Insert" e le altre
+>     parole lunghe continuano ad andare in overflow nonostante il rimpicciolimento precedente.
+>   - **Indagine overflow persistente**: ho ri-estratto dal binario di Base Camp (stessa tecnica
+>     UTF-16LE) il markup per Insert/Home/PgUp/Del/End/PgDn/PrtSc/ScrollLk/NumLock — ma tutte le
+>     occorrenze trovate sono dentro `<div class="keylighting">`/`"keylight-1"`, cioè la tastiera di
+>     anteprima del pannello **Lighting** (effetti RGB), non quella interattiva **Key Binding** che
+>     l'utente ha screenshottato. Lì le label sono infatti abbreviate a due righe (cifra sopra +
+>     parola corta sotto: "0"/"Ins", "7"/"Home", "9"/"PgUp", "1"/"End", "3"/"PgDn", "."/"Del") — utile
+>     comunque come conferma indiretta che pure Base Camp non riesce a stare largo su un tasto 30px:
+>     anche loro abbreviano, non usano mai la parola intera lì. Non ho invece trovato il markup della
+>     tastiera Key Binding vera e propria (quella con le label estese viste nello screenshot).
+>   - **Decisione**: invece di rimpicciolire ANCORA il font (già a 5-6px, il prossimo passo sarebbe
+>     stato illeggibile), ho accorciato le due parole peggiori — `INSERT`→**`INS`**, `DELETE`→**`DEL`**
+>     (3 caratteri, stessa convenzione delle tastiere fisiche reali che hanno lo stesso identico
+>     vincolo di spazio) — così il testo entra comodamente anche a font normale, invece di dover
+>     scegliere fra "leggibile" e "dentro dal tasto".
+>   - **`KeyboardLayout.cs`**: `INSERT`→`INS`, `DELETE`→`DEL` (in entrambi `BuildBoardLeft_AnsiUs` e
+>     `BuildBoardLeft_Iso`). `HOME`/`END`/`PAUSE`/`PG UP`/`PG DN`/`PRT SCN`/`SCR LK`/`NUM LOCK`/
+>     `CAPS LOCK` invariati (già entravano, o vanno a capo sullo spazio).
+>   - **`MainWindow.Everest.cs`**:
+>     - `BuildCornerLegend`: i 4 angoli (shift/AltGr/Shift+AltGr/base) ora usano tutti **`fs`** (la
+>       stessa dimensione delle lettere normali), non più `fsMulti` più piccolo per i 3 angoli
+>       modificatore — la leggibilità viene dalla spaziatura, non da un font ridotto. Spaziatore
+>       centrale aumentato ulteriormente (colonna 5→7px, riga 4→6px).
+>     - Ramo "parola lunga senza spazio" (`longWord`): rimasto solo per `PAUSE`/`ENTER` (numpad) dato
+>       che `INS`/`DEL` non lo attivano più (length<5) — dimensione extra-small ridotta un altro
+>       gradino (5/6px → 4/5px) per i pochi casi residui.
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` pulito (0/0) — richiesto kill di
+>     DUE istanze K2.App aperte contemporaneamente durante questa sessione. **Da verificare
+>     dall'utente**: se la dimensione uniforme + spaziatura extra sui tasti accentati è sufficiente
+>     ora, e se INS/DEL si leggono bene — nessun modo di fare screenshot WPF da qui.
+>
+> Previous: 2026-07-09 (Everest: zoom +20%, font gruppo nav più piccolo, spaziatura accenti aumentata):
+>   - **Richiesta utente** (follow-up alla sessione precedente): il gruppo Insert/Home/PgUp/Delete/
+>     End/PgDn deve stare più piccolo per entrare nei tasti, i glifi sui tasti accentati sono ancora
+>     un po' stretti, e la tastiera nel complesso va ingrandita del 20%.
+>   - **Causa gruppo nav ancora clippato**: il fix precedente abilitava `Wrap` solo per le label CON
+>     uno spazio (`"PG UP"`, `"SCR LK"`...) — ma `INSERT`/`DELETE`/`PAUSE`/`ENTER` sono una SINGOLA
+>     parola senza spazio, quindi non vanno mai a capo e restavano piene a font 8px in un tasto 30px.
+>   - **`MainWindow.Everest.cs`** (`BuildEverestKeyboardOverlay`, ramo etichetta singola): nuova
+>     regola `longWord` — parola singola (niente spazio) di **5+ caratteri su un tasto ≤40px** usa
+>     un font ancora più piccolo (5px/6px a seconda di `kd.W`) invece del font normale; le label con
+>     spazio continuano a fare Wrap come prima, quelle corte (`HOME`, `END`, cifre, `F1`...) restano
+>     invariate.
+>   - **`BuildCornerLegend`**: spaziatore centrale della griglia 3×3 aumentato (colonna 3→5px, riga
+>     2→4px) e margine esterno aumentato (2,1,2,1 → 3,2,3,2) per dare più respiro tra i 4 angoli
+>     (shift/AltGr/Shift+AltGr/base) sui tasti con accenti.
+>   - **`MainWindow.xaml`**: `SpEvLayout` (lo `StackPanel` che contiene sia `CvsEvKeyboard` che
+>     `CvsEvNumpad`) ora ha `LayoutTransform` con `ScaleTransform 1.2×1.2` — **LayoutTransform** e non
+>     RenderTransform: la differenza è che il primo fa ri-misurare il layout a monte (il `Grid`/
+>     `Border` attorno si adatta alla dimensione scalata) E l'hit-testing di WPF segue automaticamente
+>     la trasformazione visiva, quindi i click sui tasti continuano a mappare al `Button` giusto senza
+>     toccare la matematica `KeyDef.X/Y/W/H` (che resta nello spazio di coordinate nativo, non scalato).
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` pulito (0/0) — richiesto kill di
+>     un'istanza K2.App aperta due volte di fila durante questa sessione (l'utente la sta tenendo
+>     aperta per confrontare visivamente ad ogni giro). **Da verificare dall'utente**: aspetto reale
+>     (zoom, spaziatura, font gruppo nav) e soprattutto che i click sui tasti restino precisi dopo lo
+>     scale — nessun modo di fare screenshot WPF da qui.
+>
+> Previous: 2026-07-09 (Everest: markup Razor reale estratto da BaseCamp.UI.exe — Tab/Win/FN/spaziatura accenti):
+>   - **Richiesta utente**: le legende dei tasti con accenti (è/à/ù/+ ecc.) restano troppo vicine tra
+>     loro, il tasto Tab è molto diverso da Base Camp, chiede di verificare anche decompilato/Linux
+>     per copiare meglio la struttura originale, usare l'icona vera sul tasto Windows, e disattivare
+>     FN dalla configurazione (riservato, ma illuminabile).
+>   - **Metodo**: `BaseCamp.UI.exe` è un self-contained single-file .NET+Electron bundle — non c'è
+>     modo diretto di isolare l'assembly .NET per estrarre le view Razor, ma i letterali HTML
+>     `WriteLiteral("...")` compilati restano leggibili come testo UTF-16LE grezzo nel file (stessa
+>     tecnica già in uso per altre stringhe UI, vedi `_reference/BaseCamp_decompiled/README.md`).
+>     Script Python throwaway: cerca l'encoding UTF-16LE di needle noti (`data-alt="TAB"`,
+>     `data-key="lwin"`, `data-key="FN"`...) nel binario e stampa ±250 byte di contesto decodificati.
+>     Trovato il markup Razor REALE della tastiera Everest (non supposizione):
+>     - **Tab**: `<span data-alt="TAB" data-key="⇆" .../>` → mostra **"TAB" + glifo "⇆"** (icona
+>       frecce), non solo testo "Tab".
+>     - **Windows**: `<span data-key="lwin"/"rwin" .../>` — il valore letterale non è mai mostrato,
+>       il CSS lo sovrascrive con `content:'\f17a'; font-family:"Font Awesome 5 Brands"` = icona
+>       bandiera Windows vera (K2 mostrava "⊞" Unicode come sostituto testuale).
+>     - **FN**: `<div class="keylighting" style="pointer-events:none;"><span data-key="FN" .../></div>`
+>       — Base Camp stessa disabilita il click sul tasto FN (pointer-events:none) ma lo lascia dentro
+>       il div "keylighting", quindi resta illuminabile/preview RGB ma non cliccabile/configurabile.
+>     - BaseCampLinux (community, Python/USB raw) verificato ma non contiene asset di layout tastiera
+>       (solo protocollo USB) — nessuna informazione aggiuntiva utile qui.
+>   - **`MainWindow.Everest.cs`**:
+>     - `BuildCornerLegend`: grid da 2×2 a **3×3 con riga/colonna spaziatrice** (3px/2px) tra i 4
+>       angoli — a 30px i testi corner erano quasi a contatto; la spaziatrice crea un gap visibile
+>       senza spostare gli angoli stessi.
+>     - Nuovo `BuildWinIcon()`: piccola bandiera Windows disegnata a mano (4 `Rectangle` 2×2 con gap)
+>       — Segoe MDL2 Assets non ha un glifo "logo Windows" (Microsoft lo esclude deliberatamente) e
+>       K2 non porta Font Awesome, quindi si disegna la forma invece di usare un font.
+>     - `BuildEverestKeyboardOverlay`: nuovi case per `MatrixId` 91/92 (Win → icona) e 9 (Tab →
+>       "TAB" + "⇆" due righe), prima del ramo generico corner/due-righe/singolo.
+>     - `EvKeyboardButton_Click`: guard `if (matrixId == 261) return;` DOPO `TryCustomPaint` (la
+>       paint mode per l'illuminazione custom resta attiva) ma PRIMA di capture/apertura dialog
+>       azione — FN non entra più in `_evKeys`/non apre `ButtonActionDialog` da overlay.
+>     - `BtnEvConfig_Click`: stesso guard se FN è già in lista (es. da un vecchio import DB) —
+>       "Configura" si rifiuta con un log invece di aprire il dialog.
+>     - Tooltip overlay: aggiunge "— riservato, non configurabile" per FN (0x{...}).
+>   - **`KeyboardLayout.cs`**: `(91, "⊞", ModW)`/`(92, "⊞", ModW)` → `(91, "Win", ModW)`/
+>     `(92, "Win", ModW)` (solo per il tooltip, il rendering visivo ora usa sempre l'icona).
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` pulito (0/0) — richiesto kill
+>     di un'istanza K2.App aperta (bloccava `K2.App.exe`, MSB3027). **Da verificare dall'utente**:
+>     aspetto reale in app (spaziatura corner, icona Tab/Win, comportamento click su FN) — nessun
+>     modo di fare screenshot WPF da qui.
+>
+> Previous: 2026-07-09 (Everest: aspetto keycap — testo nero/bianco/personalizzato, bordi Normal/Translucent col colore keycap):
+>   - **Richiesta utente** (correzioni alla feature "aspetto keycap" di poco fa):
+>     1. anche il colore del testo va offerto come nero/bianco/personalizzato (non solo uno swatch
+>        diretto), default bianco; il colore keycap resta di default nero (già così, confermato);
+>     2. i bordi di Normal e Translucent devono seguire il colore keycap selezionato, non restare
+>        neri fissi come deciso nella richiesta precedente — correzione esplicita, ribalta quel punto.
+>   - **`MainWindow.KeycapAppearance.cs`**: `RbEvKeycapTextBlack`/`White`/`Custom` (radio, stesso
+>     pattern di `RbEvKeycapBlack`/`White`/`Custom`) al posto dello swatch diretto; nuovo campo
+>     `_evKeycapTextColorMode` + `_evKeycapTextCustomHex`, chiavi store `settings.keycap_text_color_mode`/
+>     `settings.keycap_text_custom_hex` (rinominata da `settings.keycap_text_hex`, nessuna necessità di
+>     migrazione: feature introdotta in questa stessa sessione, mai rilasciata). Estratti helper
+>     `ParseColorMode`/`ColorModeToString` condivisi tra keycap-color e text-color per evitare
+>     duplicazione dello switch black/white/custom.
+>     `ApplyKeycapAppearanceToAllKeys`: semplificato — ora SOLO lo stile **Pudding** ha un trattamento
+>     speciale per `BorderBrush`/`Mount` (baseline dark, poi live LED per-tick); Normal, Translucent
+>     e Reverse Pudding condividono lo stesso ramo "bordo + Mount = colore keycap statico" (identico
+>     per Normal/Translucent che lo tengono fisso, e per Reverse Pudding che ci parte come baseline
+>     prima che il tick LED sovrascriva `Background`). Rimosso `Mount.ClearValue(...)`: non serve più,
+>     ora ogni stile imposta sempre esplicitamente `Mount.Background` (prima serviva solo per
+>     ripristinare il default nero del ControlTemplate quando si tornava a Normal/Translucent).
+>   - **Localizzazione**: nessuna nuova chiave necessaria (le label degli stili non menzionavano già
+>     "bordi neri fissi", quindi la correzione non ne rende nessuna stale).
+>   - **Verificato**: `build-check.bat` pulito (0 errori/0 warning) su entrambe le solution — killata
+>     un'altra istanza K2.App.exe rimasta aperta. **Da verificare dall'utente**: che Normal/Translucent
+>     mostrino ora il bordo (e il Mount) del colore keycap scelto, che il color-picker del testo
+>     nero/bianco/personalizzato funzioni e persista, e il comportamento di Pudding/Reverse Pudding
+>     (invariato in questa sessione).
+>
+> Previous: 2026-07-09 (Everest: bug reale trovato — testo dei tasti CLIPPATO, non un problema di font):
+>   - **Richiesta utente**: screenshot affiancato K2 (sopra) vs Base Camp reale (sotto) sullo stesso
+>     layout IT, chiedendo di individuare le differenze di font e riprodurle.
+>   - **Root cause reale (non il font)**: sui tasti stretti (30px) con etichette lunghe ("Prt Sc",
+>     "Scroll Lk", "Pause", "Insert", "Home", "PgUp", "Del", "End", "PgDn") il `TextBlock` aveva
+>     `TextWrapping.NoWrap` a font-size 8px: il testo trabocca oltre il bottone e viene TAGLIATO dal
+>     clip automatico che WPF applica quando un `Border` ha `CornerRadius>0` (il `Face` di
+>     `EverestKeyStyle` ha `CornerRadius="3"`) — risultato: "nser" invece di "Insert", "'ause" invece
+>     di "Pause", ecc. Base Camp (CSS `.keyboard span` = `white-space: normal` di default, i.e. va a
+>     capo) non ha questo problema perché il browser wrappa il testo su più righe nello stesso box.
+>   - **Verificato in `keyboard.css`** (`Mountain Base Camp/resources/bin/wwwroot/css/keyboard.css`):
+>     nessun `@font-face` custom per le legende — `font-family: system-ui, sans-serif` (= Segoe UI su
+>     Windows), stesso valore già usato da K2 (`_evKeyFont`): **il font non era il problema**.
+>     Trovate anche regole `content:` esplicite CSS-confermate (non supposizione): lshift/rshift →
+>     `'SHIFT'`, lctrl/rctrl → `'CTRL'`, lalt/ralt → `'ALT'`, space → **nessuna label** (`content:
+>     none`) — K2 mostrava invece "LShift"/"RShift"/"LCtrl"/"RCtrl"/"LAlt"/"RAlt"/"Space" (nomi
+>     interni, mai pensati per essere il testo visibile sul tasto).
+>   - **`MainWindow.Everest.cs`** (`BuildEverestKeyboardOverlay`, branch senza alt/AltGr): ora abilita
+>     `TextWrapping.Wrap` (invece di `NoWrap`) + font più piccolo (`fsMulti` invece di `fs`) quando
+>     `kd.Label` contiene uno spazio — le etichette corte a una parola (Esc, F1, Tab...) non vanno mai
+>     a capo quindi il comportamento per loro è invariato. Tooltip: se `Label` è vuota (barra spazio)
+>     mostra "Space" invece di stringa vuota.
+>   - **`KeyboardLayout.cs`**: rinominate le label per matchare esattamente Base Camp — `LCtrl`/`RCtrl`
+>     → `CTRL`, `LAlt`/`RAlt` → `ALT`, `LShift`/`RShift` → `SHIFT` (CSS-confermato, in entrambi
+>     `BuildBoardLeft_AnsiUs` e `BuildBoardLeft_Iso`), `Space` → stringa vuota (CSS-confermato).
+>     `Prt Sc`→`PRT SCN`, `Scroll Lk`→`SCR LK`, `Pause`→`PAUSE`, `Insert`→`INSERT`, `Home`→`HOME`,
+>     `PgUp`→`PG UP`, `Del`→`DELETE`, `End`→`END`, `PgDn`→`PG DN`, `Caps Lk`→`CAPS LOCK` (questi da
+>     lettura diretta dello screenshot Base Camp allegato dall'utente, non da CSS — tutto maiuscolo,
+>     abbreviazioni a 2 parole così vanno a capo nel box 30px invece di uscire clippate). Numpad:
+>     `Num Lk`→`NUM LOCK`, `Enter`→`ENTER`.
+>   - **Non toccato/rinviato**: il numpad reale di Base Camp sembra mostrare doppie etichette
+>     cifra+funzione-nav sui tasti 7/9/1/3/0/. (Home/PgUp/End/PgDn/Ins/Del quando NumLock è off) —
+>     `BuildBoardRight()` oggi mostra solo la cifra. Non implementato: incerto sul formato esatto
+>     senza uno screenshot ravvicinato del numpad, e comunque fuori dallo scope del bug segnalato
+>     (etichette clippate). Da riprendere se l'utente lo nota/richiede.
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` pulito (0/0) — richiesto
+>     kill di un'istanza K2.App aperta che bloccava `K2.Core.dll` (MSB3027). **Da verificare
+>     dall'utente**: confronto visivo diretto in app (nessun modo di fare screenshot WPF da qui).
+>     Nota: `K2.sln`/`K2.Core` condivisi con un'altra sessione in corso in parallelo (feature
+>     "aspetto keycap") — vedi voce successiva.
+>
+> Previous: 2026-07-09 (Everest: aspetto keycap spostato nelle impostazioni del device, colore testo, bordo Mount):
+>   - **Richiesta utente** (correzioni alla feature della sessione precedente):
+>     1. la sezione va nelle impostazioni del **device Everest**, non in quelle generali dell'app;
+>     2. aggiungere un colore del testo, per i keycap normal/pudding/reverse pudding;
+>     3. per pudding e reverse pudding, il bordo inferiore (il "Mount" scuro visibile nel gap
+>        sotto la Face) restava nero fisso — deve colorarsi come gli altri 3 lati (LED per
+>        pudding, colore keycap statico per reverse pudding);
+>     4. conferma che per normal/translucent tutti e 4 i bordi (compreso il Mount) restano neri
+>        fissi, mai colorati dall'impostazione.
+>   - **Persistenza spostata da `AppSettings` (JSON app-wide) a `EverestStore`** (SQLite
+>     per-device, tabella `Settings`, stesso store di `settings.game_mode`/`settings.keyboard_color`):
+>     nuove chiavi `settings.keycap_color_mode` (black/white/custom), `settings.keycap_custom_hex`,
+>     `settings.keycap_text_hex` (nuovo, colore testo), `settings.keycap_style` (0-3). Gli enum
+>     `EverestKeycapColorMode`/`EverestKeycapStyle` sono ora `internal` in `K2.App` (rimossi da
+>     `K2.Core/AppSettings.cs`, non più app-wide).
+>   - **`MainWindow.xaml`**: rimosso il GroupBox dal tab Impostazioni generale (`PnlSettings`);
+>     nuovi controlli aggiunti dentro `PnlSecSettings` (sezione "Settings" del tab Everest,
+>     insieme a Game Mode/Indicator LED/Keyboard color/Layout): 3 RadioButton colore keycap +
+>     swatch personalizzato, nuovo swatch "Colore testo" (singolo, no varianti nero/bianco/
+>     personalizzato — è già un color picker diretto), ComboBox tipo keycap.
+>   - **`MainWindow.KeycapAppearance.cs`**: `EvKeyVisual` esteso con `Mount` (oltre a `Button`/
+>     `Halo`), trovato via `FindName("Mount", btn)` come già per `LedHalo`. `ApplyKeycapAppearanceToAllKeys`/
+>     `ApplyEverestLedColor`: per **Pudding**, `Mount.Background` segue lo stesso brush di
+>     `BorderBrush` ad ogni tick (colore LED se acceso, altrimenti il dark default `#1D1D1D`); per
+>     **Reverse Pudding**, `Mount.Background` = stesso brush statico del colore keycap scelto
+>     (baseline, mai per-tick, coerente col fatto che in questo stile è `Background`/centro a
+>     seguire il LED, non il bordo); per **Normal/Translucent**, `Mount.ClearValue(Border.
+>     BackgroundProperty)` ripristina il default del ControlTemplate (nero fisso) — necessario
+>     perché un valore locale via codice ha precedenza MAGGIORE del TemplatedParent template
+>     trigger dell'hover, quindi un vecchio local value lasciato da Pudding/ReversePudding
+>     "silenzierebbe" per sempre l'hover su Mount se non veniva ripulito passando a un altro stile.
+>     **Nota**: colorare `Mount` da codice (a differenza di `Face`, mai toccato direttamente,
+>     solo via `Button.Background`/`BorderBrush` + TemplateBinding) fa perdere l'hover-brightening
+>     su quella striscia di 6px in stile Pudding/ReversePudding — richiesto esplicitamente
+>     dall'utente (bordo sempre colorato), quindi accettato come effetto collaterale minore.
+>     Nuovo `ResolveEverestKeycapTextColor`/`BtnEvKeycapTextColor_Click` (stesso pattern
+>     ColorDialog del colore keycap); applicato al `Foreground` della legenda per Normal/Pudding/
+>     ReversePudding, MAI per Translucent (che continua a colorare la legenda dinamicamente col
+>     LED live, invariato — l'impostazione "colore testo" la esclude di proposito).
+>   - **`MainWindow.Everest.cs`**: `InitEverestSettingsPanel` chiama il nuovo
+>     `InitKeycapAppearanceControls` (setup ItemsSource combo); `LoadEverestSettingsFromStore`
+>     chiama il nuovo `LoadKeycapAppearanceFromStore` — stesso flag `_evSettingsSuppress`
+>     condiviso con Game Mode/Keyboard color (niente flag dedicato separato come nella prima
+>     versione della feature).
+>   - **Localizzazione**: chiavi `settings_ev_keycap_*` spostate vicino a `settings_keyboard_color`
+>     (sezione Everest, non più sezione Settings generale); nuova chiave `settings_ev_keycap_text_color`
+>     (EN + IT).
+>   - **Verificato**: `build-check.bat` pulito (0 errori/0 warning) su entrambe le solution
+>     (killato un altro K2.App.exe rimasto aperto, PID diverso dalla sessione precedente).
+>     **Da verificare dall'utente**: aspetto a schermo con LED accesi/spenti nei 4 stili, hover
+>     sui tasti in ciascuno stile (in particolare la perdita di hover-brightening sul Mount in
+>     Pudding/ReversePudding, minore e attesa), e che i valori persistano correttamente riavviando K2.
+>
+> Previous: 2026-07-08 (Everest: nuova impostazione "Aspetto tastiera Everest" — colore/tipo keycap):
+>   - **Richiesta utente**: aggiungere un'impostazione per il colore dei keycap (nero/bianco/
+>     personalizzato) e il tipo di keycap (normale/traslucido/pudding/reverse pudding), dove il
+>     tipo determina come il colore LED live si combina col colore keycap nell'anteprima a
+>     schermo. **Solo cosmetico**: non tocca i keycap fisici (fissi dalla produzione) né manda
+>     nulla al device — l'effetto RGB reale resta il pannello "Illuminazione RGB" esistente.
+>   - **`K2.Core/AppSettings.cs`**: nuovi enum `EverestKeycapColorMode` (Black/White/Custom) e
+>     `EverestKeycapStyle` (Normal/Translucent/Pudding/ReversePudding), persistiti in
+>     `app_settings.json` (stesso file JSON app-wide di CloseToTray/DebugMode/..., non per-profilo).
+>   - **`MainWindow.xaml`**: `EverestKeyStyle` — aggiunto layer `LedHalo` (Border con Margin
+>     negativo, dietro Mount, per l'alone che sborda nel gap tra tasti) e rimosso `LedTint`
+>     (il vecchio "wash" traslucido sull'intera faccia, non più usato da nessuno dei 4 stili).
+>     `Face.Background`/`BorderBrush` restano `TemplateBinding` sul `Button.Background`/
+>     `BorderBrush`: il codice imposta questi ultimi (non `Face` direttamente), così il trigger
+>     hover — che punta a `Face` per nome — mantiene precedenza su mouse-over (local value su
+>     `Face` vincerebbe sempre sul trigger, rompendo l'hover). Nuovo GroupBox "Aspetto tastiera
+>     Everest" nel tab Impostazioni: 3 RadioButton colore + swatch personalizzato (ColorDialog,
+>     stesso pattern del pannello RGB) + ComboBox tipo (4 scelte, pattern `EvEffectChoice`-style).
+>   - **`MainWindow.KeycapAppearance.cs`** (nuovo file): `EvKeyVisual` (record struct Button+Halo),
+>     `ApplyKeycapAppearanceToAllKeys` (baseline statica, richiamata dopo ogni rebuild della
+>     tastiera — nuovi Button ripartono dai default di stile), `ApplyEverestLedColor`/
+>     `ResetEverestKeyToOff` (applicano il colore LED live al layer giusto per lo stile corrente:
+>     Halo per Normal/Translucent, + foreground legenda per Translucent, `BorderBrush` per
+>     Pudding, `Background` per Reverse Pudding), `SetLegendForeground` (gestisce i 3 shape di
+>     `Button.Content` — singolo `TextBlock`, `StackPanel` a due righe, `Grid` 4 angoli da
+>     `BuildCornerLegend` — tutti già bianchi fissi in `BuildEverestKeyboardOverlay`).
+>   - **`MainWindow.LedPreview.cs`**: `_evKeyTints` (Dictionary&lt;int,Border&gt;) → `_evKeyVisuals`
+>     (Dictionary&lt;int,EvKeyVisual&gt;); `BuildEverestLedTints` → `BuildEverestKeyVisuals` (cattura
+>     anche il Button, non solo l'ex-LedTint); `OnEverestColorsUpdated`/`OnSdkCrashDetected`/
+>     `UpdateEverestLedPreviewActive` delegano ora a `ApplyEverestLedColor`/`ResetEverestKeyToOff`
+>     invece di scrivere `Background` direttamente. MacroPad (`_mpKeyTints`, `KeyCapStyle`) non
+>     toccato — la feature è solo Everest, come richiesto.
+>   - **Nota nascosta**: in stile Translucent, un eventuale "flash" bianco/nero della legenda al
+>     press (logica esistente altrove in MainWindow.Everest.cs) può essere sovrascritto dal
+>     prossimo tick del poller LED (~ogni 100ms) se quel tasto è acceso — edge case cosmetico
+>     minore, non bloccante.
+>   - **Localizzazione**: nuove chiavi `settings_ev_keycap_*` (EN + IT).
+>   - **Verificato**: `build-check.bat` pulito (0 errori/0 warning) su entrambe le solution, dopo
+>     aver killato un K2.App.exe (PID 66036) rimasto aperto e bloccava `K2.Core.dll`.
+>     **Da verificare dall'utente**: aspetto a schermo dei 4 stili con LED accesi/spenti, e che
+>     l'hover sui tasti resti visibile in ciascuno stile.
+>
+> Previous: 2026-07-08 (Everest: colore/dimensione legende tasti multi-simbolo, come da riferimento fisico):
+>   - **Richiesta utente**: allegata foto di una tastiera IT reale con più simboli per tasto,
+>     chiedendo di far combaciare il rendering K2 (font/layout dei tasti con più legende).
+>   - **Contesto**: in una sessione precedente (2026-06-28) `BuildCornerLegend()` era stata
+>     "appiattita" a tutto bianco per uniformarsi alla CSS del sito Base Camp (`keyboard.css`),
+>     perdendo la distinzione colore grigio/teal che una versione di lavoro ancora precedente
+>     nella stessa sessione aveva. Il commento in `KeyLabelMap.cs` (mai aggiornato) descriveva
+>     comunque l'intento originale: "engraved... often in a different colour".
+>   - **`MainWindow.Everest.cs`**: reintrodotta la distinzione, stavolta esplicita — `_evBaseBrush`
+>     (bianco), `_evShiftBrush` (grigio `#9A9AA2`, stesso muted-text del tema K2),
+>     `_evAltGrBrush`/Shift+AltGr (teal `#5BBEC3`, lo stesso già usato in questo file per l'accento
+>     del selettore layout). `BuildCornerLegend` ora accetta due font-size separate (`fsCorner` per
+>     shift/AltGr/Shift+AltGr, `fsBase` per il carattere base) invece di una sola uguale per tutti i
+>     4 angoli: il base resta nello stesso angolo basso-sx ma più grande e bianco, dominante come su
+>     una keycap reale, mentre gli angoli modificatori restano piccoli e colorati. Stessa logica
+>     nel path a due righe (tasto con solo shift, niente AltGr): riga alt (shift) grigia più piccola,
+>     riga base bianca più grande (prima erano identiche, entrambe bianche 7px).
+>   - **Font**: verificato che resta `_evKeyFont` = "Segoe UI,system-ui,Arial,sans-serif" (nessun
+>     cambio necessario, il problema segnalato era colore/gerarchia dimensionale, non il font stesso).
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` pulito (0/0) dopo aver killato
+>     un'istanza K2.App rimasta aperta (bloccava `K2.Core.dll`, MSB3027 — vedi `stop-k2.bat`).
+>     **Da verificare dall'utente**: confronto visivo diretto con la foto allegata (l'ambiente di
+>     sviluppo non ha un modo di fare screenshot della UI WPF).
+>
+> Previous: 2026-07-08 (DisplayPad: click su un tasto fuori da Key Binding porta lì):
+>   - **Richiesta utente**: "Su displaypad, se clicco su un tasto e non sono in Key binding,
+>     portamici".
+>   - **`MainWindow.DisplayPad.cs`**: `DpKeyButton_Click` — il ramo che prima faceva
+>     `if (!IsDpKeyBindingSectionActive) return;` (no-op silenzioso cliccando un tasto mentre si
+>     è su Positioning/Pages) ora imposta `RbDpSecKeyBinding.IsChecked = true` prima di uscire,
+>     spostando l'utente sulla sezione Key Binding. Non apre subito il dialog azione sullo stesso
+>     click (il click era ambiguo tra "portami in Key Binding" e "configura questo tasto"):
+>     serve un secondo click, ora che si è nella sezione giusta. Navigazione cartella/back
+>     (`dp_folder`/`dp_back`) invariata: continua a funzionare da qualunque sezione.
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` pulito (0 errori/0 warning).
+>     **Da verificare dall'utente**: comportamento su hardware reale.
+>
+> Previous: 2026-07-08 (DisplayPad: sezione "Pages" per eliminare le pagine cartella create):
+>   - **Richiesta utente**: "ho bisogno di una funzione che mi permetta di eliminare le vecchie
+>     pagine del displaypad già create. Avevo detto di fare una seconda sezione sotto le sezioni
+>     del displaypad chiamata 'pages'. Metti un bottone 'elimina' in hover con prompt di conferma".
+>   - **`MainWindow.xaml`**: nuovo `RadioButton RbDpSecPages` ("Pages") nella sidebar SECTIONS del
+>     DisplayPad, sotto "Positioning". Nuovo pannello `PnlDpSecPages`: `ItemsControl LstDpPages`
+>     con `DataTemplate` per riga (nome pagina + bottone "Elimina" con glifo cestino, `Visibility`
+>     Collapsed di default, resa Visible via `DataTemplate.Triggers`/`IsMouseOver` sulla `Border`
+>     della riga — hover-reveal). `TextBlock LblDpNoPages` per lo stato vuoto.
+>   - **`MainWindow.SectionNav.cs`**: `DpSection_Changed` aggiunto case `RbDpSecPages` →
+>     `PnlDpSecPages`; `ShowDpSection` richiama `RefreshDpPagesList()` quando quel pannello
+>     diventa attivo (la lista può risultare stale se una pagina è stata creata/rinominata altrove,
+>     es. dal nuovo tipo azione "Pagina" in `ButtonActionDialog` — più semplice ricalcolarla ogni
+>     volta che la sezione torna visibile che tracciare ogni punto di modifica).
+>   - **`MainWindow.DisplayPad.cs`**: `_dpPages` (`ObservableCollection<DpPageRow>`, nuovo record)
+>     bindato a `LstDpPages`. `RefreshDpPagesList()` — rilegge `DisplayPadStore.ListPages` per il
+>     device+profilo correnti. `BtnDpDeletePage_Click` — prompt di conferma (`MessageBox.Show`,
+>     stesso pattern di `BtnDpDeleteProfile_Click`), poi `DpDeletePage`. `DpDeletePage(deviceId,
+>     profile, pageId)` — cancella lo store; se la pagina eliminata è quella attualmente mostrata
+>     sulla griglia, naviga fuori (`DpNavigateBack`/`ResetDpNavigation`) prima di ricaricare, per
+>     non lasciare la UI a mostrare tasti appena cancellati dal DB.
+>   - **`DisplayPadStore.cs`**: nuovo `DeletePage(deviceId, profile, pageId)` — cancella le righe
+>     `Buttons` della pagina, il nome salvato, e (via nuovo helper privato
+>     `ClearActionEverywhere`) azzera `ActionType`/`ActionValue` (mantenendo l'immagine) di
+>     qualunque tasto altrove nello stesso device+profilo che puntava a quella pagina con
+>     `dp_folder`, così non resta un link morto. **Non ricorsivo**: eventuali sotto-pagine
+>     annidate DENTRO la pagina eliminata non vengono cancellate a cascata — restano nel DB ma
+>     diventano irraggiungibili; fuori scope per questa prima versione.
+>   - **Localizzazione**: nuove chiavi `dp_pages`, `dp_no_pages`, `dp_delete_page`,
+>     `dp_delete_page_title`, `dp_delete_page_confirm` (EN + IT).
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` pulito (0 errori/0 warning) —
+>     richiesto `stop-k2.bat`/`Stop-Process` prima perché l'utente aveva K2.App aperto (PID
+>     bloccava `K2.Core.dll`). **Da verificare dall'utente**: comportamento reale della lista/hover
+>     e dell'eliminazione su hardware.
+>
+> Previous: 2026-07-08 (DisplayPad: icone cartella/pagina — rotazione doppia, icone
 > reali di Windows, template Base Camp, azione "Pagina" nel dialog azioni):
 >   - **Richiesta utente**: partita da "l'icona della cartella arriva ruotata e col testo
 >     verticale su un DisplayPad ruotato di 90°", poi evoluta via via in: usare l'icona

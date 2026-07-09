@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -25,6 +26,9 @@ public partial class App : Application
     /// <summary>Separate crash log file for native/fatal crashes.</summary>
     public static readonly string CrashLogPath = Path.Combine(
         AppContext.BaseDirectory, "K2.App.crash.log");
+
+    // Held for the process lifetime; released automatically by the OS on exit.
+    private static Mutex? _singleInstanceMutex;
 
     // Windows MiniDump API — generates a .dmp of the process on native crash.
     [DllImport("dbghelp.dll", SetLastError = true)]
@@ -173,8 +177,21 @@ public partial class App : Application
     /// </summary>
     public static volatile bool SdkRateLimitedExitThread;
 
+    // Set by the constructor; checked in OnStartup (see remarks there for why the
+    // MessageBox can't be shown here yet).
+    private static bool _singleInstanceGranted;
+
     public App()
     {
+        // Just record whether we got the lock — do NOT show the MessageBox here.
+        // MessageBox.Show() pumps the dispatcher, which at this point (still inside
+        // the App constructor, before Main() calls InitializeComponent()/Run()) can
+        // dispatch the queued OnStartup callback and build MainWindow before the
+        // App.xaml theme resources (K2Theme.xaml) are merged, crashing with
+        // ResourceReferenceKeyNotFoundException ("K2HoverBrush") — silently, since
+        // DispatcherUnhandledException isn't wired up yet either. See OnStartup.
+        _singleInstanceGranted = AcquireSingleInstanceLock();
+
         // Capture the UI thread ID — needed by the VEH to distinguish
         // our thread from SDKDLL.dll's internal thread.
         _uiThreadId = GetCurrentThreadId();
@@ -218,11 +235,50 @@ public partial class App : Application
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+        if (!_singleInstanceGranted)
+        {
+            // Safe to show here: InitializeComponent() (called by Main() before Run())
+            // has already merged the theme resources, and DispatcherUnhandledException
+            // is already wired up from the constructor.
+            MessageBox.Show(Core.Loc.Get("app_already_running"), Core.Loc.Get("app_title"),
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            Shutdown();
+            return;
+        }
+
         var window = new MainWindow();
         if (AppSettings.StartMinimizedToTray)
             window.StartMinimizedToTray();
         else
             window.Show();
+    }
+
+    /// <summary>
+    /// Acquires a named mutex so only one K2.App instance can run per user session.
+    /// Returns false if another instance already holds it.
+    /// </summary>
+    private static bool AcquireSingleInstanceLock()
+    {
+        _singleInstanceMutex = new Mutex(initiallyOwned: true, name: "K2App_SingleInstance_Mutex", out bool createdNew);
+        return createdNew;
+    }
+
+    /// <summary>
+    /// Releases the single-instance mutex ahead of a deliberate self-restart (e.g.
+    /// language change, see <see cref="MainWindow.RestartApp"/>). Without this, the
+    /// relaunched process starts while this one still holds the mutex (it hasn't
+    /// finished exiting yet) and immediately bails out as "already running",
+    /// leaving no instance running at all.
+    /// </summary>
+    public static void ReleaseSingleInstanceLockForRestart()
+    {
+        try
+        {
+            _singleInstanceMutex?.ReleaseMutex();
+            _singleInstanceMutex?.Dispose();
+            _singleInstanceMutex = null;
+        }
+        catch { /* best effort — worst case the new instance waits out our exit */ }
     }
 
     /// <summary>

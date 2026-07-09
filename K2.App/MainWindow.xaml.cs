@@ -33,6 +33,7 @@ public partial class MainWindow : Window
 
         InitKeysModule();        // MacroPad: 12-key grid (2×6 rotatable) + profile selector
         InitMacroLedPanel();     // MacroPad: LED lighting panel (firmware presets)
+        InitMpSettingsPanel();   // MacroPad: Settings section — keycap appearance (color/style)
         InitActionEngine();      // MacroPad: action engine + Python bridge
         InitEverestModule();     // Everest Max: on-demand key list + dedicated action engine
         InitMacroPanel();        // Macro: top-level section (recording/playback), own nav button

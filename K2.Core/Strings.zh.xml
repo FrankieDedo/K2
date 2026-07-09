@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <strings>
-  <string name="app_title">K2 — Mountain 设备控制台</string>
+  <string name="app_title">K2</string>
   <string name="driver_not_opened">驱动程序未打开。</string>
   <string name="open_driver">打开驱动程序</string>
   <string name="close_driver">关闭驱动程序</string>
@@ -110,7 +110,7 @@
   <string name="ev_configure">配置…</string>
   <string name="ev_remove">删除</string>
   <string name="ev_sdk_log">SDK 日志</string>
-  <string name="rgb_lighting">RGB 灯光</string>
+  <string name="rgb_lighting">灯光</string>
   <string name="rgb_effect">效果:</string>
   <string name="rgb_speed">速度:</string>
   <string name="rgb_direction">方向:</string>

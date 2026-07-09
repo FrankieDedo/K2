@@ -247,41 +247,99 @@ public partial class MainWindow
     private static readonly FontFamily _evKeyFont =
         new("Segoe UI,system-ui,Arial,sans-serif");
 
+    // Legend colours mirroring real Everest Max keycap printing: the base
+    // (unshifted) character is bright white and the dominant glyph, while the
+    // shift/AltGr corner symbols are smaller and colour-coded (grey for shift,
+    // teal for AltGr/Shift+AltGr — the same teal used elsewhere in this file
+    // for the layout-selector accent, 0x5BBEC3).
+    private static readonly Brush _evBaseBrush  = Brushes.White;
+    private static readonly Brush _evShiftBrush = new SolidColorBrush(Color.FromRgb(0x9A, 0x9A, 0xA2));
+    private static readonly Brush _evAltGrBrush = new SolidColorBrush(Color.FromRgb(0x5B, 0xBE, 0xC3));
+
     /// <summary>
-    /// Builds a 2×2 keycap legend, all white like Base Camp: shift (top-left),
-    /// Shift+AltGr (top-right), base (bottom-left), AltGr (bottom-right).
+    /// Builds a 2×2 keycap legend matching physical keycap printing: shift
+    /// (top-left, grey), Shift+AltGr (top-right, teal), base (bottom-left,
+    /// white, larger), AltGr (bottom-right, teal).
     /// </summary>
     private FrameworkElement BuildCornerLegend(
-        string baseLbl, string? shiftLbl, string? altGrLbl, string? sAltGrLbl, double fs)
+        string baseLbl, string? shiftLbl, string? altGrLbl, string? sAltGrLbl,
+        double fsCorner, double fsBase)
     {
-        var grid = new Grid { Margin = new Thickness(2, 1, 2, 1) };
+        // 3×3 grid with a spacer row/column between the 4 corners. Font size
+        // is right (per user feedback) — this is purely about the gap between
+        // the corners, wider horizontally than vertically since the key is
+        // wider than it is tall relative to the glyphs.
+        var grid = new Grid { Margin = new Thickness(0) };
         grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) });
         grid.ColumnDefinitions.Add(new ColumnDefinition());
         grid.RowDefinitions.Add(new RowDefinition());
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(2) });
         grid.RowDefinitions.Add(new RowDefinition());
 
-        void Corner(string? text, int row, int col, HorizontalAlignment h)
+        void Corner(string? text, int row, int col, HorizontalAlignment h, Brush brush, double fs)
         {
             if (string.IsNullOrEmpty(text)) return;
             var tb = new TextBlock
             {
                 Text                = text,
-                Foreground          = Brushes.White,   // BC: rgb(255,255,255)
-                FontSize            = fs,               // BC: 7px when multi-legend
+                Foreground          = brush,
+                FontSize            = fs,
                 FontFamily          = _evKeyFont,
                 HorizontalAlignment = h,
                 VerticalAlignment   = row == 0 ? VerticalAlignment.Top
                                                : VerticalAlignment.Bottom,
+                // Nudge the top row up: at this font size the two rows'
+                // glyphs were tall enough to touch/overlap the bottom row
+                // (letters disappearing behind the ones below). The bottom
+                // row is already flush against the key's own bottom edge,
+                // so only the top row has room to move.
+                Margin = row == 0 ? new Thickness(0, -2, 0, 0) : new Thickness(0),
             };
             Grid.SetRow(tb, row);
             Grid.SetColumn(tb, col);
             grid.Children.Add(tb);
         }
 
-        Corner(shiftLbl,  0, 0, HorizontalAlignment.Left);   // top-left
-        Corner(sAltGrLbl, 0, 1, HorizontalAlignment.Right);  // top-right
-        Corner(baseLbl,   1, 0, HorizontalAlignment.Left);   // bottom-left
-        Corner(altGrLbl,  1, 1, HorizontalAlignment.Right);  // bottom-right
+        Corner(shiftLbl,  0, 0, HorizontalAlignment.Left,  _evShiftBrush, fsCorner);  // top-left
+        Corner(sAltGrLbl, 0, 2, HorizontalAlignment.Right, _evAltGrBrush, fsCorner);  // top-right
+        Corner(baseLbl,   2, 0, HorizontalAlignment.Left,  _evBaseBrush,  fsBase);    // bottom-left
+        Corner(altGrLbl,  2, 2, HorizontalAlignment.Right, _evAltGrBrush, fsCorner);  // bottom-right
+        return grid;
+    }
+
+    /// <summary>
+    /// Small simplified Windows-flag icon (4 tiny squares), used in place of
+    /// text on the Win keys — mirrors Base Camp, which renders a Font Awesome
+    /// "windows" brand glyph there (<c>content:'\f17a'</c> in keyboard.css)
+    /// instead of the literal "lwin"/"rwin" data-key value. K2 has no FA
+    /// font bundled and Segoe MDL2 Assets has no Windows-logo glyph, so this
+    /// draws the flag shape directly instead of relying on a font.
+    /// </summary>
+    private static FrameworkElement BuildWinIcon()
+    {
+        const double sq = 4.5, gap = 1;
+        var grid = new Grid
+        {
+            Width = sq * 2 + gap, Height = sq * 2 + gap,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment   = VerticalAlignment.Center,
+        };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(sq) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(gap) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(sq) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(sq) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(gap) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(sq) });
+
+        for (int r = 0; r < 2; r++)
+        for (int c = 0; c < 2; c++)
+        {
+            var rect = new System.Windows.Shapes.Rectangle { Fill = Brushes.White };
+            Grid.SetRow(rect, r * 2);
+            Grid.SetColumn(rect, c * 2);
+            grid.Children.Add(rect);
+        }
         return grid;
     }
 
@@ -299,20 +357,95 @@ public partial class MainWindow
                 // more than one legend, the whole pseudo-element is 7px. All white.
                 double fs       = kd.W < 30 ? 6 : 8;   // single legend
                 double fsMulti  = kd.W < 30 ? 6 : 7;   // multi-legend (BC 7px)
+                double fsBig    = fs + 1;               // bumped size for multi-legend keycaps
                 string? altLbl     = KeyLabelMap.AltLabel(_evLayoutType, kd.MatrixId);
                 string? altGrLbl   = KeyLabelMap.AltGrLabel(_evLayoutType, kd.MatrixId);
                 string? sAltGrLbl  = KeyLabelMap.ShiftAltGrLabel(_evLayoutType, kd.MatrixId);
 
                 FrameworkElement content;
-                if (altGrLbl is not null || sAltGrLbl is not null)
+                if (kd.MatrixId is 91 or 92)
                 {
-                    // 4-corner keycap (all white, 7px) for keys with an AltGr layer.
-                    content = BuildCornerLegend(kd.Label, altLbl, altGrLbl, sAltGrLbl, fsMulti);
+                    // Windows key: real Base Camp markup is data-key="lwin"/"rwin" but
+                    // CSS overrides it to a Font Awesome "windows" brand glyph (flag
+                    // icon), not literal text — draw the same flag shape instead.
+                    content = BuildWinIcon();
+                }
+                else if (kd.MatrixId == 9)
+                {
+                    // Tab: real Base Camp markup is data-alt="TAB" data-key="⇆" —
+                    // word + arrow glyph stacked, not plain "Tab" text.
+                    var sp = new StackPanel
+                    {
+                        VerticalAlignment   = VerticalAlignment.Center,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                    };
+                    sp.Children.Add(new TextBlock
+                    {
+                        Text                = "TAB",
+                        Foreground          = Brushes.White,
+                        FontSize            = fsMulti,
+                        FontFamily          = _evKeyFont,
+                        TextAlignment       = TextAlignment.Center,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                    });
+                    sp.Children.Add(new TextBlock
+                    {
+                        Text                = "⇆",
+                        Foreground          = Brushes.White,
+                        FontSize            = fsMulti + 1,
+                        FontFamily          = _evKeyFont,
+                        TextAlignment       = TextAlignment.Center,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                    });
+                    content = sp;
+                }
+                else if (altGrLbl is not null && (altLbl is not null || sAltGrLbl is not null))
+                {
+                    // 3/4-corner keycap for keys with AltGr AND shift (and maybe
+                    // Shift+AltGr) legends: all corners a bit bigger than a normal
+                    // letter key, flush into the true corners (BuildCornerLegend
+                    // margin/spacer near zero) — this is the tightest case, so it
+                    // gets everything the key physically has room for.
+                    content = BuildCornerLegend(kd.Label, altLbl, altGrLbl, sAltGrLbl, fsBig, fsBig);
+                }
+                else if (altGrLbl is not null)
+                {
+                    // AltGr-only, no shift legend (e.g. E / €): the 4-corner grid
+                    // would leave the whole top row empty and squeeze both legends
+                    // into the bottom corners. A clean vertical stack reads better —
+                    // base on top, AltGr below (opposite order from the shift-only
+                    // stack below, matching where AltGr is usually printed on a
+                    // real keycap: under the base character, not above it).
+                    var sp = new StackPanel
+                    {
+                        VerticalAlignment   = VerticalAlignment.Center,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                    };
+                    sp.Children.Add(new TextBlock
+                    {
+                        Text                = kd.Label,
+                        Foreground          = Brushes.White,
+                        FontSize            = fsBig,
+                        FontFamily          = _evKeyFont,
+                        TextAlignment       = TextAlignment.Center,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                    });
+                    sp.Children.Add(new TextBlock
+                    {
+                        Text                = altGrLbl,
+                        Foreground          = _evAltGrBrush,
+                        FontSize            = fsMulti + 1,
+                        FontFamily          = _evKeyFont,
+                        TextAlignment       = TextAlignment.Center,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                    });
+                    content = sp;
                 }
                 else if (altLbl is not null)
                 {
-                    // Two-line label (BC): shifted symbol above, primary below —
-                    // both white, both 7px, mirroring data-alt "\a" data-key.
+                    // Two-line label: shifted symbol above (grey, smaller),
+                    // primary below (white, larger) — mirrors a real keycap
+                    // where the base character dominates.
                     var sp = new StackPanel
                     {
                         VerticalAlignment   = VerticalAlignment.Center,
@@ -321,7 +454,7 @@ public partial class MainWindow
                     sp.Children.Add(new TextBlock
                     {
                         Text                = altLbl,
-                        Foreground          = Brushes.White,
+                        Foreground          = _evShiftBrush,
                         FontSize            = fsMulti,
                         FontFamily          = _evKeyFont,
                         TextAlignment       = TextAlignment.Center,
@@ -331,7 +464,7 @@ public partial class MainWindow
                     {
                         Text                = kd.Label,
                         Foreground          = Brushes.White,
-                        FontSize            = fsMulti,
+                        FontSize            = fs,
                         FontFamily          = _evKeyFont,
                         TextAlignment       = TextAlignment.Center,
                         HorizontalAlignment = HorizontalAlignment.Center,
@@ -340,24 +473,44 @@ public partial class MainWindow
                 }
                 else
                 {
+                    // BC's data-key text wraps at spaces (CSS white-space:normal) —
+                    // narrow nav-cluster keys ("PRT SCN", "SCR LK", "PG UP"...) rely
+                    // on this to fit in a 30px key without overflowing/being clipped
+                    // by the Face border's rounded-corner clip. A single short word
+                    // (e.g. "Esc", "F1") never wraps regardless, so this is safe for
+                    // every key, not just the multi-word ones. Long single words with
+                    // no space to wrap at ("HOME", "ENTER", "PAUSE") get an extra-small
+                    // size instead, since Wrap can't help them (the worst offenders —
+                    // "INSERT", "DELETE" — were shortened to "INS"/"DEL" instead, since
+                    // even a tiny font can't fit 6 characters legibly in a 30px key).
+                    // Only applies to actual 30px keys (<=32): the wider 38px modifier
+                    // row (CTRL/ALT/FN) has enough room already — "CTRL" (4 chars) was
+                    // wrongly caught here and shrunk well below "ALT" (3 chars, never
+                    // matched), an obvious size mismatch between two keys in the same row.
+                    bool   multiWord = kd.Label.Contains(' ');
+                    bool   longWord  = !multiWord && kd.Label.Length >= 4 && kd.W <= 32;
+                    double lblFs     = multiWord ? fsMulti
+                                       : longWord ? (kd.W < 30 ? 4 : 5)
+                                       : fs;
                     content = new TextBlock
                     {
                         Text                = kd.Label,
                         Foreground          = Brushes.White,
-                        FontSize            = fs,
+                        FontSize            = lblFs,
                         FontFamily          = _evKeyFont,
                         TextAlignment       = TextAlignment.Center,
                         VerticalAlignment   = VerticalAlignment.Center,
                         HorizontalAlignment = HorizontalAlignment.Center,
-                        TextWrapping        = TextWrapping.NoWrap,
+                        TextWrapping        = multiWord ? TextWrapping.Wrap : TextWrapping.NoWrap,
                     };
                 }
 
-                var tip = kd.Label;
+                var tip = string.IsNullOrEmpty(kd.Label) ? "Space" : kd.Label;
                 if (altLbl   is not null) tip += $"  ⇧ {altLbl}";
                 if (altGrLbl is not null) tip += $"  AltGr {altGrLbl}";
                 if (sAltGrLbl is not null) tip += $"  ⇧AltGr {sAltGrLbl}";
                 tip += $"   (0x{kd.MatrixId:X2})";
+                if (kd.MatrixId == 261) tip += "  — riservato, non configurabile";
 
                 var btn = new Button
                 {
@@ -394,9 +547,10 @@ public partial class MainWindow
         CvsEvNumpad.Children.Clear();
         BuildEverestKeyboardOverlay();
 
-        _evKeyTints.Clear();
-        BuildEverestLedTints(CvsEvKeyboard, LedMatrixMapping.EverestKeyboard);
-        BuildEverestLedTints(CvsEvNumpad,   LedMatrixMapping.EverestNumpad);
+        _evKeyVisuals.Clear();
+        BuildEverestKeyVisuals(CvsEvKeyboard, LedMatrixMapping.EverestKeyboard);
+        BuildEverestKeyVisuals(CvsEvNumpad,   LedMatrixMapping.EverestNumpad);
+        ApplyKeycapAppearanceToAllKeys();
     }
 
     // ---- Layout selector helpers ------------------------------------------
@@ -449,6 +603,8 @@ public partial class MainWindow
 
     private void InitEverestSettingsPanel()
     {
+        InitKeyboardColorSelector();
+        InitKeycapAppearanceControls();
         _evSettingsSuppress = true;
         try { LoadEverestSettingsFromStore(); }
         finally { _evSettingsSuppress = false; }
@@ -472,6 +628,49 @@ public partial class MainWindow
 
         CkCoreIndicatorLed.IsChecked =
             int.TryParse(_evStore.GetSetting("settings.indicator_led"), out var led) && led != 0;
+
+        bool black = _evStore.GetSetting("settings.keyboard_color") == "black";
+        CbSettingsKeyboardColor.SelectedItem =
+            System.Array.Find(_keyboardColorChoices, c => c.IsBlack == black) ?? _keyboardColorChoices[0];
+        ApplyKeyboardColor(black);
+
+        LoadKeycapAppearanceFromStore();
+    }
+
+    private sealed record KeyboardColorChoice(bool IsBlack, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    private KeyboardColorChoice[] _keyboardColorChoices = [];
+
+    private void InitKeyboardColorSelector()
+    {
+        _keyboardColorChoices =
+        [
+            new KeyboardColorChoice(false, Loc.Get("color_silver")),
+            new KeyboardColorChoice(true,  Loc.Get("color_black")),
+        ];
+        CbSettingsKeyboardColor.ItemsSource       = _keyboardColorChoices;
+        CbSettingsKeyboardColor.DisplayMemberPath = nameof(KeyboardColorChoice.Label);
+    }
+
+    private void CbSettingsKeyboardColor_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_evSettingsSuppress) return;
+        if (CbSettingsKeyboardColor.SelectedItem is not KeyboardColorChoice c) return;
+        _evStore.SetSetting("settings.keyboard_color", c.IsBlack ? "black" : "silver");
+        ApplyKeyboardColor(c.IsBlack);
+    }
+
+    /// <summary>Swaps the keyboard body art (cosmetic only — matches the app's
+    /// rendering to the physical unit's actual color, no device command involved).</summary>
+    private void ApplyKeyboardColor(bool black)
+    {
+        var keyBgFile      = black ? "keybg_black.png"      : "keybg.png";
+        var boardRightFile = black ? "board_right_black.png" : "board_right.png";
+        BrushEvKeyBg.ImageSource      = new BitmapImage(new Uri($"pack://application:,,,/Assets/{keyBgFile}"));
+        BrushEvBoardRight.ImageSource = new BitmapImage(new Uri($"pack://application:,,,/Assets/{boardRightFile}"));
     }
 
     /// <summary>
@@ -547,6 +746,13 @@ public partial class MainWindow
         if (sender is Button btn && TryCustomPaint(btn, matrixId))
             return;
 
+        // FN is reserved for the keyboard's own Fn-layer switching, not assignable
+        // like other keys — Base Camp's own Razor markup marks the FN <span> with
+        // pointer-events:none for the same reason, while still wrapping it in a
+        // "keylighting" div so it keeps participating in RGB/custom-lighting.
+        // TryCustomPaint above already ran, so lighting is unaffected by this guard.
+        if (matrixId == 261) return;
+
         if (_evCapturing)
         {
             // Simulate capture as if the physical key was pressed
@@ -591,19 +797,19 @@ public partial class MainWindow
         EvPersistOrDiscardKey(key);
     }
 
-    /// <summary>Highlights/un-highlights a key in the overlay when physically pressed.</summary>
+    /// <summary>Highlights/un-highlights a key in the overlay when physically pressed. Uses the
+    /// ControlTemplate's "Tint" overlay (see SetKeyTint in MainWindow.KeycapAppearance.cs) rather
+    /// than touching Background directly: the keycap appearance system (custom color, live LED
+    /// tint) owns Background/BorderBrush, and a plain assignment here would both silence it and,
+    /// on release, fall back to the Style's default color instead of the user's configured one.</summary>
     private void EvHighlightKeyboardButton(int matrixId, bool pressed)
     {
         if (!_evKeyboardButtons.TryGetValue(matrixId, out var btn)) return;
 
-        if (pressed)
-            btn.Background = new SolidColorBrush(Color.FromRgb(0x5B, 0xBE, 0xC3)); // K2 teal
-        else
-            btn.ClearValue(Button.BackgroundProperty); // restore style gradient
+        SetKeyTint(btn, pressed ? new SolidColorBrush(Color.FromRgb(0x5B, 0xBE, 0xC3)) : Brushes.Transparent); // K2 teal
 
         // Highlight text with contrasting color too
-        if (btn.Content is TextBlock tb)
-            tb.Foreground = pressed ? Brushes.Black : Brushes.White;
+        SetLegendForeground(btn, pressed ? Brushes.Black : new SolidColorBrush(ResolveEverestKeycapTextColor()));
     }
 
     // ============================================================
@@ -670,8 +876,8 @@ public partial class MainWindow
             var prev = _evMapKeyDefs[index - 1];
             if (_evKeyboardButtons.TryGetValue(prev.MatrixId, out var prevBtn))
             {
-                prevBtn.ClearValue(Button.BackgroundProperty);
-                if (prevBtn.Content is TextBlock ptb) ptb.Foreground = Brushes.White;
+                SetKeyTint(prevBtn, Brushes.Transparent);
+                SetLegendForeground(prevBtn, new SolidColorBrush(ResolveEverestKeycapTextColor()));
             }
         }
 
@@ -681,8 +887,8 @@ public partial class MainWindow
         // Highlight the target key in gold
         if (_evKeyboardButtons.TryGetValue(target.MatrixId, out var btn))
         {
-            btn.Background = new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00)); // gold
-            if (btn.Content is TextBlock tb) tb.Foreground = Brushes.Black;
+            SetKeyTint(btn, new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00))); // gold
+            SetLegendForeground(btn, Brushes.Black);
         }
         LblStatus.Text = Loc.Get("ev_mapping_step", index + 1, _evMapKeyDefs.Length, target.Label);
     }
@@ -696,8 +902,8 @@ public partial class MainWindow
             var last = _evMapKeyDefs[_evMapAwaitingIndex];
             if (_evKeyboardButtons.TryGetValue(last.MatrixId, out var btn))
             {
-                btn.ClearValue(Button.BackgroundProperty);
-                if (btn.Content is TextBlock tb) tb.Foreground = Brushes.White;
+                SetKeyTint(btn, Brushes.Transparent);
+                SetLegendForeground(btn, new SolidColorBrush(ResolveEverestKeycapTextColor()));
             }
         }
 
@@ -1099,6 +1305,11 @@ public partial class MainWindow
         if (LvEvKeys.SelectedItem is not EverestKey key)
         {
             LogEverest("[WARN] select a key first");
+            return;
+        }
+        if (key.KeyMatrix == 261)
+        {
+            LogEverest("[WARN] FN is reserved (Fn-layer key) — no action can be assigned to it");
             return;
         }
         var dlg = new ButtonActionDialog(key.KeyMatrix, key.ActionType, key.ActionValue, _evActionHost)

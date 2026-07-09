@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <strings>
-  <string name="app_title">K2 — Console Mountain</string>
+  <string name="app_title">K2</string>
   <string name="driver_not_opened">Pilote non ouvert.</string>
   <string name="open_driver">Ouvrir le pilote</string>
   <string name="close_driver">Fermer le pilote</string>
@@ -110,7 +110,7 @@
   <string name="ev_configure">Configurer…</string>
   <string name="ev_remove">Supprimer</string>
   <string name="ev_sdk_log">Journal SDK</string>
-  <string name="rgb_lighting">Éclairage RGB</string>
+  <string name="rgb_lighting">Éclairage</string>
   <string name="rgb_effect">Effet :</string>
   <string name="rgb_speed">Vitesse :</string>
   <string name="rgb_direction">Direction :</string>

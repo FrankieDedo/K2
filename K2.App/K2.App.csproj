@@ -68,7 +68,9 @@
     <Resource Include="Assets\mkd_bg.png" />
     <Resource Include="Assets\key_button.png" />
     <Resource Include="Assets\keybg.png" />
+    <Resource Include="Assets\keybg_black.png" />
     <Resource Include="Assets\board_right.png" />
+    <Resource Include="Assets\board_right_black.png" />
     <Resource Include="Assets\keytop.png" />
     <Resource Include="Assets\keytop_binding.png" />
     <Resource Include="Assets\dkd_bg.png" />

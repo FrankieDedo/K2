@@ -290,6 +290,45 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
     /// used by the "Page" action type's rename flow in <c>ButtonActionDialog</c>.</summary>
     public void RenamePage(int pageId, string name) => SetFolderName(pageId, name);
 
+    /// <summary>Clears ActionType/ActionValue (keeping ImagePath — only the navigation
+    /// target goes away, not the tile's picture) on every key across this device+profile
+    /// currently configured with the given action. Used by <see cref="DeletePage"/> so a
+    /// deleted page's "dp_folder" references don't turn into dead links.</summary>
+    private void ClearActionEverywhere(int deviceId, int profile, string actionType, string actionValue)
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = @"UPDATE Buttons SET ActionType=NULL, ActionValue=NULL
+                            WHERE DeviceId=$d AND Profile=$p AND ActionType=$t AND ActionValue=$v";
+        cmd.Parameters.AddWithValue("$d", deviceId);
+        cmd.Parameters.AddWithValue("$p", profile);
+        cmd.Parameters.AddWithValue("$t", actionType);
+        cmd.Parameters.AddWithValue("$v", actionValue);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Deletes a folder sub-page entirely: its own button rows (the page's contents), its
+    /// stored name, and clears (without touching the tile picture of) every key elsewhere on
+    /// this device+profile that navigated into it — otherwise that key would become a dead
+    /// link. Pages nested INSIDE the deleted page (a "dp_folder" key living on one of its
+    /// buttons, pointing at yet another page) are NOT recursively deleted — they become
+    /// unreachable but their rows stay in the DB; out of scope for a first cut of deletion.
+    /// </summary>
+    public void DeletePage(int deviceId, int profile, int pageId)
+    {
+        ClearActionEverywhere(deviceId, profile, "dp_folder", pageId.ToString());
+
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = "DELETE FROM Buttons WHERE DeviceId=$d AND Profile=$p AND PageId=$pg";
+            cmd.Parameters.AddWithValue("$d", deviceId);
+            cmd.Parameters.AddWithValue("$p", profile);
+            cmd.Parameters.AddWithValue("$pg", pageId);
+            cmd.ExecuteNonQuery();
+        }
+        SetSetting($"folder.{pageId}.name", "");
+    }
+
     /// <summary>All DisplayPad sub-pages reachable from this device+profile via a
     /// "dp_folder" key (i.e. anything <see cref="AllocatePageId"/> could collide with) —
     /// used to populate the "assign existing page" picker in <c>ButtonActionDialog</c>.

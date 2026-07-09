@@ -66,11 +66,13 @@ public partial class MainWindow
             var label = new TextBlock
             {
                 TextAlignment = TextAlignment.Center,
+                TextWrapping  = TextWrapping.Wrap,
                 Foreground    = Brushes.White,
-                FontSize      = 8,
+                FontSize      = 11,
                 FontFamily    = new FontFamily("Segoe UI,system-ui,Arial,sans-serif"),
                 VerticalAlignment   = VerticalAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center,
+                Width         = KeySize - 16,
             };
             label.SetBinding(TextBlock.TextProperty, new Binding(nameof(MacroPadKey.Display)));
 

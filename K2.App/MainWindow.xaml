@@ -47,16 +47,35 @@
                     <ControlTemplate TargetType="Button">
                         <!--
                           Layers (bottom → top):
-                          1. Mount — solid dark #090909 background, visible in the gap under the Face
+                          0. LedHalo — glow bleeding outside Mount, Normal/Translucent keycap styles only
+                          1. Mount — tracks BorderBrush (see below), visible in the gap under the Face
                           2. Face  — the actual key (bg #404040, thick borders like BC)
                              2a. SideGrad — dark side gradient (simulates ::before)
                              2b. Tint     — hover/press overlay
                              2c. Content
+
+                          Keycap appearance (MacroPad Settings section, see MainWindow.MacroKeycapAppearance.cs
+                          — same mechanism as Everest's EverestKeyStyle/MainWindow.KeycapAppearance.cs):
+                          Background/BorderBrush are driven from code via the Button's own properties
+                          (TemplateBinding below), never touched directly on Face, so the hover trigger
+                          (which targets Face by name) keeps taking precedence on mouse-over. Mount's
+                          Background is ALSO a TemplateBinding (to BorderBrush, not a plain literal) for
+                          the same reason: a value set directly from code on Mount would permanently
+                          outrank the Hover trigger below.
                         -->
                         <Grid>
+                            <!-- 0. LED halo glow — BlurEffect feathers the edge so it fades out
+                                 instead of ending in the hard-edged ring CornerRadius alone gives -->
+                            <Border x:Name="LedHalo" Margin="-4" CornerRadius="8"
+                                    Background="Transparent" IsHitTestVisible="False">
+                                <Border.Effect>
+                                    <BlurEffect Radius="8" KernelType="Gaussian"/>
+                                </Border.Effect>
+                            </Border>
+
                             <!-- 1. Mount: fills everything, visible under the Face (10px) -->
                             <Border x:Name="Mount"
-                                    Background="#090909"
+                                    Background="{TemplateBinding BorderBrush}"
                                     CornerRadius="5"/>
 
                             <!-- 2. Face: 10px gap at the bottom reveals the Mount (border-bottom: 10px transparent) -->
@@ -78,9 +97,7 @@
                                             </LinearGradientBrush>
                                         </Border.Background>
                                     </Border>
-                                    <!-- 2b. LedTint: realtime LED color (under the text) -->
-                                    <Border x:Name="LedTint" Background="Transparent" CornerRadius="3" IsHitTestVisible="False"/>
-                                    <!-- 2c. Tint overlay hover/press -->
+                                    <!-- 2b. Tint overlay hover/press -->
                                     <Border x:Name="Tint" Background="Transparent" CornerRadius="3" IsHitTestVisible="False"/>
                                     <!-- 2c. Content -->
                                     <ContentPresenter HorizontalAlignment="Center"
@@ -91,21 +108,12 @@
                         </Grid>
 
                         <ControlTemplate.Triggers>
-                            <!-- Hover: face + borders → #656565, side gradient updated -->
+                            <!-- Hover: translucent white wash over the Face's CURRENT color (keycap
+                                 color, live LED tint, physical-press flash, …) instead of replacing it
+                                 with a flat gray — keeps whatever's actually showing recognizable, just
+                                 lightened. -->
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Face"     Property="Background"  Value="#656565"/>
-                                <Setter TargetName="Face"     Property="BorderBrush" Value="#656565"/>
-                                <Setter TargetName="Mount"    Property="Background"  Value="#656565"/>
-                                <Setter TargetName="SideGrad" Property="Background">
-                                    <Setter.Value>
-                                        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
-                                            <GradientStop Color="#55585252" Offset="0"/>
-                                            <GradientStop Color="#00656565" Offset="0.18"/>
-                                            <GradientStop Color="#00656565" Offset="0.82"/>
-                                            <GradientStop Color="#556B6565" Offset="1"/>
-                                        </LinearGradientBrush>
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter TargetName="Tint" Property="Background" Value="#26FFFFFF"/>
                             </Trigger>
                             <!-- Press: face drops 3px onto the Mount (BC: translate(0,3px)) -->
                             <Trigger Property="IsPressed" Value="True">
@@ -135,6 +143,16 @@
              EverestKeyStyle — BC .keyboard span base (Everest / Everest60):
                border: 5px sides, 2px top, 6px transparent bottom
                same Mount/gradient as KeyCapStyle, smaller values
+
+             Keycap appearance (Settings > Aspetto tastiera Everest, see
+             MainWindow.KeycapAppearance.cs): Background/BorderBrush are the
+             live keycap color (Black/White/Custom) and, for Pudding/Reverse
+             Pudding, the live LED color — both driven from code via the
+             Button's own Background/BorderBrush properties (TemplateBinding
+             below), never touched directly on Face, so the hover trigger
+             (which targets Face by name) keeps taking precedence on mouse-over.
+             LedHalo is a separate glow layer (Normal/Translucent styles only),
+             bleeding outside Face/Mount into the gap between keys.
              ============================================================ -->
         <Style x:Key="EverestKeyStyle" TargetType="Button" BasedOn="{StaticResource KeyCapStyle}">
             <!-- Override borders: 5px sides, 2px top, 0 bottom (gap handled by Margin) -->
@@ -143,7 +161,19 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Grid>
-                            <Border x:Name="Mount" Background="#090909" CornerRadius="4"/>
+                            <!-- LED halo glow: bleeds outside Mount, Normal/Translucent keycap styles only.
+                                 BlurEffect feathers the edge so it fades out instead of ending in the
+                                 hard-edged ring CornerRadius alone gives. -->
+                            <Border x:Name="LedHalo" Margin="-4" CornerRadius="7"
+                                    Background="Transparent" IsHitTestVisible="False">
+                                <Border.Effect>
+                                    <BlurEffect Radius="6" KernelType="Gaussian"/>
+                                </Border.Effect>
+                            </Border>
+                            <!-- Mount tracks BorderBrush via TemplateBinding (not a plain literal, and never
+                                 set directly from code — see MainWindow.KeycapAppearance.cs): this way the
+                                 Hover trigger below keeps overriding it on mouse-over. -->
+                            <Border x:Name="Mount" Background="{TemplateBinding BorderBrush}" CornerRadius="4"/>
                             <!-- Face: 6px gap at the bottom (border-bottom: 6px transparent) -->
                             <Border x:Name="Face"
                                     Background="{TemplateBinding Background}"
@@ -162,29 +192,20 @@
                                             </LinearGradientBrush>
                                         </Border.Background>
                                     </Border>
-                                    <Border x:Name="LedTint" Background="Transparent" CornerRadius="3" IsHitTestVisible="False"/>
                                     <Border x:Name="Tint" Background="Transparent" CornerRadius="3" IsHitTestVisible="False"/>
                                     <ContentPresenter HorizontalAlignment="Center"
                                                       VerticalAlignment="Center"
-                                                      Margin="2"/>
+                                                      Margin="1"/>
                                 </Grid>
                             </Border>
                         </Grid>
                         <ControlTemplate.Triggers>
+                            <!-- Hover: translucent white wash over the Face's CURRENT color (keycap
+                                 color, live LED tint, physical-press flash, …) instead of replacing it
+                                 with a flat gray — keeps whatever's actually showing recognizable, just
+                                 lightened. -->
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Face"     Property="Background"  Value="#656565"/>
-                                <Setter TargetName="Face"     Property="BorderBrush" Value="#656565"/>
-                                <Setter TargetName="Mount"    Property="Background"  Value="#656565"/>
-                                <Setter TargetName="SideGrad" Property="Background">
-                                    <Setter.Value>
-                                        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
-                                            <GradientStop Color="#55585252" Offset="0"/>
-                                            <GradientStop Color="#00656565" Offset="0.18"/>
-                                            <GradientStop Color="#00656565" Offset="0.82"/>
-                                            <GradientStop Color="#556B6565" Offset="1"/>
-                                        </LinearGradientBrush>
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter TargetName="Tint" Property="Background" Value="#26FFFFFF"/>
                             </Trigger>
                             <!-- Press: face drops 3px (bottom 6→3, top +3) -->
                             <Trigger Property="IsPressed" Value="True">
@@ -619,7 +640,10 @@
             <Grid x:Name="PnlEverest">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>  <!-- toolbar -->
+                        <!-- Fixed (not Auto): keeps the sidebar/content start position
+                             identical across devices regardless of which toolbar
+                             buttons/breadcrumb happen to be visible for this device. -->
+                        <RowDefinition Height="32"/>    <!-- toolbar -->
                         <RowDefinition Height="*"/>     <!-- 3-pane main -->
                     </Grid.RowDefinitions>
 
@@ -660,7 +684,7 @@
                                              IsChecked="True" Checked="EvSection_Changed"/>
                                 <RadioButton x:Name="RbSecRgb"
                                              Style="{StaticResource SectionTabStyle}"
-                                             Content="RGB &amp; Lighting" GroupName="EvSections"
+                                             Content="{loc:Get rgb_lighting}" GroupName="EvSections"
                                              Checked="EvSection_Changed"/>
                                 <RadioButton x:Name="RbSecDial"
                                              Style="{StaticResource SectionTabStyle}"
@@ -692,6 +716,13 @@
                                 <DockPanel>
                                 <StackPanel x:Name="SpEvLayout" Orientation="Horizontal"
                                             HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <!-- +20% zoom on request: LayoutTransform (not RenderTransform)
+                                             so the Grid/Border around it re-measures at the scaled size
+                                             and WPF's hit-testing keeps mapping clicks to the right Button
+                                             automatically — no changes needed to KeyDef X/Y/W/H math. -->
+                                        <StackPanel.LayoutTransform>
+                                            <ScaleTransform ScaleX="1.2" ScaleY="1.2"/>
+                                        </StackPanel.LayoutTransform>
                                         <!-- Left column: dock overlay + keyboard body -->
                                         <Grid x:Name="GrdEvKeyColumn">
                                             <Grid.RowDefinitions>
@@ -701,7 +732,7 @@
                                             <Canvas x:Name="CvsEvKeyboard" Grid.Row="1"
                                                     Width="642" Height="260" ClipToBounds="True">
                                                 <Canvas.Background>
-                                                    <ImageBrush ImageSource="Assets/keybg.png" Stretch="Fill"/>
+                                                    <ImageBrush x:Name="BrushEvKeyBg" ImageSource="Assets/keybg.png" Stretch="Fill"/>
                                                 </Canvas.Background>
                                             </Canvas>
                                             <!-- Dock overlay: keytop art + a transparent Canvas holding the
@@ -721,7 +752,7 @@
                                         <Canvas x:Name="CvsEvNumpad" Width="166" Height="260"
                                                 ClipToBounds="True" Margin="6,0,0,0" VerticalAlignment="Bottom">
                                             <Canvas.Background>
-                                                <ImageBrush ImageSource="Assets/board_right.png" Stretch="Fill"/>
+                                                <ImageBrush x:Name="BrushEvBoardRight" ImageSource="Assets/board_right.png" Stretch="Fill"/>
                                             </Canvas.Background>
                                         </Canvas>
                                     </StackPanel>
@@ -1008,6 +1039,52 @@
                                             </WrapPanel>
 
                                             <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                <TextBlock Text="{loc:Get settings_keyboard_color}" VerticalAlignment="Center"
+                                                           FontWeight="SemiBold" Margin="0,0,6,0"/>
+                                                <ComboBox x:Name="CbSettingsKeyboardColor" Width="120"
+                                                          SelectionChanged="CbSettingsKeyboardColor_SelectionChanged"/>
+                                            </WrapPanel>
+
+                                            <TextBlock Text="{loc:Get settings_keycap_group}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                            <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                <TextBlock Text="{loc:Get settings_keycap_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <RadioButton x:Name="RbEvKeycapBlack" Content="{loc:Get settings_keycap_black}"
+                                                             GroupName="EvKeycapColor" VerticalAlignment="Center"
+                                                             Margin="0,0,10,0" Checked="RbEvKeycapColor_Checked"/>
+                                                <RadioButton x:Name="RbEvKeycapWhite" Content="{loc:Get settings_keycap_white}"
+                                                             GroupName="EvKeycapColor" VerticalAlignment="Center"
+                                                             Margin="0,0,10,0" Checked="RbEvKeycapColor_Checked"/>
+                                                <RadioButton x:Name="RbEvKeycapCustom" Content="{loc:Get settings_keycap_custom}"
+                                                             GroupName="EvKeycapColor" VerticalAlignment="Center"
+                                                             Margin="0,0,6,0" Checked="RbEvKeycapColor_Checked"/>
+                                                <Button x:Name="BtnEvKeycapCustomColor" Width="32" Height="20"
+                                                        Background="#404040" BorderThickness="2" BorderBrush="#3A3A40"
+                                                        Click="BtnEvKeycapCustomColor_Click"/>
+                                            </WrapPanel>
+                                            <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                <TextBlock Text="{loc:Get settings_keycap_text_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <RadioButton x:Name="RbEvKeycapTextBlack" Content="{loc:Get settings_keycap_black}"
+                                                             GroupName="EvKeycapTextColor" VerticalAlignment="Center"
+                                                             Margin="0,0,10,0" Checked="RbEvKeycapTextColor_Checked"/>
+                                                <RadioButton x:Name="RbEvKeycapTextWhite" Content="{loc:Get settings_keycap_white}"
+                                                             GroupName="EvKeycapTextColor" VerticalAlignment="Center"
+                                                             Margin="0,0,10,0" Checked="RbEvKeycapTextColor_Checked"/>
+                                                <RadioButton x:Name="RbEvKeycapTextCustom" Content="{loc:Get settings_keycap_custom}"
+                                                             GroupName="EvKeycapTextColor" VerticalAlignment="Center"
+                                                             Margin="0,0,6,0" Checked="RbEvKeycapTextColor_Checked"/>
+                                                <Button x:Name="BtnEvKeycapTextColor" Width="32" Height="20"
+                                                        Background="White" BorderThickness="2" BorderBrush="#3A3A40"
+                                                        Click="BtnEvKeycapTextColor_Click"/>
+                                            </WrapPanel>
+                                            <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                <TextBlock Text="{loc:Get settings_keycap_style}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <ComboBox x:Name="CbEvKeycapStyle" Width="230"
+                                                          SelectionChanged="CbEvKeycapStyle_SelectionChanged"/>
+                                            </WrapPanel>
+                                            <TextBlock Text="{loc:Get settings_keycap_hint}" Foreground="#9A9AA2"
+                                                       TextWrapping="Wrap" Margin="0,0,0,10" FontSize="12"/>
+
+                                            <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
                                                 <TextBlock Text="{loc:Get ev_layout}" VerticalAlignment="Center"
                                                            FontWeight="SemiBold" Margin="0,0,6,0"/>
                                                 <ComboBox x:Name="CbEvKeyboardLayout" Width="200" Margin="0,0,16,0"/>
@@ -1131,7 +1208,7 @@
             <Grid x:Name="PnlMacroPad" Visibility="Collapsed">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>  <!-- toolbar -->
+                        <RowDefinition Height="32"/>    <!-- toolbar (fixed, see PnlEverest) -->
                         <RowDefinition Height="*"/>     <!-- main area -->
                     </Grid.RowDefinitions>
 
@@ -1179,11 +1256,18 @@
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get led_lighting}" GroupName="MpSections"
                                              Checked="MpSection_Changed"/>
+                                <RadioButton x:Name="RbMpSecSettings"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get ev_settings}" GroupName="MpSections"
+                                             Checked="MpSection_Changed"/>
                             </StackPanel>
                         </Border>
 
-                        <!-- Middle: keys canvas (top) + settings panel (bottom) -->
-                        <Grid Grid.Column="1" Margin="0,0,8,0">
+                        <!-- Middle: keys canvas (top) + settings panel (bottom).
+                             No margin here (matches PnlEverest): the gap before the
+                             common-actions column comes from that column's own left
+                             margin, so this box is exactly as wide as Everest's. -->
+                        <Grid Grid.Column="1">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" MinHeight="160"/>  <!-- device -->
                                 <RowDefinition Height="Auto"/>               <!-- settings -->
@@ -1238,19 +1322,23 @@
                                         <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,0,16,6">
                                             <TextBlock Text="{loc:Get rgb_effect}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                             <ComboBox x:Name="CbMacroEffect" Width="140"
-                                                      SelectionChanged="CbMacroEffect_SelectionChanged"/>
+                                                      SelectionChanged="CbMacroEffect_SelectionChanged"
+                                                      DropDownOpened="CbMacroEffect_DropDownOpened"
+                                                      DropDownClosed="CbMacroEffect_DropDownClosed"/>
                                         </StackPanel>
-                                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,0,16,6">
+                                        <StackPanel x:Name="PnlMpSpeed" Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,0,16,6">
                                             <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                             <ComboBox x:Name="CbMacroSpeed" Width="90"
                                                       SelectionChanged="CbMacroEffectParam_Changed"/>
                                         </StackPanel>
-                                        <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Margin="0,0,16,6">
+                                        <StackPanel x:Name="PnlMpDirection" Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Margin="0,0,16,6">
                                             <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                             <ComboBox x:Name="CbMacroDirection" Width="180"
                                                       SelectionChanged="CbMacroEffectParam_Changed"/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal" Margin="0,0,16,6">
+                                            <CheckBox x:Name="CkMacroRainbow" Content="{loc:Get rgb_rainbow}" Margin="0,0,10,0"
+                                                      VerticalAlignment="Center" Click="CkMacroRainbow_Click" ToolTip="{loc:Get rgb_rainbow_tip}"/>
                                             <CheckBox x:Name="CkMacroSync" Content="{loc:Get led_sync_profiles}"
                                                       VerticalAlignment="Center" Click="CkMacroSync_Click"/>
                                         </StackPanel>
@@ -1282,15 +1370,61 @@
                                                     BorderBrush="#3A3A40" Click="BtnMacroColor_Click" Tag="3"/>
                                         </StackPanel>
                                     </Grid>
+
+                                    <!-- ── SETTINGS (keycap appearance, same as Everest) ── -->
+                                    <StackPanel x:Name="PnlMpSecSettings" Visibility="Collapsed">
+                                        <TextBlock Text="{loc:Get settings_keycap_group}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                            <TextBlock Text="{loc:Get settings_keycap_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                            <RadioButton x:Name="RbMpKeycapBlack" Content="{loc:Get settings_keycap_black}"
+                                                         GroupName="MpKeycapColor" VerticalAlignment="Center"
+                                                         Margin="0,0,10,0" Checked="RbMpKeycapColor_Checked"/>
+                                            <RadioButton x:Name="RbMpKeycapWhite" Content="{loc:Get settings_keycap_white}"
+                                                         GroupName="MpKeycapColor" VerticalAlignment="Center"
+                                                         Margin="0,0,10,0" Checked="RbMpKeycapColor_Checked"/>
+                                            <RadioButton x:Name="RbMpKeycapCustom" Content="{loc:Get settings_keycap_custom}"
+                                                         GroupName="MpKeycapColor" VerticalAlignment="Center"
+                                                         Margin="0,0,6,0" Checked="RbMpKeycapColor_Checked"/>
+                                            <Button x:Name="BtnMpKeycapCustomColor" Width="32" Height="20"
+                                                    Background="#404040" BorderThickness="2" BorderBrush="#3A3A40"
+                                                    Click="BtnMpKeycapCustomColor_Click"/>
+                                        </WrapPanel>
+                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                            <TextBlock Text="{loc:Get settings_keycap_text_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                            <RadioButton x:Name="RbMpKeycapTextBlack" Content="{loc:Get settings_keycap_black}"
+                                                         GroupName="MpKeycapTextColor" VerticalAlignment="Center"
+                                                         Margin="0,0,10,0" Checked="RbMpKeycapTextColor_Checked"/>
+                                            <RadioButton x:Name="RbMpKeycapTextWhite" Content="{loc:Get settings_keycap_white}"
+                                                         GroupName="MpKeycapTextColor" VerticalAlignment="Center"
+                                                         Margin="0,0,10,0" Checked="RbMpKeycapTextColor_Checked"/>
+                                            <RadioButton x:Name="RbMpKeycapTextCustom" Content="{loc:Get settings_keycap_custom}"
+                                                         GroupName="MpKeycapTextColor" VerticalAlignment="Center"
+                                                         Margin="0,0,6,0" Checked="RbMpKeycapTextColor_Checked"/>
+                                            <Button x:Name="BtnMpKeycapTextColor" Width="32" Height="20"
+                                                    Background="White" BorderThickness="2" BorderBrush="#3A3A40"
+                                                    Click="BtnMpKeycapTextColor_Click"/>
+                                        </WrapPanel>
+                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <TextBlock Text="{loc:Get settings_keycap_style}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                            <ComboBox x:Name="CbMpKeycapStyle" Width="230"
+                                                      SelectionChanged="CbMpKeycapStyle_SelectionChanged"/>
+                                        </WrapPanel>
+                                        <TextBlock Text="{loc:Get settings_keycap_hint}" Foreground="#9A9AA2"
+                                                   TextWrapping="Wrap" Margin="0,0,0,4" FontSize="12"/>
+                                    </StackPanel>
                                 </Grid>
                                 </ScrollViewer>
                             </Border>
                         </Grid>
 
                         <!-- Common actions (same rule for all devices): uniform width/height,
-                             vertical stack, grouped Profile / Import / Device -->
+                             vertical stack, grouped Profile / Import / Device.
+                             Left-only margin (not on the device box) mirrors PnlEverest exactly,
+                             so column 1 keeps the same width in both. The gap before the (normally
+                             collapsed) debug column lives on that column's own left margin instead,
+                             so it doesn't cost width here in the common (non-debug) case. -->
                         <Border Grid.Column="2" Background="#111115" CornerRadius="6"
-                                Margin="0,0,8,0" Padding="10" VerticalAlignment="Top">
+                                Margin="8,0,0,0" Padding="10" VerticalAlignment="Top">
                             <StackPanel>
                                 <TextBlock Text="{loc:Get profile}" Style="{StaticResource K2SideGroupHeader}"/>
                                 <ComboBox x:Name="CbProfile" Style="{StaticResource K2SideActionCombo}"
@@ -1334,7 +1468,7 @@
                         </Border>
 
                         <!-- Debug panel: visible only in debug mode -->
-                        <Grid x:Name="PnlMpDebugRight" Grid.Column="3" Width="380" Visibility="Collapsed" Margin="0,0,0,0">
+                        <Grid x:Name="PnlMpDebugRight" Grid.Column="3" Width="380" Visibility="Collapsed" Margin="8,0,0,0">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
@@ -1368,7 +1502,7 @@
             <Grid x:Name="PnlDisplayPad" Visibility="Collapsed">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>  <!-- toolbar -->
+                        <RowDefinition Height="32"/>    <!-- toolbar (fixed, see PnlEverest) -->
                         <RowDefinition Height="*"/>     <!-- main area -->
                     </Grid.RowDefinitions>
 
@@ -1421,11 +1555,18 @@
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get positioning}" GroupName="DpSections"
                                              Checked="DpSection_Changed"/>
+                                <RadioButton x:Name="RbDpSecPages"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get dp_pages}" GroupName="DpSections"
+                                             Checked="DpSection_Changed"/>
                             </StackPanel>
                         </Border>
 
-                        <!-- Middle: keys canvas (top) + settings panel (bottom) -->
-                        <Grid Grid.Column="1" Margin="0,0,8,0">
+                        <!-- Middle: keys canvas (top) + settings panel (bottom).
+                             No margin here (matches PnlEverest): the gap before the
+                             common-actions column comes from that column's own left
+                             margin, so this box is exactly as wide as Everest's. -->
+                        <Grid Grid.Column="1">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*" MinHeight="160"/>  <!-- device -->
                                 <RowDefinition Height="Auto"/>               <!-- settings -->
@@ -1468,15 +1609,60 @@
                                                 Style="{StaticResource K2IconButton}" Tag="&#xE14A;"
                                                 Click="BtnDpRotateCw_Click"/>
                                     </StackPanel>
+
+                                    <!-- ── PAGES (folder sub-pages created for this device+profile) ── -->
+                                    <StackPanel x:Name="PnlDpSecPages" Orientation="Vertical" Visibility="Collapsed">
+                                        <TextBlock x:Name="LblDpNoPages" Text="{loc:Get dp_no_pages}"
+                                                   Foreground="#9A9AA2" TextWrapping="Wrap" Visibility="Collapsed"/>
+                                        <ItemsControl x:Name="LstDpPages">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Vertical"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border x:Name="RowBorder" Padding="6,3" CornerRadius="4"
+                                                            Background="Transparent">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                                                       Foreground="#CCCCCC" VerticalAlignment="Center"
+                                                                       TextTrimming="CharacterEllipsis"/>
+                                                            <Button x:Name="BtnRowDelete" Grid.Column="1"
+                                                                    Content="{loc:Get dp_delete_page}"
+                                                                    Style="{StaticResource K2IconButton}" Tag="&#xE74D;"
+                                                                    Visibility="Collapsed" Margin="8,0,0,0"
+                                                                    CommandParameter="{Binding PageId}"
+                                                                    Click="BtnDpDeletePage_Click"/>
+                                                        </Grid>
+                                                    </Border>
+                                                    <DataTemplate.Triggers>
+                                                        <Trigger SourceName="RowBorder" Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="BtnRowDelete" Property="Visibility" Value="Visible"/>
+                                                            <Setter TargetName="RowBorder" Property="Background" Value="#1E1E24"/>
+                                                        </Trigger>
+                                                    </DataTemplate.Triggers>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
                                 </Grid>
                                 </ScrollViewer>
                             </Border>
                         </Grid>
 
                         <!-- Common actions (same rule for all devices): uniform width/height,
-                             vertical stack, grouped Profile / Import / Device -->
+                             vertical stack, grouped Profile / Import / Device.
+                             Left-only margin (not on the device box) mirrors PnlEverest exactly,
+                             so column 1 keeps the same width in both. The gap before the (normally
+                             collapsed) debug column lives on that column's own left margin instead,
+                             so it doesn't cost width here in the common (non-debug) case. -->
                         <Border Grid.Column="2" Background="#111115" CornerRadius="6"
-                                Margin="0,0,8,0" Padding="10" VerticalAlignment="Top">
+                                Margin="8,0,0,0" Padding="10" VerticalAlignment="Top">
                             <StackPanel>
                                 <TextBlock Text="{loc:Get profile}" Style="{StaticResource K2SideGroupHeader}"/>
                                 <ComboBox x:Name="CbDpProfile" Style="{StaticResource K2SideActionCombo}"
@@ -1529,7 +1715,7 @@
                         </Border>
 
                         <!-- Debug panel: visible only in debug mode -->
-                        <Grid x:Name="PnlDpDebugRight" Grid.Column="3" Width="380" Visibility="Collapsed">
+                        <Grid x:Name="PnlDpDebugRight" Grid.Column="3" Width="380" Visibility="Collapsed" Margin="8,0,0,0">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>

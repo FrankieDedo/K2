@@ -35,7 +35,10 @@ public partial class MainWindow
     private readonly IDisplayPadClient _dpClient = AppSettings.DisplayPadNativeEngine
         ? new DisplayPadNativeClient()
         : new DisplayPadSatelliteClient();
-    private readonly DisplayPadStore _dpStore = new();
+    /// <summary>Internal (not private): read directly by <see cref="DisplayPadBackgroundActionHost"/>,
+    /// which executes actions for connected pads other than the foreground tab (see
+    /// <see cref="DpActivateBackgroundDevice"/>) and cannot go through the UI-bound fields.</summary>
+    internal readonly DisplayPadStore _dpStore = new();
 
     // ---- Key model ----
     internal readonly DisplayPadKey[] _dpKeys = Enumerable.Range(0, 12)
@@ -43,6 +46,8 @@ public partial class MainWindow
     private readonly Button[] _dpButtons = new Button[12];
     private readonly ObservableCollection<DpDeviceRow> _dpDevices = new();
     private readonly ObservableCollection<int> _dpDeviceIds = new();
+    /// <summary>Backing list for the "Pages" sidebar section — see <see cref="RefreshDpPagesList"/>.</summary>
+    private readonly ObservableCollection<DpPageRow> _dpPages = new();
     /// <summary>Maps SDK ID → progressive label ("DisplayPad 1", "DisplayPad 2"…).</summary>
     private readonly Dictionary<int, string> _dpDeviceLabels = new();
     private readonly Dictionary<int, int> _dpMatrixToIndex = new();
@@ -83,6 +88,25 @@ public partial class MainWindow
         (4,  0x2C), (5,  0x35), (6,  0x3E), (7,  0x47),
         (8,  0x50), (9,  0x59), (10, 0x62), (11, 0x7D),
     };
+
+    /// <summary>
+    /// Matrix→index map for connected DisplayPads that are NOT the foreground tab (see
+    /// <see cref="DpHandleBackgroundKey"/>). There is no persisted per-device remap for the
+    /// DisplayPad (unlike MacroPad's <c>GetKeyMap</c>) — <c>_dpMatrixToIndex</c>/remap-mode
+    /// only ever apply to whichever device is on-screen, so every physical pad uses the same
+    /// hardware-constant default map; built once from <see cref="DpDefaultKeyMap"/>.
+    /// </summary>
+    private static readonly Dictionary<int, int> DpDefaultMatrixToIndex =
+        DpDefaultKeyMap.ToDictionary(m => m.Matrix, m => m.Index);
+
+    // ---- Background devices: connected DisplayPads the user hasn't opened the tab for yet.
+    // _dpKeys/_dpMatrixToIndex/_currentDpPageId only ever reflect the foreground tab
+    // (_activeDpDeviceId); every OTHER connected pad still needs to respond to its own
+    // physical key presses using ITS OWN persisted profile/page — see DpActivateBackgroundDevice/
+    // DpHandleBackgroundKey/DpUploadPageForDevice.
+    private readonly Dictionary<int, ButtonActionEngine> _dpBgEngines = new();
+    private readonly Dictionary<int, int> _dpBgPageId = new();
+    private readonly Dictionary<int, Stack<int>> _dpBgPageHistory = new();
 
     // ---- Canvas layout (mkd_bg.png coordinates at 510×370, same graphic as MacroPad) ----
     private const double DpKeyW = 60;   // BC: 60×60
@@ -135,6 +159,8 @@ public partial class MainWindow
 
         LvDpDevices.ItemsSource = _dpDevices;
         // DP device tabs are added to TcDevices by DpRefreshDevices; CbDpProfile by DpRefreshProfiles
+
+        LstDpPages.ItemsSource = _dpPages;
 
         _dpSuppressRotation = true;
         CbDpRotation.ItemsSource = new[]
@@ -717,6 +743,13 @@ public partial class MainWindow
             DpSelectProfileSlot(slot);
             ResetDpNavigation();
         }
+        else
+        {
+            // Background-device counterpart of ResetDpNavigation() above: a profile switch
+            // always lands on that device's root page, same as the foreground path.
+            _dpBgPageId[id] = 0;
+            if (_dpBgPageHistory.TryGetValue(id, out var hist)) hist.Clear();
+        }
         // Hardware repaint is serialized + coalesced per device (see DpRequestRepaint):
         // the store/UI switched instantly above; the device repaints when free.
         DpRequestRepaint(id);
@@ -1192,8 +1225,17 @@ public partial class MainWindow
         }
 
         // Key editing is only enabled while the "Key Binding" section is active
-        // (folder/back navigation above always works, since that's normal usage).
-        if (!IsDpKeyBindingSectionActive) return;
+        // (folder/back navigation above always works, since that's normal usage). Clicking a
+        // key from another section (Positioning, Pages, ...) jumps there instead of silently
+        // doing nothing — RbDpSecKeyBinding.IsChecked fires DpSection_Changed synchronously,
+        // so the user still has to click the key again to actually open the config dialog
+        // (this click was ambiguous: "switch to Key Binding" and "configure this key" aren't
+        // guaranteed to be the same intent).
+        if (!IsDpKeyBindingSectionActive)
+        {
+            RbDpSecKeyBinding.IsChecked = true;
+            return;
+        }
 
         // Unified dialog: image + action
         var dlg = new DpKeyConfigDialog(key.Index, key.ImagePath, key.ActionType, key.ActionValue) { Owner = this };
@@ -1398,6 +1440,66 @@ public partial class MainWindow
     /// <summary>Facade for <see cref="DisplayPadActionHost"/>'s <c>IActionHost.RenamePage</c>.</summary>
     internal void DpRenamePage(int pageId, string name) => _dpStore.RenamePage(pageId, name);
 
+    // ================================================================
+    // Pages section (list + delete existing folder sub-pages)
+    // ================================================================
+
+    /// <summary>Repopulates <see cref="_dpPages"/> from the store for the currently selected
+    /// device+profile — called whenever the "Pages" section becomes active (see
+    /// <see cref="ShowDpSection"/>), so it always reflects pages created/renamed elsewhere
+    /// (context menu, or the "Page" action type in <c>ButtonActionDialog</c>).</summary>
+    private void RefreshDpPagesList()
+    {
+        _dpPages.Clear();
+        if (DpSelectedDeviceId() is int id)
+            foreach (var (pageId, name) in _dpStore.ListPages(id, DpCurrentProfile()))
+                _dpPages.Add(new DpPageRow(pageId, name));
+
+        LblDpNoPages.Visibility = _dpPages.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Deletes a folder page after a confirmation prompt — the row's "Delete" button
+    /// (see <c>MainWindow.xaml</c>'s <c>LstDpPages</c> template) only shows up on hover.</summary>
+    private void BtnDpDeletePage_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.CommandParameter is not int pageId) return;
+        if (DpSelectedDeviceId() is not int id) return;
+
+        string name = _dpStore.GetFolderName(pageId) ?? $"Page {pageId}";
+        var res = MessageBox.Show(
+            Loc.Get("dp_delete_page_confirm", name),
+            Loc.Get("dp_delete_page_title"),
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+        if (res != MessageBoxResult.OK) return;
+
+        int profile = DpCurrentProfile();
+        DpDeletePage(id, profile, pageId);
+        RefreshDpPagesList();
+        DpLog($"[ACT] page {pageId} \"{name}\" deleted");
+    }
+
+    /// <summary>Deletes a page (see <see cref="DisplayPadStore.DeletePage"/>) and keeps the
+    /// live UI in sync: if the page being deleted is the one currently shown on the device
+    /// grid, navigates out of it first (it's about to stop existing); either way the grid is
+    /// reloaded so any key elsewhere that pointed at the deleted page shows as actionless.</summary>
+    private void DpDeletePage(int deviceId, int profile, int pageId)
+    {
+        _dpStore.DeletePage(deviceId, profile, pageId);
+
+        if (_currentDpPageId == pageId && _dpPageHistory.Count > 0)
+        {
+            DpNavigateBack(); // pops out of the now-deleted page and reloads the grid
+            return;
+        }
+        if (_currentDpPageId == pageId)
+            ResetDpNavigation(); // no history to pop back to: fall back to root
+
+        // Either the deleted page wasn't the one on screen (a key elsewhere pointing at it
+        // must show as actionless now) or we just fell back to root above — reload either way.
+        DpReloadCurrentProfile(persistent: false);
+    }
+
     /// <summary>Binds this key to navigate back to the parent page — the in-app equivalent
     /// of Base Camp's "Back" button (see <see cref="DpMnuCreateFolder_Click"/> remarks).</summary>
     private void DpMnuSetBack_Click(object sender, RoutedEventArgs e)
@@ -1449,6 +1551,12 @@ public partial class MainWindow
         {
             DpGifAnimator.StopAllForDevice(goneId);
             DpFullscreenAnimator.Stop(goneId);
+            // Forget this device's background-activation bookkeeping too: its onboard icon
+            // memory won't survive the replug, so if it comes back it must be treated as
+            // "never activated" again (re-uploaded), not silently skipped — see the
+            // "already tracked" guard below.
+            _dpBgPageId.Remove(goneId);
+            _dpBgPageHistory.Remove(goneId);
         }
         var items = new List<DpDeviceItem>();
         int progressive = 1;
@@ -1505,6 +1613,20 @@ public partial class MainWindow
             // starts responding immediately but doesn't steal focus (same concern as above).
             _activeDpDeviceId = items[0].SdkId;
             DpActivateDevice(_activeDpDeviceId.Value);
+        }
+
+        // Every OTHER connected DisplayPad (multi-device setups) must ALSO respond to physical
+        // key presses immediately, not just the one that became _activeDpDeviceId above — see
+        // DpActivateBackgroundDevice/DpHandleBackgroundKey. Without this, only the first pad
+        // (or whichever tab the user opens) is ever "activated"; the rest stay mute until the
+        // user clicks their tab too. Skip devices already tracked in _dpBgPageId (activated by
+        // a previous refresh) so a plug event for ONE device doesn't re-upload every OTHER
+        // already-active pad's icons for nothing.
+        foreach (var item in items)
+        {
+            if (item.SdkId == _activeDpDeviceId) continue;
+            if (_dpBgPageId.ContainsKey(item.SdkId)) continue;
+            DpActivateBackgroundDevice(item.SdkId);
         }
     }
 
@@ -1646,7 +1768,18 @@ public partial class MainWindow
             return;
         }
         _dpRepaintBusy[id] = true;
-        DpReloadAndPreloadProfile(blankFirst: true);
+        // BUG FIX: this used to call DpReloadAndPreloadProfile() unconditionally, which
+        // ignores its `id` parameter entirely and always reloads DpSelectedDeviceId() (the
+        // foreground tab) — so a cross-device or background-device profile switch (id !=
+        // the visible tab) silently repainted the WRONG pad's screen (DB state was correct,
+        // hardware just never got the new icons until the user opened that pad's own tab).
+        // Route to the foreground-only reload (which also updates the UI grid) ONLY when
+        // `id` really is the visible tab; every other device uses the background uploader.
+        if (DpSelectedDeviceId() is int selId && id == selId)
+            DpReloadAndPreloadProfile(blankFirst: true);
+        else
+            DpUploadPageForDevice(id, _dpStore.GetCurrentProfile(id), _dpBgPageId.GetValueOrDefault(id, 0),
+                persistent: false, blankFirst: true);
         var chain = _dpUploadChain.TryGetValue(id, out var t) ? t : Task.CompletedTask;
         chain.ContinueWith(_ => Dispatcher.BeginInvoke(() =>
         {
@@ -1681,6 +1814,126 @@ public partial class MainWindow
         // see project_displaypad_profile_corruption memory). Skipping it roughly halves the
         // number of USB transfers per reload.
         DpReloadCurrentProfile(persistent: false, blankFirst: blankFirst);
+    }
+
+    // ================================================================
+    // Background devices (connected DisplayPad, not the foreground tab)
+    // ================================================================
+
+    /// <summary>
+    /// Prepares a connected DisplayPad that is NOT the current foreground tab so it keeps
+    /// responding to its own physical key presses and shows the right icons right away —
+    /// see <see cref="DpHandleBackgroundKey"/>. Mirrors the essential part of
+    /// <see cref="DpActivateDevice"/>/<see cref="DpReloadAndPreloadProfile"/> WITHOUT
+    /// touching any UI-bound field (_dpKeys, CbDpProfile, _dpRotation, ...) — those only
+    /// ever represent whichever single device tab is actually visible.
+    /// </summary>
+    private void DpActivateBackgroundDevice(int id)
+    {
+        _dpBgPageId[id] = 0;
+        _dpBgPageHistory[id] = new Stack<int>();
+        int profile = _dpStore.GetCurrentProfile(id);
+        DpUploadPageForDevice(id, profile, 0, persistent: false);
+        DpLog($"[UI] Background device {id} activated (profile {profile}).");
+    }
+
+    /// <summary>
+    /// Uploads one page's icons (or its fullscreen image) to the hardware for an arbitrary
+    /// device/profile/page, without touching UI-bound state — the background counterpart of
+    /// <see cref="DpReloadCurrentProfile"/> (which also updates the visible key grid and is
+    /// reserved for the foreground tab). Chained onto the same per-device <see cref="_dpUploadChain"/>,
+    /// so it can never race the foreground reload's uploads on the wire.
+    /// <paramref name="blankFirst"/> mirrors <see cref="DpReloadCurrentProfile"/>'s own flag: pass
+    /// true on a real profile switch so a button with NO image in the new profile actually goes
+    /// blank instead of keeping the previous profile's icon on screen (buttons that DO have an
+    /// image get overwritten right after anyway, so this only matters for the empty ones).
+    /// </summary>
+    private void DpUploadPageForDevice(int id, int profile, int pageId, bool persistent, bool blankFirst = false)
+    {
+        int rotation = _dpStore.GetRotation(id);
+        var rows = _dpStore.LoadPage(id, profile, pageId);
+        var fullscreen = _dpStore.GetFullscreenImage(id, profile, pageId);
+        bool fullscreenActive = fullscreen.HasValue && File.Exists(fullscreen.Value.Path);
+        _dpFullscreenByDevice[id] = fullscreenActive;
+
+        var previous = _dpUploadChain.TryGetValue(id, out var p) ? p : Task.CompletedTask;
+        var next = previous.ContinueWith(_ =>
+        {
+            if (blankFirst) _dpClient.ResetPictures(id);
+
+            if (fullscreenActive)
+            {
+                DpFullscreenAnimator.Start(_dpClient, DpLogAsync, id,
+                    fullscreen!.Value.Path, fullscreen.Value.Rotation, rotation);
+                return;
+            }
+            foreach (var r in rows)
+            {
+                if (string.IsNullOrEmpty(r.ImagePath) || !File.Exists(r.ImagePath)) continue;
+                if (DpGifAnimator.IsAnimatedGif(r.ImagePath))
+                    DpGifAnimator.StartOrUpdate(_dpClient, DpLogAsync, id, r.ButtonIndex, r.ImagePath, rotation);
+                else
+                {
+                    if (persistent) _dpClient.UploadImageToProfile(id, r.ImagePath, r.ButtonIndex, profile, rotation);
+                    _dpClient.UploadImage(id, r.ImagePath, r.ButtonIndex, rotation);
+                }
+            }
+        }, TaskScheduler.Default);
+        _dpUploadChain[id] = next;
+    }
+
+    /// <summary>
+    /// Executes a physical key event from a connected DisplayPad that is NOT the foreground
+    /// tab, using its OWN persisted bindings/profile/page rather than the shared UI-bound
+    /// _dpKeys/_dpMatrixToIndex/_currentDpPageId (those only ever reflect whichever single
+    /// device tab is visible — see <see cref="OnDpKey"/>). Always called on the UI thread.
+    /// </summary>
+    private void DpHandleBackgroundKey(int devId, int matrix, bool pressed)
+    {
+        if (!pressed) return; // background pads skip the UI press-bounce visual
+        if (!DpDefaultMatrixToIndex.TryGetValue(matrix, out int idx) || idx >= 12) return;
+
+        if (AppSettings.LogLevel == K2LogLevel.Verbose)
+            DpLog($"[KEY][bg {devId}] matrix 0x{matrix:X2} down");
+
+        int profile = _dpStore.GetCurrentProfile(devId);
+        int pageId = _dpBgPageId.GetValueOrDefault(devId, 0);
+        var row = _dpStore.LoadPage(devId, profile, pageId).FirstOrDefault(r => r.ButtonIndex == idx);
+        if (row is null) return;
+
+        if (row.ActionType == "dp_folder" && int.TryParse(row.ActionValue, out int folderPageId))
+            DpBgNavigateToPage(devId, folderPageId);
+        else if (row.ActionType == "dp_back")
+            DpBgNavigateBack(devId);
+        else
+            DpEngineFor(devId).Execute(row.ActionType, row.ActionValue, idx);
+    }
+
+    private void DpBgNavigateToPage(int devId, int pageId)
+    {
+        var stack = _dpBgPageHistory.TryGetValue(devId, out var s) ? s : (_dpBgPageHistory[devId] = new Stack<int>());
+        stack.Push(_dpBgPageId.GetValueOrDefault(devId, 0));
+        _dpBgPageId[devId] = pageId;
+        DpUploadPageForDevice(devId, _dpStore.GetCurrentProfile(devId), pageId, persistent: false);
+    }
+
+    private void DpBgNavigateBack(int devId)
+    {
+        if (!_dpBgPageHistory.TryGetValue(devId, out var stack) || stack.Count == 0) return;
+        int pageId = stack.Pop();
+        _dpBgPageId[devId] = pageId;
+        DpUploadPageForDevice(devId, _dpStore.GetCurrentProfile(devId), pageId, persistent: false);
+    }
+
+    /// <summary>Lazily creates (and caches) the action engine used to execute actions for a
+    /// background device — see <see cref="DisplayPadBackgroundActionHost"/>.</summary>
+    internal ButtonActionEngine DpEngineFor(int devId)
+    {
+        if (_dpBgEngines.TryGetValue(devId, out var engine)) return engine;
+        engine = new ButtonActionEngine(new DisplayPadBackgroundActionHost(this, devId));
+        engine.Start();
+        _dpBgEngines[devId] = engine;
+        return engine;
     }
 
     // ---- Folder navigation ----
@@ -1740,14 +1993,19 @@ public partial class MainWindow
     private void OnDpKey(object? sender, JsonElement e) =>
         Dispatcher.BeginInvoke(() =>
         {
-            // Only handle events from the currently selected device.
-            // Each device has independent state (_dpKeys, _dpMatrixToIndex, _currentDpPageId)
-            // so events from non-selected devices would execute incorrect actions.
             int evtDevId = e.Get("deviceId");
-            if (DpSelectedDeviceId() is not int selId || evtDevId != selId) return;
-
             int matrix = e.Get("keyMatrix");
             bool pressed = e.GetBool("pressed");
+
+            // The foreground tab (_activeDpDeviceId) uses the UI-bound state (_dpKeys,
+            // _dpMatrixToIndex, _currentDpPageId, remap mode, press-bounce visual). Any OTHER
+            // connected DisplayPad (multi-device setups) must still execute ITS OWN bindings —
+            // see DpHandleBackgroundKey — otherwise it stays mute until the user opens its tab.
+            if (DpSelectedDeviceId() is not int selId || evtDevId != selId)
+            {
+                DpHandleBackgroundKey(evtDevId, matrix, pressed);
+                return;
+            }
 
             // Per-key-press log: noisy in normal use, so it only fires at LogLevel.Verbose
             // (see General Settings tab / AppSettings.LogLevel).
@@ -1907,6 +2165,7 @@ public partial class MainWindow
         DpGifAnimator.StopAll();
         DpFullscreenAnimator.StopAll();
         _dpEngine?.Dispose();
+        foreach (var engine in _dpBgEngines.Values) engine.Dispose();
         _dpClient.Dispose();
         _dpStore.Dispose();
     }
@@ -1928,6 +2187,9 @@ public sealed class DpProfileItem(int slot, string label)
     public bool IsNew => Label.StartsWith("+");
     public override string ToString() => Label;
 }
+
+// ---- "Pages" section row ----
+public sealed record DpPageRow(int PageId, string Name);
 
 // ---- Device table rows ----
 public sealed class DpDeviceRow

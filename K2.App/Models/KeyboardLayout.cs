@@ -192,7 +192,7 @@ public static class EverestKeyboardLayout
             (120, "F9", U), (121, "F10", U), (122, "F11", U), (123, "F12", U));
         navStart = f9Start + 4 * (U + G) + 45;
         Row(list, navStart, y,
-            (44, "Prt Sc", U), (145, "Scroll Lk", U), (19, "Pause", U));
+            (44, "PRT SCN", U), (145, "SCR LK", U), (19, "PAUSE", U));
         return y;
     }
 
@@ -201,10 +201,10 @@ public static class EverestKeyboardLayout
                                      double navStart)
     {
         Row(list, x0, y,
-            (162, "LCtrl", ModW), (91, "⊞", ModW), (164, "LAlt", ModW),
-            (32, "Space", SpaceW),
-            (165, "RAlt", ModW), (92, "⊞", ModW), (261, "FN", ModW),
-            (163, "RCtrl", ModW));
+            (162, "CTRL", ModW), (91, "Win", ModW), (164, "ALT", ModW),
+            (32, "", SpaceW), // BC keyboard.css: space bar has no legend (content: none)
+            (165, "ALT", ModW), (92, "Win", ModW), (261, "FN", ModW),
+            (163, "CTRL", ModW));
         Row(list, navStart, y,
             (37, "←", U), (40, "↓", U), (39, "→", U));
     }
@@ -230,7 +230,7 @@ public static class EverestKeyboardLayout
             (56, "8", U), (57, "9", U), (48, "0", U), (189, "-", U),
             (187, "=", U), (8, "⭠", 68));
         Row(k, navStart, y,
-            (96, "Insert", U), (103, "Home", U), (105, "PgUp", U));
+            (96, "INS", U), (103, "HOME", U), (105, "PG UP", U));
 
         // ---- Row 2: Tab Q-P [] \ | Del End PgDn ----
         y += RH;
@@ -240,22 +240,22 @@ public static class EverestKeyboardLayout
             (73, "I", U), (79, "O", U), (80, "P", U), (219, "[", U),
             (221, "]", U), (220, "\\", 50));
         Row(k, navStart, y,
-            (110, "Del", U), (97, "End", U), (99, "PgDn", U));
+            (110, "DEL", U), (97, "END", U), (99, "PG DN", U));
 
         // ---- Row 3: CapsLock A-L ;' Enter ----
         y += RH;
         Row(k, x0, y,
-            (20, "Caps Lk", 60), (65, "A", U), (83, "S", U), (68, "D", U),
+            (20, "CAPS LOCK", 60), (65, "A", U), (83, "S", U), (68, "D", U),
             (70, "F", U), (71, "G", U), (72, "H", U), (74, "J", U),
             (75, "K", U), (76, "L", U), (186, ";", U), (222, "'", U),
-            (13, "Enter", 73));
+            (13, "ENTER", 73));
 
         // ---- Row 4: LShift Z-M ,./ RShift | ↑ ----
         y += RH;
         Row(k, x0, y,
-            (160, "LShift", 80), (90, "Z", U), (88, "X", U), (67, "C", U),
+            (160, "SHIFT", 80), (90, "Z", U), (88, "X", U), (67, "C", U),
             (86, "V", U), (66, "B", U), (78, "N", U), (77, "M", U),
-            (188, ",", U), (190, ".", U), (191, "/", U), (161, "RShift", 88));
+            (188, ",", U), (190, ".", U), (191, "/", U), (161, "SHIFT", 88));
         Row(k, navStart + (U + G), y, (38, "↑", U));
 
         // ---- Row 5: bottom row ----
@@ -296,7 +296,7 @@ public static class EverestKeyboardLayout
             (56, L(56, "8"), U), (57, L(57, "9"), U), (48, L(48, "0"), U), (189, L(189, "-"), U),
             (187, L(187, "="), U), (8, "⭠", 68));
         Row(k, navStart, y,
-            (96, "Insert", U), (103, "Home", U), (105, "PgUp", U));
+            (96, "INS", U), (103, "HOME", U), (105, "PG UP", U));
 
         // ---- Row 2: Tab Q-P <oem><oem> [Enter tall 2 rows] | Del End PgDn ----
         y += RH;
@@ -309,15 +309,15 @@ public static class EverestKeyboardLayout
         // ISO Enter: tall rectangle spanning rows 2–3.
         // Positioned after the 13th key: x = x0 + Tab(50)+G + 12×(U+G) = 27+52+384 = 463
         double enterX = x0 + 50 + G + 12 * (U + G);
-        Key(k, 13, "Enter", enterX, row2Y, 42, RH + U); // h = 62 (2 rows)
+        Key(k, 13, "ENTER", enterX, row2Y, 42, RH + U); // h = 62 (2 rows)
 
         Row(k, navStart, y,
-            (110, "Del", U), (97, "End", U), (99, "PgDn", U));
+            (110, "DEL", U), (97, "END", U), (99, "PG DN", U));
 
         // ---- Row 3: CapsLock A-L <oem><oem><oem> (Enter covers the right side) ----
         y += RH;
         Row(k, x0, y,
-            (20, "Caps Lk", 60), (65, L(65, "A"), U), (83, L(83, "S"), U), (68, L(68, "D"), U),
+            (20, "CAPS LOCK", 60), (65, L(65, "A"), U), (83, L(83, "S"), U), (68, L(68, "D"), U),
             (70, L(70, "F"), U), (71, L(71, "G"), U), (72, L(72, "H"), U), (74, L(74, "J"), U),
             (75, L(75, "K"), U), (76, L(76, "L"), U), (186, L(186, ";"), U), (222, L(222, "'"), U),
             (220, L(220, "#"), U));
@@ -327,10 +327,10 @@ public static class EverestKeyboardLayout
         y += RH;
         // ISO: LShift shorter (1.25U ≈ 50px), extra <> key (VK_OEM_102=226)
         Row(k, x0, y,
-            (160, "LShift", 50), (226, L(226, "<"), U),
+            (160, "SHIFT", 50), (226, L(226, "<"), U),
             (90, L(90, "Z"), U), (88, L(88, "X"), U), (67, L(67, "C"), U),
             (86, L(86, "V"), U), (66, L(66, "B"), U), (78, L(78, "N"), U), (77, L(77, "M"), U),
-            (188, L(188, ","), U), (190, L(190, "."), U), (191, L(191, "/"), U), (161, "RShift", 58));
+            (188, L(188, ","), U), (190, L(190, "."), U), (191, L(191, "/"), U), (161, "SHIFT", 58));
         Row(k, navStart + (U + G), y, (38, "↑", U));
 
         // ---- Row 5: bottom row (same) ----
@@ -420,7 +420,7 @@ public static class EverestKeyboardLayout
 
         // NumLock / * -
         Row(k, npL, y,
-            (144, "Num Lk", U), (111, "/", U), (106, "*", U), (109, "-", U));
+            (144, "NUM LOCK", U), (111, "/", U), (106, "*", U), (109, "-", U));
 
         // 7 8 9 + (+ is double-height)
         y += RH;
@@ -437,7 +437,7 @@ public static class EverestKeyboardLayout
         y += RH;
         Row(k, npL, y,
             (97, "1", U), (98, "2", U), (99, "3", U));
-        k.Add(new KeyDef(13, "Enter", npL + 3 * (U + G), y, U, 62));
+        k.Add(new KeyDef(13, "ENTER", npL + 3 * (U + G), y, U, 62));
 
         // 0 . (0 is double-width)
         y += RH;
