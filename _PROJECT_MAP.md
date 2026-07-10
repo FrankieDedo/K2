@@ -62,21 +62,39 @@ produced files; dependencies from other folders are copied inside `K2`.
   state lives only in memory (same scope decision as Everest 60); persistence
   is a future step. **Verified on real hardware 2026-07-10** (Everest Max +
   MacroPad + DisplayPad also connected, K2 ran clean end-to-end).
-  **Shipped in this cut: RGB lighting (presets + 8-LED custom window) and
-  device settings (polling rate/debounce/lift-off/angle snapping) only.**
-  **DPI levels and button remap were implemented and protocol-complete but
-  are DISABLED** — enabling either (even with the code never actually
-  invoked at runtime) reproducibly caused a fatal CLR crash on K2 startup
-  ("Invalid Program: attempted to call a UnmanagedCallersOnly method from
-  managed code" inside WPF's own `Dispatcher.Run`/`DispatchMessage`, x86
-  process). A long bisection session (2026-07-10, see CHANGELOG) ruled out
-  total code size, the underlying HID P/Invoke calls, `FindResource` lookups,
-  the `DispatcherTimer`/lambda pattern, and the dynamic-button-creation loop
-  as the sole cause — no single method reproduced it in isolation, yet any
-  combination including real DPI/Remap code did. Root cause undetermined.
-  The DPI/Remap protocol code remains in `MakaluProtocol.cs`/`MakaluService.cs`
-  (untouched, not implicated) for whenever this is revisited; only the UI
-  wiring in `MainWindow.Makalu.cs` was stripped back out.
+  **Full 3-column layout (sidebar SECTIONS / device image with clickable
+  remap hotspots / right-side Profile-Import-Export-Device column) shipped
+  2026-07-10** — same pattern as MacroPad/Everest/DisplayPad. RGB lighting,
+  DPI levels, and button remap (incl. sniper) are all wired and working;
+  device settings (polling/debounce/lift-off/angle-snapping) too.
+
+  This layout previously caused a fatal CLR crash on K2 startup ("Invalid
+  Program: attempted to call a UnmanagedCallersOnly method from managed
+  code") that a long build-and-launch bisection session couldn't explain.
+  **Root-caused and fixed with WinDbg+SOS the same day**: it was never a
+  JIT/CLR bug. WPF fires a control's XAML-wired event (`RadioButton.Checked`,
+  `Slider.ValueChanged`, ...) **synchronously** the instant BAML sets the
+  triggering property (`IsChecked="True"`, or `Minimum`/`Maximum` coercing
+  `Value` away from its default) — and that happens mid-`InitializeComponent()`,
+  before elements declared *later* in the same XAML file have been assigned.
+  Two independent instances hit this: `RbMkSecRgb`'s `IsChecked="True"`
+  null-refed into `MkRgbSettings` (declared later in `MainWindow.xaml`);
+  `SldMkDpi`'s `Minimum="50"` null-refed into `TxtMkDpi` (declared right
+  after it in `MakaluDpiRemapPanel.xaml`). .NET's crash reporter mislabels
+  this class of AV with the generic "UnmanagedCallersOnly" message, which is
+  what made it look exotic. Fixed by (1) setting `IsChecked` in code after
+  `InitializeComponent()` finishes instead of in XAML, and (2) defaulting
+  `MakaluDpiRemapPanel`/`MakaluRgbSettingsPanel`'s `_mkSuppress` guard flag
+  to `true` (cleared only at the end of `Init()`) so any XAML-load-time event
+  is a no-op regardless of which property triggers it. Verified stable across
+  6 consecutive clean-rebuild launches. Full session in CHANGELOG.md
+  2026-07-10 — worth reading before writing any new XAML-wired event handler
+  anywhere in this codebase; the same pattern can bite any tab, not just
+  Makalu. Everest 60 was not given the same layout in this round (out of
+  scope for this session, not because of risk — the risk turned out to be a
+  generic WPF gotcha, not device-specific). **Not yet verified with a
+  physical Makalu** (no unit available in the sessions so far) —
+  DPI/remap/sniper over HID still need a hardware pass.
 - **Shared library `K2.Core`:** the key action execution engine (incl. Python
   scripts and RPC bridge) lives in `K2.Core`, a WPF library shared by all device
   modules. Compiles both x86 and x64 (`<Platforms>x86;x64</Platforms>`): a .NET
@@ -241,22 +259,46 @@ platform (x86 or x64).
   (feature report = transfer stateless, nessuna sessione persistente
   necessaria, come l'`open_device()`/`close()` per comando di BaseCampLinux).
 - `MainWindow.Makalu.cs` — partial: tab **Makalu** (mouse, raw-HID, nessun
-  SDK — vedi nota architetturale sopra). Stato connessione (poll 3s, rileva
-  modello 67/Max), pannello RGB (Off/Static/Breathing/RGB Breathing/Rainbow/
-  Responsive/Yeti + velocità/luminosità/2 colori/direzione per Rainbow,
-  stesso pattern `CapsFor` di Everest/Everest60), bottone per l'editor
-  per-LED custom (`MakaluCustomRgbWindow`), pannello impostazioni (polling
-  rate/debounce/angle snapping/lift-off). **Nessuna persistenza
-  cross-sessione** (stessa scelta di scope di Everest 60: stato solo in
-  memoria). **DPI e remap tasti NON sono in questo file**: implementati e
-  poi rimossi dopo aver causato un crash fatale del CLR riproducibile
-  (vedi nota architetturale sopra e CHANGELOG 2026-07-10) — il codice UI
-  è stato tolto, resta solo il layer protocollo/servizio (sotto), inerte
-  e non referenziato da nessuna UI.
+  SDK — vedi nota architetturale sopra). Shell del layout a 3 colonne:
+  sidebar SECTIONS (RGB/DPI/Remap/Settings, `MkSection_Changed`/
+  `ShowMkSection` toggolano le sezioni dentro `MkRgbSettings`/`MkDpiRemap`),
+  immagine mouse con hotspot cliccabili (`BuildMkHotspots`, posizioni stimate
+  a occhio su `Assets/makalu_mouse.png`, click → seleziona il tasto nella
+  sezione Remap), colonna destra (Profilo/Import/Export disabilitati —
+  nessuna persistenza multi-profilo per questo device — Rinomina device
+  funzionante via `AppSettings.MakaluDeviceName`). **Importante**:
+  `RbMkSecRgb.IsChecked` è impostato in `InitMkSectionNav()` (codice), MAI
+  con `IsChecked="True"` in XAML — quest'ultimo causava un crash fatale del
+  CLR (falso allarme "bug JIT x86", root-causato 2026-07-10 con WinDbg+SOS:
+  era solo `RadioButton.Checked` che scattava durante `InitializeComponent()`
+  prima che `MkRgbSettings` fosse assegnato — vedi CHANGELOG). **Nessuna
+  persistenza cross-sessione** (stessa scelta di scope di Everest 60).
+- `MakaluDpiRemapPanel.xaml(.cs)` — `UserControl` figlio diretto di
+  `MainWindow` (non annidato — vedi nota nel file) che ospita DPI+Remap+
+  overlay di conferma. `Init`/`UpdateDeviceInfo`/`SelectRemapButton`
+  `internal`, prende un `MakaluService` iniettato dal chiamante. Campo
+  `_mkSuppress` di default `true` (non `false`), azzerato solo a fine
+  `Init()`: qualunque handler XAML (`SldMkDpi_ValueChanged` ecc.) che
+  scattasse durante il caricamento del BAML (es. `Minimum="50"` che forza
+  la coercizione di `Value` da 0 a 50 su uno `Slider` appena costruito) è
+  quindi un no-op invece di un null-ref — root-causato 2026-07-10, vedi
+  CHANGELOG per i dettagli completi (stesso bug di `RbMkSecRgb` sopra, in un
+  punto diverso).
+- `MakaluRgbSettingsPanel.xaml(.cs)` — `UserControl` figlio diretto di
+  `MainWindow`, ospita RGB+Settings. Stesso pattern `_mkSuppress = true` di
+  default di `MakaluDpiRemapPanel` (difesa in profondità, non risulta
+  necessario oggi ma costa nulla).
+- `Services/MakaluRemapData.cs` — tabelle statiche condivise (nomi
+  tasti/categorie/funzioni remap per modello 67 vs Max), usate sia da
+  `MainWindow.Makalu.cs` (tooltip hotspot) sia da `MakaluDpiRemapPanel.xaml.cs`
+  (lista bottoni remap).
 - `MakaluCustomRgbWindow.xaml(.cs)` — finestra dedicata: editor 8 LED
   (4 sinistra + 4 destra, layout fisico del mouse) con color-picker per LED
   (WinForms `ColorDialog`, un click = un colore, non un canvas multi-select
   come il riferimento Python) + slider luminosità + Apply.
+- `Assets/makalu_mouse.png` — foto top-down Makalu 67 (da Base Camp
+  `wwwroot/images/makalu67.png`), usata come thumbnail 72×72 accanto allo
+  stato di connessione nel tab Makalu.
 - `Services/MakaluHidNative.cs` — P/Invoke raw HID (`hid.dll`+`setupapi.dll`,
   stesso schema di `Everest60HidNative`). Enumera l'interfaccia `mi_01`
   (VID `0x3282`, PID `0x0003` Makalu 67/`0x0002` Makalu Max). **Verificato
@@ -268,8 +310,7 @@ platform (x86 or x64).
   get/set (5 livelli), button remap + sniper. Tutte le costanti (report id
   0xA1, mappe funzione remap, range DPI 50–19000 step 50, debounce
   2/4/6/8/10/12ms) copiate identiche dalla fonte. **DPI/remap non wired in
-  UI** (vedi sopra) ma il codice protocollo resta qui pronto per quando si
-  riprenderà l'indagine sul crash.
+  UI** (vedi sopra) — codice pronto per quando si riprenderà l'indagine.
 - `Services/MakaluService.cs` — facade find-open-send-close per chiamata,
   stesso pattern di `Everest60Service`. `DeviceInfo` incapsula
   modello/label/numero-tasti/DPI-minimo (67 vs Max differiscono). Metodi
@@ -608,17 +649,24 @@ Tutto ciò che deriva dai binari di Base Camp. Solo per sviluppo locale.
    Fn-layer/macro (richiede USB capture dedicata di Base Camp Windows —
    nessuna fonte nota ha ancora questo protocollo).
 6. Makalu 67/Max (mouse, nuovo tab, raw HID — non SDK, vedi nota
-   architetturale sopra): **FATTO e verificato su hardware reale 2026-07-10**
-   — ma solo per RGB preset (Off/Static/Breathing/RGB Breathing/Rainbow/
-   Responsive/Yeti + speed/brightness/2 colori/direzione Rainbow), editor
-   custom per-LED (finestra dedicata, 8 LED) e impostazioni (polling rate/
-   debounce/angle snapping/lift-off). **DPI e remap tasti implementati ma
-   DISABILITATI**: causano un crash fatale del CLR all'avvio di K2
-   (riproducibile, isolato con una lunga sessione di bisezione — vedi nota
-   architetturale sopra e CHANGELOG 2026-07-10 per i dettagli di cosa è
-   stato escluso). Root cause non trovata; il codice protocollo/servizio
-   resta pronto in `MakaluProtocol.cs`/`MakaluService.cs`, solo la UI in
-   `MainWindow.Makalu.cs` è stata tolta. **Da fare**: capire la causa del
-   crash e reintrodurre DPI/remap; persistenza cross-sessione; import
-   profili da `BaseCamp.db` (`MakaluKeyBinding`/`MakaluLighting`/
-   `MakaluSetting`/`DPILevel`, non incluso).
+   architetturale sopra): RGB preset (Off/Static/Breathing/RGB Breathing/
+   Rainbow/Responsive/Yeti + speed/brightness/2 colori/direzione Rainbow),
+   editor custom per-LED (finestra dedicata, 8 LED) e impostazioni (polling
+   rate/debounce/angle snapping/lift-off) **verificati su hardware reale
+   2026-07-10**. DPI e remap tasti (incl. sniper), e il layout a 3 colonne
+   (sidebar SECTIONS/immagine con hotspot/colonna destra) **completati e
+   funzionanti 2026-07-10** — il crash fatale del CLR che li aveva fatti
+   disabilitare due volte è stato root-causato con WinDbg+SOS: era un
+   null-ref banale (evento XAML che scatta durante `InitializeComponent()`
+   prima che un elemento dichiarato più avanti nel file fosse assegnato),
+   non un bug del JIT/CLR — v. nota architetturale sopra e CHANGELOG
+   2026-07-10 per la sessione di debug completa. **Da fare**: verifica su
+   hardware Makalu fisico (DPI/remap/sniper mai testati end-to-end su
+   device reale — nessuna unità disponibile finora); dare lo stesso layout
+   a 3 colonne a Everest 60 (non tentato in questo giro, era rimasto
+   indietro per prudenza mentre la causa del crash era ignota — ora che si
+   sa cos'è, si può procedere sapendo cosa evitare: niente
+   `IsChecked`/`Minimum`/`Maximum` letterali in XAML abbinati a un handler
+   che tocca elementi dichiarati più avanti nel file); persistenza
+   cross-sessione; import profili da `BaseCamp.db` (`MakaluKeyBinding`/
+   `MakaluLighting`/`MakaluSetting`/`DPILevel`, non incluso).

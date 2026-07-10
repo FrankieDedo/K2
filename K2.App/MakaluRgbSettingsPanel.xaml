@@ -1,0 +1,87 @@
+<UserControl x:Class="K2.App.MakaluRgbSettingsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core">
+    <!-- RGB + Settings section content for the Makalu tab, its own
+         UserControl — DIRECT child of MainWindow.xaml alongside
+         MakaluDpiRemapPanel (not nested inside another custom control, see
+         MakaluDpiRemapPanel.xaml for why that specific nesting is unsafe).
+         SecRgb/SecSettings are toggled from MainWindow.Makalu.cs's
+         MkSection_Changed. -->
+    <Grid>
+        <!-- RGB -->
+        <Grid x:Name="SecRgb">
+            <StackPanel>
+                <DockPanel Margin="0,0,0,8">
+                    <Button DockPanel.Dock="Right" x:Name="BtnMkCustomOpen" Content="{loc:Get makalu_custom_open}"
+                            Click="BtnMkCustomOpen_Click" Padding="8,3" HorizontalAlignment="Right"/>
+                    <TextBlock Text="{loc:Get rgb_lighting}" FontWeight="Bold" VerticalAlignment="Center"/>
+                </DockPanel>
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock Text="{loc:Get rgb_effect}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <ComboBox x:Name="CbMkEffect" Width="140" Margin="0,0,12,0"
+                              SelectionChanged="CbMkEffect_SelectionChanged"/>
+                    <StackPanel x:Name="PnlMkSpeed" Orientation="Horizontal" Margin="0,0,12,0">
+                        <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox x:Name="CbMkSpeed" Width="90" SelectionChanged="CbMkEffectParam_Changed"/>
+                    </StackPanel>
+                    <StackPanel x:Name="PnlMkDirection" Orientation="Horizontal">
+                        <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox x:Name="CbMkDirection" Width="90" SelectionChanged="CbMkEffectParam_Changed"/>
+                    </StackPanel>
+                </WrapPanel>
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <Slider x:Name="SldMkBrightness" Minimum="0" Maximum="100" Width="140"
+                            TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                            ValueChanged="SldMkBrightness_ValueChanged" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="LblMkBrightness" Text="100%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
+                </WrapPanel>
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <Button x:Name="BtnMkColor1" Width="40" Height="22" Background="#900000"
+                            BorderThickness="2" BorderBrush="#3A3A40" Click="BtnMkColor_Click" Tag="1"
+                            Margin="0,0,14,0"/>
+                    <StackPanel x:Name="PnlMkColor2" Orientation="Horizontal">
+                        <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <Button x:Name="BtnMkColor2" Width="40" Height="22" Background="#1A1A1E"
+                                BorderThickness="2" BorderBrush="#3A3A40" Click="BtnMkColor_Click" Tag="2"/>
+                    </StackPanel>
+                </WrapPanel>
+                <WrapPanel x:Name="PnlMkPresets" Orientation="Horizontal" Margin="0,0,0,4"/>
+                <TextBlock x:Name="LblMkRgbStatus" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Settings -->
+        <Grid x:Name="SecSettings" Visibility="Collapsed">
+            <StackPanel>
+                <TextBlock Text="{loc:Get makalu_settings_title}" FontWeight="Bold" Margin="0,0,0,8"/>
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock Text="{loc:Get makalu_setting_poll}" VerticalAlignment="Center" Width="130"/>
+                    <ComboBox x:Name="CbMkPolling" Width="100" Margin="0,0,8,0"/>
+                    <Button x:Name="BtnMkPollingApply" Content="{loc:Get makalu_apply}" Click="BtnMkPollingApply_Click" Padding="8,3" Margin="0,0,6,0"/>
+                    <TextBlock x:Name="LblMkPollingStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                </WrapPanel>
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock Text="{loc:Get makalu_setting_debounce}" VerticalAlignment="Center" Width="130"/>
+                    <Slider x:Name="SldMkDebounce" Minimum="0" Maximum="5" Width="120" TickFrequency="1" IsSnapToTickEnabled="True"
+                            ValueChanged="SldMkDebounce_ValueChanged" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="LblMkDebounceVal" Text="2 ms" Width="44" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                    <Button x:Name="BtnMkDebounceApply" Content="{loc:Get makalu_apply}" Click="BtnMkDebounceApply_Click" Padding="8,3" Margin="6,0,6,0"/>
+                    <TextBlock x:Name="LblMkDebounceStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                </WrapPanel>
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock Text="{loc:Get makalu_setting_angle}" VerticalAlignment="Center" Width="130"/>
+                    <CheckBox x:Name="CkMkAngleSnap" Content="{loc:Get makalu_setting_on}" Click="CkMkAngleSnap_Click" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock x:Name="LblMkAngleStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                </WrapPanel>
+                <WrapPanel Orientation="Horizontal">
+                    <TextBlock Text="{loc:Get makalu_setting_liftoff}" VerticalAlignment="Center" Width="130"/>
+                    <CheckBox x:Name="CkMkLiftHigh" Content="{loc:Get makalu_setting_liftoff_high}" Click="CkMkLiftHigh_Click" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock x:Name="LblMkLiftStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                </WrapPanel>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

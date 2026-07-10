@@ -503,6 +503,7 @@
   <string name="rename_device">Rinomina dispositivo</string>
   <string name="rename_device_title">Rinomina dispositivo</string>
   <string name="rename_device_prompt">Inserisci un nome per questo dispositivo:</string>
+  <string name="profile_not_available_tip">Non ancora disponibile per questo dispositivo — nessuna persistenza profili implementata.</string>
   <!-- Rename / delete profile -->
   <string name="rename_profile">Rinomina profilo</string>
   <string name="rename_profile_title">Rinomina profilo</string>

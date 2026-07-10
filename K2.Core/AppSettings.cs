@@ -38,6 +38,8 @@ public static class AppSettings
         public bool StartMinimizedToTray { get; set; }
         public List<string> RecentExecPaths { get; set; } = new();
         public List<string> RecentFolderPaths { get; set; } = new();
+        public string? MakaluDeviceName { get; set; }
+        public string? Everest60DeviceName { get; set; }
     }
 
     private static Data _data = new();
@@ -202,6 +204,46 @@ public static class AppSettings
         {
             if (_data.StartMinimizedToTray == value) return;
             _data.StartMinimizedToTray = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>User-chosen nickname for the Makalu tab header. Makalu has no
+    /// per-device SQLite store (no profile persistence — see MakaluService),
+    /// so this lives here instead of a "device.name" store setting like
+    /// MacroPad/Everest/DisplayPad use.</summary>
+    public static string? MakaluDeviceName
+    {
+        get { EnsureLoaded(); return _data.MakaluDeviceName; }
+    }
+
+    public static void SetMakaluDeviceName(string? value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.MakaluDeviceName == value) return;
+            _data.MakaluDeviceName = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>User-chosen nickname for the Everest 60 tab header. Same
+    /// reasoning as <see cref="MakaluDeviceName"/> — no per-device store.</summary>
+    public static string? Everest60DeviceName
+    {
+        get { EnsureLoaded(); return _data.Everest60DeviceName; }
+    }
+
+    public static void SetEverest60DeviceName(string? value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.Everest60DeviceName == value) return;
+            _data.Everest60DeviceName = value;
             Save();
         }
         Changed?.Invoke();

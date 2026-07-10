@@ -504,6 +504,7 @@
   <string name="rename_device">Rename device</string>
   <string name="rename_device_title">Rename device</string>
   <string name="rename_device_prompt">Enter a name for this device:</string>
+  <string name="profile_not_available_tip">Not available yet for this device — no profile storage implemented.</string>
   <!-- Rename / delete profile -->
   <string name="rename_profile">Rename profile</string>
   <string name="rename_profile_title">Rename profile</string>

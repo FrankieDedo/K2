@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+        xmlns:local="clr-namespace:K2.App"
         Title="{loc:Get app_title}"
         Icon="Assets/K2_logo.png"
         Height="897" Width="1426"
@@ -1205,6 +1206,8 @@
                     </Grid><!-- end 3-pane -->
                 </Grid>
             </Grid><!-- end PnlEverest -->
+
+            <!-- ==================== Everest 60 (raw-HID lighting only) ==================== -->
             <Grid x:Name="PnlEverest60" Visibility="Collapsed">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
@@ -1305,15 +1308,42 @@
                     </Grid>
                 </Grid>
             </Grid><!-- end PnlEverest60 -->
+
+            <!-- ==================== Makalu (mouse) ====================
+                 Sections (RGB Lighting/DPI/Remap/Settings) at left, device
+                 image with clickable remap hotspots + selected section
+                 content in the middle, generic Profile/Import/Export/Device
+                 column at right — same pattern as MacroPad/Everest/
+                 DisplayPad. Section content is split into two UserControls
+                 (MakaluRgbSettingsPanel, MakaluDpiRemapPanel), kept as
+                 DIRECT MainWindow children (not nested inside another
+                 custom control — see MakaluDpiRemapPanel.xaml for why that
+                 specific nesting is unsafe).
+
+                 The "Invalid Program: attempted to call a UnmanagedCallersOnly
+                 method from managed code" crash this layout used to trigger
+                 (2026-07-10, root-caused with WinDbg+SOS) was NOT a JIT/CLR
+                 bug: it was RbMkSecRgb's IsChecked="True" firing Checked
+                 synchronously mid-InitializeComponent(), before MkRgbSettings
+                 (declared later in this file) was assigned — a plain null
+                 ref that .NET's crash reporter mislabeled with that generic
+                 message. Fixed by setting IsChecked in code (see
+                 InitMkSectionNav in MainWindow.Makalu.cs) instead of XAML.
+                 A second instance of the same pattern (Slider.Minimum
+                 coercing Value during load, firing ValueChanged before a
+                 later-declared TextBox was assigned) was found and fixed in
+                 MakaluDpiRemapPanel. See CHANGELOG.md 2026-07-10 for the
+                 full WinDbg session — any new event handler wired to a
+                 property that gets a literal value in XAML needs to guard
+                 against firing before InitializeComponent() finishes. -->
             <Grid x:Name="PnlMakalu" Visibility="Collapsed">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>  <!-- status bar -->
-                        <RowDefinition Height="Auto"/>  <!-- hint -->
-                        <RowDefinition Height="*"/>     <!-- sections -->
+                        <RowDefinition Height="*"/>     <!-- sections/image/common columns -->
                     </Grid.RowDefinitions>
 
-                    <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+                    <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
                         <TextBlock x:Name="LblMkStatus" Text="{loc:Get makalu_status_disconnected}"
                                    VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,12,0"/>
                         <Button x:Name="BtnMkRefresh" Content="{loc:Get makalu_refresh}"
@@ -1321,107 +1351,126 @@
                                 Style="{StaticResource K2IconButton}" Tag="&#xE72C;"/>
                     </WrapPanel>
 
-                    <TextBlock Grid.Row="1" Text="{loc:Get makalu_hint}" TextWrapping="Wrap"
-                               Foreground="{StaticResource K2TextMutedBrush}" FontStyle="Italic"
-                               Margin="0,0,0,10" MaxWidth="720" HorizontalAlignment="Left"/>
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="160"/>  <!-- sidebar -->
+                            <ColumnDefinition Width="*"/>    <!-- image + section content -->
+                            <ColumnDefinition Width="210"/>  <!-- common actions -->
+                        </Grid.ColumnDefinitions>
 
-                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>  <!-- RGB -->
-                            <RowDefinition Height="Auto"/>  <!-- Settings -->
-                            <RowDefinition Height="*"/>     <!-- log -->
-                        </Grid.RowDefinitions>
-
-                        <!-- RGB -->
-                        <Border Grid.Row="0" Background="#14141A" BorderBrush="#2A2A32" BorderThickness="1"
-                                CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                        <!-- LEFT: specific sections -->
+                        <Border Grid.Column="0" Background="#111115" CornerRadius="6"
+                                Margin="0,0,8,0" Padding="4">
                             <StackPanel>
-                                <DockPanel Margin="0,0,0,8">
-                                    <Button DockPanel.Dock="Right" x:Name="BtnMkCustomOpen" Content="{loc:Get makalu_custom_open}"
-                                            Click="BtnMkCustomOpen_Click" Padding="8,3" HorizontalAlignment="Right"/>
-                                    <TextBlock Text="{loc:Get rgb_lighting}" FontWeight="Bold" VerticalAlignment="Center"/>
-                                </DockPanel>
-                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <TextBlock Text="{loc:Get rgb_effect}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <ComboBox x:Name="CbMkEffect" Width="140" Margin="0,0,12,0"
-                                              SelectionChanged="CbMkEffect_SelectionChanged"/>
-                                    <StackPanel x:Name="PnlMkSpeed" Orientation="Horizontal" Margin="0,0,12,0">
-                                        <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                        <ComboBox x:Name="CbMkSpeed" Width="90" SelectionChanged="CbMkEffectParam_Changed"/>
-                                    </StackPanel>
-                                    <StackPanel x:Name="PnlMkDirection" Orientation="Horizontal">
-                                        <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                        <ComboBox x:Name="CbMkDirection" Width="90" SelectionChanged="CbMkEffectParam_Changed"/>
-                                    </StackPanel>
-                                </WrapPanel>
-                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Slider x:Name="SldMkBrightness" Minimum="0" Maximum="100" Width="140"
-                                            TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
-                                            ValueChanged="SldMkBrightness_ValueChanged" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="LblMkBrightness" Text="100%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
-                                </WrapPanel>
-                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                    <Button x:Name="BtnMkColor1" Width="40" Height="22" Background="#900000"
-                                            BorderThickness="2" BorderBrush="#3A3A40" Click="BtnMkColor_Click" Tag="1"
-                                            Margin="0,0,14,0"/>
-                                    <StackPanel x:Name="PnlMkColor2" Orientation="Horizontal">
-                                        <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                        <Button x:Name="BtnMkColor2" Width="40" Height="22" Background="#1A1A1E"
-                                                BorderThickness="2" BorderBrush="#3A3A40" Click="BtnMkColor_Click" Tag="2"/>
-                                    </StackPanel>
-                                </WrapPanel>
-                                <WrapPanel x:Name="PnlMkPresets" Orientation="Horizontal" Margin="0,0,0,4"/>
-                                <TextBlock x:Name="LblMkRgbStatus" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                                <TextBlock Text="SECTIONS" FontSize="9" Foreground="#4A4A58"
+                                           Margin="14,8,0,6" FontWeight="Bold"/>
+                                <!-- IsChecked is set in code (InitMkSectionNav), not here: WPF fires
+                                     Checked synchronously the moment BAML sets IsChecked="True", i.e.
+                                     mid-way through InitializeComponent() — MkRgbSettings/MkDpiRemap
+                                     (declared later in this file) aren't assigned yet at that point,
+                                     so MkSection_Changed would null-ref. Root-caused via WinDbg+SOS,
+                                     see CHANGELOG.md 2026-07-10. -->
+                                <RadioButton x:Name="RbMkSecRgb"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get rgb_lighting}" GroupName="MkSections"
+                                             Checked="MkSection_Changed"/>
+                                <RadioButton x:Name="RbMkSecDpi"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get makalu_dpi_title}" GroupName="MkSections"
+                                             Checked="MkSection_Changed"/>
+                                <RadioButton x:Name="RbMkSecRemap"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get makalu_remap_title}" GroupName="MkSections"
+                                             Checked="MkSection_Changed"/>
+                                <RadioButton x:Name="RbMkSecSettings"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get makalu_settings_title}" GroupName="MkSections"
+                                             Checked="MkSection_Changed"/>
                             </StackPanel>
                         </Border>
 
-                        <!-- Settings -->
-                        <Border Grid.Row="1" Background="#14141A" BorderBrush="#2A2A32" BorderThickness="1"
-                                CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                        <!-- CENTER: interactive device image (top) + selected section content (bottom) -->
+                        <Grid Grid.Column="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" MinHeight="160"/>  <!-- device -->
+                                <RowDefinition Height="Auto"/>               <!-- section content -->
+                            </Grid.RowDefinitions>
+
+                            <Border Grid.Row="0" Background="#18181C" CornerRadius="6" Padding="8">
+                                <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Image Source="Assets/makalu_mouse.png" Width="190" Stretch="Uniform"/>
+                                    <!-- Hotspots positioned in BuildMkHotspots (Canvas coords match
+                                         the Image's rendered 190×422 size at Stretch=Uniform). -->
+                                    <Canvas x:Name="CvsMkHotspots" Width="190" Height="422"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- Bottom section panel: fixed Height so it doesn't resize/jump
+                                 when switching between RGB / DPI / Remap / Settings. Both
+                                 controls are ALWAYS present (siblings in the same cell);
+                                 each toggles its own SecXxx children's Visibility, so only
+                                 the active section is ever painted. -->
+                            <Border Grid.Row="1" Background="#14141A"
+                                    BorderBrush="#2A2A32" BorderThickness="1"
+                                    CornerRadius="6" Padding="12,10" Margin="0,8,0,0"
+                                    Height="180">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <Grid>
+                                        <local:MakaluRgbSettingsPanel x:Name="MkRgbSettings"/>
+                                        <local:MakaluDpiRemapPanel x:Name="MkDpiRemap"/>
+                                    </Grid>
+                                </ScrollViewer>
+                            </Border>
+                        </Grid>
+
+                        <!-- RIGHT: generic settings (profile/import/export not implemented for
+                             this device yet — disabled with an explanatory tooltip; device
+                             rename works now, via AppSettings, no per-device store needed). -->
+                        <Border Grid.Column="2" Background="#111115" CornerRadius="6"
+                                Margin="8,0,0,0" Padding="10" VerticalAlignment="Top">
                             <StackPanel>
-                                <TextBlock Text="{loc:Get makalu_settings_title}" FontWeight="Bold" Margin="0,0,0,8"/>
-                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <TextBlock Text="{loc:Get makalu_setting_poll}" VerticalAlignment="Center" Width="130"/>
-                                    <ComboBox x:Name="CbMkPolling" Width="100" Margin="0,0,8,0"/>
-                                    <Button x:Name="BtnMkPollingApply" Content="{loc:Get makalu_apply}" Click="BtnMkPollingApply_Click" Padding="8,3" Margin="0,0,6,0"/>
-                                    <TextBlock x:Name="LblMkPollingStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
-                                </WrapPanel>
-                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <TextBlock Text="{loc:Get makalu_setting_debounce}" VerticalAlignment="Center" Width="130"/>
-                                    <Slider x:Name="SldMkDebounce" Minimum="0" Maximum="5" Width="120" TickFrequency="1" IsSnapToTickEnabled="True"
-                                            ValueChanged="SldMkDebounce_ValueChanged" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="LblMkDebounceVal" Text="2 ms" Width="44" VerticalAlignment="Center" Margin="6,0,0,0"/>
-                                    <Button x:Name="BtnMkDebounceApply" Content="{loc:Get makalu_apply}" Click="BtnMkDebounceApply_Click" Padding="8,3" Margin="6,0,6,0"/>
-                                    <TextBlock x:Name="LblMkDebounceStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
-                                </WrapPanel>
-                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <TextBlock Text="{loc:Get makalu_setting_angle}" VerticalAlignment="Center" Width="130"/>
-                                    <CheckBox x:Name="CkMkAngleSnap" Content="{loc:Get makalu_setting_on}" Click="CkMkAngleSnap_Click" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <TextBlock x:Name="LblMkAngleStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
-                                </WrapPanel>
-                                <WrapPanel Orientation="Horizontal">
-                                    <TextBlock Text="{loc:Get makalu_setting_liftoff}" VerticalAlignment="Center" Width="130"/>
-                                    <CheckBox x:Name="CkMkLiftHigh" Content="{loc:Get makalu_setting_liftoff_high}" Click="CkMkLiftHigh_Click" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <TextBlock x:Name="LblMkLiftStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
-                                </WrapPanel>
+                                <TextBlock Text="{loc:Get profile}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <ComboBox Style="{StaticResource K2SideActionCombo}" IsEnabled="False"
+                                          ToolTip="{loc:Get profile_not_available_tip}"/>
+                                <Button Content="{loc:Get rename_profile}" IsEnabled="False"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
+                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+                                <Button Content="{loc:Get delete_profile}" IsEnabled="False"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE74D;"
+                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+
+                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get import}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button Content="{loc:Get dp_import_xml}" IsEnabled="False"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8E5;"
+                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+                                <Button Content="{loc:Get import_bc}" IsEnabled="False"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE72C;"
+                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+
+                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get export}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button Content="{loc:Get export_profiles_btn}" IsEnabled="False"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE898;"
+                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+
+                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get device}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button x:Name="BtnMkRename" Content="{loc:Get rename_device}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8AC;"
+                                        Click="BtnMkRename_Click"/>
+
+                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get makalu_log}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Border Background="#0F0F13" BorderBrush="#2A2A32" BorderThickness="1"
+                                        CornerRadius="6" Padding="6" Height="110">
+                                    <TextBox x:Name="TxtMkLog" IsReadOnly="True" FontFamily="Consolas" FontSize="10"
+                                             VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap"
+                                             Background="Transparent" BorderThickness="0"/>
+                                </Border>
                             </StackPanel>
-                        </Border>
-                        <!-- Log -->
-                        <Border Grid.Row="2" Background="#0F0F13" BorderBrush="#2A2A32" BorderThickness="1"
-                                CornerRadius="6" Padding="8">
-                            <DockPanel>
-                                <TextBlock DockPanel.Dock="Top" Text="{loc:Get makalu_log}"
-                                           Foreground="{StaticResource K2TextMutedBrush}" FontSize="10" Margin="2,0,0,4"/>
-                                <TextBox x:Name="TxtMkLog" IsReadOnly="True" FontFamily="Consolas" FontSize="11"
-                                         VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap"
-                                         Background="Transparent" BorderThickness="0"/>
-                            </DockPanel>
                         </Border>
                     </Grid>
-                    </ScrollViewer>
                 </Grid>
             </Grid><!-- end PnlMakalu -->
 

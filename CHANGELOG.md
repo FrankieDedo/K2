@@ -9,7 +9,318 @@
 > mappa stabile in `_PROJECT_MAP.md`. Consultare qui solo per il contesto
 > di una modifica specifica passata (grep per parola chiave/data).
 
-> Last updated: 2026-07-10 (Makalu: crash fatale isolato a DPI/remap, rilasciato RGB+Settings, DPI/remap disabilitati):
+> Last updated: 2026-07-10 (Makalu: ROOT CAUSE TROVATA E RISOLTA con WinDbg+SOS —
+> NON era un bug del JIT/CLR x86, era un null-ref banale in due punti diversi.
+> Layout a 3 colonne per Makalu ORA FUNZIONANTE, DPI/Remap riattivati, sidebar
+> interattiva con hotspot sull'immagine del mouse):
+>   - **Setup debug**: generato un dump completo (`DOTNET_DbgEnableMiniDump=1`,
+>     `DOTNET_DbgMiniDumpType=4`, `DOTNET_DbgMiniDumpName=...` — attenzione:
+>     vanno impostate con `$env:NOME = "valore"` in PowerShell, `set` è sintassi
+>     cmd.exe e non propaga la variabile al processo figlio). Aperto in WinDbg
+>     con `.symfix`/`.reload`/`.loadby sos coreclr`/`!analyze -v`.
+>   - **Prima sorpresa**: `!analyze -v` decodifica l'exception record e mostra
+>     un `ExceptionCode: c0000005 (Access violation)` — **non** un vero errore
+>     interno del CLR — con indirizzo di lettura `0x00000100` dentro
+>     `K2.App.MainWindow.MkSection_Changed+0xdc`, riga sorgente esatta:
+>     `nameof(RbMkSecRgb) => MkRgbSettings.SecRgb`. Il messaggio generico
+>     `Invalid Program: attempted to call a UnmanagedCallersOnly method from
+>     managed code` che si vedeva su console era quindi **fuorviante** — solo
+>     l'etichetta che .NET assegna in modo generico ad alcuni AV non gestiti
+>     che avvengono in profondità nello stack nativo, non una descrizione
+>     reale del fault.
+>   - **Causa reale**: `RbMkSecRgb` ha `IsChecked="True"` nello XAML. WPF
+>     imposta quella proprietà durante il parsing del BAML dentro
+>     `MainWindow.InitializeComponent()`, e questo fa scattare l'evento
+>     `Checked` **sincronamente, immediatamente** — ma `MkRgbSettings`
+>     (l'elemento `<local:MakaluRgbSettingsPanel x:Name="MkRgbSettings"/>`,
+>     dichiarato più avanti nello stesso file XAML, nella colonna centrale)
+>     non è ancora stato assegnato da `Connect()` a quel punto (gli elementi
+>     vengono cablati in ordine di apparizione nel documento). `MkSection_Changed`
+>     legge quindi `MkRgbSettings.SecRgb` con `MkRgbSettings == null` → crash.
+>     Deterministico al 100%, non un fenomeno raro o dipendente da timing/ASLR
+>     (coerente con l'aver visto lo stesso crash "sempre" in ogni sessione di
+>     test precedente che includeva questo pattern).
+>   - **Fix #1**: tolto `IsChecked="True"` da `RbMkSecRgb` in `MainWindow.xaml`;
+>     impostato invece `RbMkSecRgb.IsChecked = true;` dentro `InitMkSectionNav()`
+>     in `MainWindow.Makalu.cs`, chiamata da `InitMakaluModule()` **dopo** che
+>     il costruttore ha già eseguito `InitializeComponent()` per intero — a
+>     quel punto tutti i campi `x:Name` sono garantiti assegnati.
+>   - **Il crash persisteva ancora dopo il fix #1** (stesso messaggio generico,
+>     ma stavolta rebuild pulita + nuovo dump). Rianalizzato con lo stesso
+>     procedimento (`!analyze -v` su `k2crash2.dmp`): **stesso identico pattern**,
+>     stavolta in `K2.App.MakaluDpiRemapPanel.SldMkDpi_ValueChanged`, riga
+>     `TxtMkDpi.Text = dpi.ToString();`. Causa: `SldMkDpi` ha `Minimum="50"`
+>     nello XAML; uno `Slider` appena costruito ha `Value=0` di default, quindi
+>     impostare `Minimum="50"` forza la coercizione di `Value` da 0 a 50, il
+>     che fa scattare `ValueChanged` — di nuovo, sincronamente, durante il
+>     parsing del BAML di `MakaluDpiRemapPanel`, PRIMA che `TxtMkDpi`
+>     (dichiarato dopo `SldMkDpi` nello stesso `WrapPanel`) sia assegnato.
+>     **Stessa classe di bug, secondo punto indipendente.**
+>   - **Fix #2** (più generale, non solo per questo caso specifico): cambiato
+>     il default del campo `_mkSuppress` da `false` a **`true`** sia in
+>     `MakaluDpiRemapPanel.xaml.cs` sia in `MakaluRgbSettingsPanel.xaml.cs`
+>     (azzerato a `false` solo alla fine di `Init()`, che viene chiamato dopo
+>     che `InitializeComponent()` di quel controllo è già completo) — così
+>     QUALSIASI handler che controlla `_mkSuppress` all'inizio (pattern già
+>     usato ovunque in questi due file) è automaticamente no-op durante tutto
+>     il caricamento del BAML, non solo per i due casi trovati. Aggiunta anche
+>     la guardia `if (_mkSuppress) return;` mancante in
+>     `SldMkSniperDpi_ValueChanged` (stesso `Minimum="50"`, stesso rischio,
+>     mai arrivato a crashare solo perché il flusso di esecuzione non ci era
+>     ancora arrivato).
+>   - **Verificato**: rebuild pulita (`rm -rf obj bin` su entrambi i progetti)
+>     + **6 lanci consecutivi, 0 crash**, log applicativo che arriva
+>     regolarmente all'apertura di tutti e tre i driver (MacroPad/Everest/
+>     DisplayPad, ~820 righe di log per run). Il layout a 3 colonne per Makalu
+>     (sidebar SECTIONS, immagine mouse con hotspot cliccabili per il remap,
+>     colonna destra Profilo/Import/Export/Device) richiesto dall'utente
+>     all'inizio di questa giornata **ora funziona correttamente**.
+>   - **Rivalutazione della "teoria del nesting"**: la sessione di bisezione
+>     precedente (stessa giornata) aveva concluso che annidare
+>     `MakaluDpiRemapPanel` dentro un secondo `UserControl` "shell" fosse
+>     intrinsecamente pericoloso (2 livelli di nesting di controlli custom).
+>     Con la root cause reale ora nota, è plausibile che ANCHE quel crash
+>     fosse lo stesso identico bug (la shell aveva la stessa combinazione
+>     `IsChecked="True"` + `Checked="MkSection_Changed"` che referenziava
+>     `MkDpiRemap.SecDpi` non ancora assegnato) — **non riverificato
+>     esplicitamente**, quindi la nota nel codice tratta il nesting come
+>     "rischio non confermato", non "sicuro". Se in futuro serve un'architettura
+>     annidata, vale la pena ritestarla ora che si sa cosa cercare.
+>   - **Lezione generale per il futuro**: qualunque `RadioButton`/`CheckBox`
+>     con `IsChecked` impostato a un letterale in XAML, o qualunque `Slider`
+>     con `Minimum`/`Maximum` che differisce dal `Value` di default, che ha
+>     anche un handler (`Checked`/`ValueChanged`/...) collegato via XAML,
+>     rischia di far scattare quell'handler **sincronamente durante
+>     `InitializeComponent()`**, prima che elementi dichiarati più avanti nello
+>     stesso file siano assegnati. Il fix generale è: non impostare quei valori
+>     "di attivazione" in XAML se l'handler tocca altri elementi nominati —
+>     impostarli in codice dopo che l'intera `InitializeComponent()` è
+>     terminata, oppure guardare l'handler con un flag tipo `_mkSuppress`
+>     inizializzato a `true` di default.
+>
+> Previous: 2026-07-10 (Makalu: crash-repro RIATTIVATO di proposito su
+> richiesta utente, per debug con WinDbg+SOS — vedi entry sotto per lo stato
+> attuale della build, NON è più lo stato "sicuro" descritto più sotto):
+>   - **Richiesta utente**: dopo il resoconto della sessione precedente
+>     (crash ricomparso, root cause non trovata, revert a stato sicuro), ha
+>     chiesto esplicitamente di rimettere la configurazione che fa crashare
+>     l'app, per indagarla lui stesso con WinDbg + estensione SOS.
+>   - **Fatto**: ricreati `MakaluRgbSettingsPanel.xaml(.cs)` (identici alla
+>     versione cancellata nella sessione precedente) e ripristinato in
+>     `MainWindow.xaml`/`MainWindow.Makalu.cs` il layout completo a 3 colonne
+>     (sidebar SECTIONS + immagine mouse con hotspot + colonna destra) con
+>     `MkRgbSettings`/`MkDpiRemap` entrambi wired come figli diretti — la
+>     stessa identica configurazione già confermata come reproducer nella
+>     bisezione precedente. **Verificato che il crash si riproduce ancora**
+>     (`Fatal error. Invalid Program: attempted to call a UnmanagedCallersOnly
+>     method from managed code` dentro `Dispatcher.Run`, exit code 6) subito
+>     dopo la build. Questo è quindi lo stato ATTUALE della working tree:
+>     **NON è sicuro da lanciare per uso normale**, è lasciato così apposta
+>     per il debug. Istruzioni WinDbg+SOS fornite in chat (non salvate qui,
+>     sono indipendenti dal codice — vedi cronologia sessione se servono di
+>     nuovo).
+>   - **Per tornare allo stato sicuro** (RGB+Settings inline, DPI/Remap
+>     disabilitati): vedi l'entry precedente per la procedura già fatta una
+>     volta in questa stessa giornata — in breve, rimuovere
+>     `MakaluRgbSettingsPanel.xaml(.cs)`, ripristinare RGB+Settings come XAML
+>     inline in `MainWindow.xaml`/`MainWindow.Makalu.cs`, non referenziare più
+>     `MkDpiRemap`.
+>
+> Previous: 2026-07-10 (Makalu: il layout "sezioni/immagine/impostazioni" fa
+> ricomparire il crash fatale — DPI/Remap DISABILITATI di nuovo, root cause non
+> trovata, Everest 60 non toccato per lo stesso motivo):
+>   - **Richiesta utente**: dare a Everest 60 e Makalu lo stesso layout delle
+>     altre tab (MacroPad/Everest/DisplayPad) — sezioni specifiche a sinistra
+>     (RadioButton), immagine interattiva del device al centro, impostazioni
+>     generiche (Profilo/Import/Export/Device) a destra. Per Makalu: sezioni
+>     RGB/DPI/Remap/Settings separate (oggi DPI+Remap sono un unico blocco),
+>     colonna destra con gli stessi gruppi del template (Profilo/Import/Export
+>     disabilitati per ora — nessuna persistenza multi-profilo per questo
+>     device — solo "Rinomina device" funzionante via nuovo
+>     `AppSettings.MakaluDeviceName`/`Everest60DeviceName`).
+>   - **Refactor preparatorio**: spostati `SectionTabStyle`/`K2SideActionButton`/
+>     `K2SideActionAccentButton`/`K2SideActionCombo`/`K2SideGroupHeader` da
+>     `MainWindow.xaml` (locali) a `K2.Core/Themes/K2Theme.xaml` (merged a
+>     livello Application) — **poi ripristinati** (vedi sotto, esclusi come causa
+>     ma non serviva più tenerli spostati una volta abbandonato il refactor).
+>   - **Ricostruito il layout Makalu a 3 colonne** (sidebar SECTIONS + immagine
+>     mouse con hotspot cliccabili per selezionare il tasto da rimappare,
+>     posizioni stimate a occhio su `Assets/makalu_mouse.png` + colonna destra),
+>     inizialmente come UserControl "shell" (`MakaluTabPanel`) che incapsulava
+>     tutto (sidebar/immagine/RGB/DPI/Remap/Settings/colonna destra).
+>   - **Il crash fatale del CLR già visto l'8 luglio è ricomparso**
+>     (`Fatal error. Invalid Program: attempted to call a UnmanagedCallersOnly
+>     method from managed code` dentro `Dispatcher.Run`) — stessa firma esatta.
+>     Segue la sequenza di bisezione fatta in questa sessione (per intero, è
+>     stato un pomeriggio di tentativi, riportata perché la prossima persona
+>     che riprende questo lavoro NON deve rifare gli stessi test):
+>     1. **Un solo `MakaluTabPanel` gigante** (sidebar+immagine+4 sezioni+colonna
+>        destra, ~55 elementi nominati + ~28 handler) → crash.
+>     2. **Split in 3 UserControl annidati** (`MakaluTabPanel` shell che
+>        incapsula `MakaluRgbSettingsPanel` + `MakaluDpiRemapPanel`, 2 livelli
+>        di nesting) → crash.
+>     3. **Bisezione dentro la shell**: shell vuota (solo un TextBlock) →
+>        stabile. Shell con sidebar+colonna destra (senza immagine né
+>        contenuto sezioni) → stabile. + immagine/hotspot → ancora stabile.
+>        + **`MakaluDpiRemapPanel` annidato dentro la shell** → **crash** (con
+>        contenuto byte-identico a quello stabile l'8 luglio, unica differenza:
+>        nesting a 2 livelli invece di 1).
+>     4. **Eliminata la shell**: `MakaluRgbSettingsPanel` e `MakaluDpiRemapPanel`
+>        come figli DIRETTI di `MainWindow` (niente più nesting a 2 livelli,
+>        stesso pattern di `MakaluDpiRemapPanel` da solo l'8 luglio) → **crash
+>        comunque**, sia col layout pieno (sidebar+immagine+colonna destra) sia
+>        col solo layout minimale a singola colonna.
+>     5. **Isolato l'ultimo fattore**: `MakaluDpiRemapPanel` DA SOLO (senza
+>        `MakaluRgbSettingsPanel`) come figlio diretto → **stabile**.
+>        `MakaluRgbSettingsPanel` DA SOLO (senza `MakaluDpiRemapPanel`) →
+>        **stabile**. **ENTRAMBI insieme, come semplici fratelli diretti di
+>        MainWindow, layout minimale identico a quello dell'8 luglio tranne
+>        per il fatto che RGB+Settings sono ORA un UserControl invece di XAML
+>        inline** → **crash**, riproducibile 4/4 volte, anche dopo
+>        `rm -rf obj bin` e rebuild pulita completa (quindi non cache/staleness).
+>     6. **Ripristinato l'ESATTO layout dell'8 luglio** (RGB+Settings come XAML
+>        inline in `MainWindow.xaml`/`MainWindow.Makalu.cs`, SOLO
+>        `MakaluDpiRemapPanel` estratto) → **crash comunque**, 3/3 volte, anche
+>        con rebuild pulita — la stessa identica configurazione che l'8 luglio
+>        era stata verificata stabile più volte, inclusa una sessione con
+>        hardware reale collegato (MacroPad+Everest+DisplayPad), ora non lo è
+>        più in questa sessione.
+>     7. **Sospettato lo spostamento degli stili** (punto precedente,
+>        `SectionTabStyle` ecc. in `K2Theme.xaml` invece che locali in
+>        `MainWindow.xaml`) come causa residua — **ripristinati locali,
+>        rebuild pulita, testato 3 volte → crash identico**. Escluso anche
+>        questo.
+>   - **Root cause NON trovata**. Il fatto che la configurazione del punto 6
+>     (identica, byte per byte nella parte Makalu, a quella verificata stabile
+>     l'8 luglio) ora crashi in modo riproducibile è la scoperta più
+>     preoccupante della sessione: significa che la causa non è (solo) nel
+>     contenuto/struttura del tab Makalu, ma in qualcosa che è cambiato
+>     nell'ambiente/toolchain/stato del repository tra l'8 luglio e ora, mai
+>     isolato. Ipotesi non testate per mancanza di strumenti adeguati in questo
+>     ambiente: bug di cache dello stub table dei reverse P/Invoke a livello di
+>     processo host .NET (non per-progetto, quindi non pulibile con `rm -rf
+>     obj/bin`), comportamento diverso di un aggiornamento SDK/runtime
+>     installato nel frattempo (`dotnet --list-sdks` andrebbe ricontrollato),
+>     o un fattore ambientale del tutto estraneo al codice K2. **Serve un
+>     debugger nativo (WinDbg + estensione SOS) attaccato al processo che
+>     crasha per vedere l'istruzione/stub corrotto**: la bisezione a colpi di
+>     build+lancio ha ormai raggiunto il suo limite di utilità su questo bug.
+>   - **Deciso**: tornare allo stato sicuro noto — Makalu con RGB+Settings
+>     inline (invariati) e **DPI/Remap disabilitati di nuovo** (stesso stato di
+>     prima dell'8 luglio: `MakaluDpiRemapPanel.xaml(.cs)` resta nel repo,
+>     protocollo/servizio pronti, ma non referenziato da `MainWindow.xaml`).
+>     Verificato stabile 4/4 lanci consecutivi con rebuild pulita, log
+>     applicativo che arriva regolarmente all'apertura driver MacroPad/Everest.
+>   - **Everest 60 NON toccato** (il secondo device del task originale): dato
+>     che il bug si è dimostrato meno prevedibile del previsto (rompe anche
+>     configurazioni "innocue" già provate sicure), non ha più senso assumere
+>     che l'assenza di codice DPI/Remap-like in Everest 60 lo renda
+>     automaticamente sicuro senza testarlo — rimandato a quando si potrà usare
+>     un debugger nativo o si sarà isolata la causa reale.
+>   - **Materiale preparato ma non wired**: `K2.App/Assets/everest60_keyboard.png`
+>     (foto Everest 60, da `Mountain Base Camp/.../Everest60/everest_60_home.png`,
+>     stessa fonte usata per `makalu_mouse.png`) copiato ma non ancora inserito
+>     in nessun tab. `K2.App/Services/MakaluRemapData.cs` (tabelle remap
+>     condivise, estratte durante il refactor) resta in uso da
+>     `MakaluDpiRemapPanel.xaml.cs`. `K2.Core.AppSettings.MakaluDeviceName`/
+>     `Everest60DeviceName` (nuove proprietà per un futuro "rinomina device"
+>     senza store SQLite dedicato) aggiunte ma non ancora usate da nessuna UI.
+>   - **Da fare**: (1) capire la vera causa del crash con strumenti adeguati
+>     prima di ritentare QUALSIASI modifica strutturale al tab Makalu; (2)
+>     valutare se procedere con Everest 60 in una sessione separata, con test
+>     più incrementali (un elemento alla volta, rebuild pulita ad ogni step) e
+>     accettando che anche lì possa ripresentarsi lo stesso problema.
+>
+> Previous: 2026-07-10 (Makalu: aggiunta immagine device nel tab):
+>   - **Richiesta utente**: "aggiungi la possibilità di vedere i dispositivi nella UI", con 3 PNG
+>     allegati (mouse Makalu top-down + 2 pannelli device generici) e nota che sono reperibili anche
+>     nel Base Camp decompilato.
+>   - **Sorgente scelta**: invece di provare a salvare i PNG incollati in chat (nessun tool disponibile
+>     per estrarre i byte grezzi di un'immagine incollata), usato l'equivalente già presente in
+>     `Mountain Base Camp/resources/bin/wwwroot/images/makalu67.png` (foto top-down identica per
+>     inquadratura al PNG incollato) — confermato dallo stesso utente come fonte valida alternativa.
+>   - **Controllato prima di copiare alla cieca**: le due immagini "pannello generico" allegate
+>     corrispondono quasi certamente a `mkd_bg.png` (già usato dal tab MacroPad) e a un `dkd_bg.png`
+>     trovato in `K2.App/Assets/` ma MAI referenziato in nessun `.xaml`/`.cs` — sembrava un bug
+>     ("DisplayPad usa lo sfondo del MacroPad invece del proprio"). Verificato `MainWindow.DisplayPad.cs`
+>     riga 28-30: è una scelta di design ESPLICITA e documentata ("Canvas with device background
+>     (mkd_bg.png, same graphic as MacroPad)"), non un bug — lasciato invariato. `dkd_bg.png` resta
+>     un asset orfano (non toccato, nessuna richiesta di usarlo).
+>   - **Fatto**: copiato `makalu67.png` → `K2.App/Assets/makalu_mouse.png`, aggiunto a
+>     `K2.App.csproj` come `<Resource>` (stesso schema di `mkd_bg.png`/`keybg.png`/etc.). Tab Makalu
+>     (`MainWindow.xaml`, riga status): la `WrapPanel` di stato è ora dentro un `DockPanel` con
+>     l'immagine del mouse (72×72) a sinistra. Nessuna modifica a MacroPad/DisplayPad/Everest60 (non
+>     evidenziato alcun gap concreto lì, evitato lavoro non richiesto).
+>   - **Verificato**: `dotnet build` pulito su entrambe le solution (0 errori/0 warning); app lanciata
+>     in locale senza crash/eccezioni nuove (stesso VEH pre-esistente e non correlato di SDKDLL.dll
+>     osservato quando il processo viene terminato a forza da un timeout esterno, non un problema
+>     introdotto qui).
+>
+> Previous: 2026-07-10 (Makalu: trovata root cause del crash fatale DPI/Remap, riattivati come MakaluDpiRemapPanel UserControl):
+>   - **Contesto**: ripresa dell'indagine sospesa nella entry precedente (stesso giorno). L'utente ha
+>     chiesto di capire come riattivare il pannello DPI/Remap del Makalu 67/Max e di indagare la causa
+>     del crash fatale del CLR che lo aveva fatto disabilitare (v. entry sotto per sintomo/bisezione
+>     originale: `Invalid Program: attempted to call a UnmanagedCallersOnly method from managed code`
+>     dentro `Dispatcher.Run`, isolato al tab Makalu ma con causa radice non trovata).
+>   - **Codice pre-fix recuperato**: il commit che ha introdotto Makalu (`444b62b`) contiene già la
+>     versione RGB+Settings-only; il codice DPI/Remap COMPLETO (739 righe) era però ancora recuperabile
+>     da uno stash lasciato dalla sessione di bisezione precedente (`git stash list` → `bisect-full-session`,
+>     `git show stash@{0}^3:K2.App/MainWindow.Makalu.cs`, i file nuovi di quella sessione erano stati
+>     stashati come "untracked files"). Riportato in un ambiente locale (Windows, non sandbox — build e
+>     lancio diretti via `dotnet build`/`./K2.App.exe`), il crash si riproduce ISTANTANEAMENTE anche
+>     SENZA hardware collegato: il log si ferma dopo 5 righe (init pre-driver), coerente con quanto
+>     già osservato nella bisezione originale.
+>   - **Due ipotesi escluse con test diretti** (mai provati nella bisezione originale):
+>     - `DOTNET_JITMinOpts=1` (forza il tier JIT più semplice, nessuna ottimizzazione) → crash identico.
+>       Esclude un bug di miscompilazione del JIT ottimizzante sul codice IL del tipo.
+>     - `DOTNET_ReadyToRun=0` (forza il re-JIT delle DLL WPF invece di usare le immagini R2R
+>       precompilate) → crash identico. Esclude un'immagine R2R di WPF corrotta/stale come causa.
+>     - (Provato anche il roll-forward a .NET 10.0.8 via `DOTNET_ROLL_FORWARD=LatestMajor`: non
+>       verificabile su questa macchina, l'host **x86** a `C:\Program Files (x86)\dotnet` ha solo
+>       runtime 8.0.x — .NET 10 è installato solo per x64. Rimane un test aperto se in futuro si
+>       installa un runtime desktop x86 più recente.)
+>   - **Root cause isolata**: `MainWindow.xaml` è un unico `Window` monolitico che ospita TUTTI i tab
+>     device (MacroPad/Everest/Everest60/Makalu/Macro/Settings). WPF compila l'intero file in UN SOLO
+>     metodo generato `IComponentConnector.Connect(int connectionId, object target)` — lo switch che
+>     assegna ogni `x:Name` e aggancia ogni event handler. Nella build corrente (DPI/Remap ancora
+>     disabilitati) quello switch ha già **328 case** (`K2.App/obj/x86/Debug/net8.0-windows/MainWindow.g.cs`).
+>     Riaggiungere le ~18 elementi nominati + ~12 event handler di DPI/Remap direttamente nello stesso
+>     `MainWindow.xaml` porta lo switch a **346 case** — e riproduce il crash. Spostando lo STESSO
+>     markup in un secondo file compilato separatamente (un `UserControl` con il proprio `Connect()`,
+>     stesso contenuto totale, nessuna riga di logica cambiata) il crash **sparisce**: l'app supera il
+>     punto in cui moriva prima e apre regolarmente driver MacroPad/Everest/DisplayPad (verificato via
+>     `K2.App.log`, centinaia di righe post-init contro le 5 di prima). Root cause quindi: un bug/soglia
+>     del JIT x86 legato alle dimensioni/complessità del metodo `Connect()` generato da WPF per markup
+>     molto grandi (non del codice C# scritto a mano, già escluso nella bisezione originale) — non
+>     confermato su un caso minimale isolato, ma il fix strutturale (spezzare il `Connect()`) è
+>     verificato empiricamente e riproducibile.
+>   - **Fix applicato**: nuovo `K2.App/MakaluDpiRemapPanel.xaml(.cs)` — `UserControl` che ospita SOLO
+>     il markup DPI+Remap+overlay di conferma (stesso contenuto di prima, spostato 1:1). Gli event
+>     handler XAML (`Click`/`ValueChanged`/`SelectionChanged`/`KeyDown`/`LostFocus`) vivono nel
+>     code-behind del nuovo file come thin forwarder verso `MainWindow` (proprietà `Host`, impostata da
+>     `InitMakaluModule`), tutta la logica reale resta invariata in `MainWindow.Makalu.cs` (i 12 metodi
+>     handler sono ora `internal` invece di `private` per essere richiamabili dal forwarder). `MainWindow.xaml`
+>     referenzia il pannello con `<local:MakaluDpiRemapPanel x:Name="MkDpiRemap" Grid.Row="1"/>`
+>     (nuovo `xmlns:local="clr-namespace:K2.App"` sul `Window`); i riferimenti agli elementi nominati in
+>     `MainWindow.Makalu.cs` sono ora qualificati `MkDpiRemap.NomeElemento`. Grid righe del tab Makalu
+>     tornate a 4 (RGB/DPI+Remap/Settings/Log) invece delle 5 con DPI e Remap separati.
+>   - **Verificato in locale**: `build-check.bat` pulito (0 errori/0 warning su entrambe le solution).
+>     App lanciata più volte senza hardware Makalu collegato (crash istantaneo prima, ora nessun crash);
+>     lanciata anche CON MacroPad+Everest+DisplayPad reali collegati (stessa macchina di sviluppo): tutti
+>     e tre i driver si aprono regolarmente, nessuna regressione visibile nei log.
+>   - **NON verificato**: nessun Makalu fisico disponibile in questo giro — DPI/remap/sniper via HID
+>     restano da testare su hardware reale (stesso stato "mai provato" della prima implementazione,
+>     v. entry sotto). Le stringhe loc `makalu_dpi_*`/`makalu_remap_*` erano già presenti in
+>     `Strings.xml`/`Strings.it.xml` da quando la feature era stata scritta la prima volta (mai rimosse
+>     insieme al codice), quindi non serviva aggiungerne di nuove in questa sessione.
+>   - **Da fare**: test hardware completo del pannello DPI/Remap Makalu; se confermato stabile, applicare
+>     lo stesso pattern "UserControl separato" ad altre sezioni pesanti di `MainWindow.xaml` se in futuro
+>     si osservano crash simili aggiungendo altre feature (es. l'editor RGB per-tasto pianificato per
+>     Everest 60, v. `_PROJECT_MAP.md` step 5); capire se esiste un limite noto/documentato lato .NET
+>     runtime per la dimensione del metodo `Connect()` generato da WPF (non trovato un riferimento
+>     esterno in questa sessione, solo il comportamento riprodotto empiricamente).
+>
+> Previous: 2026-07-10 (Makalu: crash fatale isolato a DPI/remap, rilasciato RGB+Settings, DPI/remap disabilitati):
 >   - **Contesto**: dopo l'implementazione MVP di Makalu (vedi entry sotto, stessa giornata),
 >     l'utente ha segnalato "continua a non avviarsi, sembra crashare all'avvio" — K2.App
 >     crashava SEMPRE all'avvio con Makalu abilitato, con o senza mouse collegato.
