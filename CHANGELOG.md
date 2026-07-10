@@ -9,7 +9,228 @@
 > mappa stabile in `_PROJECT_MAP.md`. Consultare qui solo per il contesto
 > di una modifica specifica passata (grep per parola chiave/data).
 
-> Last updated: 2026-07-09 (Aggiunto controllo istanza singola per K2.App e K2.DisplayPad — bug trovato e fixato durante il test dal vivo: il MessageBox "già in esecuzione" non era visibile):
+> Last updated: 2026-07-10 (Makalu: crash fatale isolato a DPI/remap, rilasciato RGB+Settings, DPI/remap disabilitati):
+>   - **Contesto**: dopo l'implementazione MVP di Makalu (vedi entry sotto, stessa giornata),
+>     l'utente ha segnalato "continua a non avviarsi, sembra crashare all'avvio" — K2.App
+>     crashava SEMPRE all'avvio con Makalu abilitato, con o senza mouse collegato.
+>   - **Sintomo**: crash fatale del CLR, non un'eccezione .NET normale — `Fatal error. Invalid
+>     Program: attempted to call a UnmanagedCallersOnly method from managed code`, stack trace
+>     dentro `MS.Win32.UnsafeNativeMethods.DispatchMessage` → `Dispatcher.PushFrame` →
+>     `Dispatcher.Run` → `Application.Run` → `Main()`. Nessuna riga di log oltre l'apertura driver
+>     MacroPad — il crash avveniva nel primo giro del message pump di WPF, dopo la costruzione
+>     di `MainWindow` ma primissimo evento processato.
+>   - **Bisezione** (>30 cicli build+lancio, `build-check.bat` + `Start-Process` con redirect
+>     stderr, controllo `HasExited`): isolato con certezza al tab Makalu (con Everest 60 — aggiunto
+>     nella stessa giornata — confermato pulito da solo). Escluso via `git stash`/ricostruzione
+>     chirurgica con `sed`/awk uno-alla-volta:
+>     - Rimuovere la sola `InitMakaluModule()` (codice C# non chiamato) → crash persisteva.
+>     - `DOTNET_EnableWriteXorExecute=0` (workaround noto per bug JIT/W^X simili) → non risolve.
+>     - Sostituire l'intera sezione XAML DPI+Remap+overlay con ~280 righe di codice INERTE della
+>       stessa dimensione (40 metodi triviali, nessuna API WPF/P-Invoke) → **stabile**, quindi
+>       NON è una questione di volume di codice/soglia dimensionale del tipo.
+>     - Bypassare le chiamate P/Invoke reali (`_makalu.SetButtonRemap`/`SetButtonSniper`,
+>       sostituite con `ok = false` letterale) → crash persisteva: non è l'HID P/Invoke.
+>     - Sostituire i lookup `(Brush)FindResource(...)` nei metodi di evidenziazione pulsanti
+>       dinamici con brush letterali → crash persisteva: non è FindResource.
+>     - Disabilitare SOLO il gruppo `DispatcherTimer`+lambda del dialog di conferma remap
+>       (`MkShowRemapConfirm`/`BtnMkRemapKeep_Click`/`BtnMkRemapRevert_Click`/`MkRemapRevert`)
+>       → crash persisteva.
+>     - Disabilitare SOLO `BuildMkRemapButtons` (loop di creazione dinamica pulsanti) → crash
+>       persisteva.
+>     - **Nessun singolo metodo, preso isolatamente, riproduce il crash da solo** — eppure
+>       qualsiasi combinazione che include codice reale di DPI O Remap (anche mai eseguito,
+>       solo presente/compilato nel tipo) lo causa, mentre RGB+Settings (sezioni comunque
+>       corpose, con lo stesso pattern di creazione dinamica pulsanti in `BuildMkPresets`)
+>       restano stabili da sole e insieme. Effetto combinatorio/di soglia mai pienamente isolato.
+>     - Ipotesi principale non confermata: bug del JIT specifico per il processo x86 (vincolo
+>       di piattaforma imposto da `MacroPadSDK.dll`/`SDKDLL.dll`), non un difetto di logica nel
+>       codice C# scritto. **Causa radice non trovata.**
+>   - **Decisione utente** (`AskUserQuestion`): rilasciare subito RGB+Settings (entrambe provate
+>     stabili), disabilitare DPI e remap tasti invece di continuare l'indagine.
+>   - **Fatto**: `MainWindow.Makalu.cs` riscritto da zero senza alcun riferimento a DPI/Remap
+>     (nessuno stub, codice rimosso pulito). `MainWindow.xaml`: card DPI, card Remap e l'overlay
+>     di conferma tolti da `PnlMakalu` (righe/`Grid.RowDefinitions` rinumerate, restano solo RGB/
+>     Settings/Log). `Services/MakaluProtocol.cs`/`MakaluService.cs`/`MakaluHidNative.cs`
+>     **NON toccati** — il livello protocollo/servizio non è mai stato implicato dalla bisezione,
+>     resta lì pronto (metodi `GetDpi`/`SetAllDpi`/`SetButtonRemap`/`SetButtonSniper` inerti,
+>     non referenziati da nessuna UI) per quando si riprenderà l'indagine. Riabilitata
+>     `AppSettings.AutoStopBaseCamp` in `App.xaml.cs` (disattivata temporaneamente durante la
+>     diagnosi, confermata NON essere la causa).
+>   - **Verificato su hardware reale 2026-07-10**: K2.App avviato con successo 2 volte di fila
+>     con Everest Max + MacroPad + DisplayPad + Makalu (RGB) tutti collegati — nessun crash,
+>     driver aperti correttamente, effetti LED applicati. Prima verifica hardware reale sia per
+>     Makalu (RGB) sia per Everest 60 (aggiunto nella stessa giornata, mai testato prima d'ora).
+>   - **Da fare in una sessione futura**: capire la causa radice del crash DPI/Remap (magari
+>     bisecando ulteriormente K2.App.csproj/impostazioni compilatore, o isolando su una minimal
+>     repro app separata prima di reintrodurre il codice in K2); poi reintrodurre DPI e remap
+>     tasti nella UI.
+>
+> Previous: 2026-07-10 (Nuovo modulo Makalu 67/Max — MVP tab RGB/DPI/remap/settings via raw HID, niente SDK):
+>   - **Richiesta utente**: "Aggiungiamo il supporto a Makalu 67". Stessa strategia già validata
+>     per l'Everest 60 in questa stessa giornata: nessun SDK/DLL vendor esiste affatto per questo
+>     mouse (a differenza di MacroPad/Everest Max/DisplayPad), quindi niente da decompilare — solo
+>     da portare un protocollo già reverse-engineered.
+>   - **Trovato**: `BaseCampLinux/devices/makalu67/controller.py` ha già il protocollo COMPLETO
+>     (non solo RGB come Everest 60) reverse-engineered da USB capture: illuminazione (preset +
+>     custom 8-LED), DPI (5 livelli, get/set), polling rate/debounce/lift-off/angle-snapping,
+>     remap tasti + DPI sniper. HID Feature Report puri, report id `0xA1`, 64 byte, interfaccia 1,
+>     VID `0x3282` PID `0x0003` (Makalu 67) / `0x0002` (Makalu Max).
+>   - **Decisione di architettura presa DURANTE l'implementazione** (piano iniziale in plan mode
+>     proponeva HidSharp, un nuovo pacchetto NuGet): scoperto che il modulo Everest 60, aggiunto
+>     poche ore prima nella stessa sessione, usa già un pattern HID raw via P/Invoke diretto
+>     (`hid.dll`+`setupapi.dll`, niente reader thread, feature report sincrone) — riusato
+>     IDENTICO per Makalu invece di introdurre una dipendenza NuGet nuova. Nessun impatto su
+>     `DISTRIBUTION.md` (stesso motivo per cui Everest 60 non ce l'ha: `hid.dll`/`setupapi.dll`
+>     sono di sistema, non ridistribuiti).
+>   - **Nuovi file** (`K2.App/Services/`): `MakaluHidNative.cs` (P/Invoke, enumera interfaccia
+>     `mi_01`), `MakaluProtocol.cs` (porting 1:1 di `controller.py`: enum `Effect`, lighting
+>     preset+custom, polling/debounce/liftoff/angle, DPI get/set, remap+sniper), `MakaluService.cs`
+>     (facade find-open-send-close per chiamata, stesso pattern di `Everest60Service`).
+>   - **Nuovo tab "Makalu"** (`MainWindow.Makalu.cs` + sezione XAML in `MainWindow.xaml`, tag
+>     `makalu`): stato connessione con rilevamento modello 67/Max (poll 3s), pannello RGB (Off/
+>     Static/Breathing/RGB Breathing/Rainbow/Responsive/Yeti + speed/brightness/2 colori/direzione
+>     solo Rainbow, pattern `CapsFor` condiviso con Everest/Everest60), finestra dedicata
+>     `MakaluCustomRgbWindow` per l'editor 8-LED custom (click-per-LED, non canvas multi-select
+>     come il riferimento Python — semplificazione deliberata), pannello DPI (5 livelli, slider+
+>     entry, refresh dal device), pannello remap tasti (griglia dinamica 6 tasti su 67 / 8 su Max,
+>     categorie Mouse/DPI/Scroll/Sniper — **dialog di conferma con countdown 10s e auto-revert
+>     quando si rimappa il tasto sinistro**, per non bloccare l'utente fuori dal click, stessa
+>     logica di sicurezza del riferimento Python), pannello impostazioni (polling rate/debounce/
+>     angle snapping/lift-off), log dedicato.
+>   - **NON incluso in questo MVP** (stessa scelta di scope di Everest 60): persistenza
+>     cross-sessione dei parametri (stato solo in memoria, rimandata a dopo il primo test su
+>     hardware reale), import profili Makalu da `BaseCamp.db` (`MakaluKeyBinding`/`MakaluLighting`/
+>     `MakaluSetting`/`DPILevel`, già presenti nel decompilato ma non collegati).
+>   - **Nuove stringhe** `tab_makalu`, `makalu_*` in `Strings.xml`/`Strings.it.xml` (EN+IT nella
+>     stessa sessione, come da regola CLAUDE.md).
+>   - **Verificato**: build pulite su `K2.sln` (x86) e `K2.DisplayPad.sln` (x64) dopo un fix di
+>     accessibilità (costruttore di `MakaluCustomRgbWindow` doveva essere `internal`, non
+>     `public`, perché prende un parametro di tipo `MakaluService` interno — CS0051, stessa
+>     regola già in CLAUDE.md per i metodi facade). **NON verificato su hardware reale** (nessun
+>     Makalu disponibile in questo ambiente) — da testare: enumerazione device (VID/PID/
+>     interfaccia `mi_01` — se l'euristica è sbagliata NESSUN comando funzionerà), RGB (preset +
+>     custom), DPI get/set, remap+sniper, polling/debounce/lift-off/angle-snapping.
+>
+> Previous: 2026-07-10 (Nuovo modulo Everest 60 — MVP tab + RGB via raw HID, niente SDK):
+>   - **Richiesta utente**: "Aggiungiamo il supporto a everest 60". Decisione di scope discussa
+>     PRIMA di scrivere codice (vedi `AskUserQuestion` in sessione): l'SDK ufficiale
+>     (`Everest360_USB.dll`, classe `Everest60`, ~60 export) passa quasi tutte le struct come
+>     `IntPtr` opachi — nessun layout noto, richiederebbe lo stesso lavoro di reverse-engineering
+>     multi-sessione già fatto per `EffData`/`BlockData` dell'Everest Max. Il remap tasti/macro via
+>     firmware non è MAI stato decodificato da nessuna fonte nota (nemmeno BaseCampLinux).
+>   - **Trovato**: il progetto community `BaseCampLinux` (`devices/everest60/controller.py`) ha
+>     già un protocollo di illuminazione RGB reverse-engineered e FUNZIONANTE via **HID Feature
+>     Report** puri (interfaccia 2, VID 0x3282 PID 0x0005 ANSI/0x0006 ISO, magic bytes
+>     `46 23 EA`), cross-validato con OpenRGB's MountainKeyboard60Controller. Scelto di portare
+>     QUESTO protocollo invece dell'SDK: niente DLL non ridistribuibile, niente guessing di
+>     bit-layout, coerente con la regola CLAUDE.md "sniff prima di decompilare — non indovinare
+>     il bit-layout" (qui lo sniff l'ha già fatto la community).
+>   - **Nuovi file** (`K2.App/Services/`): `Everest60HidNative.cs` (P/Invoke hid.dll+setupapi.dll,
+>     stesso schema di `EverestHidNative`/`DpHidNative` già in uso per l'Everest Max nativo, ma
+>     SENZA il reader thread overlapped — le feature report sono transfer di controllo sincroni:
+>     `HidD_SetFeature`/`HidD_GetFeature`), `Everest60Protocol.cs` (porting 1:1 di
+>     `controller.py`: enum Effect/ColorMode, tabelle direzione Wave/Tornado — i valori
+>     combaciano con quelli già noti dell'Everest Max, riscontro incrociato tra le due
+>     reverse-engineering indipendenti —, `SendMode`/`SendCustom`), `Everest60Service.cs`
+>     (facade find-open-send-close per chiamata, nessuna sessione persistente necessaria).
+>   - **Nuovo tab "Everest 60"** (`MainWindow.Everest60.cs` + sezione XAML dedicata in
+>     `MainWindow.xaml`, tag `everest60`): stato connessione (poll ogni 3s), pannello RGB
+>     (Off/Static/Breathing/Wave/Tornado/Reactive/Yeti, velocità, luminosità, 2 colori, rainbow,
+>     direzione per-effetto Wave/Tornado — stesso pattern `CapsFor`/`UpdateCapabilities` già
+>     usato per l'Everest Max), pannello Anello laterale (44 LED perimetrali, colore statico —
+>     nota: attivarlo forza i tasti principali in modalità Custom/spenti, il device indirizza
+>     l'anello solo così), log dedicato.
+>   - **NON incluso in questo MVP** (deliberatamente, vedi scelta di scope sopra): remap
+>     tasti/Fn-layer/macro (protocollo firmware ignoto), editor per-key RGB con overlay tastiera
+>     (il metodo `Everest60Protocol.SendCustom` esiste già e supporta il caso, manca solo la UI di
+>     paint), persistenza cross-sessione dei parametri RGB (Everest Max l'ha aggiunta in una
+>     sessione successiva al primo cut — stesso percorso previsto qui).
+>   - **Nuove stringhe** `tab_everest60`, `ev60_*` in `Strings.xml`/`Strings.it.xml` (EN+IT nella
+>     stessa sessione, come da regola CLAUDE.md).
+>   - **Verificato**: build pulite (0 errori/0 warning) su `K2.sln` (x86) e `K2.DisplayPad.sln`
+>     (x64). **NON verificato su hardware reale** (nessun Everest 60 disponibile in questo
+>     ambiente) — da testare: enumerazione device (VID/PID/interfaccia mi_02), invio feature
+>     report, effetti che animano davvero, anello laterale.
+>
+> Previous: 2026-07-09 (MacroPad: CONFERMATO funzionante su hardware dopo il fix byAll/SwitchProfile/SaveFlash; rifinitura elenco effetti Reactive):
+>   - **Conferma utente**: "Ottimo, funziona" — i 3 fix della entry precedente (byAll=0, SwitchProfile
+>     prima dell'apply, SaveFlash(EffMenuIndex)) risolvono definitivamente gli effetti MacroPad su
+>     hardware reale. Chiude l'indagine iniziata a inizio sessione.
+>   - **Richiesta utente**: disattivare "Reactive B" dal combo effetti e rinominare "Reactive A" →
+>     "Reactive", "Reactive C" → "Reactive Wave".
+>   - **`MainWindow.MacroLed.cs`**: `MacroEffectList` — rimossa la voce `ReactiveB` (il firmware la
+>     supporta ancora, `MacroPadService.Effect.ReactiveB` e il suo `MenuIndexFor`/`CapsFor` non sono
+>     stati toccati: semplicemente non più selezionabile dal combo), label `ReactiveA`→"Reactive",
+>     `ReactiveC`→"Reactive Wave".
+>   - **Verificato**: build pulite (0/0) su entrambe le solution.
+>
+> Previous: 2026-07-09 (MacroPad: 3 bug CONFERMATI su cattura USB reale — byAll, SwitchProfile mancante, SaveFlash(profilo) — non più ipotesi):
+>   - **L'utente ha fatto la cattura USB** (`_reference/usb_dumps/macropad.pcapng`): sequenza Static →
+>     Breathing → Reactive → Matrix → Custom → Yeti → Off applicata da Base Camp reale. Parsato con
+>     `tools/parse_usb_pcap.py`. Traffico su **bus=2 dev=7 ep=0x03** (dev=6 ep=0x05 è rumore di fondo,
+>     pacchetti periodici "11 14"/"11 83 00 00 28" indipendenti dai click — quasi certamente heartbeat
+>     dell'Everest connesso in parallelo, ignorato).
+>   - **Struttura confermata byte-per-byte**: ogni cambio effetto è ESATTAMENTE 3 pacchetti da 64B:
+>     1. `14 00 00 00 <profilo> <EffMenuIndex> 00...` — **SwitchProfile(profilo, EffMenuIndex, id)**.
+>        Il 6° byte incrementa **0,3,4,5,6,7,8 nello stesso ordine dei click dell'utente**
+>        (Static/Breathing/Reactive/Matrix/Custom/Yeti/Off) — coincide esattamente con l'enum
+>        `Lighting.MenuIndex` decompilato la sessione scorsa. **Non è un artefatto del decompile: viene
+>        davvero mandato, per OGNI effetto**, non solo quando l'utente cambia profilo esplicitamente.
+>     2. `14 2C <EffData 62B>` — ChangeEffect. Offset [2..] del pacchetto = byte 0..61 di `EffData`:
+>        confermano l'ordine campi (byEffectIndex, byAll, bySpeed, byLightness, byRandColor,
+>        byDirection, byWidth, colorLv0/1/2, bkColor, byData) e **byDirection=0xFF/byWidth=0xFF sempre**
+>        (già noto). **`byAll` è SEMPRE `0x00`** in tutti i 6 pacchetti non-Custom — il codice K2 lo
+>        mandava **`1`** da sempre, mai verificato: bug concreto, primo sospettato per "ChangeEffect
+>        torna true ma non succede nulla" (i pacchetti BlockData di Wave/Tornado, che GIA' funzionavano,
+>        avevano per coincidenza `byAll=0` corretto fin dall'inizio — combacia perfettamente col fatto
+>        che solo quelli funzionassero).
+>     3. `13 55 00 00 <EffMenuIndex> 00...` — **SaveFlash(EffMenuIndex, id)**. Il 5° byte è lo stesso
+>        MenuIndex del punto 1, NON la costante `6=ALL_PROFILE` che K2 mandava.
+>   - **"Custom" (MenuIndex=6)** usa una sequenza diversa/più lunga (`14 2C 0A...FF...` +
+>     `11 01 00 03 01 02...` + un secondo giro con più pacchetti) — conferma il ramo decompilato
+>     `SetCustomLighting`, MAI implementato per il MacroPad in K2 (a differenza dell'Everest, che ha
+>     "Custom Lighting per-key"): fuori scope per questo fix, resta un gap noto.
+>   - **Fix `MacroPadSdkNative.cs::EffData.New`**: `byAll` 1 → **0**.
+>   - **Fix `MacroPadService.cs::SetEffect`**: nuovo `MenuIndexFor(Effect)` (mappa Effect→EffMenuIndex,
+>     stessi valori confermati sul wire; ReactiveA/B/C → 4, l'unica voce "Reactive" del menu BC).
+>     Aggiunta chiamata **`SwitchProfile(profile, menuIndex, id)`** prima di ChangeEffect/
+>     ChangeBlockEffect (mai chiamata da qui prima d'ora — decisione esplicita della sessione
+>     precedente di NON aggiungerla, per mancanza di conferma; ora confermata). `SaveFlash` in
+>     entrambi i rami passa `menuIndex` invece della costante `6`. Nuovo parametro `int profile = 1` su
+>     `SetEffect`, valorizzato da `MainWindow.MacroLed.cs` con `CurrentProfile()` (combo profilo già
+>     esistente).
+>   - **Verificato**: build pulite (0/0) su entrambe le solution. **Da riverificare sull'hardware**:
+>     Static/Breathing/Reactive/Matrix/Yeti/Off ora dovrebbero applicarsi davvero (questi 3 bug, in
+>     particolare `byAll`, sono confermati sul wire — non più un'ipotesi). Nota: se `BaseCampService`
+>     (vedi entry precedente) era ancora attivo durante QUESTA cattura, il confronto resta comunque
+>     valido perché il capture legge il traffico REALE di Base Camp verso il device, indipendentemente
+>     da cosa facesse K2 nel frattempo — ma **ripetere il test di K2.App con `BaseCampService`
+>     davvero fermo** resta comunque necessario per isolare eventuali interferenze residue.
+>
+> Previous: 2026-07-09 (Nuova funzione "ferma automaticamente Base Camp all'avvio", attiva di default):
+>   - **Richiesta utente**: K2 deve poter spegnere tutti i servizi/eseguibili che Base Camp apre
+>     automaticamente, di default attiva ma disattivabile nei Settings.
+>   - **`Services/BaseCampProcessGuard.cs`** (K2.App): nuovo metodo `KillAllBaseCampProcesses()` —
+>     equivalente in-process di `stop-basecamp.bat`: ferma il servizio Windows `BaseCampService`
+>     via `sc.exe stop` (best-effort, serve admin, fallisce in silenzio senza) poi killa ogni
+>     processo che matcha i needles condivisi (`displaypadworker`/`basecamp`/`base camp`/`mountain`/
+>     **`makalu`** — aggiunto ora, mancava e "Makalu Monitor.exe" non veniva mai preso), esclude
+>     sempre processi con "k2" nel nome. Distinto da `KillDisplayPadWorkers()` (esistente, mirato
+>     solo al worker DisplayPad per il conflitto col motore nativo).
+>   - **`AppSettings.AutoStopBaseCamp`** (default ON, persistito in `app_settings.json`): nuovo flag
+>     accanto a `KillBaseCampWorker`/`CloseToTray`/etc.
+>   - **`App.xaml.cs` → `OnStartup`**: se `AutoStopBaseCamp` è ON, chiama `KillAllBaseCampProcesses()`
+>     PRIMA di creare `MainWindow` (quindi prima che i moduli device aprano i driver) — solo in
+>     K2.App (il guscio unificato usato quotidianamente), non in K2.DisplayPad standalone.
+>   - **UI**: nuovo checkbox "Ferma automaticamente Base Camp all'avvio" nel tab Impostazioni
+>     (`MainWindow.xaml`/`MainWindow.Settings.cs`), sopra il checkbox esistente "Termina worker
+>     DisplayPad" — stringhe loc `settings_auto_stop_bc(_hint)` in `Strings.xml` (EN) e
+>     `Strings.it.xml` (IT).
+>   - **Verificato**: `build-check.bat` → entrambe le solution 0 errori/0 warning. Test su
+>     hardware/comportamento reale (Base Camp che si riavvia da solo, servizio che resiste senza
+>     admin) resta da fare dal vivo dall'utente.
+
+> Previous: 2026-07-09 (Aggiunto controllo istanza singola per K2.App e K2.DisplayPad — bug trovato e fixato durante il test dal vivo: il MessageBox "già in esecuzione" non era visibile):
 >   - **Richiesta utente**: impedire l'apertura di più istanze contemporanee di K2.
 >   - **Implementazione**: `Mutex` con nome fisso (`K2App_SingleInstance_Mutex` / `K2DisplayPad_SingleInstance_Mutex`,
 >     nessun prefisso `Global\`, quindi valido per sessione utente) creato all'avvio in entrambi `K2.App/App.xaml.cs`

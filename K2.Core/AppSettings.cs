@@ -33,6 +33,7 @@ public static class AppSettings
         public bool DisplayPadNativeEngine { get; set; }
         public bool EverestNativeEngine { get; set; }
         public bool KillBaseCampWorker { get; set; } = true;
+        public bool AutoStopBaseCamp { get; set; } = true;
         public bool CloseToTray { get; set; }
         public bool StartMinimizedToTray { get; set; }
         public List<string> RecentExecPaths { get; set; } = new();
@@ -139,6 +140,30 @@ public static class AppSettings
         {
             if (_data.KillBaseCampWorker == value) return;
             _data.KillBaseCampWorker = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// When true, K2 stops the Base Camp Windows service and kills every Base Camp
+    /// executable still running (GUI, service, workers, Makalu monitor) every time
+    /// K2 starts — including anything Windows autostart just relaunched — so K2 fully
+    /// replaces Base Camp instead of the two fighting over the same USB devices.
+    /// Checked once at K2.App startup (see App.OnStartup). Default ON.
+    /// </summary>
+    public static bool AutoStopBaseCamp
+    {
+        get { EnsureLoaded(); return _data.AutoStopBaseCamp; }
+    }
+
+    public static void SetAutoStopBaseCamp(bool value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.AutoStopBaseCamp == value) return;
+            _data.AutoStopBaseCamp = value;
             Save();
         }
         Changed?.Invoke();

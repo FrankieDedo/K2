@@ -132,6 +132,8 @@
   <string name="settings_dp_native_hint">Pilota il DisplayPad direttamente via USB invece che tramite l'SDK Mountain: trasferimenti confermati (niente icone corrotte), nessun processo satellite. La persistenza dei profili sul dispositivo non è disponibile; le immagini vengono ricaricate dal database di K2. Ha effetto al riavvio di K2.</string>
   <string name="settings_ev_native">Everest Max: motore USB nativo (sperimentale, parziale)</string>
   <string name="settings_ev_native_hint">Pilota la connessione dell'Everest Max e i 4 tasti display del numpad direttamente via USB invece che tramite SDKDLL.dll — elimina il crash cronico del thread timer di quella DLL per quello che copre. Effetti RGB, icone numpad, Media Dock e gli eventi di remap dell'intera tastiera passano ancora da SDKDLL.dll (non ancora portati). Ha effetto al riavvio di K2.</string>
+  <string name="settings_auto_stop_bc">Ferma automaticamente Base Camp all'avvio</string>
+  <string name="settings_auto_stop_bc_hint">Ogni volta che K2 si avvia, ferma il servizio Windows di Base Camp e chiude tutti i suoi processi (GUI, servizio, worker, Makalu monitor) ancora in esecuzione o riavviati dall'avvio automatico di Windows — così K2 sostituisce completamente Base Camp invece di girare insieme ad esso. Disattiva questa opzione se vuoi ancora usare Base Camp insieme a K2.</string>
   <string name="settings_kill_bc_worker">Termina il worker DisplayPad di Base Camp</string>
   <string name="settings_kill_bc_worker_hint">MountainDisplayPadWorker gira in background e scrive sul DisplayPad insieme a K2, corrompendo le icone. Se attivo, K2 lo termina automaticamente (e lo tiene chiuso finché è in esecuzione).</string>
   <string name="settings_bc_autostart">Avvia i servizi Base Camp con Windows</string>
@@ -194,6 +196,80 @@
   <string name="custom_color">Colore:</string>
   <string name="custom_fill_all">Riempi tutti</string>
   <string name="custom_clear">Azzera</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       TAB EVEREST 60 (solo illuminazione raw-HID — vedi Everest60HidNative)
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="tab_everest60">Everest 60</string>
+  <string name="ev60_hint">Controllo illuminazione via raw-HID (nessuna DLL vendor). La rimappatura dei tasti non è ancora disponibile — il protocollo firmware di remap dell'Everest 60 non è stato ancora decodificato.</string>
+  <string name="ev60_status_connected">Connesso: {0}</string>
+  <string name="ev60_status_disconnected">Non connesso</string>
+  <string name="ev60_refresh">Aggiorna</string>
+  <string name="ev60_side_ring">Anello laterale</string>
+  <string name="ev60_side_apply">Applica all'anello laterale</string>
+  <string name="ev60_side_hint">Applicare un colore all'anello laterale porta i tasti principali in modalità Custom (si spengono) — il dispositivo indirizza l'anello solo tramite quella modalità.</string>
+  <string name="ev60_log">Log</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       TAB MAKALU (mouse — raw-HID, nessun SDK vendor — vedi MakaluHidNative)
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="tab_makalu">Makalu</string>
+  <string name="makalu_hint">Controllo via raw-HID (per questo mouse non esiste alcuna DLL vendor). Protocollo portato dal progetto community BaseCampLinux.</string>
+  <string name="makalu_status_connected">Connesso: {0}</string>
+  <string name="makalu_status_disconnected">Non connesso</string>
+  <string name="makalu_refresh">Aggiorna</string>
+  <string name="makalu_apply">Applica</string>
+  <string name="makalu_applied">Applicato</string>
+  <string name="makalu_failed">Fallito</string>
+  <string name="makalu_close">Chiudi</string>
+  <string name="makalu_log">Log</string>
+
+  <string name="makalu_custom_open">Personalizza per-LED…</string>
+  <string name="makalu_custom_title">RGB personalizzato — Makalu</string>
+  <string name="makalu_custom_hint">Clicca un LED per scegliere il colore, poi Applica. Layout fisico: 4 LED a sinistra, 4 a destra.</string>
+
+  <string name="makalu_dpi_title">DPI</string>
+
+  <string name="makalu_remap_title">Rimappatura tasti</string>
+  <string name="makalu_remap_category">Categoria:</string>
+  <string name="makalu_remap_function">Funzione:</string>
+  <string name="makalu_remap_sniper_dpi">DPI Sniper:</string>
+  <string name="makalu_remap_applied">Applicato</string>
+  <string name="makalu_remap_reverted">Ripristinato</string>
+  <string name="makalu_remap_keep_btn">Mantieni</string>
+  <string name="makalu_remap_revert_btn">Ripristina</string>
+  <string name="makalu_remap_keep_text">Tasto sinistro rimappato. Mantenere la modifica? Ripristino automatico tra {0}s…</string>
+  <string name="makalu_remap_cat_mouse">Mouse</string>
+  <string name="makalu_remap_cat_dpi">DPI</string>
+  <string name="makalu_remap_cat_scroll">Scroll</string>
+  <string name="makalu_remap_cat_sniper">Sniper</string>
+  <string name="makalu_remap_fn_left">Click sinistro</string>
+  <string name="makalu_remap_fn_right">Click destro</string>
+  <string name="makalu_remap_fn_middle">Click centrale</string>
+  <string name="makalu_remap_fn_back">Indietro</string>
+  <string name="makalu_remap_fn_forward">Avanti</string>
+  <string name="makalu_remap_fn_dpi_plus">DPI +</string>
+  <string name="makalu_remap_fn_dpi_minus">DPI -</string>
+  <string name="makalu_remap_fn_scroll_up">Scroll su</string>
+  <string name="makalu_remap_fn_scroll_down">Scroll giù</string>
+  <string name="makalu_remap_fn_disabled">Disabilitato</string>
+  <string name="makalu_remap_fn_sniper">Sniper</string>
+  <string name="makalu_remap_btn_left">Tasto Sx</string>
+  <string name="makalu_remap_btn_right">Tasto Dx</string>
+  <string name="makalu_remap_btn_middle">Tasto Centrale</string>
+  <string name="makalu_remap_btn_back">Indietro</string>
+  <string name="makalu_remap_btn_forward">Avanti</string>
+  <string name="makalu_remap_btn_dpi">DPI+</string>
+  <string name="makalu_remap_btn_5">Tasto 5</string>
+  <string name="makalu_remap_btn_6">Tasto 6</string>
+
+  <string name="makalu_settings_title">Impostazioni dispositivo</string>
+  <string name="makalu_setting_poll">Frequenza polling:</string>
+  <string name="makalu_setting_debounce">Risposta tasti:</string>
+  <string name="makalu_setting_angle">Angle snapping:</string>
+  <string name="makalu_setting_on">On</string>
+  <string name="makalu_setting_liftoff">Distanza lift-off:</string>
+  <string name="makalu_setting_liftoff_high">Alta</string>
 
   <!-- Display Dial -->
   <string name="display_dial">Display Dial</string>

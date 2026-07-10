@@ -526,6 +526,8 @@
                     </TabControl.Template>
                     <TabItem x:Name="TabEverest"   Tag="everest"   Header="{loc:Get tab_everest}"/>
                     <TabItem x:Name="TabMacroPad" Tag="macropad" Header="{loc:Get tab_macropad}"/>
+                    <TabItem x:Name="TabEverest60" Tag="everest60" Header="{loc:Get tab_everest60}"/>
+                    <TabItem x:Name="TabMakalu"    Tag="makalu"    Header="{loc:Get tab_makalu}"/>
                     <!-- DisplayPad tabs added dynamically by DpRefreshDevices -->
                 </TabControl>
 
@@ -1203,6 +1205,225 @@
                     </Grid><!-- end 3-pane -->
                 </Grid>
             </Grid><!-- end PnlEverest -->
+            <Grid x:Name="PnlEverest60" Visibility="Collapsed">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>  <!-- status bar -->
+                        <RowDefinition Height="Auto"/>  <!-- hint -->
+                        <RowDefinition Height="*"/>     <!-- RGB + side ring + log -->
+                    </Grid.RowDefinitions>
+
+                    <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+                        <TextBlock x:Name="LblEv60Status" Text="{loc:Get ev60_status_disconnected}"
+                                   VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,12,0"/>
+                        <Button x:Name="BtnEv60Refresh" Content="{loc:Get ev60_refresh}"
+                                Click="BtnEv60Refresh_Click"
+                                Style="{StaticResource K2IconButton}" Tag="&#xE72C;"/>
+                    </WrapPanel>
+
+                    <TextBlock Grid.Row="1" Text="{loc:Get ev60_hint}" TextWrapping="Wrap"
+                               Foreground="{StaticResource K2TextMutedBrush}" FontStyle="Italic"
+                               Margin="0,0,0,10" MaxWidth="720" HorizontalAlignment="Left"/>
+
+                    <Grid Grid.Row="2">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>  <!-- RGB effect panel -->
+                            <RowDefinition Height="Auto"/>  <!-- Side ring panel -->
+                            <RowDefinition Height="*"/>     <!-- log -->
+                        </Grid.RowDefinitions>
+
+                        <!-- RGB effect panel -->
+                        <Border Grid.Row="0" Background="#14141A" BorderBrush="#2A2A32" BorderThickness="1"
+                                CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Get rgb_lighting}" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <TextBlock Text="{loc:Get rgb_effect}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ComboBox x:Name="CbEv60Effect" Width="120" Margin="0,0,12,0"
+                                              SelectionChanged="CbEv60Effect_SelectionChanged"/>
+                                    <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ComboBox x:Name="CbEv60Direction" Width="120" Margin="0,0,12,0"
+                                              SelectionChanged="CbEv60EffectParam_Changed"/>
+                                    <CheckBox x:Name="CkEv60Rainbow" Content="{loc:Get rgb_rainbow}"
+                                              ToolTip="{loc:Get rgb_rainbow_tip}" Click="CkEv60Rainbow_Click"/>
+                                </WrapPanel>
+                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Slider x:Name="SldEv60Speed" Minimum="0" Maximum="100" Width="120"
+                                            TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                                            ValueChanged="SldEv60Param_ValueChanged" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="LblEv60Speed" Text="50%" VerticalAlignment="Center" Margin="6,0,16,0" MinWidth="36"/>
+                                    <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Slider x:Name="SldEv60Brightness" Minimum="0" Maximum="100" Width="120"
+                                            TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                                            ValueChanged="SldEv60Param_ValueChanged" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="LblEv60Brightness" Text="100%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
+                                </WrapPanel>
+                                <WrapPanel Orientation="Horizontal">
+                                    <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <Button x:Name="BtnEv60Color1" Width="40" Height="22" Background="#900000"
+                                            BorderThickness="2" BorderBrush="#3A3A40" Click="BtnEv60Color_Click" Tag="1"
+                                            Margin="0,0,14,0"/>
+                                    <StackPanel x:Name="PnlEv60Color2" Orientation="Horizontal">
+                                        <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <Button x:Name="BtnEv60Color2" Width="40" Height="22" Background="#1A1A1E"
+                                                BorderThickness="2" BorderBrush="#3A3A40" Click="BtnEv60Color_Click" Tag="2"/>
+                                    </StackPanel>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Side ring panel -->
+                        <Border Grid.Row="1" Background="#14141A" BorderBrush="#2A2A32" BorderThickness="1"
+                                CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Get ev60_side_ring}" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <WrapPanel Orientation="Horizontal">
+                                    <Button x:Name="BtnEv60SideColor" Width="40" Height="22" Background="#900000"
+                                            BorderThickness="2" BorderBrush="#3A3A40" Click="BtnEv60SideColor_Click"
+                                            Margin="0,0,12,0"/>
+                                    <Button x:Name="BtnEv60SideApply" Content="{loc:Get ev60_side_apply}"
+                                            Click="BtnEv60SideApply_Click" Padding="8,4"/>
+                                </WrapPanel>
+                                <TextBlock Text="{loc:Get ev60_side_hint}" TextWrapping="Wrap"
+                                           Foreground="{StaticResource K2TextMutedBrush}" FontStyle="Italic" FontSize="11"
+                                           Margin="0,8,0,0" MaxWidth="640"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Log -->
+                        <Border Grid.Row="2" Background="#0F0F13" BorderBrush="#2A2A32" BorderThickness="1"
+                                CornerRadius="6" Padding="8">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="{loc:Get ev60_log}"
+                                           Foreground="{StaticResource K2TextMutedBrush}" FontSize="10" Margin="2,0,0,4"/>
+                                <TextBox x:Name="TxtEv60Log" IsReadOnly="True" FontFamily="Consolas" FontSize="11"
+                                         VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap"
+                                         Background="Transparent" BorderThickness="0"/>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Grid><!-- end PnlEverest60 -->
+            <Grid x:Name="PnlMakalu" Visibility="Collapsed">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>  <!-- status bar -->
+                        <RowDefinition Height="Auto"/>  <!-- hint -->
+                        <RowDefinition Height="*"/>     <!-- sections -->
+                    </Grid.RowDefinitions>
+
+                    <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+                        <TextBlock x:Name="LblMkStatus" Text="{loc:Get makalu_status_disconnected}"
+                                   VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,12,0"/>
+                        <Button x:Name="BtnMkRefresh" Content="{loc:Get makalu_refresh}"
+                                Click="BtnMkRefresh_Click"
+                                Style="{StaticResource K2IconButton}" Tag="&#xE72C;"/>
+                    </WrapPanel>
+
+                    <TextBlock Grid.Row="1" Text="{loc:Get makalu_hint}" TextWrapping="Wrap"
+                               Foreground="{StaticResource K2TextMutedBrush}" FontStyle="Italic"
+                               Margin="0,0,0,10" MaxWidth="720" HorizontalAlignment="Left"/>
+
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>  <!-- RGB -->
+                            <RowDefinition Height="Auto"/>  <!-- Settings -->
+                            <RowDefinition Height="*"/>     <!-- log -->
+                        </Grid.RowDefinitions>
+
+                        <!-- RGB -->
+                        <Border Grid.Row="0" Background="#14141A" BorderBrush="#2A2A32" BorderThickness="1"
+                                CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                            <StackPanel>
+                                <DockPanel Margin="0,0,0,8">
+                                    <Button DockPanel.Dock="Right" x:Name="BtnMkCustomOpen" Content="{loc:Get makalu_custom_open}"
+                                            Click="BtnMkCustomOpen_Click" Padding="8,3" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="{loc:Get rgb_lighting}" FontWeight="Bold" VerticalAlignment="Center"/>
+                                </DockPanel>
+                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <TextBlock Text="{loc:Get rgb_effect}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ComboBox x:Name="CbMkEffect" Width="140" Margin="0,0,12,0"
+                                              SelectionChanged="CbMkEffect_SelectionChanged"/>
+                                    <StackPanel x:Name="PnlMkSpeed" Orientation="Horizontal" Margin="0,0,12,0">
+                                        <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <ComboBox x:Name="CbMkSpeed" Width="90" SelectionChanged="CbMkEffectParam_Changed"/>
+                                    </StackPanel>
+                                    <StackPanel x:Name="PnlMkDirection" Orientation="Horizontal">
+                                        <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <ComboBox x:Name="CbMkDirection" Width="90" SelectionChanged="CbMkEffectParam_Changed"/>
+                                    </StackPanel>
+                                </WrapPanel>
+                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Slider x:Name="SldMkBrightness" Minimum="0" Maximum="100" Width="140"
+                                            TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                                            ValueChanged="SldMkBrightness_ValueChanged" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="LblMkBrightness" Text="100%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
+                                </WrapPanel>
+                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <Button x:Name="BtnMkColor1" Width="40" Height="22" Background="#900000"
+                                            BorderThickness="2" BorderBrush="#3A3A40" Click="BtnMkColor_Click" Tag="1"
+                                            Margin="0,0,14,0"/>
+                                    <StackPanel x:Name="PnlMkColor2" Orientation="Horizontal">
+                                        <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <Button x:Name="BtnMkColor2" Width="40" Height="22" Background="#1A1A1E"
+                                                BorderThickness="2" BorderBrush="#3A3A40" Click="BtnMkColor_Click" Tag="2"/>
+                                    </StackPanel>
+                                </WrapPanel>
+                                <WrapPanel x:Name="PnlMkPresets" Orientation="Horizontal" Margin="0,0,0,4"/>
+                                <TextBlock x:Name="LblMkRgbStatus" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Settings -->
+                        <Border Grid.Row="1" Background="#14141A" BorderBrush="#2A2A32" BorderThickness="1"
+                                CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Get makalu_settings_title}" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <TextBlock Text="{loc:Get makalu_setting_poll}" VerticalAlignment="Center" Width="130"/>
+                                    <ComboBox x:Name="CbMkPolling" Width="100" Margin="0,0,8,0"/>
+                                    <Button x:Name="BtnMkPollingApply" Content="{loc:Get makalu_apply}" Click="BtnMkPollingApply_Click" Padding="8,3" Margin="0,0,6,0"/>
+                                    <TextBlock x:Name="LblMkPollingStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                                </WrapPanel>
+                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <TextBlock Text="{loc:Get makalu_setting_debounce}" VerticalAlignment="Center" Width="130"/>
+                                    <Slider x:Name="SldMkDebounce" Minimum="0" Maximum="5" Width="120" TickFrequency="1" IsSnapToTickEnabled="True"
+                                            ValueChanged="SldMkDebounce_ValueChanged" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="LblMkDebounceVal" Text="2 ms" Width="44" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                    <Button x:Name="BtnMkDebounceApply" Content="{loc:Get makalu_apply}" Click="BtnMkDebounceApply_Click" Padding="8,3" Margin="6,0,6,0"/>
+                                    <TextBlock x:Name="LblMkDebounceStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                                </WrapPanel>
+                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <TextBlock Text="{loc:Get makalu_setting_angle}" VerticalAlignment="Center" Width="130"/>
+                                    <CheckBox x:Name="CkMkAngleSnap" Content="{loc:Get makalu_setting_on}" Click="CkMkAngleSnap_Click" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock x:Name="LblMkAngleStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                                </WrapPanel>
+                                <WrapPanel Orientation="Horizontal">
+                                    <TextBlock Text="{loc:Get makalu_setting_liftoff}" VerticalAlignment="Center" Width="130"/>
+                                    <CheckBox x:Name="CkMkLiftHigh" Content="{loc:Get makalu_setting_liftoff_high}" Click="CkMkLiftHigh_Click" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock x:Name="LblMkLiftStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                        <!-- Log -->
+                        <Border Grid.Row="2" Background="#0F0F13" BorderBrush="#2A2A32" BorderThickness="1"
+                                CornerRadius="6" Padding="8">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="{loc:Get makalu_log}"
+                                           Foreground="{StaticResource K2TextMutedBrush}" FontSize="10" Margin="2,0,0,4"/>
+                                <TextBox x:Name="TxtMkLog" IsReadOnly="True" FontFamily="Consolas" FontSize="11"
+                                         VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap"
+                                         Background="Transparent" BorderThickness="0"/>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+                    </ScrollViewer>
+                </Grid>
+            </Grid><!-- end PnlMakalu -->
 
             <!-- ==================== MacroPad ==================== -->
             <Grid x:Name="PnlMacroPad" Visibility="Collapsed">
@@ -2045,6 +2266,11 @@
                     <CheckBox x:Name="CkEvNativeEngine" Content="{loc:Get settings_ev_native}"
                               Click="CkEvNativeEngine_Click" FontSize="14" Margin="0,16,0,0"/>
                     <TextBlock Text="{loc:Get settings_ev_native_hint}" Foreground="#9A9AA2"
+                               TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+
+                    <CheckBox x:Name="CkAutoStopBaseCamp" Content="{loc:Get settings_auto_stop_bc}"
+                              Click="CkAutoStopBaseCamp_Click" FontSize="14" Margin="0,20,0,0"/>
+                    <TextBlock Text="{loc:Get settings_auto_stop_bc_hint}" Foreground="#9A9AA2"
                                TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
 
                     <CheckBox x:Name="CkKillBcWorker" Content="{loc:Get settings_kill_bc_worker}"

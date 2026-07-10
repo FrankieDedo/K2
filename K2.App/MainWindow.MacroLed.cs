@@ -40,9 +40,8 @@ public partial class MainWindow
         new(MacroPadService.Effect.Static,    "Static"),
         new(MacroPadService.Effect.Breath,    "Breath"),
         new(MacroPadService.Effect.Wave,      "Wave"),
-        new(MacroPadService.Effect.ReactiveA, "Reactive A"),
-        new(MacroPadService.Effect.ReactiveB, "Reactive B"),
-        new(MacroPadService.Effect.ReactiveC, "Reactive C"),
+        new(MacroPadService.Effect.ReactiveA, "Reactive"),
+        new(MacroPadService.Effect.ReactiveC, "Reactive Wave"),
         new(MacroPadService.Effect.Yeti,      "Yeti"),
         new(MacroPadService.Effect.Tornado,   "Tornado"),
         new(MacroPadService.Effect.Matrix,    "Matrix"),
@@ -339,7 +338,8 @@ public partial class MainWindow
             brightness:    bright,
             randomColor:   rainbow,
             speedByte:     speedByte,
-            directionByte: dirByte);
+            directionByte: dirByte,
+            profile:       CurrentProfile());
         Log($"[LED ] ChangeEffect -> {ok}");
     }
 }

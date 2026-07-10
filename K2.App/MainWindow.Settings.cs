@@ -33,6 +33,7 @@ public partial class MainWindow
 
         CkDpNativeEngine.IsChecked = AppSettings.DisplayPadNativeEngine;
         CkEvNativeEngine.IsChecked = AppSettings.EverestNativeEngine;
+        CkAutoStopBaseCamp.IsChecked = AppSettings.AutoStopBaseCamp;
         CkKillBcWorker.IsChecked = AppSettings.KillBaseCampWorker;
         InitBcAutostartCheckbox();
 
@@ -74,6 +75,13 @@ public partial class MainWindow
         }
         CkBcAutostart.IsEnabled = true;
         CkBcAutostart.IsChecked = entries.Any(x => x.Enabled);
+    }
+
+    /// <summary>Persists the "auto-stop Base Camp on startup" flag. Takes effect at
+    /// the next K2 launch (see App.OnStartup).</summary>
+    private void CkAutoStopBaseCamp_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.SetAutoStopBaseCamp(CkAutoStopBaseCamp.IsChecked == true);
     }
 
     private void CkKillBcWorker_Click(object sender, RoutedEventArgs e)

@@ -42,6 +42,7 @@ public partial class MainWindow
     private readonly Dictionary<int, KeyVisual> _mpKeyVisuals = new();
 
     private int _evColorLogCount;  // log only the first N ticks for diagnostics
+    private int _mpColorLogCount;  // log only the first N ticks for diagnostics
 
 
     /// <summary>
@@ -243,15 +244,31 @@ public partial class MainWindow
 
     private void OnMacroPadColorsUpdated(MacroPadSdkNative.FWColor[] colors)
     {
+        if (_mpColorLogCount < 3)
+        {
+            _mpColorLogCount++;
+            int nonZero = 0;
+            for (int i = 0; i < colors.Length; i++)
+                if (colors[i].r != 0 || colors[i].g != 0 || colors[i].b != 0) nonZero++;
+            App.WriteLog($"[LED] MacroPadColors tick#{_mpColorLogCount}: len={colors.Length} nonZero={nonZero} " +
+                         $"matrixToIndex={_matrixToIndex.Count} visuals={_mpKeyVisuals.Count}");
+        }
+
         // _matrixToIndex maps wMatrix (SDK callback) → button index (0..11).
-        // To read the correct color from GetColorData, translate
-        // wMatrix to LED index via LedMatrixMapping.MacroPad.
+        // 2026-07-10: confirmed via real device capture (user's saved
+        // device.<id>.keymap in macropad.db: {"8":0,"17":1,"26":2,...,"125":11})
+        // that the firmware's wMatrix IS DIRECTLY the GetColorData LED index —
+        // there is no separate translation table. The previous
+        // LedMatrixMapping.MacroPad dictionary assumed wMatrix was 170-179/220/221
+        // (copied by analogy from the DB "DLLMatrixIndex" scheme used for
+        // BaseCamp profile import, a completely different numbering domain) and
+        // never matched anything real, which is why the on-screen LED preview
+        // never lit up (mappedToLed was always 0).
         foreach (var kv in _matrixToIndex)
         {
-            int wMatrix  = kv.Key;    // code from SDK callback (170-179, 220, 221)
+            int ledIndex = kv.Key;    // code from SDK callback == GetColorData index
             int btnIndex = kv.Value;  // index in _keyButtons (0..11)
 
-            if (!LedMatrixMapping.MacroPad.TryGetValue(wMatrix, out int ledIndex)) continue;
             if (ledIndex < 0 || ledIndex >= colors.Length) continue;
             if (!_mpKeyVisuals.TryGetValue(btnIndex, out var v)) continue;
 

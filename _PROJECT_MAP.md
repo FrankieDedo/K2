@@ -40,8 +40,43 @@ produced files; dependencies from other folders are copied inside `K2`.
 - **Everest DLL (important):** Base Camp has two Everest wrappers —
   class `Everest` → `SDKDLL.dll` (**Everest Max** keyboard, ≈75 exports with
   bar/clock/MMDock/numpad), class `Everest60` → `Everest360_USB.dll`
-  (**Everest 60** keyboard, 60%, Fn-heavy, 110 exports). K2 targets **SDKDLL.dll**
-  (the user has the Max). Verify bindings via `outputs/dotnet_pinvoke_dump.py`.
+  (**Everest 60** keyboard, 60%, Fn-heavy, ~60 exports). K2 targets **SDKDLL.dll**
+  for the Max (the user has one). Verify bindings via `outputs/dotnet_pinvoke_dump.py`.
+- **Everest 60 (raw HID, no SDK):** unlike Everest Max/MacroPad, K2 does NOT
+  P/Invoke `Everest360_USB.dll` for the Everest 60 — almost every export of
+  class `Everest60` passes structs as opaque `IntPtr` (layout never
+  reverse-engineered by anyone). Instead K2 talks HID **Feature Reports**
+  directly (VID `0x3282`, PID `0x0005` ANSI/`0x0006` ISO, interface `mi_02`),
+  porting the protocol already reverse-engineered by the community project
+  `BaseCampLinux` (`devices/everest60/controller.py`). Covers RGB lighting
+  only (presets + 44-LED side ring); key remapping/macros need the firmware
+  remap protocol, which isn't decoded anywhere yet. See
+  `K2.App/Services/Everest60HidNative.cs` for the rationale in full.
+- **Makalu 67/Max (mouse, raw HID, no SDK at all):** no vendor SDK/DLL exists
+  for this device (unlike MacroPad/Everest Max/DisplayPad). K2 talks HID
+  **Feature Reports** directly (VID `0x3282`, PID `0x0003` Makalu 67/`0x0002`
+  Makalu Max, interface `mi_01`), porting the protocol reverse-engineered by
+  `BaseCampLinux` (`devices/makalu67/controller.py`). Buttons are remapped
+  directly in firmware — no `IActionHost`/`ButtonActionEngine` involvement,
+  no per-key action assignment, unlike every other device module. Panel
+  state lives only in memory (same scope decision as Everest 60); persistence
+  is a future step. **Verified on real hardware 2026-07-10** (Everest Max +
+  MacroPad + DisplayPad also connected, K2 ran clean end-to-end).
+  **Shipped in this cut: RGB lighting (presets + 8-LED custom window) and
+  device settings (polling rate/debounce/lift-off/angle snapping) only.**
+  **DPI levels and button remap were implemented and protocol-complete but
+  are DISABLED** — enabling either (even with the code never actually
+  invoked at runtime) reproducibly caused a fatal CLR crash on K2 startup
+  ("Invalid Program: attempted to call a UnmanagedCallersOnly method from
+  managed code" inside WPF's own `Dispatcher.Run`/`DispatchMessage`, x86
+  process). A long bisection session (2026-07-10, see CHANGELOG) ruled out
+  total code size, the underlying HID P/Invoke calls, `FindResource` lookups,
+  the `DispatcherTimer`/lambda pattern, and the dynamic-button-creation loop
+  as the sole cause — no single method reproduced it in isolation, yet any
+  combination including real DPI/Remap code did. Root cause undetermined.
+  The DPI/Remap protocol code remains in `MakaluProtocol.cs`/`MakaluService.cs`
+  (untouched, not implicated) for whenever this is revisited; only the UI
+  wiring in `MainWindow.Makalu.cs` was stripped back out.
 - **Shared library `K2.Core`:** the key action execution engine (incl. Python
   scripts and RPC bridge) lives in `K2.Core`, a WPF library shared by all device
   modules. Compiles both x86 and x64 (`<Platforms>x86;x64</Platforms>`): a .NET
@@ -183,6 +218,62 @@ platform (x86 or x64).
   checkbox "sincronizza tra profili", pulsanti backlight ON/OFF e reset
   effetti. Stato persistito globalmente in `Settings` (chiavi `rgb.*`),
   riapplicato all'apertura del driver.
+- `MainWindow.Everest60.cs` — partial: tab **Everest 60** (raw-HID, no SDK —
+  vedi nota architetturale sopra). Stato connessione (poll 3s), pannello RGB
+  (preset Off/Static/Breathing/Wave/Tornado/Reactive/Yeti + velocità/
+  luminosità/2 colori/rainbow/direzione per-effetto, stesso pattern
+  `CapsFor`/`UpdateCapabilities` dell'Everest Max), pannello anello laterale
+  (44 LED perimetrali). **Non incluso** (MVP): remap tasti/Fn/macro (protocollo
+  firmware ignoto), editor RGB per-tasto (il metodo protocollo esiste,
+  manca la UI paint), persistenza cross-sessione dei parametri RGB.
+- `Services/Everest60HidNative.cs` — P/Invoke raw HID (`hid.dll`+`setupapi.dll`,
+  stesso schema di `EverestHidNative`/`DpHidNative` ma senza reader thread:
+  le feature report sono transfer di controllo sincroni via
+  `HidD_SetFeature`/`HidD_GetFeature`). Enumera l'interfaccia `mi_02`
+  (VID `0x3282`, PID `0x0005` ANSI/`0x0006` ISO).
+- `Services/Everest60Protocol.cs` — porting 1:1 di BaseCampLinux
+  `devices/everest60/controller.py`: enum `Effect`/`ColorMode`, tabelle
+  direzione Wave/Tornado (valori coincidenti con quelli già noti
+  dell'Everest Max — riscontro incrociato tra due reverse-engineering
+  indipendenti), `SendMode` (preset effects) e `SendCustom` (per-key +
+  side ring, usato oggi solo per l'anello).
+- `Services/Everest60Service.cs` — facade find-open-send-close per chiamata
+  (feature report = transfer stateless, nessuna sessione persistente
+  necessaria, come l'`open_device()`/`close()` per comando di BaseCampLinux).
+- `MainWindow.Makalu.cs` — partial: tab **Makalu** (mouse, raw-HID, nessun
+  SDK — vedi nota architetturale sopra). Stato connessione (poll 3s, rileva
+  modello 67/Max), pannello RGB (Off/Static/Breathing/RGB Breathing/Rainbow/
+  Responsive/Yeti + velocità/luminosità/2 colori/direzione per Rainbow,
+  stesso pattern `CapsFor` di Everest/Everest60), bottone per l'editor
+  per-LED custom (`MakaluCustomRgbWindow`), pannello impostazioni (polling
+  rate/debounce/angle snapping/lift-off). **Nessuna persistenza
+  cross-sessione** (stessa scelta di scope di Everest 60: stato solo in
+  memoria). **DPI e remap tasti NON sono in questo file**: implementati e
+  poi rimossi dopo aver causato un crash fatale del CLR riproducibile
+  (vedi nota architetturale sopra e CHANGELOG 2026-07-10) — il codice UI
+  è stato tolto, resta solo il layer protocollo/servizio (sotto), inerte
+  e non referenziato da nessuna UI.
+- `MakaluCustomRgbWindow.xaml(.cs)` — finestra dedicata: editor 8 LED
+  (4 sinistra + 4 destra, layout fisico del mouse) con color-picker per LED
+  (WinForms `ColorDialog`, un click = un colore, non un canvas multi-select
+  come il riferimento Python) + slider luminosità + Apply.
+- `Services/MakaluHidNative.cs` — P/Invoke raw HID (`hid.dll`+`setupapi.dll`,
+  stesso schema di `Everest60HidNative`). Enumera l'interfaccia `mi_01`
+  (VID `0x3282`, PID `0x0003` Makalu 67/`0x0002` Makalu Max). **Verificato
+  su hardware reale 2026-07-10**: l'euristica di selezione interfaccia
+  funziona (RGB applicato con successo sul device fisico).
+- `Services/MakaluProtocol.cs` — porting 1:1 di BaseCampLinux
+  `devices/makalu67/controller.py`: enum `Effect`, lighting (preset +
+  custom 8-LED), polling rate/debounce/lift-off/angle-snapping, DPI
+  get/set (5 livelli), button remap + sniper. Tutte le costanti (report id
+  0xA1, mappe funzione remap, range DPI 50–19000 step 50, debounce
+  2/4/6/8/10/12ms) copiate identiche dalla fonte. **DPI/remap non wired in
+  UI** (vedi sopra) ma il codice protocollo resta qui pronto per quando si
+  riprenderà l'indagine sul crash.
+- `Services/MakaluService.cs` — facade find-open-send-close per chiamata,
+  stesso pattern di `Everest60Service`. `DeviceInfo` incapsula
+  modello/label/numero-tasti/DPI-minimo (67 vs Max differiscono). Metodi
+  DPI/remap presenti ma non chiamati da nessuna UI (vedi sopra).
 - `MainWindow.UsbRecorder.cs` — partial: pannello **"Registratore USB"**
   (Expander nel tab Everest). Orchestra `UsbRecorder` (tshark) per catturare
   i pacchetti HID inviati da Base Camp alla tastiera, mostra hex dump dei
@@ -508,3 +599,26 @@ Tutto ciò che deriva dai binari di Base Camp. Solo per sviluppo locale.
    x64 a parte (stessa base `K2.Core`, tre `IActionHost` distinti nello stesso
    processo di K2.App: `MainWindow` per MacroPad, `EverestActionHost`,
    `DisplayPadActionHost` — vedi `K2.Core/IActionHost.cs`).
+5. Everest 60 (nuovo tab, raw HID — non SDK, vedi nota architetturale sopra):
+   **FATTO** (MVP 2026-07-10, **verificato su hardware reale 2026-07-10**):
+   connessione (poll), RGB preset (Off/Static/Breathing/Wave/Tornado/Reactive/
+   Yeti + speed/brightness/2 colori/rainbow/direzione), anello laterale 44 LED.
+   **Da fare**: editor RGB per-tasto (UI paint, il metodo `SendCustom` già lo
+   supporta); persistenza cross-sessione dei parametri RGB; remap tasti/
+   Fn-layer/macro (richiede USB capture dedicata di Base Camp Windows —
+   nessuna fonte nota ha ancora questo protocollo).
+6. Makalu 67/Max (mouse, nuovo tab, raw HID — non SDK, vedi nota
+   architetturale sopra): **FATTO e verificato su hardware reale 2026-07-10**
+   — ma solo per RGB preset (Off/Static/Breathing/RGB Breathing/Rainbow/
+   Responsive/Yeti + speed/brightness/2 colori/direzione Rainbow), editor
+   custom per-LED (finestra dedicata, 8 LED) e impostazioni (polling rate/
+   debounce/angle snapping/lift-off). **DPI e remap tasti implementati ma
+   DISABILITATI**: causano un crash fatale del CLR all'avvio di K2
+   (riproducibile, isolato con una lunga sessione di bisezione — vedi nota
+   architetturale sopra e CHANGELOG 2026-07-10 per i dettagli di cosa è
+   stato escluso). Root cause non trovata; il codice protocollo/servizio
+   resta pronto in `MakaluProtocol.cs`/`MakaluService.cs`, solo la UI in
+   `MainWindow.Makalu.cs` è stata tolta. **Da fare**: capire la causa del
+   crash e reintrodurre DPI/remap; persistenza cross-sessione; import
+   profili da `BaseCamp.db` (`MakaluKeyBinding`/`MakaluLighting`/
+   `MakaluSetting`/`DPILevel`, non incluso).

@@ -36,6 +36,8 @@ public partial class MainWindow : Window
         InitMpSettingsPanel();   // MacroPad: Settings section — keycap appearance (color/style)
         InitActionEngine();      // MacroPad: action engine + Python bridge
         InitEverestModule();     // Everest Max: on-demand key list + dedicated action engine
+        InitEverest60Module();   // Everest 60: raw-HID connectivity check + RGB lighting
+        InitMakaluModule();      // Makalu 67/Max: raw-HID connectivity + RGB/DPI/remap/settings
         InitMacroPanel();        // Macro: top-level section (recording/playback), own nav button
         InitUsbRecorderModule(); // USB Recorder: capture Base Camp packets via tshark
         InitDisplayPadModule();  // DisplayPad: graphic overlay + x64 satellite IPC
@@ -187,6 +189,8 @@ public partial class MainWindow : Window
         PnlSettings.Visibility   = Visibility.Collapsed;
         PnlMacro.Visibility      = Visibility.Collapsed;
         PnlEverest.Visibility    = tag == "everest"          ? Visibility.Visible : Visibility.Collapsed;
+        PnlEverest60.Visibility  = tag == "everest60"        ? Visibility.Visible : Visibility.Collapsed;
+        PnlMakalu.Visibility     = tag == "makalu"           ? Visibility.Visible : Visibility.Collapsed;
         PnlMacroPad.Visibility   = tag == "macropad"         ? Visibility.Visible : Visibility.Collapsed;
         PnlDisplayPad.Visibility = tag.StartsWith("dp_")     ? Visibility.Visible : Visibility.Collapsed;
 
@@ -211,6 +215,8 @@ public partial class MainWindow : Window
         PnlSettings.Visibility   = Visibility.Visible;
         PnlMacro.Visibility      = Visibility.Collapsed;
         PnlEverest.Visibility    = Visibility.Collapsed;
+        PnlEverest60.Visibility  = Visibility.Collapsed;
+        PnlMakalu.Visibility     = Visibility.Collapsed;
         PnlMacroPad.Visibility   = Visibility.Collapsed;
         PnlDisplayPad.Visibility = Visibility.Collapsed;
 
@@ -230,6 +236,8 @@ public partial class MainWindow : Window
         PnlMacro.Visibility      = Visibility.Visible;
         PnlSettings.Visibility   = Visibility.Collapsed;
         PnlEverest.Visibility    = Visibility.Collapsed;
+        PnlEverest60.Visibility  = Visibility.Collapsed;
+        PnlMakalu.Visibility     = Visibility.Collapsed;
         PnlMacroPad.Visibility   = Visibility.Collapsed;
         PnlDisplayPad.Visibility = Visibility.Collapsed;
 

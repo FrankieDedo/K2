@@ -18,7 +18,8 @@ namespace K2.App.Services;
 internal static class BaseCampProcessGuard
 {
     // Substrings (lowercase) identifying Base Camp processes / autostart entries.
-    private static readonly string[] Needles = { "displaypadworker", "basecamp", "base camp", "mountain" };
+    private static readonly string[] Needles =
+        { "displaypadworker", "basecamp", "base camp", "mountain", "makalu" };
 
     private static bool IsBaseCamp(string s)
     {
@@ -63,6 +64,73 @@ internal static class BaseCampProcessGuard
         }
         catch { /* best-effort */ }
         return killed;
+    }
+
+    // ================================================================
+    // Full stop (all processes + Windows service) — AppSettings.AutoStopBaseCamp
+    // ================================================================
+
+    /// <summary>
+    /// Stops the "BaseCampService" Windows service and kills every running Base Camp
+    /// process (GUI, service, workers, Makalu monitor — anything matching <see cref="Needles"/>,
+    /// except K2 itself). Equivalent to <c>stop-basecamp.bat</c> but run in-process at K2
+    /// startup, so K2 replaces Base Camp instead of both fighting over the same USB
+    /// devices. Best-effort throughout: the service stop needs admin rights and silently
+    /// no-ops without them, same as the .bat. Returns the number of processes killed.
+    /// </summary>
+    public static int KillAllBaseCampProcesses(Action<string>? log = null)
+    {
+        StopBaseCampService(log);
+
+        int killed = 0;
+        try
+        {
+            foreach (var p in System.Diagnostics.Process.GetProcesses())
+            {
+                string name;
+                try { name = p.ProcessName; } catch { continue; }
+                if (!IsBaseCamp(name)) continue;
+                try
+                {
+                    log?.Invoke($"[AutoStop] killing Base Camp process: {name} (pid {p.Id})");
+                    p.Kill(entireProcessTree: true);
+                    p.WaitForExit(2000);
+                    killed++;
+                }
+                catch (Exception ex)
+                {
+                    log?.Invoke($"[AutoStop] could not kill {name}: {ex.Message}");
+                }
+            }
+        }
+        catch { /* best-effort */ }
+        return killed;
+    }
+
+    /// <summary>Stops the Base Camp Windows service via <c>sc.exe</c> (avoids pulling in
+    /// the System.ServiceProcess NuGet package for a single best-effort call). Requires
+    /// admin rights; fails silently (logged, not thrown) otherwise.</summary>
+    private static void StopBaseCampService(Action<string>? log)
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("sc.exe", "stop BaseCampService")
+            {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            using var sc = System.Diagnostics.Process.Start(psi);
+            sc?.WaitForExit(3000);
+            log?.Invoke(sc != null && sc.ExitCode == 0
+                ? "[AutoStop] BaseCampService stopped."
+                : "[AutoStop] BaseCampService not stopped (not installed, already stopped, or admin rights needed).");
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"[AutoStop] could not stop BaseCampService: {ex.Message}");
+        }
     }
 
     // ================================================================

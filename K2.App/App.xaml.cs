@@ -246,6 +246,13 @@ public partial class App : Application
             return;
         }
 
+        // Stop any Base Camp service/process still running (or just relaunched by
+        // Windows autostart) BEFORE the device modules try to open their drivers —
+        // mirrors stop-basecamp.bat, run automatically so K2 fully replaces Base Camp.
+        // Default ON, toggle in Settings (AppSettings.AutoStopBaseCamp).
+        if (AppSettings.AutoStopBaseCamp)
+            Services.BaseCampProcessGuard.KillAllBaseCampProcesses(WriteLog);
+
         var window = new MainWindow();
         if (AppSettings.StartMinimizedToTray)
             window.StartMinimizedToTray();

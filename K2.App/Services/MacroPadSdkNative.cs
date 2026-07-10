@@ -334,7 +334,13 @@ internal static class MacroPadSdkNative
             return new EffData
             {
                 byEffectIndex = (byte)eff,
-                byAll         = 1,
+                // Confirmed 0 (not 1) against a real USB capture 2026-07-09
+                // (_reference/usb_dumps/macropad.pcapng, "14 2C" packets):
+                // byte offset 1 of EffData is 0x00 for every preset Base Camp
+                // sent (Static/Breathing/Reactive/Matrix/Yeti/Off). The
+                // previous "byAll=1" was never verified and is a likely reason
+                // ChangeEffect returned true but never visibly applied.
+                byAll         = 0,
                 bySpeed       = noSpeed ? (byte)255 : speed,
                 byLightness   = (byte)bright,
                 byRandColor   = randColor,
@@ -407,6 +413,13 @@ internal static class MacroPadSdkNative
         /// 2 colors -&gt; byRand=16(0x10)/byBlockNum=1; rainbow -&gt;
         /// byRand=2/byBlockNum=0. <paramref name="direction"/> must already be
         /// one of the firmware's valid codes (Wave: 0/2/4/6, Tornado: 9/10).
+        /// <para>
+        /// Rainbow colorLv0/colorLv1 confirmed 2026-07-10 against a real
+        /// capture of Base Camp's own live LED preview
+        /// (<c>_reference/usb_dumps/macropad_led.pcapng</c>, "14 2C" packet,
+        /// Wave+rainbow): both slots are sent as the sentinel
+        /// <c>{pos=0xFF,0,0,0}</c>, not left zeroed.
+        /// </para>
         /// </summary>
         public static BlockData New(MacroPadSdkNative.EffectIndex eff, byte direction, byte speed, byte lightness,
                                      FWColor c1, FWColor? c2 = null, bool rainbow = false)
@@ -424,6 +437,8 @@ internal static class MacroPadSdkNative
             if (rainbow)
             {
                 d.byRandColor = 2; d.byWidth = 2; d.byBlockNum = 0;
+                d.colorLv0 = new FWBColor(0xFF, 0, 0, 0);
+                d.colorLv1 = new FWBColor(0xFF, 0, 0, 0);
             }
             else if (c2 is { } s)
             {

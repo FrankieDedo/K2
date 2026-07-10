@@ -355,6 +355,32 @@ public sealed class MacroPadService : IDisposable
     /// (forced to 255, "N/A") for Static/Off — see <see cref="MacroPadSdkNative.EffData.New"/>.</param>
     /// <param name="directionByte">Raw firmware direction byte, effect-specific
     /// (Wave: 0/2/4/6, Tornado: 9/10). Only meaningful for Wave/Tornado.</param>
+    /// <summary>
+    /// Maps a firmware <see cref="Effect"/> to Base Camp's DB "EffMenuIndex"
+    /// (<c>BaseCamp.Data.Lighting.MenuIndex</c>: Static=0, Colorwave=1, Tornado=2,
+    /// Breathing=3, Reactive=4, Matrix=5, Custom=6, Yetimode=7, Off=8). Confirmed
+    /// against a real USB capture 2026-07-09 (<c>_reference/usb_dumps/macropad.pcapng</c>,
+    /// Static/Breathing/Reactive/Matrix/Custom/Yeti/Off in sequence): every
+    /// effect change starts with a <c>SwitchProfile(profile, EffMenuIndex, id)</c>
+    /// packet whose 6th byte increments exactly 0,3,4,5,6,7,8 in that order —
+    /// i.e. this really is sent, not just a decompile artifact. ReactiveA/B/C
+    /// all map to the single "Reactive" menu entry (Base Camp's menu doesn't
+    /// distinguish the 3 reactive firmware variants).
+    /// </summary>
+    private static int MenuIndexFor(Effect effect) => effect switch
+    {
+        Effect.Static    => 0,
+        Effect.Wave      => 1, // Colorwave
+        Effect.Tornado   => 2,
+        Effect.Breath    => 3, // Breathing
+        Effect.ReactiveA => 4,
+        Effect.ReactiveB => 4,
+        Effect.ReactiveC => 4,
+        Effect.Matrix    => 5,
+        Effect.Yeti      => 7, // Yetimode
+        _                => 8, // Off
+    };
+
     public bool SetEffect(uint id, Effect effect,
                           (byte r, byte g, byte b) primary,
                           (byte r, byte g, byte b)? secondary = null,
@@ -363,12 +389,26 @@ public sealed class MacroPadService : IDisposable
                           int brightness = 100,
                           bool randomColor = false,
                           byte speedByte = 60,
-                          int directionByte = -1)
+                          int directionByte = -1,
+                          int profile = 1)
     {
         EnsureSlotInitialized(id);
 
         MacroPadSdkNative.FWColor C((byte, byte, byte) c) => new(c.Item1, c.Item2, c.Item3);
         var bright = QuantizeBrightness(brightness);
+        int menuIndex = MenuIndexFor(effect);
+
+        // Base Camp calls SwitchProfile(profile, EffMenuIndex, id) before EVERY
+        // effect apply (confirmed on the wire, see MenuIndexFor) — not just when
+        // the user explicitly switches profiles. Never called from here before
+        // 2026-07-09; added after the capture proved it's part of the real
+        // sequence, not an optional/cosmetic call.
+        try
+        {
+            bool sp = MacroPadSdkNative.SwitchProfile(profile, menuIndex, id);
+            App.WriteLog($"[MacroPad.SetEffect] SwitchProfile(profile={profile}, menu={menuIndex}, id={id}) -> {sp}");
+        }
+        catch (Exception ex) { App.WriteLog("[MacroPad.SetEffect] SwitchProfile threw: " + ex); }
 
         if (effect == Effect.Wave || effect == Effect.Tornado)
         {
@@ -391,8 +431,10 @@ public sealed class MacroPadService : IDisposable
 
                 try
                 {
-                    bool flashOk = MacroPadSdkNative.SaveFlash(6, id); // 6 = ALL_PROFILE
-                    App.WriteLog($"[MacroPad.SetEffect] SaveFlash(ALL,id={id}) (commit) -> {flashOk}");
+                    // Base Camp passes EffMenuIndex here, NOT a constant "6=ALL_PROFILE" —
+                    // confirmed on the wire (report "13 55 00 00 <MenuIndex>").
+                    bool flashOk = MacroPadSdkNative.SaveFlash(menuIndex, id);
+                    App.WriteLog($"[MacroPad.SetEffect] SaveFlash(menu={menuIndex},id={id}) (commit) -> {flashOk}");
                 }
                 catch (Exception ex2) { App.WriteLog("[MacroPad.SetEffect] SaveFlash threw: " + ex2); }
 
@@ -422,8 +464,8 @@ public sealed class MacroPadService : IDisposable
 
             try
             {
-                bool flashOk = MacroPadSdkNative.SaveFlash(6, id); // 6 = ALL_PROFILE
-                App.WriteLog($"[MacroPad.SetEffect] SaveFlash(ALL,id={id}) (commit) -> {flashOk}");
+                bool flashOk = MacroPadSdkNative.SaveFlash(menuIndex, id);
+                App.WriteLog($"[MacroPad.SetEffect] SaveFlash(menu={menuIndex},id={id}) (commit) -> {flashOk}");
             }
             catch (Exception ex2) { App.WriteLog("[MacroPad.SetEffect] SaveFlash threw: " + ex2); }
 

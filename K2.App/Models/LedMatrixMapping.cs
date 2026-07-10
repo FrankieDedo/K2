@@ -177,27 +177,12 @@ internal static class LedMatrixMapping
     };
 
     // ==================================================================
-    // MACROPAD — callback wMatrix → GetColorData index
+    // MACROPAD
     // ==================================================================
-
-    /// <summary>
-    /// Maps the wMatrix value reported by the MacroPad SDK KEY_CALLBACK
-    /// → index in the GetColorData array (126 elements).
-    /// wMatrix values are custom Mountain codes (170-179, 220, 221).
-    /// </summary>
-    public static readonly Dictionary<int, int> MacroPad = new()
-    {
-        { 170, 8 },    // M1
-        { 171, 17 },   // M2
-        { 172, 26 },   // M3
-        { 173, 35 },   // M4
-        { 174, 44 },   // M5
-        { 175, 53 },   // M6
-        { 176, 62 },   // M7
-        { 177, 71 },   // M8
-        { 178, 80 },   // M9
-        { 179, 89 },   // M10
-        { 220, 98 },   // M11
-        { 221, 125 },  // M12
-    };
+    // No translation table needed here: confirmed 2026-07-10 against a real
+    // device (user's saved device.<id>.keymap in macropad.db) that the
+    // MacroPad SDK KEY_CALLBACK's wMatrix IS DIRECTLY the GetColorData LED
+    // index (e.g. wMatrix=8,17,26,...,125 for M1..M12) — unlike Everest,
+    // there is no separate DLLMatrixIndex-style code to translate. See
+    // MainWindow.LedPreview.cs::OnMacroPadColorsUpdated.
 }
