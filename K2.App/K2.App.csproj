@@ -76,6 +76,7 @@
     <Resource Include="Assets\dkd_bg.png" />
     <Resource Include="Assets\dock_bg.png" />
     <Resource Include="Assets\makalu_mouse.png" />
+    <Resource Include="Assets\everest60_keyboard.png" />
   </ItemGroup>
 
   <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\..\_reference\native\MacroPadSDK.dll')">

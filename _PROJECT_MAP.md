@@ -236,14 +236,27 @@ platform (x86 or x64).
   checkbox "sincronizza tra profili", pulsanti backlight ON/OFF e reset
   effetti. Stato persistito globalmente in `Settings` (chiavi `rgb.*`),
   riapplicato all'apertura del driver.
-- `MainWindow.Everest60.cs` — partial: tab **Everest 60** (raw-HID, no SDK —
-  vedi nota architetturale sopra). Stato connessione (poll 3s), pannello RGB
-  (preset Off/Static/Breathing/Wave/Tornado/Reactive/Yeti + velocità/
-  luminosità/2 colori/rainbow/direzione per-effetto, stesso pattern
-  `CapsFor`/`UpdateCapabilities` dell'Everest Max), pannello anello laterale
-  (44 LED perimetrali). **Non incluso** (MVP): remap tasti/Fn/macro (protocollo
-  firmware ignoto), editor RGB per-tasto (il metodo protocollo esiste,
-  manca la UI paint), persistenza cross-sessione dei parametri RGB.
+- `MainWindow.Everest60.cs` — partial: shell del tab **Everest 60** (raw-HID,
+  no SDK — vedi nota architetturale sopra), stesso layout a 3 colonne di
+  Makalu: sidebar SECTIONS (RGB Lighting/Side Ring, `Ev60Section_Changed`/
+  `ShowEv60Section`), immagine `Assets/everest60_keyboard.png` **solo
+  decorativa** (nessun hotspot: nessun protocollo di remap per-tasto esiste
+  per questo device), colonna destra (Profilo/Import/Export disabilitati,
+  Rinomina device via `AppSettings.Everest60DeviceName`). **Importante**:
+  `RbEv60SecRgb.IsChecked` impostato in codice (`InitEv60SectionNav`), mai
+  `IsChecked="True"` in XAML — stessa ragione di `RbMkSecRgb` in
+  `MainWindow.Makalu.cs` (vedi lì e CHANGELOG 2026-07-10). Contenuto RGB/Side
+  Ring effettivo vive in `Everest60RgbPanel`.
+- `Everest60RgbPanel.xaml(.cs)` — `UserControl` figlio diretto di
+  `MainWindow` (non annidato), ospita `SecRgb` (preset Off/Static/Breathing/
+  Wave/Tornado/Reactive/Yeti + velocità/luminosità/2 colori/rainbow/direzione
+  per-effetto, stesso pattern `CapsFor`/`UpdateEv60Capabilities` dell'Everest
+  Max) e `SecSideRing` (44 LED perimetrali). Campo `_ev60Suppress` di default
+  `true` (difesa in profondità, stesso pattern di `MakaluDpiRemapPanel`/
+  `MakaluRgbSettingsPanel` — non risulta necessario oggi per gli `Slider` di
+  questo pannello, ma costa nulla). **Non incluso** (MVP): remap tasti/Fn/macro
+  (protocollo firmware ignoto), editor RGB per-tasto (il metodo protocollo
+  esiste, manca la UI paint), persistenza cross-sessione dei parametri RGB.
 - `Services/Everest60HidNative.cs` — P/Invoke raw HID (`hid.dll`+`setupapi.dll`,
   stesso schema di `EverestHidNative`/`DpHidNative` ma senza reader thread:
   le feature report sono transfer di controllo sincroni via
@@ -644,9 +657,13 @@ Tutto ciò che deriva dai binari di Base Camp. Solo per sviluppo locale.
    **FATTO** (MVP 2026-07-10, **verificato su hardware reale 2026-07-10**):
    connessione (poll), RGB preset (Off/Static/Breathing/Wave/Tornado/Reactive/
    Yeti + speed/brightness/2 colori/rainbow/direzione), anello laterale 44 LED.
-   **Da fare**: editor RGB per-tasto (UI paint, il metodo `SendCustom` già lo
-   supporta); persistenza cross-sessione dei parametri RGB; remap tasti/
-   Fn-layer/macro (richiede USB capture dedicata di Base Camp Windows —
+   **Layout a 3 colonne (sidebar/immagine/colonna destra) completato
+   2026-07-10** — stesso pattern di Makalu, immagine solo decorativa (nessun
+   hotspot: nessun protocollo remap per questo device). **Da fare**: verifica
+   su hardware reale del nuovo layout (non testato con device fisico in
+   questa sessione); editor RGB per-tasto (UI paint, il metodo `SendCustom`
+   già lo supporta); persistenza cross-sessione dei parametri RGB; remap
+   tasti/Fn-layer/macro (richiede USB capture dedicata di Base Camp Windows —
    nessuna fonte nota ha ancora questo protocollo).
 6. Makalu 67/Max (mouse, nuovo tab, raw HID — non SDK, vedi nota
    architetturale sopra): RGB preset (Off/Static/Breathing/RGB Breathing/

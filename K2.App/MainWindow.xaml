@@ -1208,15 +1208,22 @@
             </Grid><!-- end PnlEverest -->
 
             <!-- ==================== Everest 60 (raw-HID lighting only) ==================== -->
+            <!-- ==================== Everest 60 ====================
+                 Same 3-column pattern as Makalu (see MainWindow.Makalu.cs
+                 for the lessons learned about XAML-load-time event firing —
+                 RbEv60SecRgb.IsChecked is set in InitEv60SectionNav, not
+                 XAML). Device image is decorative only (no clickable
+                 hotspots): unlike Makalu, no per-key/per-button remap
+                 protocol exists for this device (raw-HID, firmware remap
+                 never reverse-engineered — see architectural note above). -->
             <Grid x:Name="PnlEverest60" Visibility="Collapsed">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>  <!-- status bar -->
-                        <RowDefinition Height="Auto"/>  <!-- hint -->
-                        <RowDefinition Height="*"/>     <!-- RGB + side ring + log -->
+                        <RowDefinition Height="*"/>     <!-- sections/image/common columns -->
                     </Grid.RowDefinitions>
 
-                    <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+                    <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
                         <TextBlock x:Name="LblEv60Status" Text="{loc:Get ev60_status_disconnected}"
                                    VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,12,0"/>
                         <Button x:Name="BtnEv60Refresh" Content="{loc:Get ev60_refresh}"
@@ -1224,86 +1231,100 @@
                                 Style="{StaticResource K2IconButton}" Tag="&#xE72C;"/>
                     </WrapPanel>
 
-                    <TextBlock Grid.Row="1" Text="{loc:Get ev60_hint}" TextWrapping="Wrap"
-                               Foreground="{StaticResource K2TextMutedBrush}" FontStyle="Italic"
-                               Margin="0,0,0,10" MaxWidth="720" HorizontalAlignment="Left"/>
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="160"/>  <!-- sidebar -->
+                            <ColumnDefinition Width="*"/>    <!-- image + section content -->
+                            <ColumnDefinition Width="210"/>  <!-- common actions -->
+                        </Grid.ColumnDefinitions>
 
-                    <Grid Grid.Row="2">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>  <!-- RGB effect panel -->
-                            <RowDefinition Height="Auto"/>  <!-- Side ring panel -->
-                            <RowDefinition Height="*"/>     <!-- log -->
-                        </Grid.RowDefinitions>
-
-                        <!-- RGB effect panel -->
-                        <Border Grid.Row="0" Background="#14141A" BorderBrush="#2A2A32" BorderThickness="1"
-                                CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                        <!-- LEFT: specific sections -->
+                        <Border Grid.Column="0" Background="#111115" CornerRadius="6"
+                                Margin="0,0,8,0" Padding="4">
                             <StackPanel>
-                                <TextBlock Text="{loc:Get rgb_lighting}" FontWeight="Bold" Margin="0,0,0,8"/>
-                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <TextBlock Text="{loc:Get rgb_effect}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <ComboBox x:Name="CbEv60Effect" Width="120" Margin="0,0,12,0"
-                                              SelectionChanged="CbEv60Effect_SelectionChanged"/>
-                                    <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <ComboBox x:Name="CbEv60Direction" Width="120" Margin="0,0,12,0"
-                                              SelectionChanged="CbEv60EffectParam_Changed"/>
-                                    <CheckBox x:Name="CkEv60Rainbow" Content="{loc:Get rgb_rainbow}"
-                                              ToolTip="{loc:Get rgb_rainbow_tip}" Click="CkEv60Rainbow_Click"/>
-                                </WrapPanel>
-                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Slider x:Name="SldEv60Speed" Minimum="0" Maximum="100" Width="120"
-                                            TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
-                                            ValueChanged="SldEv60Param_ValueChanged" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="LblEv60Speed" Text="50%" VerticalAlignment="Center" Margin="6,0,16,0" MinWidth="36"/>
-                                    <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Slider x:Name="SldEv60Brightness" Minimum="0" Maximum="100" Width="120"
-                                            TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
-                                            ValueChanged="SldEv60Param_ValueChanged" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="LblEv60Brightness" Text="100%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
-                                </WrapPanel>
-                                <WrapPanel Orientation="Horizontal">
-                                    <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                    <Button x:Name="BtnEv60Color1" Width="40" Height="22" Background="#900000"
-                                            BorderThickness="2" BorderBrush="#3A3A40" Click="BtnEv60Color_Click" Tag="1"
-                                            Margin="0,0,14,0"/>
-                                    <StackPanel x:Name="PnlEv60Color2" Orientation="Horizontal">
-                                        <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                        <Button x:Name="BtnEv60Color2" Width="40" Height="22" Background="#1A1A1E"
-                                                BorderThickness="2" BorderBrush="#3A3A40" Click="BtnEv60Color_Click" Tag="2"/>
-                                    </StackPanel>
-                                </WrapPanel>
+                                <TextBlock Text="SECTIONS" FontSize="9" Foreground="#4A4A58"
+                                           Margin="14,8,0,6" FontWeight="Bold"/>
+                                <RadioButton x:Name="RbEv60SecRgb"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get rgb_lighting}" GroupName="Ev60Sections"
+                                             Checked="Ev60Section_Changed"/>
+                                <RadioButton x:Name="RbEv60SecSideRing"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get ev60_side_ring}" GroupName="Ev60Sections"
+                                             Checked="Ev60Section_Changed"/>
                             </StackPanel>
                         </Border>
 
-                        <!-- Side ring panel -->
-                        <Border Grid.Row="1" Background="#14141A" BorderBrush="#2A2A32" BorderThickness="1"
-                                CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
-                            <StackPanel>
-                                <TextBlock Text="{loc:Get ev60_side_ring}" FontWeight="Bold" Margin="0,0,0,8"/>
-                                <WrapPanel Orientation="Horizontal">
-                                    <Button x:Name="BtnEv60SideColor" Width="40" Height="22" Background="#900000"
-                                            BorderThickness="2" BorderBrush="#3A3A40" Click="BtnEv60SideColor_Click"
-                                            Margin="0,0,12,0"/>
-                                    <Button x:Name="BtnEv60SideApply" Content="{loc:Get ev60_side_apply}"
-                                            Click="BtnEv60SideApply_Click" Padding="8,4"/>
-                                </WrapPanel>
-                                <TextBlock Text="{loc:Get ev60_side_hint}" TextWrapping="Wrap"
-                                           Foreground="{StaticResource K2TextMutedBrush}" FontStyle="Italic" FontSize="11"
-                                           Margin="0,8,0,0" MaxWidth="640"/>
-                            </StackPanel>
-                        </Border>
+                        <!-- CENTER: device image (top) + selected section content (bottom) -->
+                        <Grid Grid.Column="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" MinHeight="160"/>  <!-- device -->
+                                <RowDefinition Height="Auto"/>               <!-- section content -->
+                            </Grid.RowDefinitions>
 
-                        <!-- Log -->
-                        <Border Grid.Row="2" Background="#0F0F13" BorderBrush="#2A2A32" BorderThickness="1"
-                                CornerRadius="6" Padding="8">
-                            <DockPanel>
-                                <TextBlock DockPanel.Dock="Top" Text="{loc:Get ev60_log}"
-                                           Foreground="{StaticResource K2TextMutedBrush}" FontSize="10" Margin="2,0,0,4"/>
-                                <TextBox x:Name="TxtEv60Log" IsReadOnly="True" FontFamily="Consolas" FontSize="11"
-                                         VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap"
-                                         Background="Transparent" BorderThickness="0"/>
-                            </DockPanel>
+                            <Border Grid.Row="0" Background="#18181C" CornerRadius="6" Padding="8">
+                                <Image Source="Assets/everest60_keyboard.png" Stretch="Uniform"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+
+                            <!-- Bottom section panel: fixed Height so it doesn't resize/jump
+                                 when switching between RGB Lighting / Side Ring. -->
+                            <Border Grid.Row="1" Background="#14141A"
+                                    BorderBrush="#2A2A32" BorderThickness="1"
+                                    CornerRadius="6" Padding="12,10" Margin="0,8,0,0"
+                                    Height="150">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <local:Everest60RgbPanel x:Name="Ev60RgbPanel"/>
+                                </ScrollViewer>
+                            </Border>
+                        </Grid>
+
+                        <!-- RIGHT: generic settings (profile/import/export not implemented for
+                             this device yet — disabled with an explanatory tooltip; device
+                             rename works now, via AppSettings, no per-device store needed). -->
+                        <Border Grid.Column="2" Background="#111115" CornerRadius="6"
+                                Margin="8,0,0,0" Padding="10" VerticalAlignment="Top">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Get profile}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <ComboBox Style="{StaticResource K2SideActionCombo}" IsEnabled="False"
+                                          ToolTip="{loc:Get profile_not_available_tip}"/>
+                                <Button Content="{loc:Get rename_profile}" IsEnabled="False"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
+                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+                                <Button Content="{loc:Get delete_profile}" IsEnabled="False"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE74D;"
+                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+
+                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get import}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button Content="{loc:Get dp_import_xml}" IsEnabled="False"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8E5;"
+                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+                                <Button Content="{loc:Get import_bc}" IsEnabled="False"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE72C;"
+                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+
+                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get export}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button Content="{loc:Get export_profiles_btn}" IsEnabled="False"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE898;"
+                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+
+                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get device}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Button x:Name="BtnEv60Rename" Content="{loc:Get rename_device}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8AC;"
+                                        Click="BtnEv60Rename_Click"/>
+
+                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
+                                <TextBlock Text="{loc:Get ev60_log}" Style="{StaticResource K2SideGroupHeader}"/>
+                                <Border Background="#0F0F13" BorderBrush="#2A2A32" BorderThickness="1"
+                                        CornerRadius="6" Padding="6" Height="110">
+                                    <TextBox x:Name="TxtEv60Log" IsReadOnly="True" FontFamily="Consolas" FontSize="10"
+                                             VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap"
+                                             Background="Transparent" BorderThickness="0"/>
+                                </Border>
+                            </StackPanel>
                         </Border>
                     </Grid>
                 </Grid>

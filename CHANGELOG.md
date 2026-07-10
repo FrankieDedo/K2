@@ -9,7 +9,47 @@
 > mappa stabile in `_PROJECT_MAP.md`. Consultare qui solo per il contesto
 > di una modifica specifica passata (grep per parola chiave/data).
 
-> Last updated: 2026-07-10 (Makalu: ROOT CAUSE TROVATA E RISOLTA con WinDbg+SOS —
+> Last updated: 2026-07-10 (Everest 60: stesso layout a 3 colonne di Makalu,
+> applicate le stesse precauzioni fin da subito — nessun crash, 5/5 lanci OK):
+>   - **Richiesta utente**: "continua con Everest 60" dopo commit del fix
+>     Makalu.
+>   - **Fatto**: stesso pattern esatto di Makalu. Nuovo `Everest60RgbPanel.xaml(.cs)`
+>     (`UserControl`, figlio diretto di `MainWindow`, non annidato) che ospita
+>     `SecRgb`/`SecSideRing` (contenuto identico ai due pannelli che prima
+>     stavano inline in `MainWindow.xaml`, solo spostati). `MainWindow.xaml`:
+>     `PnlEverest60` ristrutturato a 3 colonne — sidebar SECTIONS (RGB
+>     Lighting/Side Ring), immagine `Assets/everest60_keyboard.png` al centro
+>     (**solo decorativa, nessun hotspot cliccabile**: a differenza di Makalu,
+>     per Everest 60 non esiste alcun protocollo di remap per-tasto — vedi nota
+>     architetturale, firmware mai reverse-engineered), colonna destra
+>     Profilo/Import/Export (disabilitati, stesso tooltip di Makalu)/Device
+>     (Rinomina, funzionante via nuovo `AppSettings.Everest60DeviceName`, già
+>     aggiunto in sessione precedente ma mai usato finora). `MainWindow.Everest60.cs`
+>     riscritto come shell (sidebar/status/rename/log), stesso schema di
+>     `MainWindow.Makalu.cs`.
+>   - **Precauzioni applicate PRIMA di testare** (lezione della sessione Makalu,
+>     non riscoperte da zero): `RbEv60SecRgb.IsChecked` impostato in codice
+>     (`InitEv60SectionNav`, chiamato da `InitEverest60Module` dopo che
+>     `InitializeComponent()` è già completo) — MAI `IsChecked="True"` in XAML.
+>     Campo `_ev60Suppress` in `Everest60RgbPanel.xaml.cs` inizializzato a
+>     `true` di default (non `false`), azzerato solo a fine `Init()` — anche se
+>     i due `Slider` di questo pannello (`SldEv60Speed`/`SldEv60Brightness`,
+>     entrambi `Minimum="0"` che combacia col `Value` di default 0, quindi
+>     nessuna coercizione) non risultano a rischio dell'esatto bug trovato in
+>     Makalu, costa nulla applicare la stessa difesa.
+>   - **Verificato**: rebuild pulita (`rm -rf obj bin`) + **5 lanci consecutivi,
+>     0 crash**, log applicativo regolare (~828 righe/run, tutti e tre i driver
+>     MacroPad/Everest/DisplayPad aperti). `K2.DisplayPad.sln` (x64) verificato
+>     pulito separatamente (non toccato da questa modifica, solo controllo di
+>     non-regressione).
+>   - **Da fare**: verifica su hardware Everest 60 fisico del nuovo layout
+>     (RGB/Side Ring funzionavano già prima, solo la disposizione UI è
+>     cambiata — rischio basso ma non testato con device reale in questa
+>     sessione); persistenza cross-sessione; Import/Export/Profilo restano
+>     disabilitati come per Makalu (nessuna persistenza multi-profilo per
+>     questo device).
+>
+> Previous: 2026-07-10 (Makalu: ROOT CAUSE TROVATA E RISOLTA con WinDbg+SOS —
 > NON era un bug del JIT/CLR x86, era un null-ref banale in due punti diversi.
 > Layout a 3 colonne per Makalu ORA FUNZIONANTE, DPI/Remap riattivati, sidebar
 > interattiva con hotspot sull'immagine del mouse):
