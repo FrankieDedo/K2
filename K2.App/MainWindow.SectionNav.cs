@@ -28,10 +28,18 @@
 // DisplayPad section panels: PnlDpSecKeyBinding (keys configured on the grid above),
 //   PnlDpSecRotation (rotation + icon rotate)
 //
-// Brightness sliders (SldEvBrightness/SldMacroBrightness/SldDpBrightness) live in
-// the shared top-right brightness bar (BrEverest/BrMacroPad/BrDisplayPad in
+// Brightness sliders (SldEvBrightness/SldMacroBrightness/SldDpBrightness/
+// SldEv60Brightness/SldMkBrightness) live in the shared top-right brightness
+// bar (BrEverest/BrMacroPad/BrDisplayPad/BrEverest60/BrMakalu in
 // MainWindow.xaml), not in these per-device sections — see MainWindow.xaml.cs
 // TcDevices_SelectionChanged for how that bar switches with the active tab.
+// Everest 60/Makalu's sliders live in MainWindow (this partial class's
+// siblings MainWindow.Everest60.cs/MainWindow.Makalu.cs) same as the other
+// three, but the effect-apply logic they trigger stays inside those devices'
+// own UserControls (Ev60RgbPanel/MkRgbSettings) via an internal
+// Brightness/SetBrightness() property+method, since (unlike Everest/MacroPad/
+// DisplayPad, which have no separate UserControl) that's where the rest of
+// each device's RGB state already lives.
 //
 // Key-editing gate: clicking a key on the on-screen grid/keyboard only opens the
 // action-configuration dialog while that device's Key Binding section is the

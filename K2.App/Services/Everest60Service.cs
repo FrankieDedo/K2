@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.Win32.SafeHandles;
 
 namespace K2.App.Services;
@@ -65,4 +66,15 @@ internal sealed class Everest60Service
             var keys = new (byte, byte, byte)[Everest60Protocol.NumKeys]; // dark
             Everest60Protocol.SendCustom(h, keys, brightnessPct, side, _log);
         });
+
+    /// <summary>
+    /// Sets the 64 main-board keys to per-key colors (Custom mode paint
+    /// editor — see MainWindow.Everest60CustomLighting.cs). NOTE: same
+    /// firmware limitation as <see cref="SetSideRing"/> — Custom mode
+    /// addresses keys and the side ring in one combined command, so applying
+    /// per-key colors here turns the side ring dark (and vice versa). This
+    /// is a firmware behavior, not a K2 shortcut.
+    /// </summary>
+    public bool SetCustomKeys(IReadOnlyList<(byte r, byte g, byte b)> keys, int brightnessPct) =>
+        WithDevice(h => Everest60Protocol.SendCustom(h, keys, brightnessPct, sideColors: null, _log));
 }

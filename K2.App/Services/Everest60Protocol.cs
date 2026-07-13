@@ -68,6 +68,46 @@ internal static class Everest60Protocol
     /// <summary>Side perimeter ring: 44 RGB LEDs, clockwise starting above ESC.</summary>
     public static readonly byte[] SideLedIndex = BuildRange(126, 44);
 
+    /// <summary>
+    /// Numpad accessory's 17 keys → firmware LED hardware address, same index
+    /// order as <see cref="Models.Everest60KeyboardLayout.Numpad"/> (Num//,*,-,
+    /// 7,8,9,+, 4,5,6, 1,2,3,Enter, 0,.). Reverse-engineered 2026-07-12 via a
+    /// real USBPcap capture of Base Camp painting each numpad key individually
+    /// (user confirmed paint order), NOT guessed — see CHANGELOG for the full
+    /// trace. The addresses fall in the unused "row" slots right after the
+    /// main board's own keys (e.g. 38-41 sit right after Backspace=34 in
+    /// LedIndex's row 0): the numpad shares the same physical PCB row/column
+    /// addressing as the main board, just further right — same
+    /// firmware-family reasoning already confirmed for the main 64 keys and
+    /// side ring. Read-only for now (live preview only, see
+    /// MainWindow.Everest60.cs's OnEv60ColorsUpdated) — writing/painting the
+    /// numpad is a separate feature, not implemented here.
+    /// </summary>
+    public static readonly byte[] NumpadLedIndex =
+    {
+        38, 39, 40, 41,
+        59, 60, 61, 62,
+        80, 81, 82,
+        101, 102, 103,
+        125, 122, 124,
+    };
+
+    /// <summary>Every hardware LED address accounted for by <see cref="LedIndex"/>/
+    /// <see cref="SideLedIndex"/>/<see cref="NumpadLedIndex"/> — used to spot
+    /// non-zero colors at UNKNOWN addresses in a <c>GetColorData2</c> readback
+    /// (whatever's left is genuinely unexplained padding in the firmware's
+    /// address space, not a missed physical LED). Diagnostic only, added
+    /// 2026-07-12.</summary>
+    public static readonly HashSet<byte> KnownLedAddresses = BuildKnownAddresses();
+
+    private static HashSet<byte> BuildKnownAddresses()
+    {
+        var set = new HashSet<byte>(LedIndex);
+        foreach (var a in SideLedIndex) set.Add(a);
+        foreach (var a in NumpadLedIndex) set.Add(a);
+        return set;
+    }
+
     private static byte[] BuildRange(int start, int count)
     {
         var a = new byte[count];

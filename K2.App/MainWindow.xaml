@@ -619,6 +619,26 @@
                     <TextBlock x:Name="LblDpBrightness" Text="100%" VerticalAlignment="Center"
                                Margin="6,0,0,0" MinWidth="40"/>
                 </StackPanel>
+                <StackPanel x:Name="BrEverest60" Orientation="Horizontal" Visibility="Collapsed">
+                    <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <Slider x:Name="SldEv60Brightness" Minimum="0" Maximum="100" Value="100"
+                            Width="140" TickFrequency="25" IsSnapToTickEnabled="True"
+                            TickPlacement="BottomRight"
+                            ValueChanged="SldEv60Brightness_ValueChanged"
+                            VerticalAlignment="Center"/>
+                    <TextBlock x:Name="LblEv60Brightness" Text="100%" VerticalAlignment="Center"
+                               Margin="6,0,0,0" MinWidth="40"/>
+                </StackPanel>
+                <StackPanel x:Name="BrMakalu" Orientation="Horizontal" Visibility="Collapsed">
+                    <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <Slider x:Name="SldMkBrightness" Minimum="0" Maximum="100" Value="100"
+                            Width="140" TickFrequency="25" IsSnapToTickEnabled="True"
+                            TickPlacement="BottomRight"
+                            ValueChanged="SldMkBrightness_ValueChanged"
+                            VerticalAlignment="Center"/>
+                    <TextBlock x:Name="LblMkBrightness" Text="100%" VerticalAlignment="Center"
+                               Margin="6,0,0,0" MinWidth="40"/>
+                </StackPanel>
             </StackPanel>
 
             <!-- Loading overlay — covers tab strip + content while AutoOpenDrivers runs.
@@ -707,11 +727,16 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Right: device image (top) + settings panel (bottom) -->
+                        <!-- Right: device image (top, fixed height) + settings panel (bottom, grows) -->
                         <Grid Grid.Column="1">
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="*" MinHeight="160"/>  <!-- device -->
-                                <RowDefinition Height="Auto"/>               <!-- settings -->
+                                <!-- Fixed height across all devices, matching MacroPad's box height
+                                     when rotated to vertical orientation (Positioning section,
+                                     90°/270°): the canvas is 510x370, but RotateTransform swaps its
+                                     rendered footprint to 370x510, so 510 + 8px padding each side = 526
+                                     is the tallest a device box needs to be. -->
+                                <RowDefinition Height="526"/>  <!-- device -->
+                                <RowDefinition Height="*"/>    <!-- settings: grows with window height -->
                             </Grid.RowDefinitions>
 
                             <!-- Device image with interactive overlay -->
@@ -762,15 +787,14 @@
                                 </DockPanel>
                             </Border>
 
-                            <!-- Bottom settings panel: sections switch here. Fixed Height (not
-                                 Auto) so the panel doesn't resize/jump when switching between
-                                 sections of very different natural height (Key Binding/RGB vs.
-                                 Display Dial vs. USB Recorder) — a ScrollViewer absorbs any
-                                 section taller than the fixed area instead of clipping it. -->
+                            <!-- Bottom settings panel: grows with the window (Row="*" above); MinHeight
+                                 keeps its old fixed size as a floor so it doesn't collapse below the
+                                 tallest section (Key Binding/RGB vs. Display Dial vs. USB Recorder) —
+                                 a ScrollViewer absorbs any section taller than the current area. -->
                             <Border Grid.Row="1" Background="#14141A"
                                     BorderBrush="#2A2A32" BorderThickness="1"
                                     CornerRadius="6" Padding="12,10" Margin="0,8,0,0"
-                                    Height="270">
+                                    MinHeight="270">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <Grid>
                                     <Grid.RowDefinitions>
@@ -848,12 +872,19 @@
                                                               SelectionChanged="CbEvEffect_SelectionChanged"
                                                               DropDownOpened="CbEvEffect_DropDownOpened"
                                                               DropDownClosed="CbEvEffect_DropDownClosed"/>
-                                                    <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                    <ComboBox x:Name="CbEvSpeed" Width="95" Margin="0,0,12,0"
-                                                              SelectionChanged="CbEvEffectParam_Changed"/>
-                                                    <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                    <ComboBox x:Name="CbEvDirection" Width="130" Margin="0,0,12,0"
-                                                              SelectionChanged="CbEvEffectParam_Changed"/>
+                                                    <StackPanel x:Name="PnlEvSpeed" Orientation="Horizontal" Margin="0,0,12,0">
+                                                        <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                        <Slider x:Name="SldEvSpeed" Minimum="0" Maximum="100" Width="110"
+                                                                TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                                                                ValueChanged="SldEvSpeed_ValueChanged" VerticalAlignment="Center"/>
+                                                        <TextBlock x:Name="LblEvSpeed" Text="50%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
+                                                    </StackPanel>
+                                                    <StackPanel x:Name="PnlEvDirection" Orientation="Horizontal" Margin="0,0,12,0">
+                                                        <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                        <Border Style="{StaticResource K2SegmentedGroupBorder}">
+                                                            <UniformGrid x:Name="GridEvDirection" Rows="1"/>
+                                                        </Border>
+                                                    </StackPanel>
                                                     <CheckBox x:Name="CkEvRainbow" Content="{loc:Get rgb_rainbow}" Margin="0,0,10,0"
                                                               Click="CkEvRainbow_Click" ToolTip="{loc:Get rgb_rainbow_tip}"/>
                                                     <CheckBox x:Name="CkEvSync" Content="{loc:Get rgb_sync_profiles}"
@@ -948,11 +979,23 @@
                                                     <TextBlock Text="{loc:Get dial_clock_section}" FontWeight="SemiBold" Margin="0,0,0,8"/>
                                                     <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
                                                         <TextBlock Text="{loc:Get dial_clock_label}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                        <ComboBox x:Name="CbDialClockType" Width="70" Margin="0,0,16,0"
-                                                                  SelectionChanged="CbDialClockType_SelectionChanged"/>
+                                                        <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="90" Margin="0,0,16,0">
+                                                            <UniformGrid Rows="1">
+                                                                <RadioButton x:Name="RbDialClock24h" Content="24h" GroupName="DialClockType"
+                                                                             Style="{StaticResource K2SegmentedButton}" Checked="RbDialClockType_Checked"/>
+                                                                <RadioButton x:Name="RbDialClock12h" Content="12h" GroupName="DialClockType"
+                                                                             Style="{StaticResource K2SegmentedButton}" Checked="RbDialClockType_Checked"/>
+                                                            </UniformGrid>
+                                                        </Border>
                                                         <TextBlock Text="{loc:Get dial_clock_style_label}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                        <ComboBox x:Name="CbDialClockStyle" Width="80"
-                                                                  SelectionChanged="CbDialClockStyle_SelectionChanged"/>
+                                                        <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="140">
+                                                            <UniformGrid Rows="1">
+                                                                <RadioButton x:Name="RbDialClockDigital" Content="{loc:Get dial_clock_digital}" GroupName="DialClockStyle"
+                                                                             Style="{StaticResource K2SegmentedButton}" Checked="RbDialClockStyle_Checked"/>
+                                                                <RadioButton x:Name="RbDialClockAnalog" Content="{loc:Get dial_clock_analog}" GroupName="DialClockStyle"
+                                                                             Style="{StaticResource K2SegmentedButton}" Checked="RbDialClockStyle_Checked"/>
+                                                            </UniformGrid>
+                                                        </Border>
                                                     </WrapPanel>
 
                                                     <TextBlock Text="{loc:Get dial_screensaver_section}" FontWeight="SemiBold" Margin="0,0,0,8"/>
@@ -1044,8 +1087,14 @@
                                             <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
                                                 <TextBlock Text="{loc:Get settings_keyboard_color}" VerticalAlignment="Center"
                                                            FontWeight="SemiBold" Margin="0,0,6,0"/>
-                                                <ComboBox x:Name="CbSettingsKeyboardColor" Width="120"
-                                                          SelectionChanged="CbSettingsKeyboardColor_SelectionChanged"/>
+                                                <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="140">
+                                                    <UniformGrid Rows="1">
+                                                        <RadioButton x:Name="RbEvKbColorSilver" Content="{loc:Get color_silver}" GroupName="EvKbColor"
+                                                                     Style="{StaticResource K2SegmentedButton}" Checked="RbEvKbColor_Checked"/>
+                                                        <RadioButton x:Name="RbEvKbColorBlack" Content="{loc:Get color_black}" GroupName="EvKbColor"
+                                                                     Style="{StaticResource K2SegmentedButton}" Checked="RbEvKbColor_Checked"/>
+                                                    </UniformGrid>
+                                                </Border>
                                             </WrapPanel>
 
                                             <TextBlock Text="{loc:Get settings_keycap_group}" FontWeight="SemiBold" Margin="0,0,0,6"/>
@@ -1219,23 +1268,29 @@
             <Grid x:Name="PnlEverest60" Visibility="Collapsed">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>  <!-- status bar -->
+                        <!-- Fixed (not Auto): keeps the sidebar/content start position
+                             identical across devices — same rule as PnlEverest. Connected
+                             status + Refresh moved to the common-actions Debug group (see
+                             PnlEv60DebugGroup below); this toolbar is debug-only like the
+                             other devices', just with nothing to show yet for this one. -->
+                        <RowDefinition Height="32"/>    <!-- toolbar -->
                         <RowDefinition Height="*"/>     <!-- sections/image/common columns -->
                     </Grid.RowDefinitions>
 
-                    <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                        <TextBlock x:Name="LblEv60Status" Text="{loc:Get ev60_status_disconnected}"
-                                   VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,12,0"/>
-                        <Button x:Name="BtnEv60Refresh" Content="{loc:Get ev60_refresh}"
-                                Click="BtnEv60Refresh_Click"
-                                Style="{StaticResource K2IconButton}" Tag="&#xE72C;"/>
-                    </WrapPanel>
+                    <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8"/>
 
                     <Grid Grid.Row="1">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="160"/>  <!-- sidebar -->
                             <ColumnDefinition Width="*"/>    <!-- image + section content -->
-                            <ColumnDefinition Width="210"/>  <!-- common actions -->
+                            <!-- Fixed at 218, NOT Auto: Auto let a NoWrap log TextBox (now removed)
+                                 drive the column's width to whatever its longest line needed, so it
+                                 kept growing as new log lines came in. 218 = the Border's own
+                                 Margin.Left="8" + its 210px desired width (190px buttons + 10px
+                                 padding each side) — same effective pixel width Everest Max/MacroPad/
+                                 DisplayPad's Auto column resolves to (safe there only because none of
+                                 their common-actions content is unbounded-width). -->
+                            <ColumnDefinition Width="218"/>  <!-- common actions -->
                         </Grid.ColumnDefinitions>
 
                         <!-- LEFT: specific sections -->
@@ -1244,71 +1299,173 @@
                             <StackPanel>
                                 <TextBlock Text="SECTIONS" FontSize="9" Foreground="#4A4A58"
                                            Margin="14,8,0,6" FontWeight="Bold"/>
-                                <RadioButton x:Name="RbEv60SecRgb"
+                                <RadioButton x:Name="RbEv60SecKeyBinding"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get ev60_key_binding}" GroupName="Ev60Sections"
+                                             Checked="Ev60Section_Changed"/>
+                                <RadioButton x:Name="RbEv60SecLighting"
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get rgb_lighting}" GroupName="Ev60Sections"
                                              Checked="Ev60Section_Changed"/>
-                                <RadioButton x:Name="RbEv60SecSideRing"
+                                <RadioButton x:Name="RbEv60SecSettings"
                                              Style="{StaticResource SectionTabStyle}"
-                                             Content="{loc:Get ev60_side_ring}" GroupName="Ev60Sections"
+                                             Content="{loc:Get ev_settings}" GroupName="Ev60Sections"
                                              Checked="Ev60Section_Changed"/>
                             </StackPanel>
                         </Border>
 
-                        <!-- CENTER: device image (top) + selected section content (bottom) -->
+                        <!-- CENTER: device image (top, fixed height) + selected section content (bottom, grows) -->
                         <Grid Grid.Column="1">
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="*" MinHeight="160"/>  <!-- device -->
-                                <RowDefinition Height="Auto"/>               <!-- section content -->
+                                <!-- Fixed height across all devices, matching MacroPad's box height
+                                     when rotated to vertical orientation (Positioning section,
+                                     90°/270°): the canvas is 510x370, but RotateTransform swaps its
+                                     rendered footprint to 370x510, so 510 + 8px padding each side = 526
+                                     is the tallest a device box needs to be. -->
+                                <RowDefinition Height="526"/>  <!-- device -->
+                                <RowDefinition Height="*"/>    <!-- section content: grows with window height -->
                             </Grid.RowDefinitions>
 
+                            <!-- Interactive keyboard overlay: 64 paintable main-board keys (Key
+                                 Lighting section, per-key custom color) over the flat everest60_board.png
+                                 panel — same technique as Everest Max's CvsEvKeyboard/keybg.png. The
+                                 numpad accessory is decorative-only (no known LED/remap protocol for
+                                 it — see Everest60KeyboardLayout.Numpad); presence and side (left/right)
+                                 are auto-detected via Everest60SdkNative.GetSubDeviceInfo and polled by
+                                 Ev60RefreshStatus (MainWindow.Everest60.cs) — CvsEv60Numpad is moved to
+                                 either side of SpEv60Layout and BrushEv60NumpadBg mirrored for "right"
+                                 (no separate right-side art exists — see EV60_NumpadLeft.png, no
+                                 EV60_NumpadRight.png in Base Camp's own assets). -->
                             <Border Grid.Row="0" Background="#18181C" CornerRadius="6" Padding="8">
-                                <Image Source="Assets/everest60_keyboard.png" Stretch="Uniform"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <StackPanel x:Name="SpEv60Layout" Orientation="Horizontal"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Canvas x:Name="CvsEv60Numpad" Width="154" Height="186"
+                                            ClipToBounds="True" Margin="0,0,6,0"
+                                            Visibility="Collapsed">
+                                        <Canvas.Background>
+                                            <ImageBrush x:Name="BrushEv60NumpadBg"
+                                                        ImageSource="Assets/everest60_numpad.png" Stretch="Fill"/>
+                                        </Canvas.Background>
+                                    </Canvas>
+                                    <Canvas x:Name="CvsEv60Keyboard" Width="504" Height="186"
+                                            ClipToBounds="True">
+                                        <Canvas.Background>
+                                            <ImageBrush ImageSource="Assets/everest60_board.png" Stretch="Fill"/>
+                                        </Canvas.Background>
+                                    </Canvas>
+                                </StackPanel>
                             </Border>
 
-                            <!-- Bottom section panel: fixed Height so it doesn't resize/jump
-                                 when switching between RGB Lighting / Side Ring. -->
+                            <!-- Bottom section panel: grows with the window (Row="*" above); MinHeight
+                                 keeps its old fixed size as a floor so it doesn't collapse below the
+                                 tallest section (RGB Lighting / Side Ring). -->
                             <Border Grid.Row="1" Background="#14141A"
                                     BorderBrush="#2A2A32" BorderThickness="1"
                                     CornerRadius="6" Padding="12,10" Margin="0,8,0,0"
-                                    Height="150">
+                                    MinHeight="150">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                    <local:Everest60RgbPanel x:Name="Ev60RgbPanel"/>
+                                    <Grid>
+                                        <local:Everest60RgbPanel x:Name="Ev60RgbPanel"/>
+                                        <local:Everest60KeyBindingPanel x:Name="Ev60KeyBindingPanel" Visibility="Collapsed"/>
+
+                                        <!-- ── SETTINGS ── Keycap Appearance: purely cosmetic, same
+                                             on-screen-only semantics as MainWindow.KeycapAppearance.cs
+                                             for Everest Max (no live LED tick blend modes here, since
+                                             this raw-HID board has no GetColorData-equivalent readback
+                                             to blend with — just a static base/text color choice).
+                                             Layout: disabled placeholder pending investigation of the
+                                             Everest360_USB.dll SetFWLayout/locale-legend data (see
+                                             CHANGELOG) — not faked as functional. -->
+                                        <StackPanel x:Name="PnlEv60Settings" Visibility="Collapsed">
+                                            <TextBlock Text="{loc:Get settings_keycap_group}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                            <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                <TextBlock Text="{loc:Get settings_keycap_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <RadioButton x:Name="RbEv60KeycapBlack" Content="{loc:Get settings_keycap_black}"
+                                                             GroupName="Ev60KeycapColor" VerticalAlignment="Center"
+                                                             Margin="0,0,10,0" Checked="RbEv60KeycapColor_Checked"/>
+                                                <RadioButton x:Name="RbEv60KeycapWhite" Content="{loc:Get settings_keycap_white}"
+                                                             GroupName="Ev60KeycapColor" VerticalAlignment="Center"
+                                                             Margin="0,0,10,0" Checked="RbEv60KeycapColor_Checked"/>
+                                                <RadioButton x:Name="RbEv60KeycapCustom" Content="{loc:Get settings_keycap_custom}"
+                                                             GroupName="Ev60KeycapColor" VerticalAlignment="Center"
+                                                             Margin="0,0,6,0" Checked="RbEv60KeycapColor_Checked"/>
+                                                <Button x:Name="BtnEv60KeycapCustomColor" Width="32" Height="20"
+                                                        Background="#404040" BorderThickness="2" BorderBrush="#3A3A40"
+                                                        Click="BtnEv60KeycapCustomColor_Click"/>
+                                            </WrapPanel>
+                                            <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                <TextBlock Text="{loc:Get settings_keycap_text_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <RadioButton x:Name="RbEv60KeycapTextBlack" Content="{loc:Get settings_keycap_black}"
+                                                             GroupName="Ev60KeycapTextColor" VerticalAlignment="Center"
+                                                             Margin="0,0,10,0" Checked="RbEv60KeycapTextColor_Checked"/>
+                                                <RadioButton x:Name="RbEv60KeycapTextWhite" Content="{loc:Get settings_keycap_white}"
+                                                             GroupName="Ev60KeycapTextColor" VerticalAlignment="Center"
+                                                             Margin="0,0,10,0" Checked="RbEv60KeycapTextColor_Checked"/>
+                                                <RadioButton x:Name="RbEv60KeycapTextCustom" Content="{loc:Get settings_keycap_custom}"
+                                                             GroupName="Ev60KeycapTextColor" VerticalAlignment="Center"
+                                                             Margin="0,0,6,0" Checked="RbEv60KeycapTextColor_Checked"/>
+                                                <Button x:Name="BtnEv60KeycapTextColor" Width="32" Height="20"
+                                                        Background="White" BorderThickness="2" BorderBrush="#3A3A40"
+                                                        Click="BtnEv60KeycapTextColor_Click"/>
+                                            </WrapPanel>
+                                            <!-- Keycap style: imported from Everest Max's Settings section
+                                                 (settings_keycap_style/CbEvKeycapStyle). No live LED tick to
+                                                 blend with on this raw-HID board, so the "live" signal each
+                                                 style blends with is the Key Lighting section's painted
+                                                 per-key color instead (see ApplyEv60KeycapAppearanceToAllKeys) —
+                                                 applies to the numpad too (always the "off" baseline there,
+                                                 since it's never painted). -->
+                                            <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                <TextBlock Text="{loc:Get settings_keycap_style}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <ComboBox x:Name="CbEv60KeycapStyle" Width="230"
+                                                          SelectionChanged="CbEv60KeycapStyle_SelectionChanged"/>
+                                            </WrapPanel>
+                                            <TextBlock Text="{loc:Get settings_keycap_hint}" Foreground="#9A9AA2"
+                                                       TextWrapping="Wrap" Margin="0,0,0,10" FontSize="12"/>
+
+                                            <Separator Style="{StaticResource K2SideSeparator}" Margin="0,0,0,10"/>
+                                            <WrapPanel Orientation="Horizontal">
+                                                <TextBlock Text="{loc:Get ev_layout}" VerticalAlignment="Center"
+                                                           FontWeight="SemiBold" Margin="0,0,6,0"/>
+                                                <ComboBox x:Name="CbEv60KeyboardLayout" Width="200" Margin="0,0,16,0"
+                                                          IsEnabled="False" ToolTip="{loc:Get ev60_layout_not_available_tip}"/>
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Grid>
                                 </ScrollViewer>
                             </Border>
                         </Grid>
 
-                        <!-- RIGHT: generic settings (profile/import/export not implemented for
-                             this device yet — disabled with an explanatory tooltip; device
-                             rename works now, via AppSettings, no per-device store needed). -->
+                        <!-- RIGHT: generic settings — Profile/Import/Export now backed by
+                             Everest60Store (see MainWindow.Everest60.cs), same pattern as
+                             Everest Max's CbEvProfile block. Device rename via AppSettings unchanged. -->
                         <Border Grid.Column="2" Background="#111115" CornerRadius="6"
                                 Margin="8,0,0,0" Padding="10" VerticalAlignment="Top">
                             <StackPanel>
                                 <TextBlock Text="{loc:Get profile}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <ComboBox Style="{StaticResource K2SideActionCombo}" IsEnabled="False"
-                                          ToolTip="{loc:Get profile_not_available_tip}"/>
-                                <Button Content="{loc:Get rename_profile}" IsEnabled="False"
+                                <ComboBox x:Name="CbEv60Profile" Style="{StaticResource K2SideActionCombo}"
+                                          SelectionChanged="CbEv60Profile_SelectionChanged"/>
+                                <Button x:Name="BtnEv60RenameProfile" Content="{loc:Get rename_profile}"
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
-                                        ToolTip="{loc:Get profile_not_available_tip}"/>
-                                <Button Content="{loc:Get delete_profile}" IsEnabled="False"
+                                        Click="BtnEv60RenameProfile_Click"/>
+                                <Button x:Name="BtnEv60DeleteProfile" Content="{loc:Get delete_profile}"
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE74D;"
-                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+                                        Click="BtnEv60DeleteProfile_Click"/>
 
                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
                                 <TextBlock Text="{loc:Get import}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Button Content="{loc:Get dp_import_xml}" IsEnabled="False"
+                                <Button x:Name="BtnEv60ImportXml" Content="{loc:Get dp_import_xml}"
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE8E5;"
-                                        ToolTip="{loc:Get profile_not_available_tip}"/>
-                                <Button Content="{loc:Get import_bc}" IsEnabled="False"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE72C;"
-                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+                                        Click="BtnEv60ImportXml_Click"/>
+                                <Button x:Name="BtnEv60ImportBc" Content="{loc:Get import_bc}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8B5;"
+                                        Click="BtnEv60ImportBc_Click"/>
 
                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
                                 <TextBlock Text="{loc:Get export}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Button Content="{loc:Get export_profiles_btn}" IsEnabled="False"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE898;"
-                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+                                <Button x:Name="BtnEv60ExportProfiles" Content="{loc:Get export_profiles_btn}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE896;"
+                                        Click="BtnEv60ExportProfiles_Click"/>
 
                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
                                 <TextBlock Text="{loc:Get device}" Style="{StaticResource K2SideGroupHeader}"/>
@@ -1316,14 +1473,21 @@
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE8AC;"
                                         Click="BtnEv60Rename_Click"/>
 
-                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
-                                <TextBlock Text="{loc:Get ev60_log}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Border Background="#0F0F13" BorderBrush="#2A2A32" BorderThickness="1"
-                                        CornerRadius="6" Padding="6" Height="110">
-                                    <TextBox x:Name="TxtEv60Log" IsReadOnly="True" FontFamily="Consolas" FontSize="10"
-                                             VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap"
-                                             Background="Transparent" BorderThickness="0"/>
-                                </Border>
+                                <!-- Debug group: same position/pattern as PnlEvDebugGroup/PnlMpDebugGroup/
+                                     PnlDpDebugGroup (right after Device, toggled by ApplyEv60DebugMode).
+                                     Connected status + manual Refresh moved here from the toolbar above —
+                                     the 3s poll (Ev60RefreshStatus) keeps updating LblEv60Status regardless
+                                     of whether this group is visible. -->
+                                <StackPanel x:Name="PnlEv60DebugGroup" Visibility="Collapsed">
+                                    <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
+                                    <TextBlock Text="{loc:Get debug_group}" Style="{StaticResource K2SideGroupHeader}"/>
+                                    <TextBlock x:Name="LblEv60Status" Text="{loc:Get ev60_status_disconnected}"
+                                               FontWeight="Bold" Margin="0,0,0,6"/>
+                                    <Button x:Name="BtnEv60Refresh" Content="{loc:Get ev60_refresh}"
+                                            Style="{StaticResource K2SideActionButton}" Tag="&#xE72C;"
+                                            Click="BtnEv60Refresh_Click"/>
+                                </StackPanel>
+
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -1360,23 +1524,31 @@
             <Grid x:Name="PnlMakalu" Visibility="Collapsed">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>  <!-- status bar -->
+                        <!-- Fixed (not Auto): keeps the sidebar/content start position
+                             identical across devices — same rule as PnlEverest. Connected
+                             status + Refresh moved to the common-actions Debug group (see
+                             PnlMkDebugGroup below); this toolbar is debug-only like the
+                             other devices', just with nothing to show yet for this one. -->
+                        <RowDefinition Height="32"/>    <!-- toolbar -->
                         <RowDefinition Height="*"/>     <!-- sections/image/common columns -->
                     </Grid.RowDefinitions>
 
-                    <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                        <TextBlock x:Name="LblMkStatus" Text="{loc:Get makalu_status_disconnected}"
-                                   VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,12,0"/>
-                        <Button x:Name="BtnMkRefresh" Content="{loc:Get makalu_refresh}"
-                                Click="BtnMkRefresh_Click"
-                                Style="{StaticResource K2IconButton}" Tag="&#xE72C;"/>
-                    </WrapPanel>
+                    <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8"/>
 
                     <Grid Grid.Row="1">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="160"/>  <!-- sidebar -->
                             <ColumnDefinition Width="*"/>    <!-- image + section content -->
-                            <ColumnDefinition Width="210"/>  <!-- common actions -->
+                            <!-- Fixed at 218, NOT Auto: a NoWrap log TextBox lives in this column
+                                 (TxtMkLog) — Auto would let it drive the column's width to whatever
+                                 its longest line needs, growing further with every new log line (the
+                                 exact bug hit on Everest 60's identical column, see MainWindow.xaml's
+                                 Everest 60 grid). 218 = the Border's own Margin.Left="8" + its 210px
+                                 desired width (190px buttons + 10px padding each side) — same
+                                 effective pixel width Everest Max/MacroPad/DisplayPad's Auto column
+                                 resolves to (safe there only because none of their common-actions
+                                 content is unbounded-width). -->
+                            <ColumnDefinition Width="218"/>  <!-- common actions -->
                         </Grid.ColumnDefinitions>
 
                         <!-- LEFT: specific sections -->
@@ -1385,23 +1557,25 @@
                             <StackPanel>
                                 <TextBlock Text="SECTIONS" FontSize="9" Foreground="#4A4A58"
                                            Margin="14,8,0,6" FontWeight="Bold"/>
-                                <!-- IsChecked is set in code (InitMkSectionNav), not here: WPF fires
+                                <!-- Order matches MacroPad/DisplayPad/Everest 60: Key Binding
+                                     first (also the default section, see InitMkSectionNav),
+                                     device-specific Lighting in the middle, Settings last. DPI
+                                     is no longer a section of its own — its levels list now
+                                     lives inside Settings (right column), same as Base Camp's
+                                     own Makalu Settings page.
+                                     IsChecked is set in code (InitMkSectionNav), not here: WPF fires
                                      Checked synchronously the moment BAML sets IsChecked="True", i.e.
                                      mid-way through InitializeComponent() — MkRgbSettings/MkDpiRemap
                                      (declared later in this file) aren't assigned yet at that point,
                                      so MkSection_Changed would null-ref. Root-caused via WinDbg+SOS,
                                      see CHANGELOG.md 2026-07-10. -->
+                                <RadioButton x:Name="RbMkSecRemap"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get ev_key_binding}" GroupName="MkSections"
+                                             Checked="MkSection_Changed"/>
                                 <RadioButton x:Name="RbMkSecRgb"
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get rgb_lighting}" GroupName="MkSections"
-                                             Checked="MkSection_Changed"/>
-                                <RadioButton x:Name="RbMkSecDpi"
-                                             Style="{StaticResource SectionTabStyle}"
-                                             Content="{loc:Get makalu_dpi_title}" GroupName="MkSections"
-                                             Checked="MkSection_Changed"/>
-                                <RadioButton x:Name="RbMkSecRemap"
-                                             Style="{StaticResource SectionTabStyle}"
-                                             Content="{loc:Get makalu_remap_title}" GroupName="MkSections"
                                              Checked="MkSection_Changed"/>
                                 <RadioButton x:Name="RbMkSecSettings"
                                              Style="{StaticResource SectionTabStyle}"
@@ -1410,31 +1584,47 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- CENTER: interactive device image (top) + selected section content (bottom) -->
+                        <!-- CENTER: interactive device image (top, fixed height) + selected section content (bottom, grows) -->
                         <Grid Grid.Column="1">
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="*" MinHeight="160"/>  <!-- device -->
-                                <RowDefinition Height="Auto"/>               <!-- section content -->
+                                <!-- Fixed height across all devices, matching MacroPad's box height
+                                     when rotated to vertical orientation (Positioning section,
+                                     90°/270°): the canvas is 510x370, but RotateTransform swaps its
+                                     rendered footprint to 370x510, so 510 + 8px padding each side = 526
+                                     is the tallest a device box needs to be — comfortably fits the
+                                     mouse image's 422px height too. -->
+                                <RowDefinition Height="526"/>  <!-- device -->
+                                <RowDefinition Height="*"/>    <!-- section content: grows with window height -->
                             </Grid.RowDefinitions>
 
                             <Border Grid.Row="0" Background="#18181C" CornerRadius="6" Padding="8">
                                 <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image Source="Assets/makalu_mouse.png" Width="190" Stretch="Uniform"/>
+                                    <!-- LED ring preview host — BEHIND the Image on purpose: the ring
+                                         area in makalu_mouse.png is a genuinely TRANSPARENT cutout (not
+                                         painted pixels, confirmed 2026-07-12), so the colored ring is
+                                         rendered underneath and shows through the gap, same as how the
+                                         real backlit ring/Base Camp's own overlay works. See
+                                         BuildMkLedRing in MainWindow.Makalu.cs. Only relevant while the
+                                         Lighting section is active — ImgMkMouse switches back to the
+                                         opaque makalu_mouse_rainbow.png (no cutout) for every other
+                                         section, see MkSection_Changed/MkUpdateMouseImage. -->
+                                    <Canvas x:Name="CvsMkRingBack" Width="190" Height="422"/>
+                                    <Image x:Name="ImgMkMouse" Source="Assets/makalu_mouse.png" Width="190" Stretch="Uniform"/>
                                     <!-- Hotspots positioned in BuildMkHotspots (Canvas coords match
                                          the Image's rendered 190×422 size at Stretch=Uniform). -->
                                     <Canvas x:Name="CvsMkHotspots" Width="190" Height="422"/>
                                 </Grid>
                             </Border>
 
-                            <!-- Bottom section panel: fixed Height so it doesn't resize/jump
-                                 when switching between RGB / DPI / Remap / Settings. Both
-                                 controls are ALWAYS present (siblings in the same cell);
-                                 each toggles its own SecXxx children's Visibility, so only
-                                 the active section is ever painted. -->
+                            <!-- Bottom section panel: grows with the window (Row="*" above); MinHeight
+                                 keeps its old fixed size as a floor so it doesn't collapse below the
+                                 tallest section (RGB / DPI / Remap / Settings). Both controls are
+                                 ALWAYS present (siblings in the same cell); each toggles its own
+                                 SecXxx children's Visibility, so only the active section is ever painted. -->
                             <Border Grid.Row="1" Background="#14141A"
                                     BorderBrush="#2A2A32" BorderThickness="1"
                                     CornerRadius="6" Padding="12,10" Margin="0,8,0,0"
-                                    Height="180">
+                                    MinHeight="180">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                     <Grid>
                                         <local:MakaluRgbSettingsPanel x:Name="MkRgbSettings"/>
@@ -1444,36 +1634,36 @@
                             </Border>
                         </Grid>
 
-                        <!-- RIGHT: generic settings (profile/import/export not implemented for
-                             this device yet — disabled with an explanatory tooltip; device
-                             rename works now, via AppSettings, no per-device store needed). -->
+                        <!-- RIGHT: generic settings — Profile/Import/Export now backed by
+                             MakaluStore (see MainWindow.Makalu.cs), same pattern as Everest Max's
+                             CbEvProfile block. Device rename via AppSettings unchanged. -->
                         <Border Grid.Column="2" Background="#111115" CornerRadius="6"
                                 Margin="8,0,0,0" Padding="10" VerticalAlignment="Top">
                             <StackPanel>
                                 <TextBlock Text="{loc:Get profile}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <ComboBox Style="{StaticResource K2SideActionCombo}" IsEnabled="False"
-                                          ToolTip="{loc:Get profile_not_available_tip}"/>
-                                <Button Content="{loc:Get rename_profile}" IsEnabled="False"
+                                <ComboBox x:Name="CbMkProfile" Style="{StaticResource K2SideActionCombo}"
+                                          SelectionChanged="CbMkProfile_SelectionChanged"/>
+                                <Button x:Name="BtnMkRenameProfile" Content="{loc:Get rename_profile}"
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
-                                        ToolTip="{loc:Get profile_not_available_tip}"/>
-                                <Button Content="{loc:Get delete_profile}" IsEnabled="False"
+                                        Click="BtnMkRenameProfile_Click"/>
+                                <Button x:Name="BtnMkDeleteProfile" Content="{loc:Get delete_profile}"
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE74D;"
-                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+                                        Click="BtnMkDeleteProfile_Click"/>
 
                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
                                 <TextBlock Text="{loc:Get import}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Button Content="{loc:Get dp_import_xml}" IsEnabled="False"
+                                <Button x:Name="BtnMkImportXml" Content="{loc:Get dp_import_xml}"
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE8E5;"
-                                        ToolTip="{loc:Get profile_not_available_tip}"/>
-                                <Button Content="{loc:Get import_bc}" IsEnabled="False"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE72C;"
-                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+                                        Click="BtnMkImportXml_Click"/>
+                                <Button x:Name="BtnMkImportBc" Content="{loc:Get import_bc}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8B5;"
+                                        Click="BtnMkImportBc_Click"/>
 
                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
                                 <TextBlock Text="{loc:Get export}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Button Content="{loc:Get export_profiles_btn}" IsEnabled="False"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE898;"
-                                        ToolTip="{loc:Get profile_not_available_tip}"/>
+                                <Button x:Name="BtnMkExportProfiles" Content="{loc:Get export_profiles_btn}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE896;"
+                                        Click="BtnMkExportProfiles_Click"/>
 
                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
                                 <TextBlock Text="{loc:Get device}" Style="{StaticResource K2SideGroupHeader}"/>
@@ -1481,14 +1671,33 @@
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE8AC;"
                                         Click="BtnMkRename_Click"/>
 
-                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
-                                <TextBlock Text="{loc:Get makalu_log}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Border Background="#0F0F13" BorderBrush="#2A2A32" BorderThickness="1"
-                                        CornerRadius="6" Padding="6" Height="110">
-                                    <TextBox x:Name="TxtMkLog" IsReadOnly="True" FontFamily="Consolas" FontSize="10"
-                                             VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap"
-                                             Background="Transparent" BorderThickness="0"/>
-                                </Border>
+                                <!-- Debug group: same position/pattern as PnlEvDebugGroup/PnlMpDebugGroup/
+                                     PnlDpDebugGroup (right after Device, toggled by ApplyMkDebugMode).
+                                     Connected status + manual Refresh moved here from the toolbar above —
+                                     the 3s poll (MkRefreshStatus) keeps updating LblMkStatus regardless
+                                     of whether this group is visible. -->
+                                <StackPanel x:Name="PnlMkDebugGroup" Visibility="Collapsed">
+                                    <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
+                                    <TextBlock Text="{loc:Get debug_group}" Style="{StaticResource K2SideGroupHeader}"/>
+                                    <TextBlock x:Name="LblMkStatus" Text="{loc:Get makalu_status_disconnected}"
+                                               FontWeight="Bold" Margin="0,0,0,6"/>
+                                    <Button x:Name="BtnMkRefresh" Content="{loc:Get makalu_refresh}"
+                                            Style="{StaticResource K2SideActionButton}" Tag="&#xE72C;"
+                                            Click="BtnMkRefresh_Click"/>
+                                </StackPanel>
+
+                                <!-- Log: debug only, same gating as GbEvLog (Everest) — toggled by
+                                     ApplyMkDebugMode, see MainWindow.Makalu.cs. -->
+                                <StackPanel x:Name="PnlMkLog" Visibility="Collapsed">
+                                    <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
+                                    <TextBlock Text="{loc:Get makalu_log}" Style="{StaticResource K2SideGroupHeader}"/>
+                                    <Border Background="#0F0F13" BorderBrush="#2A2A32" BorderThickness="1"
+                                            CornerRadius="6" Padding="6" Height="110">
+                                        <TextBox x:Name="TxtMkLog" IsReadOnly="True" FontFamily="Consolas" FontSize="10"
+                                                 VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap"
+                                                 Background="Transparent" BorderThickness="0"/>
+                                    </Border>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -1560,8 +1769,13 @@
                              margin, so this box is exactly as wide as Everest's. -->
                         <Grid Grid.Column="1">
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="*" MinHeight="160"/>  <!-- device -->
-                                <RowDefinition Height="Auto"/>               <!-- settings -->
+                                <!-- Fixed height across all devices: matches this canvas (510x370)
+                                     rotated to vertical orientation (Positioning section, 90°/270°) —
+                                     RotateTransform swaps its rendered footprint to 370x510, so
+                                     510 + 8px padding each side = 526 is the tallest this box (and
+                                     therefore every device's box) needs to be. -->
+                                <RowDefinition Height="526"/>  <!-- device -->
+                                <RowDefinition Height="*"/>    <!-- settings: grows with window height -->
                             </Grid.RowDefinitions>
 
                             <Border Grid.Row="0" Background="#18181C" CornerRadius="6" Padding="8">
@@ -1573,13 +1787,13 @@
                                 </Canvas>
                             </Border>
 
-                            <!-- Bottom settings panel: sections switch here. Fixed Height (not
-                                 Auto) so the panel doesn't resize/jump when switching between
-                                 Key Binding / Orientation / LED Lighting. -->
+                            <!-- Bottom settings panel: grows with the window (Row="*" above); MinHeight
+                                 keeps its old fixed size as a floor so it doesn't collapse below the
+                                 tallest section (Key Binding / Orientation / LED Lighting). -->
                             <Border Grid.Row="1" Background="#14141A"
                                     BorderBrush="#2A2A32" BorderThickness="1"
                                     CornerRadius="6" Padding="12,10" Margin="0,8,0,0"
-                                    Height="130">
+                                    MinHeight="130">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <Grid>
 
@@ -1619,13 +1833,16 @@
                                         </StackPanel>
                                         <StackPanel x:Name="PnlMpSpeed" Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,0,16,6">
                                             <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                            <ComboBox x:Name="CbMacroSpeed" Width="90"
-                                                      SelectionChanged="CbMacroEffectParam_Changed"/>
+                                            <Slider x:Name="SldMacroSpeed" Minimum="0" Maximum="100" Width="110"
+                                                    TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                                                    ValueChanged="SldMacroSpeed_ValueChanged" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="LblMacroSpeed" Text="50%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
                                         </StackPanel>
                                         <StackPanel x:Name="PnlMpDirection" Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Margin="0,0,16,6">
                                             <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                            <ComboBox x:Name="CbMacroDirection" Width="180"
-                                                      SelectionChanged="CbMacroEffectParam_Changed"/>
+                                            <Border Style="{StaticResource K2SegmentedGroupBorder}">
+                                                <UniformGrid x:Name="GridMacroDirection" Rows="1"/>
+                                            </Border>
                                         </StackPanel>
                                         <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal" Margin="0,0,16,6">
                                             <CheckBox x:Name="CkMacroRainbow" Content="{loc:Get rgb_rainbow}" Margin="0,0,10,0"
@@ -1859,8 +2076,13 @@
                              margin, so this box is exactly as wide as Everest's. -->
                         <Grid Grid.Column="1">
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="*" MinHeight="160"/>  <!-- device -->
-                                <RowDefinition Height="Auto"/>               <!-- settings -->
+                                <!-- Fixed height across all devices: matches MacroPad's identical
+                                     510x370 canvas rotated to vertical orientation (Positioning
+                                     section, 90°/270°) — RotateTransform swaps its rendered footprint
+                                     to 370x510, so 510 + 8px padding each side = 526 is the tallest
+                                     a device box needs to be. -->
+                                <RowDefinition Height="526"/>  <!-- device -->
+                                <RowDefinition Height="*"/>    <!-- settings: grows with window height -->
                             </Grid.RowDefinitions>
 
                             <Border Grid.Row="0" Background="#18181C" CornerRadius="6" Padding="8">
@@ -1872,13 +2094,13 @@
                                 </Canvas>
                             </Border>
 
-                            <!-- Bottom settings panel: sections switch here. Fixed Height (not
-                                 Auto) so the panel doesn't resize/jump when switching between
-                                 Key Binding / Rotation. -->
+                            <!-- Bottom settings panel: grows with the window (Row="*" above); MinHeight
+                                 keeps its old fixed size as a floor so it doesn't collapse below the
+                                 tallest section (Key Binding / Rotation). -->
                             <Border Grid.Row="1" Background="#14141A"
                                     BorderBrush="#2A2A32" BorderThickness="1"
                                     CornerRadius="6" Padding="12,10" Margin="0,8,0,0"
-                                    Height="90">
+                                    MinHeight="90">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <Grid>
 
@@ -2309,6 +2531,15 @@
                                       Click="CkStartMinToTray_Click" FontSize="14" Margin="0,12,0,0"/>
                             <TextBlock Text="{loc:Get settings_start_min_tray_hint}" Foreground="#9A9AA2"
                                        TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <GroupBox x:Name="GbAppFont" Header="{loc:Get settings_font_family}" Margin="0,0,0,20">
+                        <StackPanel Margin="8">
+                            <ComboBox x:Name="CmbAppFont" Width="220" HorizontalAlignment="Left"
+                                      SelectionChanged="CmbAppFont_SelectionChanged"/>
+                            <TextBlock Text="{loc:Get settings_font_family_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
                         </StackPanel>
                     </GroupBox>
 

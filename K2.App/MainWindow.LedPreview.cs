@@ -251,25 +251,23 @@ public partial class MainWindow
             for (int i = 0; i < colors.Length; i++)
                 if (colors[i].r != 0 || colors[i].g != 0 || colors[i].b != 0) nonZero++;
             App.WriteLog($"[LED] MacroPadColors tick#{_mpColorLogCount}: len={colors.Length} nonZero={nonZero} " +
-                         $"matrixToIndex={_matrixToIndex.Count} visuals={_mpKeyVisuals.Count}");
+                         $"visuals={_mpKeyVisuals.Count}");
         }
 
-        // _matrixToIndex maps wMatrix (SDK callback) → button index (0..11).
-        // 2026-07-10: confirmed via real device capture (user's saved
-        // device.<id>.keymap in macropad.db: {"8":0,"17":1,"26":2,...,"125":11})
-        // that the firmware's wMatrix IS DIRECTLY the GetColorData LED index —
-        // there is no separate translation table. The previous
-        // LedMatrixMapping.MacroPad dictionary assumed wMatrix was 170-179/220/221
-        // (copied by analogy from the DB "DLLMatrixIndex" scheme used for
-        // BaseCamp profile import, a completely different numbering domain) and
-        // never matched anything real, which is why the on-screen LED preview
-        // never lit up (mappedToLed was always 0).
-        foreach (var kv in _matrixToIndex)
+        // GetColorData's LED array is indexed DIRECTLY by key position (0..11 = M1..M12),
+        // NOT by the wMatrix code the SDK's KEY_CALLBACK reports on a physical key press
+        // (used for remapping/key-binding identity, a completely different domain — see
+        // _matrixToIndex in MainWindow.Keys.cs). The previous version of this method
+        // assumed wMatrix doubled as the color-array index (based on an unverified
+        // per-key check on 2026-07-10); root-caused 2026-07-11 with a full 126-slot
+        // nonzero dump while a rainbow-ish effect was running: real data lived
+        // contiguously at indices 0-11, NOT at the wMatrix values (8,17,26,...,125) —
+        // the old code only ever showed a color for M1 because wMatrix=8 happens to
+        // also be a valid (if wrong) index in the 0-11 range, while M2..M12's wMatrix
+        // values (17,26,...) point past the real per-key data into always-zero slots.
+        for (int btnIndex = 0; btnIndex < MacroPadSdkNative.FW_NUM_KEY; btnIndex++)
         {
-            int ledIndex = kv.Key;    // code from SDK callback == GetColorData index
-            int btnIndex = kv.Value;  // index in _keyButtons (0..11)
-
-            if (ledIndex < 0 || ledIndex >= colors.Length) continue;
+            if (btnIndex >= colors.Length) break;
             if (!_mpKeyVisuals.TryGetValue(btnIndex, out var v)) continue;
 
             // Skip a key that's currently mid-physical-press: the IsHighlighted
@@ -279,10 +277,10 @@ public partial class MainWindow
             // poll landing here would otherwise leave the key looking "stuck"
             // in the LED-off/gray color after the press ends (see
             // UpdateMpLedPreviewActive for the full explanation).
-            if (btnIndex >= 0 && btnIndex < _keys.Length && _keys[btnIndex].IsHighlighted)
+            if (btnIndex < _keys.Length && _keys[btnIndex].IsHighlighted)
                 continue;
 
-            var c = colors[ledIndex];
+            var c = colors[btnIndex];
             ApplyMacroPadLedColor(v, c.r, c.g, c.b);
         }
     }

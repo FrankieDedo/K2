@@ -1,7 +1,8 @@
 <ResourceDictionary x:Class="K2.Core.Themes.K2Theme"
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework">
+                    xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
     <!-- ============================================================
          K2 — Shared dark theme (DisplayPad / MacroPad / Everest).
@@ -28,6 +29,24 @@
     <SolidColorBrush x:Key="K2AccentDimBrush"   Color="#5C0000"/>
     <SolidColorBrush x:Key="K2AccentTextBrush"  Color="#FFFFFF"/>
     <SolidColorBrush x:Key="K2DangerBrush"      Color="#C7402F"/>
+
+    <!-- ===== App-wide UI font (Settings > Font) =====
+         Default = Roboto (embedded, see K2.Core/Fonts/LICENSE.Roboto.txt).
+         Overridden at runtime by FontCatalog.Apply (K2.Core/Services) whenever
+         the user picks a different font in Settings — it sets this same key on
+         Application.Current.Resources, which every window's K2WindowStyle below
+         picks up live via DynamicResource (no restart). See AppSettings.AppFontFamily. -->
+    <FontFamily x:Key="K2AppFontFamily">pack://application:,,,/K2.Core;component/Fonts/#Roboto, Segoe UI</FontFamily>
+
+    <!-- Base UI text size, same idea as K2AppFontFamily above: most control
+         styles below set FontSize explicitly (they don't just inherit it from
+         Window), so this single DynamicResource is what every one of them
+         references — FontCatalog.Apply overrides it per font (e.g. smaller for
+         OpenDyslexic, whose glyphs render noticeably larger than other fonts at
+         the same nominal size). Icon glyphs (Segoe MDL2 Assets, FontSize 10/12/15
+         elsewhere in this file) are deliberately NOT wired to this — they're
+         unrelated to the selected text font. -->
+    <sys:Double x:Key="K2AppFontSize">13</sys:Double>
 
     <!-- ===== Title bar buttons ===== -->
     <Style x:Key="K2CaptionButton" TargetType="Button">
@@ -78,7 +97,7 @@
         <Setter Property="Background" Value="{StaticResource K2AccentBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource K2AccentTextBrush}"/>
         <Setter Property="Padding" Value="14,6"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -117,7 +136,7 @@
         <Setter Property="BorderBrush" Value="{StaticResource K2BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="12,6"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
@@ -159,7 +178,7 @@
         <Setter Property="Background" Value="{StaticResource K2AccentBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource K2AccentTextBrush}"/>
         <Setter Property="Padding" Value="14,6"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -345,7 +364,7 @@
         <Setter Property="BorderBrush" Value="{StaticResource K2BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="12,6"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="Template">
@@ -378,7 +397,7 @@
     <!-- ===== ComboBox ===== -->
     <Style TargetType="ComboBox">
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="Height" Value="30"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -421,7 +440,7 @@
 
     <Style TargetType="ComboBoxItem">
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="Padding" Value="10,6"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -450,7 +469,7 @@
         <Setter Property="BorderBrush" Value="{StaticResource K2BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="8,5"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="CaretBrush" Value="{StaticResource K2AccentBrush}"/>
         <Setter Property="SelectionBrush" Value="{StaticResource K2AccentBrush}"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -482,7 +501,7 @@
     <!-- ===== CheckBox ===== -->
     <Style TargetType="CheckBox">
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -524,7 +543,7 @@
          the Everest Display Dial "show menu" grid. -->
     <Style x:Key="K2ToggleRow" TargetType="CheckBox">
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Padding" Value="0,6"/>
         <Setter Property="Template">
@@ -573,7 +592,7 @@
     <!-- ===== RadioButton ===== -->
     <Style TargetType="RadioButton">
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -595,6 +614,49 @@
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="outer" Property="Stroke" Value="{StaticResource K2AccentBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ===== Segmented button group ===== -->
+    <!-- Alternative to ComboBox/CheckBox for a short (2-3) list of mutually
+         exclusive options — e.g. "Angle snapping: Off/On", "Lift-off: Low/High".
+         Wrap a UniformGrid Rows="1" of these RadioButtons (same GroupName) in a
+         Border using K2SegmentedGroupBorder; the outer Border's rounded corners
+         + ClipToBounds give the pill look without templating per-segment radii. -->
+    <Style x:Key="K2SegmentedGroupBorder" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource K2SurfaceDarkBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource K2BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="ClipToBounds" Value="True"/>
+        <Setter Property="Height" Value="28"/>
+    </Style>
+    <Style x:Key="K2SegmentedButton" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{StaticResource K2TextMutedBrush}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Padding" Value="10,0"/>
+        <Setter Property="MinWidth" Value="40"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                            BorderBrush="{StaticResource K2BorderBrush}" BorderThickness="0,0,1,0">
+                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource K2HoverBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource K2AccentBrush}"/>
+                            <Setter Property="Foreground" Value="{StaticResource K2AccentTextBrush}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -773,7 +835,7 @@
 
     <Style TargetType="MenuItem">
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="Padding" Value="10,6"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -832,7 +894,7 @@
 
     <Style TargetType="TabItem">
         <Setter Property="Foreground" Value="{StaticResource K2TextMutedBrush}"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="Padding" Value="15,7"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
@@ -866,14 +928,15 @@
     <Style x:Key="K2WindowStyle" TargetType="Window">
         <Setter Property="Background" Value="{StaticResource K2BgBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
-        <!-- Roboto (embedded, see K2.Core/Fonts): app-wide default, inherited by
-             every descendant control that doesn't set its own FontFamily (e.g.
-             KeyCapStyle's BC keycap replica, Consolas log/hex viewers, and the
-             Segoe MDL2 Assets icon glyphs are intentionally untouched).
-             "Segoe UI" fallback covers the unlikely case the pack URI fails to
-             resolve. -->
-        <Setter Property="FontFamily" Value="pack://application:,,,/K2.Core;component/Fonts/#Roboto, Segoe UI"/>
-        <Setter Property="FontSize" Value="13"/>
+        <!-- User-selectable app-wide font (Settings > Font, default Roboto — see
+             K2AppFontFamily above and FontCatalog). Inherited by every descendant
+             control that doesn't set its own FontFamily (e.g. KeyCapStyle's BC
+             keycap replica, Consolas log/hex viewers, and the Segoe MDL2 Assets
+             icon glyphs are intentionally untouched). DynamicResource (not
+             StaticResource) is required: it's how FontCatalog.Apply changes the
+             font live, without restarting the app. -->
+        <Setter Property="FontFamily" Value="{DynamicResource K2AppFontFamily}"/>
+        <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
         <Setter Property="shell:WindowChrome.WindowChrome">
             <Setter.Value>

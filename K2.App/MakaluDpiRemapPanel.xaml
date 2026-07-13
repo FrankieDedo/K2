@@ -2,51 +2,40 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core">
-    <!-- DPI + Remap section content — DIRECT child of MainWindow.xaml
-         (MainWindow.Makalu.cs toggles SecDpi/SecRemap directly). Do not
-         nest this inside another custom UserControl (a "shell" wrapping
-         this + MakaluRgbSettingsPanel) — that specific nesting was tried
-         2026-07-10 and appeared to crash, though the WinDbg session that
-         eventually root-caused the *real* bug that day (a plain null-ref in
-         MkSection_Changed/SldMkDpi_ValueChanged firing before dependent
-         fields were assigned — see MainWindow.Makalu.cs and _mkSuppress
-         above) suggests the "nesting" theory may itself have been a
-         misdiagnosis of the same root cause, never independently
-         re-verified after the real fix. Treat nesting as unconfirmed-risky,
-         not proven-safe, until someone actually retests it. -->
+    <!-- "Key Binding" (button remap) section content — DIRECT child of
+         MainWindow.xaml (MainWindow.Makalu.cs toggles SecRemap directly).
+         Despite the class name (kept for now to limit churn), DPI no longer
+         lives here — its levels list moved into MakaluRgbSettingsPanel's
+         Settings section. Do not nest this inside another custom
+         UserControl (a "shell" wrapping this + MakaluRgbSettingsPanel) —
+         that specific nesting was tried 2026-07-10 and appeared to crash,
+         though the WinDbg session that eventually root-caused the *real*
+         bug that day (a plain null-ref in MkSection_Changed/
+         SldMkDpi_ValueChanged firing before dependent fields were assigned
+         — see MainWindow.Makalu.cs and _mkSuppress above) suggests the
+         "nesting" theory may itself have been a misdiagnosis of the same
+         root cause, never independently re-verified after the real fix.
+         Treat nesting as unconfirmed-risky, not proven-safe, until someone
+         actually retests it. -->
     <Grid>
-        <!-- DPI -->
-        <Grid x:Name="SecDpi">
+        <!-- Remap ("Key Binding" in the sidebar — DPI used to live here too,
+             now moved into MakaluRgbSettingsPanel's Settings section, see
+             MainWindow.xaml). This is the default Makalu section (see
+             InitMkSectionNav), so it starts Visible, not Collapsed — the
+             sibling sections in MakaluRgbSettingsPanel (SecRgb/SecSettings)
+             both start Collapsed to match. -->
+        <Grid x:Name="SecRemap">
             <StackPanel>
-                <TextBlock Text="{loc:Get makalu_dpi_title}" FontWeight="Bold" Margin="0,0,0,8"/>
-                <WrapPanel x:Name="PnlMkDpiLevels" Orientation="Horizontal" Margin="0,0,0,8"/>
-                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-                    <Slider x:Name="SldMkDpi" Minimum="50" Maximum="19000" Width="220"
-                            TickFrequency="50" ValueChanged="SldMkDpi_ValueChanged" VerticalAlignment="Center"/>
-                    <TextBox x:Name="TxtMkDpi" Width="70" Margin="8,0,0,0" TextAlignment="Center"
-                             KeyDown="TxtMkDpi_KeyDown" LostFocus="TxtMkDpi_LostFocus"/>
-                </WrapPanel>
-                <WrapPanel Orientation="Horizontal">
-                    <Button x:Name="BtnMkDpiApply" Content="{loc:Get makalu_apply}" Click="BtnMkDpiApply_Click" Padding="8,4" Margin="0,0,6,0"/>
-                    <Button x:Name="BtnMkDpiRefresh" Content="{loc:Get makalu_refresh}" Click="BtnMkDpiRefresh_Click" Padding="8,4"/>
-                    <TextBlock x:Name="LblMkDpiStatus" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
-                </WrapPanel>
-            </StackPanel>
-        </Grid>
-
-        <!-- Remap -->
-        <Grid x:Name="SecRemap" Visibility="Collapsed">
-            <StackPanel>
-                <TextBlock Text="{loc:Get makalu_remap_title}" FontWeight="Bold" Margin="0,0,0,8"/>
-                <WrapPanel x:Name="PnlMkRemapButtons" Orientation="Horizontal" Margin="0,0,0,8"/>
-                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <TextBlock Text="{loc:Get makalu_remap_title}" FontWeight="Bold" Margin="0,0,0,14"/>
+                <WrapPanel x:Name="PnlMkRemapButtons" Orientation="Horizontal" Margin="0,0,0,12"/>
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,16">
                     <TextBlock Text="{loc:Get makalu_remap_category}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <ComboBox x:Name="CbMkRemapCategory" Width="110" Margin="0,0,12,0"
                               SelectionChanged="CbMkRemapCategory_SelectionChanged"/>
                     <TextBlock Text="{loc:Get makalu_remap_function}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <ComboBox x:Name="CbMkRemapFunction" Width="150"/>
                 </WrapPanel>
-                <WrapPanel x:Name="PnlMkSniper" Orientation="Horizontal" Margin="0,0,0,6" Visibility="Collapsed">
+                <WrapPanel x:Name="PnlMkSniper" Orientation="Horizontal" Margin="0,0,0,16" Visibility="Collapsed">
                     <TextBlock Text="{loc:Get makalu_remap_sniper_dpi}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <Slider x:Name="SldMkSniperDpi" Minimum="50" Maximum="19000" Width="160"
                             ValueChanged="SldMkSniperDpi_ValueChanged" VerticalAlignment="Center"/>

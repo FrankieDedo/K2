@@ -9,7 +9,1143 @@
 > mappa stabile in `_PROJECT_MAP.md`. Consultare qui solo per il contesto
 > di una modifica specifica passata (grep per parola chiave/data).
 
-> Last updated: 2026-07-10 (Everest 60: stesso layout a 3 colonne di Makalu,
+> Last updated: 2026-07-13 (Gestione profili per Everest 60 e Makalu:
+> persistenza SQLite nuova, riapplica-su-switch, import da BaseCamp.db,
+> export XML — colma il gap "profilo non disponibile" rimasto per questi
+> due device):
+>   - **Design**: nessuno dei due device ha un vero profilo firmware (a
+>     differenza di Everest Max/MacroPad che chiamano una `SwitchProfile`
+>     nativa) — stesso identico caso già risolto per il DisplayPad
+>     (`MainWindow.DisplayPad.cs::DpSwitchProfile`, commento esplicito sul
+>     perché BC stesso non chiama mai una SwitchProfile nativa lì). Quindi:
+>     profilo = concetto puramente lato-K2 (5 slot fissi, come tutti gli
+>     altri device), "cambiare profilo" = leggere lo stato salvato per quello
+>     slot e ri-mandarlo al device con le stesse chiamate HID/SDK già
+>     esistenti.
+>   - **Nuovi store** (stesso pattern `Settings` k/v + JSON blob di
+>     `EverestStore`): `K2.App/Services/MakaluStore.cs` (`makalu.db`) —
+>     lighting/DPI/settings come blob JSON per slot + tabella `Remap`
+>     (Profile,ButtonIndex,FunctionName); `Everest60Store.cs`
+>     (`everest60.db`) — lighting come blob JSON per slot + tabella
+>     `KeyBindings` (Profile,LedIndex,Mode,Value,ModifierMask).
+>   - **Wiring cattura+riapplica**: ogni handler "Apply" esistente
+>     (`ApplyCurrentMkEffect`, `BtnMkDpiApply_Click`, `BtnMkRemapApply_Click`,
+>     `ApplyCurrentEv60Effect`/`BtnEv60SideApply_Click`/
+>     `BtnEv60CustomApply_Click`, `BtnEv60RemapApply_Click`) ora persiste lo
+>     stato appena applicato nello store per lo slot corrente — persistenza
+>     **incondizionata** (anche a device scollegato), così un profilo
+>     modificato senza device collegato resta salvato. `Everest60KeyBindingPanel`
+>     non aveva PRIMA nessuno stato locale (ogni Apply era una scrittura SDK
+>     one-shot): aggiunto `Dictionary<int,(Mode,Value,Mask)> _bindings` come
+>     unica fonte sia per la persistenza sia per il replay firmware.
+>     `MkReloadProfile(slot)`/`Ev60ReloadProfile(slot)`/`Ev60ReloadKeyBindings(slot)`
+>     (nuovi) leggono lo store e ri-applicano tutto all'hardware (se
+>     connesso/sessione SDK aperta) — chiamati allo switch combo, all'init
+>     modulo, e alla transizione disconnesso→connesso dei rispettivi poll
+>     (`MkRefreshStatus`/`Ev60RefreshStatus`, più i 2 punti di apertura lazy
+>     della sessione SDK Ev60). **Decisione esplicita**: lo switch profilo su
+>     Everest 60 riscrive dal vivo l'intera mappa 64-tasti in firmware ma
+>     **non chiama mai `SaveFlash` automaticamente** (resta dietro il
+>     pulsante "Save" manuale, per non consumare cicli di scrittura flash ad
+>     ogni switch).
+>   - **UI**: sostituiti i due blocchi placeholder disabilitati
+>     (`IsEnabled="False"`, tooltip `profile_not_available_tip`) in
+>     `MainWindow.xaml` con controlli reali (`CbMkProfile`/`CbEv60Profile` +
+>     rename/delete/import/export), copiati 1:1 dal blocco Everest Max e
+>     ricollegati (`CbMkProfile_SelectionChanged`,
+>     `BtnMkRenameProfile_Click`, `BtnMkDeleteProfile_Click`, e omologhi
+>     Ev60 in `MainWindow.Everest60.cs`).
+>   - **Import da BaseCamp.db**: `DeviceType` reale verificato (non
+>     indovinato) contro il vero `BaseCamp.db` di riferimento del progetto
+>     (`Mountain Base Camp/resources/bin/BaseCamp.db`, via `sqlite3`) —
+>     Everest 60 = **`"EverestMini"`** (confermato: 1 profilo reale, 232
+>     righe key-binding, 9 righe lighting — una per effetto — trovate);
+>     Makalu = **`"Makalu"`** (nessun profilo Makalu mai esistito in questo
+>     DB — inferito dalle proprietà di navigazione `Profile.MakaluLightings/
+>     MakaluKeyBindings/MakaluSettings` e dal bridge RPC JS
+>     `{'Class':'Makalu',...}` embedded in `BaseCamp.UI.dll`, non da un
+>     campione reale). **Scoperta collaterale, fuori scope, segnalata non
+>     corretta**: il MacroPad legge da tempo (codice pre-esistente,
+>     `ReadMakaluBindings`/`ImportMacroPadProfile`) la tabella
+>     `MakaluKeyBindings` — che nel DB reale è VUOTA (0 righe) — mentre i
+>     dati reali del MacroPad vivono in `EverestKeyBidings` (12 righe
+>     trovate, DLLMatrixIndex reali 8/17/26.../125, che NON combaciano con
+>     `KeyIdToIndex` 170-179/220-221 già in uso) — il MacroPad ha già un
+>     secondo path di lettura corretto su `EverestKeyBidings`
+>     (`ReadMacroPadProfiles`), ma quello su `MakaluKeyBindings` sembra
+>     dati/mai-eseguito. Non toccato in questa sessione (fuori scope), solo
+>     verificato e segnalato.
+>     `BaseCampDbImporter.cs`: nuove `ReadMakaluProfiles`/
+>     `ReadMakaluMouseKeyBindings`/`ReadMakaluMouseLighting`/
+>     `ReadMakaluMouseSettings`/`ImportMakaluProfile`,
+>     `ReadEverest60Profiles`/`ReadEverest60KeyBindingsRaw`/
+>     `ReadEverest60LightingRaw`/`ImportEverest60Profile` + `ParseBcColor`
+>     (parser condiviso, i dati reali usano SIA `#RRGGBB` SIA `rgb(r, g, b)`
+>     nella stessa tabella). **Lighting import ad alta confidenza**
+>     (verificato contro dati reali); **Key Binding import best-effort**: le
+>     uniche righe `IsKeyAssigned=1` viste nel profilo reale sono legende
+>     factory `LayerType=3` ("FN + 10", non un vero remap utente) — nessun
+>     campione reale di remap `LayerType=1` disponibile, quindi si importano
+>     solo le righe il cui `FunctionValue` combacia esattamente con
+>     `Everest60RemapData.KeyCatalog`, tutto il resto viene scartato (mai
+>     indovinato).
+>   - **Export XML**: nuovi `MkProfileExporter.cs`/`Ev60ProfileExporter.cs`
+>     (mirror di `EvProfileExporter.cs`, stesso `ExportProfileHelper.Run`
+>     condiviso) — modalità K2 (round-trip lossless, `FunctionType="K2Remap"`)
+>     e Base Camp compatibile (vocabolario BC reale/dedotto, con skip+motivo
+>     per ciò che non ha equivalente).
+>   - Nuove stringhe EN+IT: `mk_no_profiles_in_bc`/`mk_imported_bc`/
+>     `ev60_no_profiles_in_bc`/`ev60_imported_bc` (`Strings.xml`/`.it.xml`).
+>   - Verificato con `dotnet build` pulito (rimossi bin/obj) su **entrambe**
+>     le solution: **0 errori, 0 warning**. **Non verificato su hardware
+>     fisico** (nessun Everest 60/Makalu disponibile in questa sessione) —
+>     da provare: che lo switch profilo ridisegni davvero RGB/DPI/remap sul
+>     Makalu e riscriva davvero i 64 tasti su Everest 60; l'import reale da
+>     BaseCamp.db per un profilo Makalu vero (mai esistito finora) e per un
+>     profilo Everest 60 con veri remap `LayerType=1` (mai visto finora).
+>
+> Previous: 2026-07-13 (Makalu: log box nella colonna destra spostato
+> dietro Debug Mode, stesso gating già usato da Everest):
+>   - `TxtMkLog` (box log Makalu, `MainWindow.xaml`) era sempre visibile,
+>     unico device rimasto scoperto dal pattern "log solo con Debug ON" già
+>     applicato a Everest (`GbEvLog`, `MainWindow.SectionNav.cs::ApplyDebugMode`).
+>     Avvolto Separator+header+Border/TextBox in un nuovo `StackPanel
+>     x:Name="PnlMkLog" Visibility="Collapsed"`, toggolato in
+>     `ApplyMkDebugMode` (`MainWindow.Makalu.cs`) insieme a `PnlMkDebugGroup`
+>     — nessun nuovo flag: riusa `AppSettings.DebugMode` già centralizzato
+>     (checkbox "Debug Mode" nel tab General Settings →
+>     `ApplyDebugModeToAllDevices` → `ApplyMkDebugMode`/`ApplyDebugMode`/
+>     `ApplyMpDebugMode`/`ApplyDpDebugMode`/`ApplyEv60DebugMode`).
+>     `LogMakalu()` non necessitava modifiche: scrive su `TxtMkLog` a
+>     prescindere dalla sua Visibility (un controllo Collapsed esiste ancora,
+>     semplicemente non è disegnato), quindi il log continua a popolarsi in
+>     background e appare non appena si attiva Debug Mode.
+>   - Verificato con `build-check.bat`: **0 errori, 0 warning** su entrambe
+>     le solution. **Non verificato a schermo** in questa sessione.
+>
+> Previous: 2026-07-13 (Makalu: colonna DPI (Settings) allargata a metà
+> pannello, livelli DPI in un'unica riga estendibile con entry "Level N /
+> NNNNN DPI"):
+>   - **Colonna DPI = metà pannello**: `SecSettings`'s `Grid.ColumnDefinitions`
+>     in `MakaluRgbSettingsPanel.xaml` — la colonna destra (DPI) era
+>     `Width="230"` fisso contro `Width="*"` a sinistra (Device settings),
+>     quindi su finestre larghe la colonna sinistra si allargava molto più
+>     della destra. Ora entrambe sono `Width="*"` → 50/50 sempre, a qualunque
+>     dimensione finestra (richiesta esplicita utente).
+>   - **DPI levels in una riga sola, estendibile**: `PnlMkDpiLevels` da
+>     `WrapPanel` (andava a capo se non c'entravano tutti e 5) a
+>     `UniformGrid Rows="1"` — con `Rows="1"` esplicito, `UniformGrid` calcola
+>     da sé `Columns` = numero di figli, quindi la riga resta sempre unica e
+>     ogni entry si allarga/restringe per occupare una quota uguale della
+>     larghezza disponibile (non serve larghezza fissa sui pulsanti). Resta a
+>     **5 livelli fissi** (il firmware Makalu non supporta un conteggio
+>     variabile — `MakaluProtocol.SetAllDpi`/`GetDpi` sono cablati a 5 slot,
+>     vedi `_PROJECT_MAP.md`): "estendibile" qui è la RIGA (si adatta alla
+>     larghezza), non il numero di livelli — valori di default (400/800/1600/
+>     3200/6400) lasciati invariati, da rivedere in una sessione futura
+>     (richiesta esplicita dell'utente di rimandare quella scelta).
+>   - **Entry allargate col contenuto giusto**: prima ogni bottone era
+>     `Width=54 Height=40` con `Content="L1\n800"` (abbreviato, a stento
+>     leggibile). Ora `BuildMkDpiButtonContent()` (nuovo helper in
+>     `MakaluRgbSettingsPanel.xaml.cs`) costruisce un `StackPanel` con
+>     "Level N" (riga muted, sopra) e "NNNNN" + "DPI" (numero in grassetto +
+>     etichetta fissa a fianco, sotto) — stessa struttura a due righe dello
+>     screenshot Base Camp fornito dall'utente in una sessione precedente.
+>     Bottoni senza `Width` fisso (`Height=52`, si allargano da soli dentro
+>     lo `UniformGrid`), `HorizontalContentAlignment="Left"` (testo allineato
+>     a sinistra come nello screenshot, non centrato). `Foreground` ora
+>     impostato esplicitamente per contrasto (`K2AccentTextBrush` sul livello
+>     attivo, `K2TextBrush` sugli altri) — prima veniva lasciato al default
+>     del tema, mai un problema quando il contenuto era testo semplice, ma
+>     ora che è un albero di `TextBlock` con `Opacity` (non `Foreground`)
+>     serve un `Foreground` esplicito sul `Button` perché i figli lo
+>     ereditino.
+>   - **Slider DPI ora a larghezza piena**: la riga slider+textbox era una
+>     `WrapPanel` con `Slider Width="140"` fisso — sproporzionatamente corto
+>     ora che la colonna è più larga. Cambiata in `DockPanel` (TextBox
+>     `Dock="Right"` a larghezza fissa, Slider senza `Width` riempie il resto)
+>     così segue la larghezza della colonna come "la barra" della richiesta
+>     dell'utente.
+>   - Rebuild bloccata la prima volta da MSB3027 (K2.App.exe di una sessione
+>     precedente ancora in esecuzione, lock su `K2.Core.dll`) — killato il
+>     processo (PID trovato via `Get-Process`, `stop-k2.bat` non l'ha
+>     rilevato per qualche motivo) e rilanciato: **0 errori, 0 warning** su
+>     entrambe le solution. **Non verificato a schermo/hardware** in questa
+>     sessione.
+>
+> Previous: 2026-07-13 (seguito della sessione slider/bottoni segmentati:
+> Speed degli effetti RGB → slider per TUTTI i device, Direction → bottoni
+> segmentati per TUTTI i device anche quando le opzioni sono 4, non solo ≤3):
+>   - **Nuovo `K2.App/Services/SegmentedButtonGroup.cs`**: helper condiviso
+>     `Rebuild(UniformGrid, groupName, labels[], checkedHandler, selectedIndex)`
+>     che ricostruisce un `UniformGrid` come riga di `RadioButton`
+>     `K2SegmentedButton` — usato per i picker Direction, il cui numero di
+>     opzioni cambia con l'effetto (Wave = 4 direzioni Right/Down/Left/Up,
+>     Tornado = 2 CW/CCW): a differenza dei gruppi statici a 2-3 voci fatti
+>     nella sessione precedente (dichiarati fissi in XAML), qui non si può
+>     sapere a design-time quanti bottoni servono. Ogni bottone porta il suo
+>     indice 0-based in `Tag`, letto dall'handler `Checked` del chiamante.
+>     Richiede `GroupName` univoco per grid (il grouping di `RadioButton` in
+>     WPF non è scoped al container).
+>   - **`K2SegmentedButton` style**: aggiunto `Padding="10,0"` +
+>     `MinWidth="40"` (mancavano nella sessione precedente — bottoni con testo
+>     lungo tipo "Clockwise"/"Counter-CW" o "Silver"/"Digital" risultavano
+>     troppo compressi). I `Border` dei gruppi DINAMICI (Direction) non hanno
+>     più `Width` fisso: si auto-dimensionano al contenuto (il `UniformGrid`
+>     senza vincoli di larghezza usa la `DesiredSize` del figlio più grande),
+>     visto che il numero di segmenti varia. I gruppi STATICI della sessione
+>     precedente con `Width` stretto (Keyboard Color, Clock Style) sono stati
+>     allargati a 140px per lo stesso motivo.
+>   - **Speed → Slider per tutti i device** (0-100%, tacche 25%, stesso
+>     schema già in uso per Everest 60 — che quindi non è cambiato):
+>     - **Everest Max** (`MainWindow.Everest.cs`): `CbEvSpeed` (5 voci "1 —
+>       slow"…"5 — fast") → `SldEvSpeed`. Il valore letto da
+>       `ApplyCurrentEffect` era già concettualmente 0-100 a 5 posizioni
+>       (`SelectedIndex*25`, vedi commento preesistente "Speed: 5 UI
+>       positions -> scale 0..100") — lo slider lo rende esplicito, nessun
+>       cambio di significato per il firmware.
+>     - **MacroPad** (`MainWindow.MacroLed.cs`): `CbMacroSpeed` → `SldMacroSpeed`,
+>       stesso schema (mirror dichiarato di Everest, vedi commento di file).
+>     - **Makalu** (`MakaluRgbSettingsPanel.xaml(.cs)`): **eccezione** — il
+>       byte `param2` di `MakaluProtocol.SetLighting` è letteralmente
+>       0/1/2 (Slow/Medium/Fast), NON una percentuale 0-100 come gli altri
+>       device — quindi qui lo slider è a 3 tacche (0-2), non 0-100.
+>       Sostituisce i bottoni segmentati Slow/Medium/Fast introdotti nella
+>       sessione precedente (richiesta esplicita dell'utente in questa
+>       sessione: "rendiamo anche la speed... uno slider per tutti i
+>       dispositivi", Makalu incluso).
+>   - **Direction → bottoni segmentati per tutti i device, incluse le combo
+>     a 4 voci** (richiesta esplicita: "Fallo anche se la direzione ha 4
+>     voci" — la sessione precedente le aveva escluse proprio perché il
+>     conteggio varia oltre 3):
+>     - **Everest Max**: `CbEvDirection` → `GridEvDirection` (dentro nuovo
+>       `PnlEvDirection`, che ora si Collapsa quando l'effetto non supporta
+>       la direzione — prima restava visibile solo disabilitato, la stessa
+>       incoerenza già segnalata dall'utente per il MacroPad e corretta lì
+>       in una sessione precedente). Campo `_evDirIndex` sostituisce
+>       `CbEvDirection.SelectedIndex`.
+>     - **MacroPad**: `CbMacroDirection` → `GridMacroDirection` (riusa
+>       `PnlMpDirection`, già Collapsibile). Campo `_macroDirIndex`.
+>     - **Everest 60**: `CbEv60Direction` → `GridEv60Direction` (nuovo
+>       `PnlEv60Direction`). Campo `_ev60DirIndex`. Stessa sessione,
+>       aggiunto anche `PnlEv60Speed` Collapsibile per coerenza (lo slider
+>       Speed di Everest 60 prima restava visibile solo disabilitato).
+>     - **Makalu**: `CbMkDirection` (←/→, solo 2 voci, sempre le stesse per
+>       ogni effetto) era già bottoni segmentati dalla sessione precedente —
+>       nessun cambiamento, non è un caso "4 voci dinamiche".
+>   - Persistenza (`EverestStore`/Settings): `rgb.speed`/`macroled.speed`
+>     cambiano semantica da indice 0-4 a percentuale 0-100 diretta (stesso
+>     numero di stati, solo rinominato — un valore salvato da PRIMA di
+>     questa sessione verrebbe reinterpretato come percentuale bassa invece
+>     che come indice; effetto collaterale minore accettato, nessuna
+>     migrazione scritta, per un tool locale single-utente non versionato
+>     pubblicamente).
+>   - Verificato con `build-check.bat`: **0 errori** su entrambe le
+>     solution dopo ogni passaggio. **Non verificato a schermo/hardware**
+>     in questa sessione (nessun ambiente grafico disponibile).
+>
+> Previous: 2026-07-13 (UI: Makalu Polling Rate → slider a 4 tacche,
+> DPI slider a step non uniformi, e "bottoni segmentati" al posto di
+> ComboBox/CheckBox con ≤3 voci nelle sezioni SECTIONS di tutti i device):
+>   - **Nuovo stile condiviso `K2SegmentedGroupBorder`/`K2SegmentedButton`**
+>     (`K2.Core/Themes/K2Theme.xaml`): riga orizzontale di `RadioButton`
+>     dentro un `UniformGrid Rows="1"` avvolto in un `Border` con
+>     `CornerRadius`+`ClipToBounds` (l'arrotondamento pill viene dal clip
+>     del contenitore, non da un `ControlTemplate` per-segmento — più
+>     semplice e già gestisce automaticamente 2, 3 o N segmenti). Ispirato
+>     allo screenshot di Base Camp originale (Angle Snapping Off/On,
+>     Lift-off Low/High) fornito dall'utente.
+>   - **Ambito scelto dall'utente**: solo le ComboBox con **esattamente
+>     ≤3 voci** dentro le sezioni SECTIONS (Lighting/DPI/Key Binding/
+>     Settings) di ogni device — non le combo con selezione dinamica che
+>     può superare 3 voci (es. `CbEvDirection`/`CbEv60Direction`/
+>     `CbMacroDirection`: Wave usa 4 direzioni, Tornado 2 — stessa combo,
+>     conteggio variabile, lasciata invariata), né le combo >3 voci fisse
+>     (keycap style, layout tastiera, effetti RGB, categorie/funzioni
+>     remap, rotazione MacroPad/DisplayPad).
+>   - **Makalu** (`MakaluRgbSettingsPanel.xaml(.cs)`): `CbMkPolling` (4
+>     valori fissi) → `SldMkPolling` slider a tacche, stesso pattern indice
+>     0-3 → array già usato da `SldMkDebounce`. `CbMkSpeed`
+>     (Slow/Medium/Fast) e `CbMkDirection` (←/→) → gruppi segmentati
+>     `RbMkSpeed*`/`RbMkDir*`, backed da campi `_mkSpeedIndex`/`_mkDirIndex`
+>     (prima erano `ComboBox.SelectedIndex`). `CkMkAngleSnap`/`CkMkLiftHigh`
+>     (CheckBox singola) → `RbMkAngle*`/`RbMkLift*` a 2 voci (Off/On,
+>     Low/High — **non** aggiunto "Custom" per il lift-off, il protocollo
+>     reverse-engineered in `MakaluProtocol.cs` non lo supporta, richiesta
+>     esplicita dell'utente di ignorare le feature non supportate invece di
+>     fingerle). Nuove chiavi loc `makalu_setting_off`/
+>     `makalu_setting_liftoff_low` (EN+IT, stessa sessione).
+>   - **DPI slider a step non uniformi** (richiesta esplicita utente,
+>     diversa dagli altri slider "a tacche fisse"): nuovo
+>     `MakaluProtocol.QuantizeDpiTiered(int)` — step 50 sotto 4000, 100 fra
+>     4000-10000, 500 sopra 10000 (ogni risultato resta comunque multiplo di
+>     50, compatibile col firmware che accetta solo step-50 reali — è solo
+>     la UI che arrotonda più "grosso" man mano che il DPI sale, come lo
+>     slider di riferimento). Sostituisce `QuantizeDpi` (uniforme, ancora
+>     usato per il clamp wire-level in `SetAllDpi`) sia nello slider DPI
+>     principale (`SldMkDpi`) sia nello slider sniper
+>     (`SldMkSniperDpi` in `MakaluDpiRemapPanel.xaml.cs`). **Limite noto**:
+>     lo `Slider` WPF resta lineare in pixel (`Minimum`/`Maximum` fissi) —
+>     solo lo *snapping* del valore è a tacche variabili, la spaziatura
+>     visiva delle tacche non replica esattamente quella dello screenshot
+>     Base Camp (che le disegna più dense in basso). Implementare tacche
+>     visive non uniformi richiederebbe un `TickBar` custom, non fatto
+>     (nessun `TickBar` esiste già nel `ControlTemplate` Slider condiviso —
+>     nessuno slider K2 mostra tacche visive oggi, solo snapping invisibile).
+>   - **Everest Max**: `CbSettingsKeyboardColor` (Silver/Black,
+>     `MainWindow.Everest.cs`) → `RbEvKbColor*` (rimossi
+>     `KeyboardColorChoice`/`_keyboardColorChoices`/
+>     `InitKeyboardColorSelector`, ora ridondanti). `CbDialClockType`
+>     (24h/12h) e `CbDialClockStyle` (Digital/Analog, entrambi in
+>     `MainWindow.DisplayDial.cs`) → `RbDialClock12h/24h`/
+>     `RbDialClockDigital/Analog`, backed da property calcolate
+>     `DialClockTypeIndex`/`DialClockStyleIndex` (stesso ruolo di
+>     `SelectedIndex` prima).
+>   - Verificato con `build-check.bat`: **0 errori** su entrambe le
+>     solution. **Non ancora verificato a schermo/hardware** in questa
+>     sessione (nessun ambiente grafico disponibile) — da controllare al
+>     prossimo avvio che i gruppi segmentati mostrino lo stato iniziale
+>     corretto (specialmente Makalu, dove `_mkSuppress`/l'ordine
+>     dichiarazione XAML è storicamente delicato, vedi note in
+>     `_PROJECT_MAP.md` sul crash CLR dell'`IsChecked="True"` in XAML — qui
+>     evitato impostando tutti gli `IsChecked` in `Init()`/code-behind, mai
+>     in XAML, stesso pattern già in uso).
+>
+> Previous: 2026-07-13 (Makalu: sections riordinate/rinominate (Key
+> Binding/Lighting/Settings, DPI assorbito in Settings), LED ring preview
+> software-only implementato dietro l'immagine, e bug fix HID reale su
+> hardware):
+>   - **Sections**: ordine sidebar allineato a MacroPad/DisplayPad/Everest 60
+>     — **Key Binding** primo (ora anche default all'avvio, vedi
+>     `InitMkSectionNav` in `MainWindow.Makalu.cs`), **Lighting** secondo,
+>     **Settings** ultimo. La vecchia sezione **DPI** a sé stante è sparita:
+>     la sua lista livelli è migrata dentro Settings (colonna destra, layout
+>     a 2 colonne come lo screenshot reale di Base Camp) — tutto il codice
+>     DPI (campi + metodi) si è spostato da `MakaluDpiRemapPanel.xaml(.cs)`
+>     (ora solo Key Binding/Remap, nome classe invariato per limitare
+>     churn) a `MakaluRgbSettingsPanel.xaml(.cs)`. **Bug reale trovato e
+>     risolto nello stesso passaggio**: la sovrapposizione "impostazioni
+>     sovrapposte" lamentata dall'utente era perché `MakaluDpiRemapPanel.SecDpi`
+>     partiva `Visibility` di default (Visible, nessun `Collapsed` esplicito
+>     in XAML) e non veniva MAI nascosta finché l'utente non cliccava
+>     esplicitamente DPI/Remap la prima volta — dato che RGB (sezione
+>     default all'epoca) viveva in un `UserControl` DIVERSO
+>     (`MakaluRgbSettingsPanel`), il meccanismo `_activeMkSection` condiviso
+>     non la toccava mai. Fix strutturale: ogni sezione non-default ora ha
+>     `Visibility="Collapsed"` esplicito in XAML, zero stati impliciti.
+>   - **LED ring preview** (richiesta: "implementiamo il led preview
+>     sull'anello intorno alla rotella/tasto dpi"): il Makalu non ha NESSUNA
+>     capacità di readback HID per l'illuminazione (confermato due volte:
+>     prima analizzando `devices/makalu67/controller.py` di BaseCampLinux —
+>     comando lighting `0x0C` è write-only, a differenza di DPI `0x0B` che
+>     ha un vero sub-comando GET `0x07` — poi in modo DEFINITIVO analizzando
+>     con tshark una cattura USBPcap reale fornita dall'utente
+>     (`_reference/usb_dumps/makaluled.pcapng`, Base Camp originale con vari
+>     effetti applicati dall'utente stesso): ogni SET_REPORT lighting (0x0C)
+>     è seguito da un GET_REPORT la cui risposta è SEMPRE `A0 01 00 00...`
+>     (solo ACK, zero altrove) — nessun colore/effetto/luminosità viene mai
+>     letto indietro, nemmeno da Base Camp stesso). Quindi il preview è
+>     necessariamente **software-only**: rispecchia lo stato scelto nella UI
+>     (`MakaluRgbSettingsPanel.PreviewChanged`/`GetPreviewState()`), non il
+>     device reale — stesso limite di Base Camp, non una lacuna di K2.
+>     Implementazione (`MainWindow.Makalu.cs`): l'area dell'anello nel PNG
+>     è risultata un vero **cutout trasparente** (non pixel grigi/bianchi
+>     dipinti, come una prima ispezione via soglia-di-luminosità aveva fatto
+>     credere) — l'utente ha fornito `makalu67_light.png` di Base Camp
+>     stesso (variante "off", senza rainbow pre-renderizzato) al posto del
+>     vecchio `makalu67.png` (rainbow bakato nei pixel, ora tenuto come
+>     `Assets/makalu_mouse_rainbow.png`, mostrato per Key Binding/Settings —
+>     l'immagine si scambia in base alla sezione attiva via
+>     `MkUpdateMouseImage`, chiamata da `MkSection_Changed`). L'anello vero e
+>     proprio è quindi un `Border`/coppia di `Border` disegnati DIETRO
+>     l'`Image` (nuovo `Canvas x:Name="CvsMkRingBack"` in `MainWindow.xaml`,
+>     aggiunto PRIMA di `<Image>` nello stesso `Grid`), sagomato/posizionato
+>     su misure native-pixel date a voce dall'utente via Photoshop
+>     (`left=152 top=252 width=83 height=273 lineWidth=13 radius=38` su
+>     364×809, poi corrette due volte: top -14px, height -8px). L'anello è
+>     diviso in **due metà** (sinistra/destra, `_mkLedRingLeft`/
+>     `_mkLedRingRight` dentro `_mkLedRingHost`) perché il Makalu fisico ha
+>     8 LED indirizzabili singolarmente, 4 per lato (`MakaluProtocol.
+>     SetLightingCustom`: LED0=top-left…LED3=bottom-left,
+>     LED4=bottom-right…LED7=top-right) — richiesto esplicitamente
+>     dall'utente dopo che la prima versione (un solo gradiente verticale
+>     su tutto l'anello) ignorava su quale lato fosse fisicamente ogni LED. Un
+>     `BlurEffect` sull'host ammorbidisce la giunzione centrale (specie ai
+>     capi arrotondati). Per Custom (finestra `MakaluCustomRgbWindow`, ora
+>     con evento `ColorsChanged` per il preview live) le due metà mostrano
+>     davvero gli 8 colori indipendenti; per gli altri effetti condividono
+>     lo stesso brush/animazione (simmetrici per natura, es. Rainbow).
+>   - **Bug HID reale trovato e risolto** (non introdotto in questa
+>     sessione, pre-esistente): l'applicazione effetti falliva su hardware
+>     reale con log `[RGB] apply ... -> False` pur con device "found" e
+>     "open" riusciti. Causa: `MakaluHidNative.FindDevice()` sceglieva la
+>     prima interfaccia HID il cui path contenesse `"mi_01"`, ma
+>     quell'interfaccia USB espone PIÙ collection HID separate
+>     (`col01`...`col05`, ognuna un path/handle Windows distinto) e solo
+>     una supporta davvero Feature Report da 64 byte — l'ordine di
+>     enumerazione di Windows non è garantito stabile tra riavvii/riconnessioni
+>     (funzionava il 2026-07-10, non più il 2026-07-13 senza alcuna modifica
+>     di codice nel frattempo). Fix: `FindDevice` ora chiama `HidP_GetCaps`
+>     su ogni candidato e accetta solo quello con `FeatureReportByteLength
+>     >= 64`, deterministico invece che affidato all'ordine di enumerazione.
+>   - Bug secondario trovato durante la stessa sessione: `MkUpdateMouseImage`
+>     costruiva un `BitmapImage` da un `Uri` RELATIVO creato in codice
+>     (`new Uri("Assets/foo.png", UriKind.Relative)`) — funziona in XAML
+>     (dove la markup extension risolve la base automaticamente) ma fallisce
+>     silenziosamente in code-behind. Fix: pack URI esplicito
+>     (`pack://application:,,,/Assets/...`).
+>   - **Non ancora verificato su hardware**: DPI/remap via HID erano già
+>     `Verificato su hardware reale 2026-07-10` prima di questa sessione;
+>     l'unica cosa confermata OGGI su hardware reale è l'applicazione
+>     effetti RGB (fix sopra). Il ring preview è stato verificato solo
+>     visivamente in K2 (nessun readback possibile per natura, vedi sopra).
+>
+> Previous: 2026-07-12 (Everest 60: numpad LED preview live ATTIVATO —
+> mappatura dei 17 tasti trovata via cattura USBPcap reale, non indovinata;
+> poll velocizzato a 120ms; rimossa l'etichetta testuale "Numpad: sinistra/
+> destra" a favore del solo posizionamento grafico già esistente):
+>   - **Richiesta utente**: dopo la conferma "adesso il numpad funziona,
+>     proviamo a far funzionare il led preview" (vedi entry precedenti per
+>     numpad-detect e LED-preview main board), il preview del readback
+>     mostrava dati validi (`TryGetColorData=True` sempre) ma su indirizzi
+>     "sconosciuti" — 84 slot fuori da `LedIndex`/`SideLedIndex` che si
+>     accendevano seguendo lo stesso gradiente Wave della board, troppi per
+>     essere solo il numpad (17 tasti) e quindi ambigui: rischio concreto di
+>     cablare l'overlay su indirizzi sbagliati, cosa che le regole del
+>     progetto vietano esplicitamente ("non indovinare il bit-layout").
+>   - **Reverse engineering pulito**: l'utente ha catturato con USBPcap+
+>     Wireshark una sessione di Base Camp originale, dipingendo i 17 tasti
+>     del numpad UNO ALLA VOLTA (ordine noto, confermato dall'utente:
+>     Num,7,4,1,0,/,8,5,2,*,9,6,3,.,-,+,Enter) più 5 LED dell'anello del
+>     numpad stesso. Scritti 4 tool Python usa-e-getta in
+>     `_reference/tools/` (`find_magic.py`, `find_ev60_reports.py`,
+>     `dump_dev.py`, `track_changes.py` — quest'ultimo il decisivo: traccia
+>     ogni CAMBIO di colore in ordine cronologico tra scritture successive
+>     di Custom Map, isolando esattamente quale indirizzo si accende ad ogni
+>     tasto dipinto, senza bisogno di indovinare offset). Confermato: Base
+>     Camp usa lo STESSO comando `Begin(0x34)/Map(0x35)/End(0x36)` già noto
+>     da `Everest60Protocol.SendCustom` — nessuna sorpresa sul formato,
+>     solo sugli indirizzi. I 17 indirizzi del numpad cadono nei "buchi"
+>     della stessa riga/colonna della board principale (es. 38-41 = i 4
+>     slot liberi subito dopo Backspace=34 nella Riga 0 di `LedIndex`) —
+>     il numpad condivide letteralmente lo schema di indirizzamento fisico
+>     della board, solo più a destra. Progressione aritmetica pulita
+>     (passo +21 per riga, stesso passo già visto nella board) per 14 dei
+>     17 tasti; i due tasti "alti" (+, Enter, che occupano 2 righe) rompono
+>     lievemente il pattern lineare (comportamento plausibile per tasti
+>     che coprono più slot fisici).
+>   - **Trovato anche**: l'anello dell'ECCESSORIO numpad (5 LED testati sul
+>     bordo inferiore, indirizzi 181-185) è una zona DIVERSA dall'anello
+>     della board principale (`SideLedIndex`, 126-169) — probabilmente un
+>     anello perimetrale separato sul modulo numpad stesso. Non ancora
+>     implementato (fuori scope della richiesta originale, solo 5 indirizzi
+>     su un totale sconosciuto) — annotato per una sessione futura se
+>     interessa.
+>   - **Implementato**: `Everest60Protocol.NumpadLedIndex` (17 byte, stesso
+>     ordine di `Everest60KeyboardLayout.Numpad`), aggiunto a
+>     `KnownLedAddresses`; `MainWindow.Everest60.cs::OnEv60ColorsUpdated`
+>     ora applica il colore live anche a `_ev60NumpadVisuals` (solo
+>     readback — nessun path di scrittura/paint per il numpad, resta fuori
+>     scope). **Verificato dall'utente su hardware reale**: "adesso funziona
+>     il led preview su tutta la tastiera".
+>   - **Poll velocizzato**: `Everest60LedColorPoller` da 300ms a 120ms
+>     (stessa cadenza di Everest Max/MacroPad) — la cautela iniziale (SDK+
+>     raw-HID insieme, mai verificato) è stata ampiamente confermata sicura
+>     da una sessione di debug reale su hardware fisico senza contese
+>     osservate. Rimosso anche il logging diagnostico per-tick (aveva già
+>     esaurito il suo scopo, avrebbe solo intasato il log a 120ms).
+>   - **UI cleanup su richiesta utente**: rimossa l'etichetta testuale
+>     "Numpad: Sinistra/Destra/Non rilevato" (`LblEv60NumpadStatus` +
+>     stringhe `ev60_numpad_attached*`/`ev60_numpad_left/right/none`,
+>     eliminate da `Strings.xml`/`Strings.it.xml`) dalla colonna destra —
+>     il posizionamento grafico del numpad (`ApplyEv60NumpadPosition` sposta
+>     e specchia `CvsEv60Numpad`) resta invariato e continua a funzionare,
+>     era solo la ridondante indicazione testuale ad essere rimossa.
+>
+> Previous: 2026-07-12 (Everest Max: aggiunto il check periodico
+> aggancio numpad/Media Dock, allineandolo a Everest 60):
+>   - **Richiesta utente**: "metti il listener del aggancio di numpad o
+>     media dock anche su everest max. Mettilo un check all'apertura di k2,
+>     uno all'apertura della tab del dispositivo e un check periodico se il
+>     tab everest è selezionato".
+>   - Il rilevamento esisteva già (`UpdateKeyboardLayout` in
+>     `MainWindow.Layout.cs`, via `EverestService.MMDockPlugPosition`/
+>     `NumpadPlugPosition`), ma veniva invocato solo all'apertura del driver
+>     (`EvAutoOpen`/`BtnEvOpen_Click`) e dal refresh manuale
+>     (`BtnEvRefresh_Click`) — nessun check all'apertura della tab né polling
+>     periodico, a differenza di Everest 60 (`Ev60RefreshStatus`, poll 3s).
+>   - Aggiunti in `MainWindow.Layout.cs`: `_evAccessoryPollTimer`
+>     (`DispatcherTimer` 3s, stessa cadenza di `Ev60RefreshStatus`) +
+>     `StartEvAccessoryPoll`/`StopEvAccessoryPoll`. **A differenza** del
+>     poller di Everest 60 (che gira sempre, indipendentemente dalla tab
+>     attiva), questo è gated alla tab Everest Max selezionata — richiesta
+>     esplicita dell'utente ("se il tab everest è selezionato").
+>   - `TcDevices_SelectionChanged` (`MainWindow.xaml.cs`) ora chiama
+>     `UpdateKeyboardLayout()` + `StartEvAccessoryPoll()` quando si apre la
+>     tab `"everest"`, `StopEvAccessoryPoll()` altrimenti. Siccome
+>     `BtnSettingsTab_Click`/`BtnMacroTab_Click` impostano
+>     `TcDevices.SelectedIndex = -1` (che fa uscire subito
+>     `TcDevices_SelectionChanged` per `SelectedItem == null`, senza
+>     raggiungere il branch che ferma il poller), `StopEvAccessoryPoll()` è
+>     stato aggiunto anche lì esplicitamente. Timer fermato anche alla
+>     chiusura finestra (`Closed` in `MainWindow.Everest.cs`).
+>   - Check all'apertura di K2: già coperto, nessuna modifica necessaria —
+>     `EvAutoOpen()` (chiamato da `AutoOpenDrivers` all'avvio) chiama già
+>     `UpdateKeyboardLayout()`.
+>   - Build pulita (`dotnet build K2.sln -c Debug -p:Platform=x86`, 0
+>     errori/warning). **Non verificato su hardware fisico** (nessun device
+>     Everest Max disponibile in questa sessione) — verificare che
+>     collegare/scollegare numpad o Media Dock a caldo mentre la tab Everest
+>     Max è aperta aggiorni il layout entro 3s.
+>
+> Previous: 2026-07-12 (Everest 60/Makalu: colonna destra continuava ad
+> allargarsi — il fix "Auto" della sessione precedente era la causa, non la
+> cura; rimossa anche la sezione Log di Everest 60):
+>   - **Richiesta utente**: "su everest 60 la parte a destra continua ad
+>     allargarsi. Lasciala a larghezza fissa (come gli altri dispositivi) e
+>     togli la sezione del log" — dopo che la sessione precedente aveva
+>     cambiato quella `ColumnDefinition` da `Width="210"` fisso a
+>     `Width="Auto"` per risolvere lo stesso problema (colonna 8px più
+>     stretta delle altre 3, per via del margin sottratto in una colonna
+>     fissa).
+>   - **Causa reale del "continua ad allargarsi"**: `Width="Auto"` fa sì che
+>     WPF dimensioni la colonna sul contenuto più largo — e dentro quella
+>     stessa colonna vive `TxtEv60Log`, una `TextBox` con
+>     `TextWrapping="NoWrap"`, che vuole essere larga quanto la riga di log
+>     più lunga mai scritta. Ogni nuova riga di log più lunga della
+>     precedente allargava quindi l'intera colonna, da cui l'impressione di
+>     "continua ad allargarsi" mentre l'app gira. Su Everest Max/MacroPad/
+>     DisplayPad questo non succede perché il loro log di debug vive in una
+>     colonna SEPARATA a larghezza fissa (`PnlMpDebugRight`/equivalente,
+>     380px), non nella colonna "impostazioni generiche" comune a tutti.
+>   - **Fix**: `ColumnDefinition Width="Auto"` → `Width="218"` fisso su
+>     ENTRAMBI Everest 60 e Makalu (218 = 8px margin sinistro del Border +
+>     210px larghezza desiderata del contenuto — lo stesso numero a cui si
+>     risolveva "Auto" quando funzionava, ma senza il rischio di crescita
+>     illimitata). Rimossa la sezione "Log" di Everest 60 su richiesta
+>     esplicita: `TextBlock`/`Border`/`TextBox x:Name="TxtEv60Log"` tolti da
+>     `MainWindow.xaml`, `LogEverest60()` in `MainWindow.Everest60.cs`
+>     semplificato (restava comunque `App.WriteLog(...)` verso il file di
+>     log applicativo — quello non è stato toccato, solo lo specchio a
+>     schermo). Rimossa anche la stringa loc `ev60_log` (EN+IT, non più
+>     referenziata). **Makalu ha lo stesso `TxtMkLog` con `NoWrap` nella
+>     stessa colonna** — non ancora segnalato come problema dall'utente, ma
+>     stesso identico rischio: il fix di larghezza fissa lo previene già,
+>     la sezione Log di Makalu però NON è stata rimossa (non richiesto).
+>   - **Lezione**: quando una colonna `Auto` include una `TextBox` con
+>     `TextWrapping="NoWrap"` (o qualunque controllo a larghezza intrinseca
+>     non limitata), la colonna non è mai davvero "sicura" a lungo termine —
+>     va isolata in una colonna propria a larghezza fissa (come fanno le
+>     altre 3 board) oppure il contenitore va vincolato con un `MaxWidth`.
+>   - Build verificata pulita (0 errori/0 warning). **Verifica visiva su
+>     hardware fisico non ancora fatta.**
+>
+> Previous: 2026-07-12 (Everest 60: LED preview CONFERMATO funzionante
+> su hardware reale — fix HWND + retry di resilienza verificati end-to-end
+> da log):
+>   - Log reale mandato dall'utente dopo il fix di resilienza (vedi entry
+>     sotto): `Ev60AutoOpen()` riesce al primo colpo con l'HWND reale
+>     (`OpenUSBDriver(0x871274) -> True`, `APEnable=True EnableKeyFunc=True`),
+>     poller partito subito (`[Ev60-POLL] started (sdk.IsOpen=True)`) e
+>     **37/37 tick consecutivi** (~19s) con `TryGetColorData=True` — nessun
+>     fallimento. `GetSubDeviceInfo(1) -> ok=True fwVer=259 position=2`
+>     confermato ripetutamente ogni 3s (numpad a destra, coerente col
+>     posizionamento fisico riferito dall'utente).
+>   - **Nota minore, non bloccante**: nel log compaiono 2× `OpenUSBDriver(0x0)
+>     -> False` a inizio avvio (da `Ev60RefreshStatus()`'s retry-open +
+>     `QueryNumpadPosition`'s fallback, entrambi chiamati sincronamente dentro
+>     `InitEverest60Module()` nel costruttore, quindi ancora prima che
+>     `OnSourceInitialized` assegni l'HWND reale a `MainWindow._hWnd`) — due
+>     tentativi sprecati ma innocui, il vero `Ev60AutoOpen()` da
+>     `AutoOpenDrivers()` (con HWND reale) arriva poco dopo e funziona. Non
+>     corretto in questa sessione (cosmetico, nessun impatto funzionale).
+>   - **Entrambi i bug hardware originali di oggi (numpad non rilevato, LED
+>     preview assente) sono quindi risolti e verificati su hardware fisico
+>     reale**, stessa causa radice (HWND mancante) per entrambi.
+>
+> Previous: 2026-07-12 (Everest 60: numpad CONFERMATO funzionante su
+> hardware reale dopo il fix HWND — estesa la stessa resilienza al LED
+> preview + aggiunto logging diagnostico per-tick, ancora da confermare):
+>   - **Richiesta utente**: "ok ora il numpad funziona, proviamo a far
+>     funzionare il led preview" — primo fix di oggi (passare l'HWND reale a
+>     `OpenUSBDriver`, vedi entry sotto) confermato su hardware fisico.
+>   - **Rischio individuato senza nuovo log**: `Ev60AutoOpen()` prova
+>     `_ev60Sdk.Open(_hWnd, ...)` una sola volta durante `AutoOpenDrivers()`.
+>     Dal log reale della sessione precedente, `OpenUSBDriver` falliva le
+>     prime 1-2 volte prima di iniziare a riuscire regolarmente — se il
+>     singolo tentativo eager fallisce, `_ev60Sdk.IsOpen` resta `false` per
+>     sempre: `QueryNumpadPosition` ha un fallback che apre/richiude una
+>     sessione breve ogni 3s (per questo il numpad ora funziona anche così),
+>     ma quel fallback NON lascia la sessione aperta — quindi
+>     `Everest60LedColorPoller`, che richiede `_ev60Sdk.IsOpen` persistente
+>     per partire, non veniva mai (ri)avviato anche dopo che il device
+>     iniziava a rispondere.
+>   - **Fix**: `Ev60RefreshStatus()` (già in poll ogni 3s per lo status di
+>     connessione) ora ritenta anche l'apertura persistente
+>     (`_ev60Sdk.Open(_hWnd, ...)`) finché non riesce, e alla prima riuscita
+>     chiama `UpdateEv60LedPreviewActive` per far partire il poller se la
+>     sezione Lighting è quella attiva — stessa logica di retry già
+>     dimostrata funzionante per il numpad, applicata anche alla sessione
+>     persistente invece che solo al fallback breve.
+>   - **Aggiunto logging diagnostico** in `Everest60LedColorPoller` (tag
+>     `[Ev60-POLL]`, start/stop + risultato `TryGetColorData` ad ogni tick),
+>     prima assente — mirror del logging già esistente in `LedColorPoller`
+>     per Everest Max/MacroPad (tag `[LED-POLL]`), che si è già dimostrato
+>     decisivo per diagnosticare rapidamente lo stesso genere di problema.
+>   - **Non ancora verificato**: build pulita locale, ma serve un nuovo test
+>     dell'utente con l'Everest 60 fisico sulla sezione Lighting per
+>     confermare che `[Ev60-POLL] tick#N TryGetColorData=True` compaia nel
+>     log e che i tasti mostrino davvero il colore live.
+>
+> Previous: 2026-07-12 (Everest 60: trovata la causa reale per cui
+> `GetSubDeviceInfo`/`APEnable`/`EnableKeyFunc` fallivano SEMPRE anche con
+> `OpenUSBDriver -> True` e un Everest 60 fisico collegato — `OpenUSBDriver`
+> veniva chiamato con `IntPtr.Zero` invece dell'HWND reale della finestra):
+>   - **Richiesta utente**: dopo il crash fix (vedi entry sotto), l'utente ha
+>     confermato "Il numpad ancora non compare" con l'Everest 60 fisicamente
+>     sempre collegato, e ha mandato il log completo di un avvio reale.
+>   - **Lettura del log reale** (prima volta con hardware fisico davvero
+>     collegato in questa serie di sessioni): `Everest360_USB.dll` si carica,
+>     `OpenUSBDriver` fallisce le prime 2 volte poi INIZIA A RIUSCIRE
+>     regolarmente ogni poll da 3s (`OpenUSBDriver -> True`) — quindi il
+>     device risponde davvero. Ma **`APEnable`/`EnableKeyFunc` tornano
+>     SEMPRE `False`**, e di conseguenza `GetSubDeviceInfo(1)` torna sempre
+>     `ok=False`, ad ogni singolo tentativo, anche subito dopo un Open
+>     riuscito — a differenza di MacroPad/Everest Max nello stesso log, dove
+>     le chiamate equivalenti (`EnableKeyFunc(true) -> True`,
+>     `APEnable(false) -> True`, `SetSyncEffect`, ecc.) riescono sempre.
+>   - **Causa reale**: `Everest60SdkNative.OpenUSBDriver(IntPtr hWnd)` (a
+>     differenza di `EverestSdkNative.OpenUSBDriver()` per l'Everest Max, che
+>     via metadata ECMA-335 non prende proprio l'HWND) **prende un HWND reale**
+>     — confermato anche questo via lo stesso dump di metadata
+>     (`_reference/Everest_SDK_signatures.txt`, non un'ipotesi). K2 lo
+>     chiamava però sempre con `IntPtr.Zero`, e per di più da
+>     `InitEverest60Module()`, eseguito nel COSTRUTTORE di `MainWindow` — cioè
+>     PRIMA che `OnSourceInitialized` assegni l'HWND vero (`_hWnd`) alla
+>     finestra. MacroPad/DisplayPad invece chiamano il proprio
+>     `OpenUSBDriver(_hWnd)` da `AutoOpenDrivers()`, eseguito DOPO
+>     `OnSourceInitialized` — Everest 60 era l'unico modulo a non seguire
+>     questo ordine. Ipotesi (coerente con la scoperta CHANGELOG 2026-07-11
+>     sull'`EV60MessageHandler`, una `NativeWindow` nascosta usata da Base
+>     Camp per i messaggi di plug/unplug, messaggio `0x5401`): l'SDK ha
+>     bisogno di un HWND vero per completare l'inizializzazione del proprio
+>     message pump interno, anche se K2 non consuma quei messaggi (la
+>     connettività resta pollata) — senza un HWND vero `OpenUSBDriver` torna
+>     comunque `true` (nessuna validazione dell'argomento), ma lo stato
+>     interno resta incompleto e ogni chiamata successiva silenziosamente
+>     fallisce.
+>   - **Fix**: `Everest60SdkService.Open` ora richiede un `IntPtr hWnd` reale
+>     (salvato in un campo, riusato anche dal fallback open/close di
+>     `QueryNumpadPosition`); `DoOpenAndInit` non è più `static` per poter
+>     leggere quel campo. `MainWindow.Everest60.cs`: l'apertura eager è stata
+>     spostata da `InitEverest60Module()` (costruttore) a un nuovo
+>     `Ev60AutoOpen()`, chiamato da `AutoOpenDrivers()` subito dopo
+>     `EvAutoOpen()` — stesso punto in cui MacroPad/DisplayPad aprono i propri
+>     driver con l'HWND vero. Anche la Open lazy di `Ev60Section_Changed`
+>     (visita della sezione Key Binding) ora passa `_hWnd`.
+>   - **Non ancora verificato**: serve un nuovo giro di test dell'utente con
+>     l'Everest 60 fisico per confermare che `GetSubDeviceInfo`/`APEnable`
+>     tornino `True` ora che l'HWND è reale — build pulita locale (0 errori),
+>     nessun crash, ma senza un HWND-dipendente confermato funzionante da
+>     log reale ancora mancante quando scritta questa entry.
+>
+> Previous: 2026-07-12 (Everest 60/Makalu: colonna destra "impostazioni
+> generiche" 8px più stretta delle altre 3 — fix ColumnDefinition):
+>   - **Richiesta utente**: "la sezione delle impostazioni generiche sulla
+>     destra è ancora troppo stretta rispetto a quello degli altri
+>     dispositivi. Allinea" — dopo la sessione di unificazione layout qui
+>     sotto, che aveva già portato quella colonna a `Width="210"` fisso
+>     (matematicamente identico ai 190px bottone + 20px padding degli altri
+>     device) ma il problema persisteva visivamente.
+>   - **Causa reale**: il `Border` di quella colonna ha sempre avuto
+>     `Margin="8,0,0,0"` (stesso valore su tutti e 5 i tab). Su Everest Max/
+>     MacroPad/DisplayPad quella colonna è `Width="Auto"`, quindi WPF la
+>     dimensiona includendo il margin del child (8 + 210 = 218px di colonna,
+>     Border reso alla sua piena larghezza desiderata di 210px). Su Everest 60/
+>     Makalu la colonna era invece fissa a `Width="210"`: il margin sinistro
+>     dell'8px viene SOTTRATTO dallo spazio disponibile per il child
+>     (`HorizontalAlignment` default = Stretch), quindi il Border veniva
+>     renderizzato a soli 202px — 8px più stretto delle altre 3, non
+>     rilevabile confrontando solo i numeri scritti in XAML (210 contro 210)
+>     ma reale a runtime per via di come Grid tratta Auto vs colonne fisse
+>     rispetto al margin del contenuto.
+>   - **Fix**: cambiato `ColumnDefinition Width="210"` → `Width="Auto"` su
+>     entrambi i tab (Everest 60 e Makalu), stessa identica dichiarazione
+>     ora usata da tutti e 5 i device — nessun'altra modifica necessaria
+>     (Border/Padding/Style dei bottoni già identici). Build verificata
+>     pulita (0 errori/0 warning). **Verifica visiva su hardware fisico non
+>     ancora fatta.**
+>
+> Previous: 2026-07-12 (CRASH FIX: K2 non partiva più — terza occorrenza
+> del bug "evento XAML sparato durante InitializeComponent()", questa volta
+> via Slider.Value invece di RadioButton.IsChecked):
+>   - **Richiesta utente**: "Non mi parte più k2" — subito dopo la sessione
+>     di layout qui sotto (vedi entry successiva "Layout dei 5 tab device
+>     unificato").
+>   - **Diagnosi**: Windows Event Log mostrava lo stesso identico crash già
+>     documentato per Makalu il 2026-07-10 ("Fatal error. Invalid Program:
+>     attempted to call a UnmanagedCallersOnly method from managed code",
+>     stesso indirizzo IP in coreclr.dll ad ogni lancio — .NET fail-fast
+>     generico, NON un vero `UnmanagedCallersOnly`, root-causato allora via
+>     WinDbg+SOS come AV durante il parse BAML). Confermato che la causa era
+>     nel lavoro non committato di oggi eseguendo `K2.App.exe` direttamente
+>     da terminale (ambiente locale, non serve l'utente per riprodurre):
+>     `git stash` di tutte le modifiche → l'HEAD committato partiva pulito
+>     (Everest Max/MacroPad/DisplayPad aperti correttamente, nessun crash) →
+>     `git stash pop` → crash riprodotto in modo deterministico, indipendente
+>     dall'hardware fisico collegato (si verificava anche senza un Everest 60
+>     reale connesso).
+>   - **Causa reale**: spostando lo slider di luminosità di Everest 60/Makalu
+>     dal pannello per-device alla barra condivisa in alto a destra
+>     (`BrEverest60`/`BrMakalu` in `MainWindow.xaml`, vedi entry sotto), i
+>     nuovi `SldEv60Brightness`/`SldMkBrightness` hanno `Value="100"`
+>     esplicito — diverso dal default `0` di `Slider` — quindi WPF applica il
+>     valore durante `InitializeComponent()` e spara `ValueChanged`
+>     SINCRONAMENTE in quel momento (stesso meccanismo già noto per
+>     `Minimum`/`Maximum` che coercono `Value`, qui innescato da `Value`
+>     stesso). `SldEv60Brightness_ValueChanged`/`SldMkBrightness_ValueChanged`
+>     (in `MainWindow.Everest60.cs`/`MainWindow.Makalu.cs`) chiamavano
+>     incondizionatamente `Ev60RgbPanel.SetBrightness(...)`/
+>     `MkRgbSettings.SetBrightness(...)` — ma questi due `UserControl` sono
+>     dichiarati MOLTO più avanti nello stesso `MainWindow.xaml` (contenuto
+>     dei tab Everest 60/Makalu, righe 1200+/1500+, contro la barra in alto a
+>     righe 619+) e quindi ancora `null` in quel punto del parse →
+>     `NullReferenceException`/AV non gestita durante il caricamento XAML →
+>     crash immediato ad ogni avvio, prima ancora che il costruttore di
+>     `MainWindow` eseguisse una sola riga del proprio corpo (bisezionato con
+>     log temporanei che confermavano il crash PRIMA del primo `Init*Module()`
+>     chiamato dal costruttore).
+>   - **Fix**: `Ev60RgbPanel?.SetBrightness(...)`/`MkRgbSettings?.SetBrightness(...)`
+>     (null-conditional), stesso principio difensivo già in uso altrove in
+>     questo file (`if (LblEv60Brightness != null) ...` nella riga subito
+>     sopra, che infatti non crashava). Verificato con lanci diretti ripetuti
+>     dal terminale locale (ambiente non-sandbox): 0 crash, avvio completo,
+>     Everest Max/MacroPad/DisplayPad operativi.
+>   - **Lezione per il futuro**: il pattern "evento XAML-wired che spara
+>     sincrono durante `InitializeComponent()` prima che un campo dichiarato
+>     più avanti nello stesso file sia assegnato" NON è limitato a
+>     `RadioButton.IsChecked="True"` o a coercizione `Minimum`/`Maximum` —
+>     vale per QUALSIASI proprietà con un valore esplicito diverso dal
+>     default del tipo, su qualunque controllo con un handler XAML-wired
+>     (qui: `Slider.Value="100"` vs default `0`). Ogni volta che si sposta un
+>     controllo con un handler che referenzia un altro elemento del file, va
+>     verificato l'ordine di dichiarazione E se l'handler ha già un guard
+>     null — non solo se il controllo spostato stesso ha `IsChecked="True"`.
+>
+> Previous: 2026-07-12 (Layout dei 5 tab device unificato: riquadro
+> immagine ad altezza fissa, pannello opzioni elastico, Everest 60/Makalu
+> allineati al pattern toolbar/brightness degli altri 3 device):
+>   - **Richiesta utente**: il riquadro centrale (immagine device) doveva
+>     avere altezza FISSA su tutti i device — non stiracchiarsi in verticale
+>     come prima (`RowDefinition Height="*"`) — mentre il pannello opzioni
+>     SOTTO l'immagine doveva invece crescere quando la finestra si allarga
+>     in verticale. Altezza scelta su richiesta esplicita = quella che il
+>     MacroPad raggiunge quando ruotato in verticale (Positioning 90°/270°):
+>     canvas 510x370, ma `RotateTransform` scambia l'ingombro renderizzato in
+>     370x510, quindi 510 + 8px padding per lato = **526px**, il valore ora
+>     fisso su `RowDefinition` Row 0 di tutti e 5 i tab (Everest Max,
+>     Everest 60, Makalu, MacroPad, DisplayPad). Row 1 (pannello sotto) è
+>     passata da `Height="Auto"` + `Height` fisso in pixel sul `Border` a
+>     `Height="*"` + `MinHeight` (stesso valore di prima) come pavimento, così
+>     non collassa sotto la sezione più alta ma cresce col resto. Per Makalu
+>     (mouse 190x422, più alto delle altre board 510x370) inizialmente era
+>     stato aggiunto un `Viewbox StretchDirection="DownOnly"` per non
+>     tagliarlo dentro gli originali 386px — poi rimosso perché con 526px
+>     l'immagine ci sta comoda senza scalare (Grid semplice, come gli altri).
+>   - **Seconda richiesta utente**: allineare Everest 60 e Makalu al layout
+>     degli altri 3 device su due punti rimasti diversi:
+>     1. La striscia "Connected"/pulsante Refresh in cima (era una
+>        `RowDefinition Height="Auto"` sempre visibile) è stata spostata nel
+>        gruppo **Debug** della colonna destra comune (`PnlEv60DebugGroup`/
+>        `PnlMkDebugGroup`, `Visibility="Collapsed"` di default, stessa
+>        posizione/pattern di `PnlEvDebugGroup`/`PnlMpDebugGroup`/
+>        `PnlDpDebugGroup` — subito dopo il gruppo "Device"). La Row 0 in
+>        cima è ora `Height="32"` fisso (come gli altri) con un `WrapPanel`
+>        vuoto. Aggiunte `ApplyEv60DebugMode`/`ApplyMkDebugMode` (stesso
+>        pattern di `ApplyDebugMode`/`ApplyMpDebugMode`/`ApplyDpDebugMode`),
+>        chiamate da `ApplyDebugModeToAllDevices` in `MainWindow.Settings.cs`.
+>        Il poll ogni 3s (`Ev60RefreshStatus`/`MkRefreshStatus`) continua ad
+>        aggiornare label/colore anche a gruppo nascosto (Collapsed non ferma
+>        il codice, solo il rendering).
+>     2. Lo slider luminosità (dentro `Everest60RgbPanel`/
+>        `MakaluRgbSettingsPanel`, unico per entrambi questi device — a
+>        differenza di Everest Max che ne ha solo uno "globale" già in
+>        cima) è stato spostato nella barra condivisa in alto a destra
+>        (`BrEverest60`/`BrMakalu` in `MainWindow.xaml`, stesso meccanismo di
+>        `BrEverest`/`BrMacroPad`/`BrDisplayPad`, switch di visibilità in
+>        `TcDevices_SelectionChanged`/`BtnSettingsTab_Click`/
+>        `BtnMacroTab_Click`). Differenza architetturale da tenere a mente:
+>        Everest Max/MacroPad/DisplayPad non hanno una UserControl dedicata
+>        (tutto lo stato RGB vive dentro `MainWindow`), mentre Ev60/Makalu sì
+>        — quindi lo Slider è stato spostato in XAML ma la logica di apply
+>        resta dentro le UserControl via una proprietà interna
+>        `Brightness`/metodo `SetBrightness(value)` che MainWindow chiama
+>        dal proprio `ValueChanged` handler (`SldEv60Brightness_ValueChanged`/
+>        `SldMkBrightness_ValueChanged` in `MainWindow.Everest60.cs`/
+>        `MainWindow.Makalu.cs`). Per Everest 60 il vecchio handler condiviso
+>        `SldEv60Param_ValueChanged` (Speed+Brightness insieme) è stato diviso:
+>        `SldEv60Speed_ValueChanged` resta nel panel (governa solo Speed), la
+>        Brightness rimossa è quella che ora vive in MainWindow. La
+>        Brightness "Custom" per il Key Lighting per-tasto
+>        (`SldEv60CustomBrightness`) NON è stata toccata: resta dentro il
+>        panel, è specifica della sezione Key Lighting, non un valore
+>        "sempre applicato" come l'altra.
+>   - Build verificata pulita (`K2.sln` x86, 0 errori/0 warning) dopo ogni
+>     passo. **Verifica visiva su hardware fisico non ancora fatta** in
+>     questa sessione — da controllare al prossimo avvio con i device
+>     collegati (in particolare Makalu con mouse fisico più alto delle altre
+>     board, e che il flusso Debug mode centrale mostri/nasconda
+>     correttamente i due nuovi gruppi).
+
+> Previous: 2026-07-12 (Everest 60: trovata e risolta la vera causa del
+> "numpad non rilevato" — Everest360_USB.dll non era nemmeno cercata):
+>   - **Richiesta utente**: "il numpad non viene rilevato" (dopo
+>     l'implementazione dell'auto-detect via `GetSubDeviceInfo`).
+>   - **Falsa pista iniziale**: prima ipotesi (mancava la sequenza di
+>     warm-up `APEnable`/`EnableKeyFunc` prima di `GetSubDeviceInfo`,
+>     rifattorizzata in `Everest60SdkService.DoOpenAndInit`, riusata sia da
+>     `Open()` sia da `QueryNumpadPosition()`) — cambiamento ragionevole e
+>     tenuto, ma NON la causa reale.
+>   - **Causa reale, trovata leggendo il log runtime**: `Everest60SdkNative`
+>     dichiara `[DllImport("Everest360_USB.dll")]` ma
+>     `NativeDependencyResolver.BaseCampNativeDlls` (l'elenco delle DLL non
+>     ridistribuibili che K2 sa cercare in un'installazione Base Camp)
+>     conteneva SOLO `MacroPadSDK.dll`/`SDKDLL.dll` — un commento nel codice
+>     diceva esplicitamente "Everest360_USB.dll non è nella lista: il modulo
+>     Everest di K2 non lo usa", vero quando scritto (prima della sessione
+>     Key Binding) ma mai aggiornato dopo. Il CLR quindi non chiamava mai il
+>     resolver custom per questa DLL e finiva sul default OS search path
+>     (mai next to l'exe, mai dentro un'installazione Base Camp) →
+>     `DllNotFoundException` silenziosa, loggata solo come eccezione generica
+>     senza alcun elenco di percorsi tentati (a differenza di SDKDLL.dll/
+>     MacroPadSDK.dll, che invece già passavano dal resolver e mostravano un
+>     log chiaro "NOT found. Paths tried: ...").
+>   - **Fix**: aggiunta `"Everest360_USB.dll"` a `BaseCampNativeDlls` in
+>     `NativeDependencyResolver.cs` (una riga) + commento aggiornato.
+>     Verificato via smoke-test con log fresco: `[NativeResolver]
+>     'Everest360_USB.dll' loaded from: C:\Program Files (x86)\Mountain Base
+>     Camp\Everest360_USB.dll` — la DLL ora si carica correttamente.
+>     `OpenUSBDriver -> False` nello stesso log non è un bug residuo: sulla
+>     macchina di test non risultava collegato un Everest 60 fisico in quel
+>     momento (i log mostravano invece un Everest Max attivo, con numpad
+>     rilevato dal SUO meccanismo separato — `FW_EXTEND_INFO.byNumpadPlug`,
+>     non `GetSubDeviceInfo`). **Da verificare**: test end-to-end con un
+>     Everest 60 fisico collegato, per confermare che `GetSubDeviceInfo`
+>     restituisca `position` 1/2 corretti una volta che `OpenUSBDriver`
+>     riesce.
+>   - **Nota di sessione**: durante questo lavoro si sono verificate diverse
+>     collisioni di build (`InitializeComponent` mancante su file non
+>     toccati in questa sessione, es. `ExportProfilesDialog.xaml.cs`) per
+>     via di un'altra sessione Claude Code concorrente sullo stesso
+>     repository che stava lavorando in parallelo (aggiunta del readback LED
+>     live via `GetColorData2`/`Everest60LedColorPoller` — vedi entry
+>     successiva). Bastava ripetere `build-check.bat`: non erano errori di
+>     codice, solo `bin`/`obj` cancellati/ricreati da due build simultanee.
+>
+> Previous: 2026-07-11 (Everest 60: LED preview live attivato via
+> `GetColorData2` — smentisce la precedente conclusione "nessun readback,
+> solo software"):
+>   - **Richiesta utente**: "Riusciamo ad attivare il led preview su
+>     Everest 60?" — la mappa di progetto affermava fino a questa sessione
+>     che il Key Lighting fosse "software-only, nessun readback live —
+>     stesso limite noto della side ring", perché la lighting di questo
+>     device passa da HID raw (Everest60Protocol/Everest60HidNative), non
+>     dall'SDK vendor (i cui export di lighting sono struct opache mai
+>     decodificate).
+>   - **Scoperta**: quella conclusione riguardava solo la SCRITTURA. La
+>     LETTURA è un export diverso e innocuo: `Everest60::GetColorData2(IntPtr,
+>     ushort)` in `Everest360_USB.dll`, mai investigato prima. Confermato via
+>     decompile di `BaseCamp.Service.exe`: il wrapper managed
+>     `Everest60::GetColorData` alloca 576 byte non gestiti, chiama
+>     `GetColorData2(ptr, 576)`, copia il buffer in un `FWColor[192]` se
+>     l'esito è vero, libera la memoria — nessuno struct opaco coinvolto.
+>     Confermato anche lato UI: `BaseCamp.UI.dll` ha
+>     `EverestMiniController.GetColorData` ("EverestMini" = nome interno di
+>     Base Camp per l'Everest 60, viste `Views/EverestMini/Mini60*.cshtml`),
+>     un handler websocket che alloca lo stesso `FWColor[192]` e lo pubblica
+>     in un loop `Thread.Sleep(300)` semplice, gated da un flag
+>     `StartSyncColorForEv60` (settato da `SyncColorFlagChanged`) e da un
+>     controllo "app non minimizzata" — **senza alcuna chiamata di
+>     priming/warm-up** (a differenza dell'Everest Max, che richiede
+>     `SetSyncEffect`+`EnableColorStream` prima che `GetColorData` funzioni;
+>     coerente col fatto che `SetSyncEffect`/`EnableColorStream` non
+>     compaiono nell'export list della classe `Everest60`). Il buffer è
+>     indicizzato per INDIRIZZO HARDWARE LED firmware — la stessa
+>     numerazione già portata in `Everest60Protocol.LedIndex`/`SideLedIndex`
+>     per la scrittura (`SendCustom`), verificata da due fonti indipendenti
+>     concordi in una sessione precedente.
+>   - **Implementato**: `Everest60SdkNative.GetColorData2` P/Invoke +
+>     costante `ColorBufferSize=576`; `Everest60SdkService.TryGetColorData`
+>     (rispecchia 1:1 la sequenza alloc/call/copy/free decompilata, riusa
+>     `EverestSdkNative.FWColor` già esistente); nuovo
+>     `Everest60LedColorPoller` (mirror di `LedColorPoller` ma dedicato,
+>     300ms — la cadenza reale di Base Camp, più prudente dei 120ms di
+>     Everest Max/MacroPad viste le incertezze di convivenza sotto);
+>     `MainWindow.Everest60.cs`: poller avviato/fermato in base alla
+>     sezione Lighting visibile (`UpdateEv60LedPreviewActive`, stesso
+>     schema di `UpdateEverestLedPreviewActive`/`UpdateMpLedPreviewActive`),
+>     riusa la sessione SDK già aperta eager per Key Binding/numpad;
+>     `OnEv60ColorsUpdated` traduce indice logico (0-63) → indirizzo
+>     hardware via `Everest60Protocol.LedIndex` prima di leggere il colore.
+>     **Dettaglio UX**: mentre il paint-mode di Key Lighting è attivo, un
+>     tasto appena dipinto ma non ancora "Applicato" mantiene il colore
+>     dipinto invece di essere sovrascritto dal (ancora vecchio) colore
+>     hardware al prossimo tick — stesso schema del salto `IsHighlighted`
+>     del MacroPad in `MainWindow.LedPreview.cs`, qui per un motivo diverso
+>     (anteprima di paint invece di flash da pressione fisica).
+>   - **Non verificato su hardware fisico** (nessun Everest 60 disponibile
+>     nella sessione che ha scritto questo): in particolare la convivenza
+>     tra la sessione SDK persistente (ora anche col poll colori ogni 300ms)
+>     e le scritture HID raw della lighting (`Everest60Service`/
+>     `Everest60HidNative`) resta il rischio noto già segnalato in
+>     `Everest60SdkService`'s doc comment — nessuna nuova evidenza a favore
+>     o contro, solo un nuovo consumatore dello stesso rischio esistente.
+>     Solo build pulita verificata (`build-check.bat`, 0 errori).
+
+> Previous: 2026-07-11 (Everest 60: rilevamento automatico numpad
+> sinistra/destra via SDK — smentisce la precedente conclusione "nessun
+> protocollo"):
+>   - **Richiesta utente**: "riusciamo a rilevare dove si trova il numpad e
+>     se è attivo?" — dopo che una risposta precedente in questa stessa
+>     sessione aveva concluso (erroneamente, per ricerca incompleta) che
+>     nessun protocollo esistesse.
+>   - **Scoperta**: `Everest60::GetSubDeviceInfo(int, ref int, ref int)`
+>     (mai investigato a fondo prima) è esattamente il meccanismo. Confermato
+>     via decompile: `Everest60::Everest60GetSubDeviceInfo` chiama sempre
+>     `GetSubDeviceInfo(1, ...)` (1 = sottodispositivo numpad, unico indice
+>     mai usato per questa classe); i due output sono `fwVer` e `position`.
+>     `Everest60Operations::GetEverest60NumPadStatus` (BaseCamp.UI.dll)
+>     conferma la mappatura: `position==1`→sinistra, `position==2`→destra,
+>     altro→assente. **Bonus**: esiste anche un meccanismo push (messaggio
+>     Windows 0x5401 gestito da `EV60MessageHandler`, una `NativeWindow`
+>     nascosta) — ridondante con il poll, non implementato in K2 (il poll
+>     ogni 3s già esistente è sufficiente e più semplice). Nessun
+>     checkbox manuale in Base Camp: è sempre stato automatico.
+>   - **Implementato**: nuovo `Everest60SdkNative.GetSubDeviceInfo` P/Invoke,
+>     `Everest60SdkService.QueryNumpadPosition()` (riusa la sessione SDK
+>     persistente se già aperta per Key Binding, altrimenti apre/chiude una
+>     sessione breve — mai tenuta aperta solo per il poll di stato), enum
+>     `Ev60NumpadPosition` (None/Left/Right). `MainWindow.Everest60.cs`:
+>     `ApplyEv60NumpadPosition` sposta `CvsEv60Numpad` a sinistra o a destra
+>     di `CvsEv60Keyboard` dentro `SpEv60Layout` e specchia solo l'immagine
+>     di sfondo (`BrushEv60NumpadBg.RelativeTransform`, non l'intero Canvas —
+>     altrimenti il testo dei tasti risulterebbe speculare) — nessun asset
+>     "numpad destra" esiste in Base Camp, riusato lo stesso
+>     `everest60_numpad.png` specchiato.
+>   - **Rimosso** il toggle manuale "Numpad attached" (checkbox +
+>     `AppSettings.Everest60NumpadAttached`, ora dead code eliminato):
+>     sostituito da uno stato di sola lettura auto-aggiornato ogni 3s
+>     insieme al poll di connessione esistente (`Ev60RefreshStatus`).
+>   - Build pulita, smoke-test avvio OK. **Non verificato su hardware
+>     fisico** (nessun Everest 60 con numpad disponibile in questa sessione)
+>     — da testare: valore reale di `position` per sinistra/destra/assente,
+>     e se il posizionamento a destra (mai visto in nessun asset Base Camp)
+>     è visivamente corretto.
+>
+> Previous: 2026-07-11 (Makalu 67: hotspot del mouse ripiazzati con
+> coordinate pixel-misurate, allineate al diagramma numerato ufficiale):
+>   - **Richiesta utente**: allineare gli hotspot cliccabili sull'immagine
+>     Makalu ("Imposta i bottoni del mouse... esattamente nella stessa
+>     posizione di questo screenshot e con gli stessi numeri") — screenshot
+>     fornito è il diagramma di riferimento Mountain (stessa foto di
+>     `Assets/makalu_mouse.png`, con badge numerati 1/2 top, 3 wheel, 5 sopra
+>     4 sul lato, 6 sotto la wheel).
+>   - **Root cause**: `MkHotspotPos67` in `MainWindow.Makalu.cs` era
+>     "hand-estimated" (commento originale), mai misurato sui pixel reali —
+>     in particolare 4 (back) e 5 (forward) erano invertiti rispetto al
+>     diagramma (4 sopra/5 sotto invece di 5 sopra/4 sotto), e 3/6 erano
+>     troppo in alto (sulla curva superiore del case, non sulla wheel/DPI).
+>   - **Fix**: misurate le coordinate pixel esatte su `makalu_mouse.png`
+>     (364×809) con una griglia overlay + crop zoomati (PowerShell +
+>     System.Drawing), poi convertite nello spazio canvas dell'app (190×422,
+>     scala 190/364≈0.522). Nuovi valori in `MkHotspotPos67`: `[1]=(62,100)`,
+>     `[2]=(128,100)`, `[3]=(95,133)`, `[4]=(15,218)`, `[5]=(15,195)`,
+>     `[6]=(95,238)`. Verificato visivamente renderizzando i cerchi hotspot
+>     sull'immagine alla stessa scala usata dall'app: allineamento coerente
+>     col diagramma di riferimento. **`MkHotspotPosMax`** (layout a 8 bottoni)
+>     **non toccato** — nessun diagramma di riferimento equivalente visto per
+>     quel modello, resta hand-estimated.
+>
+> Previous: 2026-07-11 (Everest 60: ordine sezioni come Everest Max +
+> Keycap Style importato da Everest Max, applicato anche al numpad):
+>   - **Richiesta utente**: "ordina le sezioni come in everest max (key
+>     binding, lighting, settings)" e "importa da everest anche il tipo di
+>     keycap e applicalo anche al numpad".
+>   - **Ordine sezioni**: sidebar SECTIONS riordinata Key Binding → Lighting
+>     → Settings (prima era Lighting → Key Binding → Settings), stesso ordine
+>     di Everest Max. La sezione di default all'apertura del tab resta
+>     "Lighting" (`RbEv60SecLighting.IsChecked` in `InitEv60SectionNav`), non
+>     cambiata: aprire "Key Binding" per default avrebbe reso eager il
+>     caricamento dell'SDK `Everest360_USB.dll` (mai verificato su hardware),
+>     scelta deliberatamente conservativa non richiesta esplicitamente.
+>   - **Keycap Style importato**: aggiunto `CbEv60KeycapStyle` alla sezione
+>     Settings, stessi 4 valori di Everest Max (Normal/Translucent/Pudding/
+>     ReversePudding, `KeycapStyleChoices`/`KeycapStyle` riusati as-is da
+>     `MainWindow.KeycapAppearance.cs`). Adattamento necessario: l'Everest 60
+>     non ha un readback LED live (nessun `GetColorData` equivalente) con cui
+>     gli stili di Everest Max normalmente si "mescolano" — il segnale usato
+>     al suo posto è il colore dipinto dall'utente nella sezione Key Lighting
+>     (`Ev60RgbPanel.TryGetPaintedColor`, nuovo metodo). Riscritta
+>     `ApplyEv60KeycapAppearanceToAllKeys` sul modello a due fasi di Everest
+>     Max (baseline statica + overlay "live") invece dell'assegnazione diretta
+>     precedente; nuovi `_ev60KeyVisuals`/`_ev60NumpadVisuals`
+>     (`Dictionary<int, KeyVisual>`/`List<KeyVisual>`, riuso del record
+>     `KeyVisual` di `MainWindow.KeycapAppearance.cs`) catturano il layer
+>     `LedHalo` di ogni tasto via `FindName` sul template condiviso
+>     `EverestKeyStyle`.
+>   - **Applicato anche al numpad**: il numpad decorativo ora riceve la
+>     stessa baseline di Keycap Appearance (colore base/testo + stile) dei
+>     64 tasti principali — sempre nello stato "off" dello stile scelto,
+>     dato che non è mai dipingibile (nessun protocollo per questo
+>     accessorio, invariato).
+>   - Build pulita (`build-check.bat`, 0 errori/0 warning), smoke-test avvio
+>     K2.App locale OK. Rimosso `_ev60KeyboardButtons` (dizionario diventato
+>     dead code dopo il refactor, sostituito da `_ev60KeyVisuals`).
+>
+> Previous: 2026-07-11 (Everest 60: Key Binding reale via Everest360_USB.dll
+> + riorganizzazione sezioni Lighting/Settings):
+>   - **Richiesta utente**: fondere Key Lighting/Side Ring dentro "Lighting",
+>     creare le sezioni Key Binding e Settings (Game Mode/Keycap Appearance/
+>     Layout/Sync across profiles), verificare se si può riconoscere il lato
+>     di attacco del numpad.
+>   - **Numpad sinistra/destra**: nessuna fonte (Base Camp, BaseCampLinux) ha
+>     mai un comando di rilevamento — unico asset esistente `EV60_NumpadLeft.png`,
+>     nessun `NumpadRight`. Il numpad si attacca solo a sinistra: nessun
+>     selettore lato necessario, il toggle sì/no esistente è già corretto.
+>   - **Key Binding — scoperta chiave**: `BaseCamp.Service.Helpers.Everest60`
+>     (wrapper di `Everest360_USB.dll`) espone `ChangeKey(int,int)`/
+>     `ChangeFnKey(int,int)`/`ChangeShortcutKey(int,int,int)`/
+>     `SetSingleMacroContent`/`SetKeyCallBack` con parametri primitivi, NON
+>     struct opache come gli export di lighting (`ChangeEffect` ecc. — quella
+>     parte della nota architetturale originale resta valida, era solo
+>     incompleta). Due sessioni di decompile (`BaseCamp.UI.dll`
+>     `Everest60Operations.SetEV60KeyBingingInHW` + `GetEverest60KeyBindings_English`)
+>     hanno confermato via IL letterale: entrambi i parametri di `ChangeKey`
+>     sono `DLLKeyId` (255=reset/disabilita); `ChangeShortcutKey` usa bitmask
+>     modificatori ctrl=1/shift=2/alt=4/win=8; `ChangeFnKey` riusa la STESSA
+>     numerazione DLLKeyId del layer principale (distinto solo da `LayerType`);
+>     `SetKeyCallBack` esiste identico a Everest Max/MacroPad. Estratta la
+>     tabella completa DLLKeyId per i 64 tasti fisici (catalogo English/US,
+>     `Everest60Operations.GetEverest60KeyBindings_English`), verificata per
+>     corrispondenza posizionale 1:1 con l'ordine righe di
+>     `Everest60KeyboardLayout.MainBoard` (già usato per l'illuminazione).
+>     **Non confermati**: i codici numerici delle azioni media/OS per
+>     `SetSingleMacroContent` (nessun catalogo enumerabile trovato nel tempo
+>     a disposizione) — implementati con ordinamento segnaposto 1-7, chiaramente
+>     marcati "unconfirmed" in UI e codice, pronti per la correzione quando si
+>     troverà la fonte reale o si potrà fare una USB capture su hardware.
+>   - **Nuovi file**: `Services/Everest60SdkNative.cs` (P/Invoke
+>     `Everest360_USB.dll`, mirror di `EverestSdkNative.cs`),
+>     `Services/Everest60SdkService.cs` (facade open-once, come `EverestService`
+>     — non per-call come il path raw-HID esistente), `Services/Everest60RemapData.cs`
+>     (catalogo DLLKeyId + tabella LED-index→DLLKeyId + costanti modificatori),
+>     `Everest60KeyBindingPanel.xaml(.cs)` (UserControl, terza sezione SECTIONS
+>     "Key Binding": clic su un tasto della tastiera già disegnata seleziona
+>     la sorgente, poi si sceglie Remap Key/Fn Layer/Shortcut/Media e si
+>     applica — scrittura diretta in firmware, NESSUN coinvolgimento di
+>     `IActionHost`/`ButtonActionEngine`, stesso pattern del remap tasti
+>     Makalu). SDK aperto lazy solo alla prima visita della sezione (non
+>     eager all'avvio come il path raw-HID di lighting).
+>   - **Limite noto non verificabile in questa sessione** (nessun device
+>     collegato): se tenere aperta la sessione SDK (`Everest360_USB.dll`)
+>     contemporaneamente alle brevi burst raw-HID per l'illuminazione causi
+>     contesa sulla stessa interfaccia USB — commentato esplicitamente nel
+>     codice, da verificare su hardware reale.
+>   - **Riorganizzazione sezioni**: SECTIONS ora `Lighting` (RGB preset +
+>     Side Ring + Key Lighting per-tasto, fuse in un solo pannello scrollabile
+>     dentro `Everest60RgbPanel`, invece di 3 voci separate) → `Key Binding`
+>     (nuovo) → `Settings` (nuovo: Keycap Appearance funzionante — colore
+>     base/testo solo cosmetico sull'overlay on-screen, nessun blend con LED
+>     live perché questo device non ha un equivalente di `GetColorData`;
+>     Layout = ComboBox disabilitata con tooltip, **non implementata**:
+>     nessuna fonte ha ancora un catalogo legende multi-lingua verificato per
+>     questo layout a 64 tasti). **Deciso esplicitamente fuori scope** (con
+>     conferma utente): Game Mode (nessun comando firmware per-device,
+>     l'unica via sarebbe un hook globale di sistema — semantica diversa dal
+>     vero Game Mode via firmware) e "Sync across profiles" (l'Everest 60 non
+>     ha alcun cambio-profilo in K2 al momento, checkbox senza effetto).
+>   - Build pulita (`build-check.bat`, 0 errori/0 warning) dopo un fix
+>     (using mancante per `GetValueOrDefault` su `IReadOnlyDictionary` in
+>     `Everest60KeyBindingPanel.xaml.cs`). Smoke-test avvio K2.App locale OK
+>     (nessun crash XAML). **Key Binding non verificato su hardware fisico**
+>     in questa sessione — da testare: apertura SDK in parallelo al path
+>     raw-HID, `ChangeKey`/`ChangeFnKey`/`ChangeShortcutKey` reali, e i codici
+>     media placeholder.
+>
+> Previous: 2026-07-11 (MacroPad: LED preview live — root-caused e risolto
+> il bug "solo M1 si accende", VERIFICATO su hardware reale):
+>   - **Richiesta utente**: "il led preview su macropad funziona, ma solo per
+>     il tasto M1, riusciamo a estenderlo per tutti e 12 i tasti?"
+>   - **Diagnosi**: il log runtime (`matrixToIndex=12 visuals=12 nonZero=12`)
+>     mostrava che la mappatura wMatrix→tasto e i 12 overlay erano già a
+>     posto — il `nonZero` era calcolato su tutto il buffer 126 slot di
+>     `GetColorData`, non sui 12 indici reali, quindi non provava che i colori
+>     arrivassero su tutti e 12 i tasti. Aggiunto un log per-tasto
+>     (`M{n}(led=..)=RRGGBB`): confermava colore reale e cangiante solo su M1
+>     (`led=8`), sempre `000000` su M2-M12 (`led=17,26,35,...,125`).
+>   - **Root cause**: la nota del 2026-07-10 (vedi entry sotto) assumeva che il
+>     codice `wMatrix` del `KEY_CALLBACK` (usato per riconoscere quale tasto è
+>     stato premuto in fase di remap) fosse DIRETTAMENTE l'indice dell'array
+>     colori di `GetColorData` — mai verificato indice-per-indice. Dump
+>     completo dei 126 slot non-zero durante un effetto rainbow: i dati reali
+>     stavano contigui agli indici **0-11** (due gruppi di colore, 0-5 e
+>     6-11), non ai valori wMatrix. M1 "funzionava" per puro caso: wMatrix=8
+>     cade comunque dentro il range 0-11 valido; gli altri wMatrix (17,26,...)
+>     puntano a slot del buffer sempre a zero. Stesso tranello già visto per
+>     Everest (VK code vs DLLMatrixIndex, due domini diversi), qui si era
+>     ripetuto per analogia senza verifica reale.
+>   - **Fix**: `MainWindow.LedPreview.cs::OnMacroPadColorsUpdated` non usa più
+>     `_matrixToIndex` per leggere i colori — legge `colors[btnIndex]`
+>     direttamente (indice = posizione fisica del tasto, M1=0..M12=11).
+>     `_matrixToIndex` resta invariato per il suo scopo originale (identità
+>     tasto premuto/remap), dominio indipendente e non toccato. Aggiornato il
+>     commento in `Models/LedMatrixMapping.cs` (sezione MACROPAD) con la
+>     spiegazione corretta.
+>   - **Verificato su hardware reale 2026-07-11**: "funziona, perfetto" —
+>     tutti e 12 i tasti mostrano ora il colore live nella preview.
+>
+> Previous: 2026-07-11 (Everest 60: tastiera interattiva a 64 tasti +
+> numpad decorativo + editor LED per-tasto):
+>   - **Richiesta utente**: portare l'Everest 60 allo stesso livello di
+>     gestione "tastiera" dell'Everest Max — tasti generati da layout reale,
+>     supporto numpad accessorio, "LED preview". L'utente ha allegato in
+>     chat le due immagini piatte board/numpad; sono state trovate identiche
+>     in Base Camp (`wwwroot/images/Everest60/keyboardv2.png` e
+>     `numpadv2.png`) invece di provare a estrarle dalla chat.
+>   - **Layout 64 tasti**: portato 1:1 da `BaseCampLinux/shared/ui_helpers.py`
+>     `_build_kb60_layout()` (label + indice LED 0-63 + geometria), riscalato
+>     da 0.82 (Tk) a scala nativa K2 (30px/2px). Indici LED verificati contro
+>     `Everest60Protocol.LedIndex` (già in K2, stesso ordine) — cross-check
+>     tra due fonti indipendenti. Nuovo `Models/Everest60KeyboardLayout.cs`
+>     (`MainBoard` 64 voci paintable + `Numpad` stimato a mano, decorativo).
+>   - **Numpad**: nessuna fonte (Base Camp, BaseCampLinux `has_numpad=False`,
+>     schema DB `Everest60Settings`/`Everest60KeyBidings` senza campo plug)
+>     ha mai avuto un protocollo LED/remap per l'accessorio — trattato come
+>     puramente decorativo (`MatrixId=-1`, `IsHitTestVisible=False`), toggle
+>     "Numpad attached" in `AppSettings.Everest60NumpadAttached`.
+>   - **"Key Lighting"**: nuova terza sezione (`RbEv60SecKeys`/`SecKeys` in
+>     `Everest60RgbPanel`) — paint mode per-tasto sui 64 tasti principali,
+>     Applica invia via nuovo `Everest60Service.SetCustomKeys()` →
+>     `Everest60Protocol.SendCustom` (già esistente, prima usato solo per
+>     l'anello). Preview è software-only: nessun `GetColorData` equivalente
+>     per questo device raw-HID. Stesso limite noto della side ring: Custom
+>     mode indirizza tasti+anello insieme, applicare l'uno spegne l'altro.
+>   - **XAML**: sostituita l'immagine 3D decorativa del tab con due
+>     `Canvas`+`ImageBrush` (board 504×186 su `everest60_board.png`, numpad
+>     154×186 su `everest60_numpad.png`, entrambi copiati 1:1 da Base Camp),
+>     stesso pattern di `CvsEvKeyboard`/`keybg.png` dell'Everest Max. Riusa
+>     `EverestKeyStyle` esistente (nessuno stile nuovo necessario).
+>   - Build pulita (`build-check.bat`, 0 errori/0 warning, entrambe le
+>     solution). **Non verificato su hardware fisico** in questa sessione
+>     (nessun Everest 60 disponibile) — da testare: geometria dei 64 tasti
+>     sovrapposta a `everest60_board.png`, paint mode → `SetCustomKeys`.
+>   - Deciso esplicitamente FUORI scope (con conferma utente via
+>     AskUserQuestion): niente multi-lingua ISO per il layout (un solo
+>     layout ANSI-like, come BaseCampLinux), niente anteprima animata dei
+>     preset RGB sulla tastiera on-screen, niente remap/azioni per-tasto
+>     (protocollo firmware ancora ignoto — invariato).
+>
+> Previous: 2026-07-10 (Everest 60: stesso layout a 3 colonne di Makalu,
 > applicate le stesse precauzioni fin da subito — nessun crash, 5/5 lanci OK):
 >   - **Richiesta utente**: "continua con Everest 60" dopo commit del fix
 >     Makalu.

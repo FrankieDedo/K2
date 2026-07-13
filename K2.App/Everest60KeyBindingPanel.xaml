@@ -1,0 +1,73 @@
+<UserControl x:Class="K2.App.Everest60KeyBindingPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core">
+    <!-- "Key Binding" section content for the Everest 60 tab — DIRECT child of
+         MainWindow.xaml (same reasoning as Everest60RgbPanel/MakaluDpiRemapPanel:
+         see MakaluDpiRemapPanel.xaml for why not nested). Unlike Makalu's remap
+         (which draws its own hotspot dots on the device image), this reuses the
+         64-key overlay already built for lighting (CvsEv60Keyboard in
+         MainWindow.xaml/MainWindow.Everest60.cs) as the key picker: clicking a
+         key while this section is active calls SelectKey() below. Writes go
+         straight to the keyboard's firmware via Everest60SdkNative
+         (ChangeKey/ChangeFnKey/ChangeShortcutKey/SetSingleMacroContent) — no
+         IActionHost/ButtonActionEngine involvement, same as Makalu's button
+         remap (K2's own action engine has no passthrough in Base Camp's own
+         Everest 60 function taxonomy — see MainWindow.Everest60KeyBinding.cs). -->
+    <StackPanel>
+        <TextBlock Text="{loc:Get ev60_key_binding}" FontWeight="Bold" Margin="0,0,0,6"/>
+        <TextBlock Text="{loc:Get ev60_key_binding_hint}"
+                   Foreground="#9A9AA2" FontStyle="Italic"
+                   TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+        <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="{loc:Get ev60_selected_key}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBlock x:Name="LblEv60SelectedKey" Text="—" FontWeight="Bold"
+                       VerticalAlignment="Center" Foreground="{StaticResource K2AccentBrush}"/>
+        </WrapPanel>
+
+        <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="{loc:Get ev60_remap_mode}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <ComboBox x:Name="CbEv60RemapMode" Width="150"
+                      SelectionChanged="CbEv60RemapMode_SelectionChanged"/>
+        </WrapPanel>
+
+        <!-- Remap Key / Fn Layer: pick a target key -->
+        <WrapPanel x:Name="PnlEv60RemapTargetKey" Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="{loc:Get ev60_target_key}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <ComboBox x:Name="CbEv60TargetKey" Width="180"/>
+        </WrapPanel>
+
+        <!-- Shortcut: modifiers + a key -->
+        <WrapPanel x:Name="PnlEv60RemapShortcut" Orientation="Horizontal" Margin="0,0,0,6" Visibility="Collapsed">
+            <CheckBox x:Name="CkEv60ModCtrl"  Content="Ctrl"  Margin="0,0,8,0" VerticalAlignment="Center"/>
+            <CheckBox x:Name="CkEv60ModShift" Content="Shift" Margin="0,0,8,0" VerticalAlignment="Center"/>
+            <CheckBox x:Name="CkEv60ModAlt"   Content="Alt"   Margin="0,0,8,0" VerticalAlignment="Center"/>
+            <CheckBox x:Name="CkEv60ModWin"   Content="Win"   Margin="0,0,10,0" VerticalAlignment="Center"/>
+            <ComboBox x:Name="CbEv60ShortcutKey" Width="150"/>
+        </WrapPanel>
+
+        <!-- Media / OS action -->
+        <WrapPanel x:Name="PnlEv60RemapMedia" Orientation="Horizontal" Margin="0,0,0,6" Visibility="Collapsed">
+            <TextBlock Text="{loc:Get ev60_media_action}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <ComboBox x:Name="CbEv60MediaAction" Width="180"/>
+        </WrapPanel>
+
+        <WrapPanel Orientation="Horizontal">
+            <Button x:Name="BtnEv60RemapApply" Content="{loc:Get apply_to_device}" Padding="8,2" Margin="0,0,6,0"
+                    Click="BtnEv60RemapApply_Click" Style="{StaticResource K2IconAccentButton}" Tag="&#xE73E;"/>
+            <Button x:Name="BtnEv60RemapReset" Content="{loc:Get ev60_remap_reset}" Padding="8,2" Margin="0,0,6,0"
+                    Click="BtnEv60RemapReset_Click" Style="{StaticResource K2IconButton}" Tag="&#xE74D;"/>
+            <Button x:Name="BtnEv60RemapSave" Content="{loc:Get save}" Padding="8,2"
+                    Click="BtnEv60RemapSave_Click" Style="{StaticResource K2IconButton}" Tag="&#xE105;"
+                    ToolTip="{loc:Get ev60_remap_save_tip}"/>
+        </WrapPanel>
+        <TextBlock x:Name="LblEv60RemapStatus" Margin="0,6,0,0" FontSize="11"
+                   Foreground="{StaticResource K2TextMutedBrush}"/>
+
+        <Separator Style="{StaticResource K2SideSeparator}" Margin="0,10,0,8"/>
+        <TextBlock Text="{loc:Get ev60_key_binding_unverified}" TextWrapping="Wrap"
+                   Foreground="{StaticResource K2TextMutedBrush}" FontStyle="Italic" FontSize="11"
+                   MaxWidth="640"/>
+    </StackPanel>
+</UserControl>

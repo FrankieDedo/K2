@@ -78,6 +78,12 @@ public partial class MainWindow
     /// <summary>Direction index restored from settings (applied if valid for the effect).</summary>
     private int _macroSavedDirIndex;
 
+    /// <summary>Backs GridMacroDirection's segmented buttons — mirrors what
+    /// CbMacroDirection.SelectedIndex used to provide before the direction
+    /// ComboBox became a dynamically-rebuilt RadioButton row (see
+    /// SegmentedButtonGroup).</summary>
+    private int _macroDirIndex;
+
     /// <summary>
     /// Aligns LED controls to the selected effect's capabilities: enables/
     /// disables speed, direction (with the right options) and rainbow.
@@ -97,20 +103,17 @@ public partial class MainWindow
             // requested by the user after testing: "andrebbe tolta la combo di
             // velocità e direzione per gli effetti che non ce l'hanno".
             PnlMpSpeed.Visibility = caps.Speed ? Visibility.Visible : Visibility.Collapsed;
-            CbMacroSpeed.IsEnabled = caps.Speed;
 
             if (caps.DirLabels.Length > 0)
             {
-                CbMacroDirection.ItemsSource = caps.DirLabels;
                 int di = (_macroSavedDirIndex >= 0 && _macroSavedDirIndex < caps.DirLabels.Length) ? _macroSavedDirIndex : 0;
-                CbMacroDirection.SelectedIndex = di;
-                CbMacroDirection.IsEnabled = true;
+                _macroDirIndex = di;
+                SegmentedButtonGroup.Rebuild(GridMacroDirection, "MacroDirection", caps.DirLabels, RbMacroDirection_Checked, di);
                 PnlMpDirection.Visibility = Visibility.Visible;
             }
             else
             {
-                CbMacroDirection.ItemsSource = null;
-                CbMacroDirection.IsEnabled = false;
+                GridMacroDirection.Children.Clear();
                 PnlMpDirection.Visibility = Visibility.Collapsed;
             }
 
@@ -133,11 +136,8 @@ public partial class MainWindow
             CbMacroEffect.ItemsSource       = MacroEffectList;
             CbMacroEffect.DisplayMemberPath = "Label";
 
-            // 5 positions -> wire scale 0/25/50/75/100, same as Everest.
-            CbMacroSpeed.ItemsSource     = new[] { "1 — slow", "2", "3", "4", "5 — fast" };
-
             CbMacroEffect.SelectedIndex    = 2; // Wave
-            CbMacroSpeed.SelectedIndex     = 2; // middle
+            SldMacroSpeed.Value             = 50; // wire scale 0/25/50/75/100, same as Everest.
             SldMacroBrightness.Value       = 100;
 
             LoadMacroLedFromStore();
@@ -161,7 +161,7 @@ public partial class MainWindow
         if (IntSetting("macroled.effect") is int eIdx)
             for (int i = 0; i < MacroEffectList.Length; i++)
                 if ((byte)MacroEffectList[i].Eff == eIdx) { CbMacroEffect.SelectedIndex = i; break; }
-        if (IntSetting("macroled.speed")      is int sp && sp is >= 0 and <= 4) CbMacroSpeed.SelectedIndex = sp;
+        if (IntSetting("macroled.speed")      is int sp && sp is >= 0 and <= 100) SldMacroSpeed.Value = sp;
         // Direction is set by UpdateMpCapabilities (depends on effect);
         // here we only restore the saved index, applied later if valid.
         if (IntSetting("macroled.direction")  is int dr && dr >= 0) _macroSavedDirIndex = dr;
@@ -183,8 +183,8 @@ public partial class MainWindow
         if (!_macroLedInitialized || _macroLedSuppress) return;
         if (CbMacroEffect.SelectedItem is not MacroEffectChoice pick) return;
         _store.SetSetting("macroled.effect",     ((int)(byte)pick.Eff).ToString());
-        _store.SetSetting("macroled.speed",      CbMacroSpeed.SelectedIndex.ToString());
-        _store.SetSetting("macroled.direction",  CbMacroDirection.SelectedIndex.ToString());
+        _store.SetSetting("macroled.speed",      ((int)SldMacroSpeed.Value).ToString());
+        _store.SetSetting("macroled.direction",  _macroDirIndex.ToString());
         _store.SetSetting("macroled.brightness", ((int)SldMacroBrightness.Value).ToString());
         _store.SetSetting("macroled.rainbow",    CkMacroRainbow.IsChecked == true ? "1" : "0");
         _store.SetSetting("macroled.color1",     _macroColor1.ToString());
@@ -215,8 +215,17 @@ public partial class MainWindow
         ApplyCurrentMacroEffect();
     }
 
-    private void CbMacroEffectParam_Changed(object sender, SelectionChangedEventArgs e) =>
+    private void SldMacroSpeed_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (LblMacroSpeed != null) LblMacroSpeed.Text = $"{(int)SldMacroSpeed.Value}%";
         ApplyCurrentMacroEffect();
+    }
+
+    private void RbMacroDirection_Checked(object sender, RoutedEventArgs e)
+    {
+        _macroDirIndex = (int)((RadioButton)sender).Tag;
+        ApplyCurrentMacroEffect();
+    }
 
     private void CkMacroRainbow_Click(object sender, RoutedEventArgs e) =>
         ApplyCurrentMacroEffect();
@@ -308,16 +317,16 @@ public partial class MainWindow
         var effect = pick.Eff;
         var caps   = CapsFor(effect);
 
-        // Speed: 5 UI positions -> scale 0..100 (pos0=0 slow … pos4=100 fast).
+        // Speed: slider already snaps to 0/25/50/75/100 (scale 0..100, 0=slow, 100=fast).
         // Static/Off ignore it (EffData.New/BlockData.New force bySpeed=255 for
         // Static; Off doesn't reach either path with a meaningful value).
-        byte speedByte = (byte)(caps.Speed ? Math.Clamp(CbMacroSpeed.SelectedIndex, 0, 4) * 25 : 0);
+        byte speedByte = (byte)(caps.Speed ? (int)SldMacroSpeed.Value : 0);
 
         // Direction: per-effect byte (Wave Right0/Down2/Left4/Up6,
         // Tornado CW9/CCW10). -1 = effect has no direction.
         int dirByte = -1;
-        if (caps.DirCodes.Length > 0 && CbMacroDirection.SelectedIndex >= 0)
-            dirByte = caps.DirCodes[Math.Clamp(CbMacroDirection.SelectedIndex, 0, caps.DirCodes.Length - 1)];
+        if (caps.DirCodes.Length > 0)
+            dirByte = caps.DirCodes[Math.Clamp(_macroDirIndex, 0, caps.DirCodes.Length - 1)];
 
         bool rainbow = caps.Rainbow && CkMacroRainbow.IsChecked == true;
         int  bright  = (int)SldMacroBrightness.Value;

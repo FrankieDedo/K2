@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using K2.Core;
+using K2.Core.Services;
 
 namespace K2.App;
 
@@ -213,6 +214,15 @@ public partial class App : Application
         // Initialize localization before any UI is created.
         Core.Loc.Init();
 
+        // Start each run with a fresh log — only when this instance actually owns
+        // the single-instance lock, so a blocked second launch never wipes the
+        // running instance's log. Crash log is untouched: it must survive a
+        // crash-triggered restart so the previous run's failure stays diagnosable.
+        if (_singleInstanceGranted)
+        {
+            try { File.Delete(LogPath); } catch { }
+        }
+
         WriteLog($"=== App start {DateTime.Now:O} pid={Environment.ProcessId} " +
                  $"arch={(Environment.Is64BitProcess ? "x64" : "x86")} lang={Core.Loc.CurrentLang} ===");
 
@@ -234,6 +244,12 @@ public partial class App : Application
     {
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        // Apply the user's saved UI font before any window is created (see
+        // AppSettings.AppFontFamily / Settings > Font). Safe here: App.xaml's
+        // K2Theme.xaml merge (which declares the K2AppFontFamily resource this
+        // overrides) already ran as part of base.OnStartup() above.
+        FontCatalog.Apply(AppSettings.AppFontFamily);
 
         if (!_singleInstanceGranted)
         {

@@ -145,6 +145,8 @@
   <string name="settings_k2_autostart">Avvia K2 all'avvio di Windows</string>
   <string name="settings_start_min_tray">Avvia direttamente ridotto a icona (tray)</string>
   <string name="settings_start_min_tray_hint">K2 si avvia con i driver attivi ma la finestra nascosta nella tray — riaprila in qualsiasi momento dall'icona.</string>
+  <string name="settings_font_family">Carattere</string>
+  <string name="settings_font_family_hint">Cambia subito il carattere dell'interfaccia in tutta l'app, senza riavvio.</string>
   <string name="tray_show">Mostra K2</string>
   <string name="tray_exit">Esci</string>
 
@@ -208,7 +210,25 @@
   <string name="ev60_side_ring">Anello laterale</string>
   <string name="ev60_side_apply">Applica all'anello laterale</string>
   <string name="ev60_side_hint">Applicare un colore all'anello laterale porta i tasti principali in modalità Custom (si spengono) — il dispositivo indirizza l'anello solo tramite quella modalità.</string>
-  <string name="ev60_log">Log</string>
+  <string name="ev60_key_lighting">Illuminazione tasti</string>
+  <string name="ev60_key_lighting_hint">Attiva la modalità pennello, scegli un colore e clicca sui tasti della tastiera qui sopra per colorarli. È solo una preview software — questa scheda raw-HID non ha un readback live. Applicare spegne l'anello laterale (stesso limite di modalità Custom del pannello anello).</string>
+  <string name="ev60_numpad_decorative_tip">Solo decorativo — nessun protocollo di illuminazione/remap noto per questo accessorio.</string>
+  <string name="ev60_key_binding">Key Binding</string>
+  <string name="ev60_key_binding_hint">Clicca su un tasto della tastiera qui sopra per selezionarlo, poi scegli cosa deve fare.</string>
+  <string name="ev60_selected_key">Tasto selezionato:</string>
+  <string name="ev60_remap_mode">Tipo:</string>
+  <string name="ev60_target_key">Tasto destinazione:</string>
+  <string name="ev60_media_action">Azione:</string>
+  <string name="ev60_remap_reset">Ripristina tasto</string>
+  <string name="ev60_remap_save_tip">Rende permanenti i binding attuali (sopravvivono a scollegamento/riavvio).</string>
+  <string name="ev60_key_binding_unverified">Scrive direttamente nel firmware della tastiera tramite l'SDK vendor (Everest360_USB.dll) — non ancora verificato su hardware reale. I codici azione media/OS non sono confermati (ordine segnaposto); i tasti destinazione di Remap Key/Fn Layer/Shortcut sono stati estratti dal catalogo decompilato di Base Camp.</string>
+  <string name="ev60_key_binding_unmapped">nessun DLLKeyId — non rimappabile</string>
+  <string name="ev60_key_binding_select_first">Seleziona prima un tasto sulla tastiera.</string>
+  <string name="ev60_key_binding_not_open">Driver SDK Everest 60 non aperto — la tastiera è collegata?</string>
+  <string name="ev60_key_binding_select_target">Seleziona prima una destinazione.</string>
+  <string name="ev60_remap_applied">Applicato.</string>
+  <string name="ev60_remap_failed">Fallito.</string>
+  <string name="ev60_remap_reset_done">Tasto ripristinato.</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
        TAB MAKALU (mouse — raw-HID, nessun SDK vendor — vedi MakaluHidNative)
@@ -268,7 +288,9 @@
   <string name="makalu_setting_debounce">Risposta tasti:</string>
   <string name="makalu_setting_angle">Angle snapping:</string>
   <string name="makalu_setting_on">On</string>
+  <string name="makalu_setting_off">Off</string>
   <string name="makalu_setting_liftoff">Distanza lift-off:</string>
+  <string name="makalu_setting_liftoff_low">Bassa</string>
   <string name="makalu_setting_liftoff_high">Alta</string>
 
   <!-- Display Dial -->
@@ -515,6 +537,12 @@
   <string name="ev_imported_bc">Importati {0} profili Everest ({1} tasti) da Base Camp.</string>
   <string name="mp_no_profiles_in_bc">Nessun profilo MacroPad trovato nel database Base Camp.</string>
   <string name="mp_imported_bc">Importati {0} profili MacroPad ({1} tasti) da Base Camp.</string>
+  <!-- Import Makalu -->
+  <string name="mk_no_profiles_in_bc">Nessun profilo Makalu trovato nel database Base Camp.</string>
+  <string name="mk_imported_bc">Importati {0} profili Makalu ({1} pulsanti rimappati) da Base Camp.</string>
+  <!-- Import Everest 60 -->
+  <string name="ev60_no_profiles_in_bc">Nessun profilo Everest 60 trovato nel database Base Camp.</string>
+  <string name="ev60_imported_bc">Importati {0} profili Everest 60 ({1} tasti) da Base Camp.</string>
   <!-- Navigazione cartelle DisplayPad -->
   <string name="dp_back">Indietro</string>
 

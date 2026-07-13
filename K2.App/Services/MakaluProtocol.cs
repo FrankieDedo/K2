@@ -37,6 +37,22 @@ internal static class MakaluProtocol
     public const int DpiMax = 19000;
     public const int DpiStep = 50;
 
+    /// <summary>Rounds to the nearest valid DPI step (always a multiple of 50 —
+    /// the firmware's actual granularity). Used for the wire-level clamp in
+    /// <see cref="SetAllDpi"/>.</summary>
+    public static int QuantizeDpi(int dpi) => (int)Math.Round(dpi / (double)DpiStep) * DpiStep;
+
+    /// <summary>Rounds to the nearest step of a coarser, tiered grid (50 below
+    /// 4000, 100 between 4000-10000, 500 above) — every result is still a
+    /// multiple of 50, so it's wire-compatible with <see cref="QuantizeDpi"/>.
+    /// Used by the DPI sliders (main levels + sniper) so dragging across the
+    /// full 50-19000 range doesn't require 380 micro-steps at the low end.</summary>
+    public static int QuantizeDpiTiered(int dpi)
+    {
+        int step = dpi < 4000 ? 50 : dpi < 10000 ? 100 : 500;
+        return (int)Math.Round(dpi / (double)step) * step;
+    }
+
     public static readonly int[] DebounceValuesMs = { 2, 4, 6, 8, 10, 12 };
 
     /// <summary>Function code (category, code) for button remap, keyed by internal name.</summary>

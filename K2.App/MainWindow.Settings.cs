@@ -11,6 +11,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using K2.Core;
+using K2.Core.Services;
 
 namespace K2.App;
 
@@ -41,7 +42,40 @@ public partial class MainWindow
         CkStartMinToTray.IsChecked = AppSettings.StartMinimizedToTray;
         CkK2Autostart.IsChecked = Services.K2AutostartService.IsEnabled();
 
+        InitAppFontCombo();
+
         ApplyDebugModeToAllDevices(debug);
+    }
+
+    /// <summary>Populates the Font combo with <see cref="FontCatalog.Options"/> and
+    /// selects the persisted choice (default Roboto). The font itself is already
+    /// applied at process startup (see App.OnStartup); this only drives the UI.</summary>
+    private void InitAppFontCombo()
+    {
+        CmbAppFont.Items.Clear();
+        foreach (var opt in FontCatalog.Options)
+            CmbAppFont.Items.Add(new ComboBoxItem { Content = opt.DisplayName, Tag = opt.Key });
+
+        string current = AppSettings.AppFontFamily;
+        CmbAppFont.SelectedIndex = 0;
+        for (int i = 0; i < CmbAppFont.Items.Count; i++)
+        {
+            if ((string)((ComboBoxItem)CmbAppFont.Items[i]).Tag == current)
+            {
+                CmbAppFont.SelectedIndex = i;
+                break;
+            }
+        }
+    }
+
+    /// <summary>Persists the chosen font and applies it live to every K2 window
+    /// (see FontCatalog.Apply / K2Theme.xaml's K2AppFontFamily DynamicResource).</summary>
+    private void CmbAppFont_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (CmbAppFont.SelectedItem is not ComboBoxItem item) return;
+        string key = (string)item.Tag;
+        AppSettings.SetAppFontFamily(key);
+        FontCatalog.Apply(key);
     }
 
     private void CkCloseToTray_Click(object sender, RoutedEventArgs e)
@@ -129,11 +163,13 @@ public partial class MainWindow
         else                              AppSettings.SetLogLevel(K2LogLevel.Normal);
     }
 
-    /// <summary>Applies the centralized debug flag to Everest, MacroPad and DisplayPad at once.</summary>
+    /// <summary>Applies the centralized debug flag to every device module at once.</summary>
     private void ApplyDebugModeToAllDevices(bool debug)
     {
-        ApplyDebugMode(debug);     // Everest   — MainWindow.SectionNav.cs
-        ApplyMpDebugMode(debug);   // MacroPad  — MainWindow.Keys.cs
+        ApplyDebugMode(debug);     // Everest    — MainWindow.SectionNav.cs
+        ApplyMpDebugMode(debug);   // MacroPad   — MainWindow.Keys.cs
         ApplyDpDebugMode(debug);   // DisplayPad — MainWindow.DisplayPad.cs
+        ApplyEv60DebugMode(debug); // Everest 60 — MainWindow.Everest60.cs
+        ApplyMkDebugMode(debug);   // Makalu     — MainWindow.Makalu.cs
     }
 }

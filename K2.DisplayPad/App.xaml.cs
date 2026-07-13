@@ -47,6 +47,11 @@ public partial class App : Application
             return;
         }
 
+        // Apply the user's saved UI font (shared app_settings.json — see
+        // AppSettings.AppFontFamily / Settings > Font in K2.App) before the
+        // StartupUri window is created below.
+        Core.Services.FontCatalog.Apply(Core.AppSettings.AppFontFamily);
+
         base.OnStartup(e); // creates/shows the StartupUri window (MainWindow.xaml)
     }
 

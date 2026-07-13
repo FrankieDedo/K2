@@ -40,11 +40,20 @@ internal static class NativeDependencyResolver
     ///   <item><c>MacroPadSDK.dll</c> — MacroPad</item>
     ///   <item><c>SDKDLL.dll</c>      — Everest Max keyboard (wrapper
     ///         <c>BaseCamp.Service.Helpers.Everest</c>)</item>
+    ///   <item><c>Everest360_USB.dll</c> — Everest 60 keyboard, Key Binding +
+    ///         numpad detection only (wrapper
+    ///         <c>BaseCamp.Service.Helpers.Everest60</c> — see
+    ///         <see cref="Everest60SdkNative"/>). Lighting stays on raw HID
+    ///         and doesn't need this DLL. Added 2026-07-11 alongside
+    ///         <c>Everest60SdkNative</c>/<c>Everest60SdkService</c> — this
+    ///         list wasn't updated at the time, which meant
+    ///         <c>OpenUSBDriver</c> always threw <c>DllNotFoundException</c>
+    ///         (root cause of a "numpad not detected" report — the CLR
+    ///         never even looked in a Base Camp install, it just tried the
+    ///         default OS search path and gave up).</item>
     /// </list>
-    /// <c>Everest360_USB.dll</c> (Everest 60) is <b>not</b> in the list: K2's
-    /// Everest module doesn't use it, see comment in <see cref="EverestSdkNative"/>.
     /// </summary>
-    public static readonly string[] BaseCampNativeDlls = { "MacroPadSDK.dll", "SDKDLL.dll" };
+    public static readonly string[] BaseCampNativeDlls = { "MacroPadSDK.dll", "SDKDLL.dll", "Everest360_USB.dll" };
 
     /// <summary>Environment variable used to force the Base Camp folder.</summary>
     public const string BaseCampDirEnvVar = "K2_BASECAMP_DIR";

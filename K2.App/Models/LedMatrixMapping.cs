@@ -179,10 +179,13 @@ internal static class LedMatrixMapping
     // ==================================================================
     // MACROPAD
     // ==================================================================
-    // No translation table needed here: confirmed 2026-07-10 against a real
-    // device (user's saved device.<id>.keymap in macropad.db) that the
-    // MacroPad SDK KEY_CALLBACK's wMatrix IS DIRECTLY the GetColorData LED
-    // index (e.g. wMatrix=8,17,26,...,125 for M1..M12) — unlike Everest,
-    // there is no separate DLLMatrixIndex-style code to translate. See
-    // MainWindow.LedPreview.cs::OnMacroPadColorsUpdated.
+    // No translation table needed here, but NOT for the reason once assumed on
+    // 2026-07-10 (that wMatrix doubles as the GetColorData index) — that was
+    // disproved 2026-07-11 with a full 126-slot nonzero dump: real LED data
+    // lives contiguously at indices 0-11, not at the wMatrix values
+    // (8,17,26,...,125 for M1..M12; those are just the KEY_CALLBACK's own
+    // key-press identity code, an unrelated domain, same story as Everest's
+    // VK-vs-DLLMatrixIndex split). GetColorData's array is indexed directly by
+    // key position (0=M1 .. 11=M12), so MainWindow.LedPreview.cs::
+    // OnMacroPadColorsUpdated reads colors[btnIndex] straight, no map needed.
 }

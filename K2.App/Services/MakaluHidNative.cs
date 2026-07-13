@@ -65,12 +65,44 @@ internal static class MakaluHidNative
                 string lower = path.ToLowerInvariant();
                 if (!lower.Contains(InterfaceMarker)) continue;
 
+                // Interface 1 exposes SEVERAL HID top-level collections (col01,
+                // col02, ... — each its own device path in Windows), only one of
+                // which actually declares Feature Reports big enough for our
+                // 64-byte report. Matching on "mi_01" alone picks whichever
+                // collection Windows enumerates first, which isn't guaranteed
+                // stable across boots/reconnects — 2026-07-13: a session that
+                // landed on a different collection than before got SetFeature
+                // silently rejected (HidD_SetFeature -> false) despite the handle
+                // opening fine. Checking FeatureReportByteLength via
+                // HidP_GetCaps is the deterministic way to find the right one.
+                if (!TryGetFeatureReportLength(h, out int featureLen) || featureLen < ReportSize)
+                    continue;
+
                 log?.Invoke($"[MakaluNative] found {lower[..Math.Min(80, lower.Length)]}…");
                 return new FoundDevice(path, attrs.ProductID);
             }
         }
         finally { SetupDiDestroyDeviceInfoList(devs); }
         return null;
+    }
+
+    /// <summary>Reads the collection's declared Feature Report length via the
+    /// standard HID capabilities API — works on a handle opened with no access
+    /// rights (query-only), since it just reads the cached device descriptor,
+    /// no I/O involved.</summary>
+    private static bool TryGetFeatureReportLength(SafeFileHandle h, out int length)
+    {
+        length = 0;
+        if (!HidD_GetPreparsedData(h, out IntPtr preparsed) || preparsed == IntPtr.Zero)
+            return false;
+        try
+        {
+            if (HidP_GetCaps(preparsed, out HIDP_CAPS caps) != HIDP_STATUS_SUCCESS)
+                return false;
+            length = caps.FeatureReportByteLength;
+            return true;
+        }
+        finally { HidD_FreePreparsedData(preparsed); }
     }
 
     private static string? GetInterfacePath(IntPtr devs, ref SP_DEVICE_INTERFACE_DATA ifData,
@@ -142,6 +174,7 @@ internal static class MakaluHidNative
     private const uint GENERIC_READ = 0x80000000, GENERIC_WRITE = 0x40000000;
     private const uint FILE_SHARE_READ = 1, FILE_SHARE_WRITE = 2;
     private const uint OPEN_EXISTING = 3;
+    private const int HIDP_STATUS_SUCCESS = 0x00110000;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct SP_DEVICE_INTERFACE_DATA
@@ -154,6 +187,31 @@ internal static class MakaluHidNative
     [StructLayout(LayoutKind.Sequential)]
     private struct HIDD_ATTRIBUTES
     { public int Size; public ushort VendorID; public ushort ProductID; public ushort VersionNumber; }
+
+    /// <summary>Mirrors Windows' hidpi.h HIDP_CAPS — only FeatureReportByteLength
+    /// is actually used, but every field must be present for the layout (and
+    /// therefore the offset of that field) to match the native struct.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct HIDP_CAPS
+    {
+        public ushort Usage;
+        public ushort UsagePage;
+        public ushort InputReportByteLength;
+        public ushort OutputReportByteLength;
+        public ushort FeatureReportByteLength;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 17)]
+        public ushort[] Reserved;
+        public ushort NumberLinkCollectionNodes;
+        public ushort NumberInputButtonCaps;
+        public ushort NumberInputValueCaps;
+        public ushort NumberInputDataIndices;
+        public ushort NumberOutputButtonCaps;
+        public ushort NumberOutputValueCaps;
+        public ushort NumberOutputDataIndices;
+        public ushort NumberFeatureButtonCaps;
+        public ushort NumberFeatureValueCaps;
+        public ushort NumberFeatureDataIndices;
+    }
 
     [DllImport("setupapi.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern IntPtr SetupDiGetClassDevsW(ref Guid gClass, string? enumerator, IntPtr hwnd, uint flags);
@@ -180,6 +238,15 @@ internal static class MakaluHidNative
 
     [DllImport("hid.dll", SetLastError = true)]
     private static extern bool HidD_GetFeature(SafeFileHandle h, byte[] reportBuffer, int reportBufferLength);
+
+    [DllImport("hid.dll")]
+    private static extern bool HidD_GetPreparsedData(SafeFileHandle h, out IntPtr preparsedData);
+
+    [DllImport("hid.dll")]
+    private static extern bool HidD_FreePreparsedData(IntPtr preparsedData);
+
+    [DllImport("hid.dll")]
+    private static extern int HidP_GetCaps(IntPtr preparsedData, out HIDP_CAPS capabilities);
 
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern SafeFileHandle CreateFileW(string path, uint access, uint share,

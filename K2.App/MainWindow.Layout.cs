@@ -11,14 +11,45 @@
 // Core", only one -> plain "Everest". Skipped if the user manually renamed
 // the tab (device.name setting present) via BtnEvRename_Click.
 
+using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using K2.Core;
 
 namespace K2.App;
 
 public partial class MainWindow
 {
+    /// <summary>
+    /// Poll timer for dock/numpad attach detection, active only while the
+    /// Everest tab is the selected top-level tab (started/stopped from
+    /// TcDevices_SelectionChanged) — unlike Everest 60's poller (see
+    /// MainWindow.Everest60.cs), which runs unconditionally, so Everest Max
+    /// stays consistent with the narrower "K2 startup + tab open + poll while
+    /// visible" trigger set requested for this device.
+    /// </summary>
+    private DispatcherTimer? _evAccessoryPollTimer;
+
+    /// <summary>
+    /// Starts the 3s dock/numpad poll (same cadence as Ev60RefreshStatus).
+    /// Idempotent — safe to call every time the Everest tab is (re)selected.
+    /// </summary>
+    private void StartEvAccessoryPoll()
+    {
+        if (_evAccessoryPollTimer != null) return;
+        _evAccessoryPollTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _evAccessoryPollTimer.Tick += (_, _) => UpdateKeyboardLayout();
+        _evAccessoryPollTimer.Start();
+    }
+
+    /// <summary>Stops the poll timer once the Everest tab is no longer active.</summary>
+    private void StopEvAccessoryPoll()
+    {
+        _evAccessoryPollTimer?.Stop();
+        _evAccessoryPollTimer = null;
+    }
+
     /// <summary>
     /// Detects dock and numpad positions and updates visibility/order.
     /// Called after SDK connection.

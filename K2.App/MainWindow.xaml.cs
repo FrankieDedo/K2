@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -100,8 +101,18 @@ public partial class MainWindow : Window
             new Action(AutoOpenDrivers));
     }
 
+    // Pause between eager vendor-SDK driver opens at startup — these are closed-source
+    // Mountain DLLs (MacroPadSDK.dll/SDKDLL.dll/Everest360_USB.dll) known to be fragile
+    // (see App.xaml.cs's VEH survival machinery); opening all of them back-to-back on the
+    // same dispatcher tick was suspected of destabilizing the shared USB/HID stack widely
+    // enough to affect unrelated processes (Steam's controller polling silently dying,
+    // physical Xbox/PS controllers left unresponsive) — reported 2026-07-13. Staggering
+    // gives each SDK's internal enumeration/driver-claim time to settle before the next
+    // one starts. Mitigation, not a confirmed root cause fix — the vendor DLLs are opaque.
+    private const int AutoOpenStaggerMs = 400;
+
     /// <summary>Opens MacroPad, Everest and DisplayPad drivers automatically on startup.</summary>
-    private void AutoOpenDrivers()
+    private async void AutoOpenDrivers()
     {
         // PnlLoading is already visible (set in XAML); it covers everything
         // while we initialize.  We collapse it at the very end.
@@ -125,8 +136,18 @@ public partial class MainWindow : Window
             Log("[AutoOpen] MacroPadSDK.dll not found — skipping");
         }
 
+        await Task.Delay(AutoOpenStaggerMs);
+
         // --- Everest ---
         EvAutoOpen();
+
+        await Task.Delay(AutoOpenStaggerMs);
+
+        // --- Everest 60 (SDK session for numpad detection + LED preview,
+        // needs the real HWND set just above — see Ev60AutoOpen's doc comment) ---
+        Ev60AutoOpen();
+
+        await Task.Delay(AutoOpenStaggerMs);
 
         // --- DisplayPad satellite ---
         DpOpenDriver();
@@ -198,6 +219,8 @@ public partial class MainWindow : Window
         BrEverest.Visibility    = PnlEverest.Visibility;
         BrMacroPad.Visibility   = PnlMacroPad.Visibility;
         BrDisplayPad.Visibility = PnlDisplayPad.Visibility;
+        BrEverest60.Visibility  = PnlEverest60.Visibility;
+        BrMakalu.Visibility     = PnlMakalu.Visibility;
 
         if (tag == "macropad")
             CbDevice_SelectionChanged(sender, e);
@@ -205,6 +228,18 @@ public partial class MainWindow : Window
         {
             _activeDpDeviceId = dpId;
             CbDpDevice_SelectionChanged(sender, e);
+        }
+
+        // Everest Max: check dock/numpad attach immediately on tab open, then
+        // keep polling every 3s only while this tab stays selected.
+        if (tag == "everest")
+        {
+            UpdateKeyboardLayout();
+            StartEvAccessoryPoll();
+        }
+        else
+        {
+            StopEvAccessoryPoll();
         }
     }
 
@@ -223,8 +258,11 @@ public partial class MainWindow : Window
         BrEverest.Visibility    = Visibility.Collapsed;
         BrMacroPad.Visibility   = Visibility.Collapsed;
         BrDisplayPad.Visibility = Visibility.Collapsed;
+        BrEverest60.Visibility  = Visibility.Collapsed;
+        BrMakalu.Visibility     = Visibility.Collapsed;
 
         TcDevices.SelectedIndex = -1;
+        StopEvAccessoryPoll();
         SetSettingsTabActive(true);
         SetMacroTabActive(false);
     }
@@ -244,8 +282,11 @@ public partial class MainWindow : Window
         BrEverest.Visibility    = Visibility.Collapsed;
         BrMacroPad.Visibility   = Visibility.Collapsed;
         BrDisplayPad.Visibility = Visibility.Collapsed;
+        BrEverest60.Visibility  = Visibility.Collapsed;
+        BrMakalu.Visibility     = Visibility.Collapsed;
 
         TcDevices.SelectedIndex = -1;
+        StopEvAccessoryPoll();
         SetSettingsTabActive(false);
         SetMacroTabActive(true);
         SelectFirstMacro();

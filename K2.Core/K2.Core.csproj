@@ -77,6 +77,72 @@
     </Content>
   </ItemGroup>
 
+  <!-- Additional selectable UI fonts (Settings > Font), same embedding
+       pattern as Roboto above (all SIL OFL 1.1, license text per family
+       under Fonts\<Family>\). Inter's static package ships only as
+       optical-size variants ("Inter 18pt"/"24pt"/"28pt"); the 18pt files
+       (tuned for small UI text, matching K2's 13px default) were
+       repacked with fontTools to rename the internal family from
+       "Inter 18pt" to plain "Inter" so the pack URI fragment matches the
+       other families. See AppSettings.AppFontFamily / K2Theme.xaml. -->
+  <ItemGroup>
+    <Resource Include="Fonts\Inter\Inter-Regular.ttf" />
+    <Resource Include="Fonts\Inter\Inter-Bold.ttf" />
+    <Resource Include="Fonts\Inter\Inter-Italic.ttf" />
+    <Resource Include="Fonts\Inter\Inter-BoldItalic.ttf" />
+    <Content Include="Fonts\Inter\LICENSE.Inter.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+
+    <Resource Include="Fonts\IBMPlexSans\IBMPlexSans-Regular.ttf" />
+    <Resource Include="Fonts\IBMPlexSans\IBMPlexSans-Bold.ttf" />
+    <Resource Include="Fonts\IBMPlexSans\IBMPlexSans-Italic.ttf" />
+    <Resource Include="Fonts\IBMPlexSans\IBMPlexSans-BoldItalic.ttf" />
+    <Content Include="Fonts\IBMPlexSans\LICENSE.IBMPlexSans.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+
+    <Resource Include="Fonts\PublicSans\PublicSans-Regular.ttf" />
+    <Resource Include="Fonts\PublicSans\PublicSans-Bold.ttf" />
+    <Resource Include="Fonts\PublicSans\PublicSans-Italic.ttf" />
+    <Resource Include="Fonts\PublicSans\PublicSans-BoldItalic.ttf" />
+    <Content Include="Fonts\PublicSans\LICENSE.PublicSans.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+
+    <Resource Include="Fonts\WorkSans\WorkSans-Regular.ttf" />
+    <Resource Include="Fonts\WorkSans\WorkSans-Bold.ttf" />
+    <Resource Include="Fonts\WorkSans\WorkSans-Italic.ttf" />
+    <Resource Include="Fonts\WorkSans\WorkSans-BoldItalic.ttf" />
+    <Content Include="Fonts\WorkSans\LICENSE.WorkSans.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+
+    <Resource Include="Fonts\SourceSans3\SourceSans3-Regular.ttf" />
+    <Resource Include="Fonts\SourceSans3\SourceSans3-Bold.ttf" />
+    <Resource Include="Fonts\SourceSans3\SourceSans3-Italic.ttf" />
+    <Resource Include="Fonts\SourceSans3\SourceSans3-BoldItalic.ttf" />
+    <Content Include="Fonts\SourceSans3\LICENSE.SourceSans3.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+
+    <!-- OpenDyslexic (SIL OFL 1.1): dyslexia-friendly option, same idea as the
+         accessibility font choice in Claude's own apps. Upstream ships .otf
+         (not .ttf like the others) — WPF's pack URI font loading handles both
+         identically. The upstream Italic face ships under a DIFFERENT internal
+         family ("OpenDyslexic Italic" instead of "OpenDyslexic"+Italic style),
+         which would stop WPF's folder-based face lookup from finding it; it was
+         repacked with fontTools to align the name table with Regular/Bold/
+         BoldItalic, same fix as Inter's optical-size rename above. -->
+    <Resource Include="Fonts\OpenDyslexic\OpenDyslexic-Regular.otf" />
+    <Resource Include="Fonts\OpenDyslexic\OpenDyslexic-Bold.otf" />
+    <Resource Include="Fonts\OpenDyslexic\OpenDyslexic-Italic.otf" />
+    <Resource Include="Fonts\OpenDyslexic\OpenDyslexic-BoldItalic.otf" />
+    <Content Include="Fonts\OpenDyslexic\LICENSE.OpenDyslexic.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <!-- PyBridge: Python helpers copied to pybridge\ next to the executable.
        Content from a referenced project flows into the referencing app's
        output, so every app using K2.Core gets k2.py and k2_runner.py

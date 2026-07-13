@@ -4,7 +4,7 @@
 //
 // FW_EXTEND_INFO ↔ Display Dial mapping (to verify with USB capture):
 //   byMMDockShowMenu  = page bitmask (bit0=Clock … bit7=Custom)
-//   byMMDockScreenSetup = clock format, 12h/24h (assumed — see CbDialClockType)
+//   byMMDockScreenSetup = clock format, 12h/24h (assumed — see DialClockTypeIndex)
 //   wMMDockScreenSaver  = screensaver timeout in seconds (0=disabled)
 //   wMMDockTurnOff      = auto-off timeout in seconds (0=disabled)
 //   MMDockColor         = menu color
@@ -73,18 +73,14 @@ public partial class MainWindow
 
     // ─────────────────────── Init ───────────────────────
 
+    /// <summary>0=24h/Digital, 1=12h/Analog — mirrors what CbDialClockType/
+    /// CbDialClockStyle.SelectedIndex used to provide before those became
+    /// RbDialClock*/RbDialClockStyle* segmented button groups.</summary>
+    private int DialClockTypeIndex => RbDialClock12h.IsChecked == true ? 1 : 0;
+    private int DialClockStyleIndex => RbDialClockAnalog.IsChecked == true ? 1 : 0;
+
     private void InitDisplayDialPanel()
     {
-        // Populate clock format combo (12h/24h)
-        CbDialClockType.Items.Clear();
-        CbDialClockType.Items.Add("24h");
-        CbDialClockType.Items.Add("12h");
-
-        // Populate clock style combo (digital/analog)
-        CbDialClockStyle.Items.Clear();
-        CbDialClockStyle.Items.Add(Loc.Get("dial_clock_digital"));
-        CbDialClockStyle.Items.Add(Loc.Get("dial_clock_analog"));
-
         // Populate screensaver-function combo (which page shows as screensaver)
         CbDialScreenSaverFunction.Items.Clear();
         foreach (var (key, _) in DialFunctions)
@@ -117,10 +113,10 @@ public partial class MainWindow
         CkDialCustom.IsChecked   = (pages & (byte)DialPage.Custom) != 0;
 
         int clockType = ParseInt(_evStore?.GetSetting("dial.clockType"), 0);
-        CbDialClockType.SelectedIndex = clockType < CbDialClockType.Items.Count ? clockType : 0;
+        (clockType == 1 ? RbDialClock12h : RbDialClock24h).IsChecked = true;
 
         int clockStyle = ParseInt(_evStore?.GetSetting("dial.clockStyle"), 0);
-        CbDialClockStyle.SelectedIndex = clockStyle < CbDialClockStyle.Items.Count ? clockStyle : 0;
+        (clockStyle == 1 ? RbDialClockAnalog : RbDialClockDigital).IsChecked = true;
 
         string ssFunction = _evStore?.GetSetting("dial.screenSaverFunction") ?? DialFunctions[0].Value;
         int ssIndex = Array.FindIndex(DialFunctions, f => f.Value == ssFunction);
@@ -144,8 +140,8 @@ public partial class MainWindow
     {
         if (_evStore is null) return;
         _evStore.SetSetting("dial.pages", BuildPageByte().ToString());
-        _evStore.SetSetting("dial.clockType", CbDialClockType.SelectedIndex.ToString());
-        _evStore.SetSetting("dial.clockStyle", CbDialClockStyle.SelectedIndex.ToString());
+        _evStore.SetSetting("dial.clockType", DialClockTypeIndex.ToString());
+        _evStore.SetSetting("dial.clockStyle", DialClockStyleIndex.ToString());
         _evStore.SetSetting("dial.screenSaverFunction", DialFunctions[CbDialScreenSaverFunction.SelectedIndex >= 0
             ? CbDialScreenSaverFunction.SelectedIndex : 0].Value);
         _evStore.SetSetting("dial.screenSaverEnable", (CkDialScreenSaverEnable.IsChecked == true) ? "1" : "0");
@@ -188,7 +184,7 @@ public partial class MainWindow
 
         // Update only the fields controlled by the Display Dial panel
         info.byMMDockShowMenu = BuildPageByte();
-        info.byMMDockScreenSetup = (byte)CbDialClockType.SelectedIndex;  // 0=24h, 1=12h (to be confirmed)
+        info.byMMDockScreenSetup = (byte)DialClockTypeIndex;  // 0=24h, 1=12h (to be confirmed)
         info.wMMDockScreenSaver = CkDialScreenSaverEnable.IsChecked == true
             ? ParseUshort(TxtDialScreenSaver.Text, 30) : (ushort)0;
         info.wMMDockTurnOff = CkDialTurnOffEnable.IsChecked == true
@@ -233,8 +229,7 @@ public partial class MainWindow
             CkDialAPM.IsChecked      = (pages & (byte)DialPage.APM) != 0;
             CkDialCustom.IsChecked   = (pages & (byte)DialPage.Custom) != 0;
 
-            CbDialClockType.SelectedIndex = info.byMMDockScreenSetup < 2
-                ? info.byMMDockScreenSetup : 0;
+            (info.byMMDockScreenSetup == 1 ? RbDialClock12h : RbDialClock24h).IsChecked = true;
 
             // The firmware only reports a timeout, not a separate enable flag
             // (Base Camp keeps that flag DB-side). 0 => disabled, keep the last
@@ -269,13 +264,13 @@ public partial class MainWindow
         SaveDialSettings();
     }
 
-    private void CbDialClockType_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void RbDialClockType_Checked(object sender, RoutedEventArgs e)
     {
         if (_dialLoading) return;
         SaveDialSettings();
     }
 
-    private void CbDialClockStyle_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void RbDialClockStyle_Checked(object sender, RoutedEventArgs e)
     {
         if (_dialLoading) return;
         SaveDialSettings();

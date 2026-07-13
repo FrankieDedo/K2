@@ -681,6 +681,434 @@ public sealed class BaseCampDbImporter
     }
 
     // =========================================================
+    // Makalu mouse — MakaluKeyBindings / MakaluLightings / MakaluSettings /
+    // DPILevels tables. DeviceType="Makalu" for the Profiles row (confirmed
+    // via the class's own MakaluLightings/MakaluKeyBindings/MakaluSettings
+    // navigation properties on BaseCamp.Data.Profile, plus the RPC bridge
+    // JS embedded in BaseCamp.UI.dll using {'Class':'Makalu', ...} literally
+    // — see _PROJECT_MAP.md). UNVERIFIED against a real exported Makalu
+    // profile: this Base Camp install never had a physical Makalu paired
+    // (all 4 tables are empty here) — Lighting/Settings/DPI field-for-field
+    // copies are high confidence (schema decompiled from real .NET metadata),
+    // but the button FunctionType/FunctionValue vocabulary below is inferred
+    // by analogy with the already-confirmed MacroPad translator
+    // (TranslateMakaluAction, same decompiled family) rather than a captured
+    // sample — falls back to skipping (not guessing) anything that doesn't
+    // match exactly.
+    // =========================================================
+
+    /// <summary>Reads Makalu mouse profiles (DeviceType="Makalu") grouped by DeviceId.</summary>
+    public static Dictionary<int, List<BcProfile>> ReadMakaluProfiles(string dbPath)
+        => ReadProfilesByType(dbPath, "Makalu");
+
+    public sealed record BcMakaluMouseBinding(
+        int ButtonIndex, string? FunctionType, string? FunctionValue, string? FunctionEnteredValue, bool IsAssigned);
+
+    /// <summary>Reads MakaluKeyBindings for a profile. KeyId is already the
+    /// 1-based physical button index MakaluService/MakaluRemapData use directly
+    /// (no translation table, unlike MacroPad's 170-179/220-221 KeyIds).</summary>
+    public static List<BcMakaluMouseBinding> ReadMakaluMouseKeyBindings(string dbPath, int profileId)
+    {
+        using var conn = OpenReadOnly(dbPath);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT KeyId, FunctionType, FunctionValue, FunctionEnteredValue, IsKeyAssigned
+            FROM MakaluKeyBindings WHERE ProfileId = $pid ORDER BY KeyId";
+        cmd.Parameters.AddWithValue("$pid", profileId);
+
+        var result = new List<BcMakaluMouseBinding>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            result.Add(new BcMakaluMouseBinding(
+                ButtonIndex:          r.GetInt32(0),
+                FunctionType:         r.IsDBNull(1) ? null : r.GetString(1),
+                FunctionValue:        r.IsDBNull(2) ? null : r.GetString(2),
+                FunctionEnteredValue: r.IsDBNull(3) ? null : r.GetString(3),
+                IsAssigned:           r.GetInt32(4) != 0));
+        return result;
+    }
+
+    /// <summary>Translates a Makalu button's BC function into one of
+    /// MakaluRemapData's function-key strings ("left"/"dpi+"/"sniper:800"/...).
+    /// Unlike every other TranslateXxx here, the target is NOT a K2.Core
+    /// action pair — Makalu buttons write straight to firmware
+    /// (MakaluService.SetButtonRemap), there is no IActionHost for this
+    /// device (see architectural note in _PROJECT_MAP.md). Returns null for
+    /// anything not an exact, confirmed match (factory-only functions with
+    /// no K2 remap equivalent, e.g. battery/brightness/effect cycle) rather
+    /// than guessing.</summary>
+    public static string? TranslateMakaluRemapFunction(string? functionType, string? functionValue, string? enteredValue)
+    {
+        var ft = (functionType ?? "").Trim();
+        var fv = (functionValue ?? "").Trim();
+        switch (ft)
+        {
+            case "Mouse":
+                return fv switch
+                {
+                    "Left button"   => "left",
+                    "Right button"  => "right",
+                    "Middle button" => "middle",
+                    "Backward"      => "back",
+                    "Forward"       => "forward",
+                    "DPI +"         => "dpi+",
+                    "DPI -"         => "dpi-",
+                    "DPI Sniper"    => int.TryParse(enteredValue, out int dpi) ? $"sniper:{dpi}" : "sniper:800",
+                    _ => null, // Next/Previous Profile, battery/brightness/effect cycle: no Makalu remap equivalent
+                };
+            case "Mouse Wheel":
+                return fv switch
+                {
+                    "Scroll Up"   => "scroll_up",
+                    "Scroll Down" => "scroll_down",
+                    _ => null,
+                };
+            case "Disable":
+            case "Default":
+                return "disabled";
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>Parses a Base Camp color string — real data shows BOTH
+    /// "#RRGGBB" and "rgb(r, g, b)" forms in the same table (the app rewrites
+    /// a slot to "rgb(...)" once the user touches its color picker, otherwise
+    /// it keeps the C# constructor's "#hex" default) — into a packed 0xRRGGBB
+    /// int.</summary>
+    internal static int ParseBcColor(string? raw, int fallback = 0)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return fallback;
+        raw = raw.Trim();
+        try
+        {
+            if (raw.StartsWith('#'))
+                return Convert.ToInt32(raw[1..], 16) & 0xFFFFFF;
+            if (raw.StartsWith("rgb", StringComparison.OrdinalIgnoreCase))
+            {
+                int open = raw.IndexOf('(');
+                int close = raw.IndexOf(')');
+                if (open < 0 || close < 0) return fallback;
+                var parts = raw[(open + 1)..close].Split(',');
+                if (parts.Length < 3) return fallback;
+                int r = int.Parse(parts[0].Trim());
+                int g = int.Parse(parts[1].Trim());
+                int b = int.Parse(parts[2].Trim());
+                return ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF);
+            }
+        }
+        catch { /* malformed color string */ }
+        return fallback;
+    }
+
+    /// <summary>Reads the currently-selected (IsEffectSelected=1) MakaluLightings
+    /// row for a profile and translates it into a MakaluLightingRecord.
+    /// EffectName is matched by name against MakaluProtocol.Effect (EffectId's
+    /// own ordering was never cross-checked against a real profile) — falls
+    /// back to Static if nothing matches or no row exists.</summary>
+    public static MakaluLightingRecord? ReadMakaluMouseLighting(string dbPath, int profileId)
+    {
+        using var conn = OpenReadOnly(dbPath);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT EffectName, ColorType, SingleColor, DualColor1, DualColor2, Speed, Brightness,
+                   Direction, IsEffectSelected, CustomMakaluLightings
+            FROM MakaluLightings WHERE ProfileId = $pid ORDER BY IsEffectSelected DESC";
+        cmd.Parameters.AddWithValue("$pid", profileId);
+
+        using var r = cmd.ExecuteReader();
+        if (!r.Read()) return null;
+
+        string effectName = r.IsDBNull(0) ? "Static" : r.GetString(0);
+        // Dual-color effects use DualColor1/2; single-color effects only ever
+        // populate SingleColor (DualColor1/2 stay at their C# ctor defaults) —
+        // prefer DualColor1 when it differs from the default so a genuinely
+        // dual-color slot isn't flattened to SingleColor's value.
+        string? singleColor = r.IsDBNull(2) ? null : r.GetString(2);
+        string? dualColor1  = r.IsDBNull(3) ? null : r.GetString(3);
+        string? dualColor2  = r.IsDBNull(4) ? null : r.GetString(4);
+        int color1 = ParseBcColor(dualColor1 ?? singleColor, 0x900000);
+        int color2 = ParseBcColor(dualColor2, 0x000000);
+        int speed = r.IsDBNull(5) ? 1 : Math.Clamp(r.GetInt32(5), 0, 2);
+        int brightness = r.IsDBNull(6) ? 100 : r.GetInt32(6);
+        int direction = r.IsDBNull(7) ? 1 : r.GetInt32(7);
+        string? customJson = r.IsDBNull(9) ? null : r.GetString(9);
+
+        var eff = effectName.Trim().ToLowerInvariant() switch
+        {
+            "static"                    => MakaluProtocol.Effect.Static,
+            "breathing"                => MakaluProtocol.Effect.Breathing,
+            "rgb breathing"             => MakaluProtocol.Effect.RgbBreathing,
+            "rainbow"                   => MakaluProtocol.Effect.Rainbow,
+            "responsive"                => MakaluProtocol.Effect.Responsive,
+            "yeti" or "yeti mode"       => MakaluProtocol.Effect.Yeti,
+            "off"                       => MakaluProtocol.Effect.Off,
+            "custom"                    => MakaluProtocol.Effect.Off, // Custom isn't a MakaluProtocol.Effect value — handled via CustomActive below
+            _                           => MakaluProtocol.Effect.Static,
+        };
+        bool customActive = effectName.Trim().Equals("Custom", StringComparison.OrdinalIgnoreCase);
+
+        var customColors = new int[8];
+        if (customActive && !string.IsNullOrEmpty(customJson))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(customJson);
+                foreach (var el in doc.RootElement.EnumerateArray())
+                {
+                    if (!el.TryGetProperty("KeyCode", out var kc) || !el.TryGetProperty("ColorHex", out var ch)) continue;
+                    int idx = kc.GetInt32();
+                    if (idx < 0 || idx >= 8) continue;
+                    customColors[idx] = ParseBcColor(ch.GetString());
+                }
+            }
+            catch { /* malformed JSON — leave customColors at default black */ }
+        }
+
+        return new MakaluLightingRecord(
+            (int)eff, color1, color2, speed, direction, brightness, customActive, customColors);
+    }
+
+    /// <summary>Reads MakaluSettings + DPILevels for a profile. No dedicated
+    /// "debounce ms" column exists in Base Camp's schema — ButtonResponseTime
+    /// is the closest analog (both are a small-int firmware debounce-style
+    /// setting) and is used as a best-effort stand-in, UNVERIFIED against a
+    /// real profile.</summary>
+    public static (MakaluDeviceSettingsRecord? Settings, MakaluDpiRecord? Dpi) ReadMakaluMouseSettings(string dbPath, int profileId)
+    {
+        using var conn = OpenReadOnly(dbPath);
+        int pollingHz = 1000, debounceMs = 2, selectedDpiId = 1;
+        bool angleOn = false, liftHigh = false;
+        bool foundSettings = false;
+
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = @"
+                SELECT PollingRate, ButtonResponseTime, AngleSnapping, LiftOffDistance, SelectedDPILevelId
+                FROM MakaluSettings WHERE ProfileId = $pid";
+            cmd.Parameters.AddWithValue("$pid", profileId);
+            using var r = cmd.ExecuteReader();
+            if (r.Read())
+            {
+                foundSettings = true;
+                pollingHz    = r.IsDBNull(0) ? 1000 : r.GetInt32(0);
+                debounceMs   = r.IsDBNull(1) ? 2 : r.GetInt32(1);
+                angleOn      = !r.IsDBNull(2) && r.GetString(2).Equals("On", StringComparison.OrdinalIgnoreCase);
+                liftHigh     = !r.IsDBNull(3) && r.GetString(3).Equals("High", StringComparison.OrdinalIgnoreCase);
+                selectedDpiId = r.IsDBNull(4) ? 1 : r.GetInt32(4);
+            }
+        }
+
+        var levels = new List<(int Id, int Dpi)>();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT DPILevelId, DPI FROM DPILevels WHERE ProfileId = $pid ORDER BY DPILevelId";
+            cmd.Parameters.AddWithValue("$pid", profileId);
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) levels.Add((r.GetInt32(0), r.GetInt32(1)));
+        }
+
+        MakaluDeviceSettingsRecord? settings = foundSettings
+            ? new MakaluDeviceSettingsRecord(pollingHz, debounceMs, angleOn, liftHigh)
+            : null;
+
+        MakaluDpiRecord? dpi = null;
+        if (levels.Count > 0)
+        {
+            var dpiValues = new int[5];
+            for (int i = 0; i < 5; i++) dpiValues[i] = i < levels.Count ? levels[i].Dpi : dpiValues[Math.Max(0, i - 1)];
+            int activeIdx = Math.Max(0, levels.FindIndex(l => l.Id == selectedDpiId));
+            dpi = new MakaluDpiRecord(dpiValues, activeIdx);
+        }
+
+        return (settings, dpi);
+    }
+
+    /// <summary>Imports a Makalu mouse profile: lighting + DPI + settings +
+    /// button remap into MakaluStore. Returns (remapped button count, lighting
+    /// imported, settings imported).</summary>
+    public static (int Remap, bool Lighting, bool Settings) ImportMakaluProfile(
+        string dbPath, BcProfile profile, MakaluStore store)
+    {
+        int slot = profile.Slot;
+        store.ClearProfile(slot);
+        store.SetProfileName(slot, profile.Name);
+
+        var lighting = ReadMakaluMouseLighting(dbPath, profile.ProfileId);
+        if (lighting is not null) store.SaveLighting(slot, lighting);
+
+        var (settings, dpi) = ReadMakaluMouseSettings(dbPath, profile.ProfileId);
+        if (settings is not null) store.SaveSettings(slot, settings);
+        if (dpi is not null) store.SaveDpi(slot, dpi);
+
+        int remapped = 0;
+        foreach (var b in ReadMakaluMouseKeyBindings(dbPath, profile.ProfileId))
+        {
+            if (!b.IsAssigned) continue;
+            string? fn = TranslateMakaluRemapFunction(b.FunctionType, b.FunctionValue, b.FunctionEnteredValue);
+            if (fn is null) continue;
+            store.SaveRemapButton(slot, b.ButtonIndex, fn);
+            remapped++;
+        }
+
+        return (remapped, lighting is not null, settings is not null);
+    }
+
+    // =========================================================
+    // Everest 60 — Everest60KeyBidings / Everest60Lightings tables.
+    // DeviceType="EverestMini" for the Profiles row — CONFIRMED directly
+    // against a real BaseCamp.db (this install has one real EverestMini
+    // profile, 232 key-binding rows + 9 lighting rows, one per effect slot,
+    // see _PROJECT_MAP.md). Lighting import is high-confidence (verified
+    // field shapes/color formats against that real data). Key Binding import
+    // is NOT: every IsKeyAssigned=1 row in the one real profile available is
+    // a LayerType=3 factory Fn-legend ("FN + 10") with a human-readable
+    // FunctionValue label, not a raw DLLKeyId target — there is no real
+    // sample of a user-created LayerType=1 remap to learn the label->target
+    // encoding from, so only exact matches against Everest60RemapData's own
+    // KeyCatalog are imported; everything else is skipped (counted, not
+    // guessed).
+    // =========================================================
+
+    /// <summary>Reads Everest 60 profiles (DeviceType="EverestMini") grouped by DeviceId.</summary>
+    public static Dictionary<int, List<BcProfile>> ReadEverest60Profiles(string dbPath)
+        => ReadProfilesByType(dbPath, "EverestMini");
+
+    public sealed record BcEverest60KeyBinding(
+        int DllKeyId, int LayerType, string? FunctionType, string? SubFunctionType,
+        string? FunctionValue, string? FunctionEnteredValue, bool IsAssigned);
+
+    public static List<BcEverest60KeyBinding> ReadEverest60KeyBindingsRaw(string dbPath, int profileId)
+    {
+        using var conn = OpenReadOnly(dbPath);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT DLLKeyId, LayerType, FunctionType, SubFunctionType, FunctionValue,
+                   FunctionEnteredValue, IsKeyAssigned
+            FROM Everest60KeyBidings WHERE ProfileId = $pid ORDER BY DLLKeyId";
+        cmd.Parameters.AddWithValue("$pid", profileId);
+
+        var result = new List<BcEverest60KeyBinding>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            result.Add(new BcEverest60KeyBinding(
+                DllKeyId:             r.GetInt32(0),
+                LayerType:            r.GetInt32(1),
+                FunctionType:         r.IsDBNull(2) ? null : r.GetString(2),
+                SubFunctionType:      r.IsDBNull(3) ? null : r.GetString(3),
+                FunctionValue:        r.IsDBNull(4) ? null : r.GetString(4),
+                FunctionEnteredValue: r.IsDBNull(5) ? null : r.GetString(5),
+                IsAssigned:           r.GetInt32(6) != 0));
+        return result;
+    }
+
+    /// <summary>Reads the active (IsActive=1) Everest60Lightings row and
+    /// translates it into an Ev60LightingRecord. EffIndex 1..9 maps to
+    /// Base Camp's own EV60EffectIndex enum (Static/ColorWave/Tornado/
+    /// Breathing/Reactive/Matrix/Custom/Yeti/Off) — Matrix has no
+    /// Everest60Protocol.Effect equivalent (falls back to Static);
+    /// Custom sets ActiveMode="custom" instead of a regular effect.
+    /// Color3 is assumed to be the side-ring accent (the one color beyond
+    /// the effect's own primary/secondary K2 tracks) — UNVERIFIED, Base
+    /// Camp's schema doesn't label which of the 3 colors is which.</summary>
+    public static Ev60LightingRecord? ReadEverest60LightingRaw(string dbPath, int profileId)
+    {
+        using var conn = OpenReadOnly(dbPath);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT EffIndex, Speed, Brightness, Direction, Color1, Color2, Color3, CustomLightings
+            FROM Everest60Lightings WHERE ProfileId = $pid ORDER BY IsActive DESC";
+        cmd.Parameters.AddWithValue("$pid", profileId);
+
+        using var r = cmd.ExecuteReader();
+        if (!r.Read()) return null;
+
+        int effIndex = r.GetInt32(0);
+        int speedPct = r.IsDBNull(1) ? 50 : r.GetInt32(1);
+        double brightness = r.IsDBNull(2) ? 100 : r.GetInt32(2);
+        int rawDirection = r.IsDBNull(3) ? 0 : r.GetInt32(3);
+        int color1 = ParseBcColor(r.IsDBNull(4) ? null : r.GetString(4), 0x900000);
+        int color2 = ParseBcColor(r.IsDBNull(5) ? null : r.GetString(5), 0x000000);
+        int sideColor = ParseBcColor(r.IsDBNull(6) ? null : r.GetString(6), 0x900000);
+        string? customJson = r.IsDBNull(7) ? null : r.GetString(7);
+
+        var eff = effIndex switch
+        {
+            1 => Everest60Protocol.Effect.Static,
+            2 => Everest60Protocol.Effect.Wave,
+            3 => Everest60Protocol.Effect.Tornado,
+            4 => Everest60Protocol.Effect.Breathing,
+            5 => Everest60Protocol.Effect.Reactive,
+            8 => Everest60Protocol.Effect.Yeti,
+            9 => Everest60Protocol.Effect.Off,
+            _ => Everest60Protocol.Effect.Static, // 6=Matrix, 7=Custom (handled below)
+        };
+        string activeMode = effIndex == 7 ? "custom" : "preset";
+
+        int dirIndex = eff switch
+        {
+            Everest60Protocol.Effect.Wave    => Math.Max(0, Array.FindIndex(Everest60Protocol.WaveDirections, d => d.Code == rawDirection)),
+            Everest60Protocol.Effect.Tornado => Math.Max(0, Array.FindIndex(Everest60Protocol.TornadoDirections, d => d.Code == rawDirection)),
+            _ => 0,
+        };
+
+        var customColors = new Dictionary<int, int>();
+        if (activeMode == "custom" && !string.IsNullOrEmpty(customJson))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(customJson);
+                foreach (var el in doc.RootElement.EnumerateArray())
+                {
+                    if (!el.TryGetProperty("KeyCode", out var kc) || !el.TryGetProperty("ColorHex", out var ch)) continue;
+                    int idx = kc.GetInt32();
+                    if (idx < 0 || idx >= Everest60Protocol.NumKeys) continue; // side ring/numpad addresses live outside 0..63 — not this dictionary's scope
+                    customColors[idx] = ParseBcColor(ch.GetString());
+                }
+            }
+            catch { /* malformed JSON */ }
+        }
+
+        return new Ev60LightingRecord(
+            (int)eff, color1, color2, speedPct, dirIndex, Rainbow: false,
+            brightness, sideColor, CustomBrightness: brightness, activeMode, customColors);
+    }
+
+    /// <summary>Imports an Everest 60 profile: lighting (high confidence) +
+    /// key bindings (best-effort, see class-level doc comment) into
+    /// Everest60Store. Returns the number of key bindings imported.</summary>
+    public static int ImportEverest60Profile(string dbPath, BcProfile profile, Everest60Store store)
+    {
+        int slot = profile.Slot;
+        store.ClearProfile(slot);
+        store.SetProfileName(slot, profile.Name);
+
+        var lighting = ReadEverest60LightingRaw(dbPath, profile.ProfileId);
+        if (lighting is not null) store.SaveLighting(slot, lighting);
+
+        int imported = 0;
+        foreach (var b in ReadEverest60KeyBindingsRaw(dbPath, profile.ProfileId))
+        {
+            // Only the base layer is imported — see class-level doc comment
+            // for why LayerType=3 (Fn) factory legends are never real remaps.
+            if (b.LayerType != 1 || !b.IsAssigned) continue;
+
+            int ledIndex = Array.IndexOf(Everest60RemapData.LedIndexToDllKeyIdArray, b.DllKeyId);
+            if (ledIndex < 0) continue;
+
+            string? label = b.FunctionValue;
+            int target = label != null ? Everest60RemapData.KeyCatalog.GetValueOrDefault(label, -1) : -1;
+            if (target < 0) continue; // FunctionValue isn't one of our exact key labels — skip rather than guess
+
+            string mode = (b.FunctionType ?? "").Equals("Keyboard Shortcuts", StringComparison.OrdinalIgnoreCase) ? "shortcut" : "key";
+            store.SaveKeyBinding(slot, ledIndex, mode, target, 0);
+            imported++;
+        }
+
+        return imported;
+    }
+
+    // =========================================================
 
     /// <summary>
     /// Decodes a base64-encoded image string, stripping any data URI prefix

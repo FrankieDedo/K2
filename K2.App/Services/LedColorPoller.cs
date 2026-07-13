@@ -49,12 +49,17 @@ internal sealed class LedColorPoller : IDisposable
 
         _timer = new DispatcherTimer(DispatcherPriority.Render)
         {
-            Interval = TimeSpan.FromMilliseconds(120),
+            Interval = TimeSpan.FromMilliseconds(60),
         };
         _timer.Tick += OnTick;
     }
 
-    /// <summary>Polling interval (default 120ms ~ 8fps, a good compromise).</summary>
+    /// <summary>Polling interval (default 60ms ~ 16fps, 2026-07-12: halved from
+    /// 120ms on user request — going much lower has diminishing visual return
+    /// (WPF itself renders at the display's refresh rate, typically 60Hz/16ms)
+    /// while adding more HID/SDK round-trips per second that could contend
+    /// with other operations sharing the same session/lock (see
+    /// TryGetColorData's Monitor.TryEnter comment below).</summary>
     public TimeSpan Interval
     {
         get => _timer.Interval;

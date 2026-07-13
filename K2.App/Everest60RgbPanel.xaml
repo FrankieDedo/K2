@@ -2,38 +2,42 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core">
-    <!-- RGB Lighting + Side Ring section content for the Everest 60 tab, its
-         own UserControl — DIRECT child of MainWindow.xaml (same pattern as
-         Makalu's MakaluRgbSettingsPanel/MakaluDpiRemapPanel; see
-         MakaluDpiRemapPanel.xaml for why not to nest it inside another
-         custom control). SecRgb/SecSideRing are toggled from
-         MainWindow.Everest60.cs's Ev60Section_Changed. -->
-    <Grid>
-        <!-- RGB effect panel -->
-        <Grid x:Name="SecRgb">
+    <!-- "Lighting" section content for the Everest 60 tab, its own UserControl —
+         DIRECT child of MainWindow.xaml (same pattern as Makalu's
+         MakaluRgbSettingsPanel/MakaluDpiRemapPanel; see MakaluDpiRemapPanel.xaml
+         for why not to nest it inside another custom control). Preset effect +
+         side ring + per-key custom lighting are stacked together under one
+         always-visible section (merged from 3 separate SECTIONS entries into
+         one "Lighting" entry) — mirrors how Everest Max stacks its preset
+         effect and "Custom Lighting (per-key)" blocks in one RGB & Lighting
+         panel (MainWindow.xaml PnlSecRgb) instead of separate tabs. -->
+    <Grid x:Name="SecLighting">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="260">
             <StackPanel>
+                <!-- Preset RGB effect -->
                 <TextBlock Text="{loc:Get rgb_lighting}" FontWeight="Bold" Margin="0,0,0,8"/>
                 <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
                     <TextBlock Text="{loc:Get rgb_effect}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <ComboBox x:Name="CbEv60Effect" Width="120" Margin="0,0,12,0"
                               SelectionChanged="CbEv60Effect_SelectionChanged"/>
-                    <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <ComboBox x:Name="CbEv60Direction" Width="120" Margin="0,0,12,0"
-                              SelectionChanged="CbEv60EffectParam_Changed"/>
+                    <StackPanel x:Name="PnlEv60Direction" Orientation="Horizontal" Margin="0,0,12,0">
+                        <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <Border Style="{StaticResource K2SegmentedGroupBorder}">
+                            <UniformGrid x:Name="GridEv60Direction" Rows="1"/>
+                        </Border>
+                    </StackPanel>
                     <CheckBox x:Name="CkEv60Rainbow" Content="{loc:Get rgb_rainbow}"
                               ToolTip="{loc:Get rgb_rainbow_tip}" Click="CkEv60Rainbow_Click"/>
                 </WrapPanel>
-                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <!-- Brightness lives in MainWindow's shared top-right bar (BrEverest60), not
+                     here — same convention as Everest Max/MacroPad/DisplayPad, see
+                     MainWindow.SectionNav.cs. MainWindow calls SetBrightness() on change. -->
+                <WrapPanel x:Name="PnlEv60Speed" Orientation="Horizontal" Margin="0,0,0,6">
                     <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <Slider x:Name="SldEv60Speed" Minimum="0" Maximum="100" Width="120"
                             TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
-                            ValueChanged="SldEv60Param_ValueChanged" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="LblEv60Speed" Text="50%" VerticalAlignment="Center" Margin="6,0,16,0" MinWidth="36"/>
-                    <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <Slider x:Name="SldEv60Brightness" Minimum="0" Maximum="100" Width="120"
-                            TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
-                            ValueChanged="SldEv60Param_ValueChanged" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="LblEv60Brightness" Text="100%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
+                            ValueChanged="SldEv60Speed_ValueChanged" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="LblEv60Speed" Text="50%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
                 </WrapPanel>
                 <WrapPanel Orientation="Horizontal">
                     <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
@@ -46,12 +50,9 @@
                                 BorderThickness="2" BorderBrush="#3A3A40" Click="BtnEv60Color_Click" Tag="2"/>
                     </StackPanel>
                 </WrapPanel>
-            </StackPanel>
-        </Grid>
 
-        <!-- Side ring panel -->
-        <Grid x:Name="SecSideRing" Visibility="Collapsed">
-            <StackPanel>
+                <!-- Side ring -->
+                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,10,0,8"/>
                 <TextBlock Text="{loc:Get ev60_side_ring}" FontWeight="Bold" Margin="0,0,0,8"/>
                 <WrapPanel Orientation="Horizontal">
                     <Button x:Name="BtnEv60SideColor" Width="40" Height="22" Background="#900000"
@@ -63,7 +64,41 @@
                 <TextBlock Text="{loc:Get ev60_side_hint}" TextWrapping="Wrap"
                            Foreground="{StaticResource K2TextMutedBrush}" FontStyle="Italic" FontSize="11"
                            Margin="0,8,0,0" MaxWidth="640"/>
+
+                <!-- Per-key custom lighting ("Key Lighting"): paint mode over the
+                     64-key overlay above (CvsEv60Keyboard in MainWindow.xaml). No
+                     live device readback exists for this raw-HID board (no
+                     GetColorData equivalent) — the preview is software-only: a key
+                     shows its picked color as soon as it's painted/applied. Mirrors
+                     Everest Max's "Custom Lighting (per-key)" block
+                     (MainWindow.CustomLighting.cs). -->
+                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,10,0,8"/>
+                <TextBlock Text="{loc:Get ev60_key_lighting}" FontWeight="Bold" Margin="0,0,0,6"/>
+                <TextBlock Text="{loc:Get ev60_key_lighting_hint}"
+                           Foreground="#9A9AA2" FontStyle="Italic"
+                           TextWrapping="Wrap" Margin="0,0,0,6"/>
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <CheckBox x:Name="CkEv60CustomPaint" Content="{loc:Get custom_paint_mode}"
+                              Foreground="White" Margin="0,0,12,0"
+                              Checked="CkEv60CustomPaint_Checked"
+                              Unchecked="CkEv60CustomPaint_Checked"/>
+                    <TextBlock Text="{loc:Get custom_color}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <Button x:Name="BtnEv60CustomBrushColor" Width="40" Height="22"
+                            Background="#900000" BorderThickness="2"
+                            BorderBrush="#3A3A40" Click="BtnEv60CustomBrushColor_Click"/>
+                </WrapPanel>
+                <WrapPanel Orientation="Horizontal">
+                    <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <Slider x:Name="SldEv60CustomBrightness" Minimum="0" Maximum="100" Width="120"
+                            TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                            VerticalAlignment="Center" ValueChanged="SldEv60CustomBrightness_ValueChanged"/>
+                    <TextBlock x:Name="LblEv60CustomBrightness" Text="100%" VerticalAlignment="Center" Margin="6,0,16,0" MinWidth="36"/>
+                    <Button x:Name="BtnEv60CustomApply" Content="{loc:Get apply_to_device}" Padding="8,2" Margin="0,0,4,0"
+                            Click="BtnEv60CustomApply_Click" Style="{StaticResource K2IconAccentButton}" Tag="&#xE73E;"/>
+                    <Button x:Name="BtnEv60CustomClear" Content="{loc:Get custom_clear}" Padding="8,2"
+                            Click="BtnEv60CustomClear_Click" Style="{StaticResource K2IconButton}" Tag="&#xE74D;"/>
+                </WrapPanel>
             </StackPanel>
-        </Grid>
+        </ScrollViewer>
     </Grid>
 </UserControl>

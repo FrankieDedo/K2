@@ -1,5 +1,61 @@
 # K2 — TODO
 
+## Roadmap 2026-07-11 (richiesta utente, non ancora iniziata)
+
+### Everest Max
+- [ ] Custom Lighting: interfaccia che permetta di dipingere i colori
+  direttamente sulla tastiera (paint mode già esiste in
+  `MainWindow.CustomLighting.cs`/`TryCustomPaint` — verificare cosa manca
+  rispetto a "dipingere direttamente" o se è già questo e serve solo rifinire)
+- [ ] Togliere i tasti con display (i 4 NDK del numpad) dalla modalità paint —
+  oggi `ClearAllOverlays` include anche `CvsEvNumpad`, e non risulta un filtro
+  che escluda gli NDK dal click di paint
+- [ ] La paint mode deve colorare solo il "LED preview", non il tasto
+  effettivo — oggi `ApplyColorOverlay` scrive direttamente su
+  `keyButton.Background`, sovrascrivendo lo stile reale del tasto invece di
+  un layer di anteprima separato
+- [ ] Gestire il **LED ring** (side ring) sia in paint mode che nel LED
+  preview — al momento il ring non risulta gestito nel modulo Everest Max
+  (a differenza di Everest 60, che ha side ring 44 LED via `Everest60RgbPanel`)
+- [ ] Hot-swap di numpad e media dock (collega/scollega a caldo, aggiorna la
+  UI senza riavvio) — per Everest 60 esiste già l'auto-detect posizione
+  numpad via poll (`Ev60RefreshStatus`/`QueryNumpadPosition`); Everest Max
+  usa `byMMDockPlug`/`byNumpadPlug` in `MainWindow.Layout.cs` ma andrebbe
+  verificato se il refresh è a caldo o solo all'avvio
+
+### Everest 60
+- [ ] Gestire il LED ring con paint mode e LED preview — il ring (44 LED,
+  `Everest60RgbPanel`) oggi ha solo i preset RGB, non risulta integrato nel
+  Key Lighting paint mode né in un "preview" separato
+- [ ] Aggiungere i layout da Base Camp (Key Binding: layout tastiera
+  multi-lingua/ISO — oggi `Everest60KeyboardLayout.MainBoard` è "un solo
+  layout ANSI-like", e la sezione "Layout" in Settings risulta disabilitata,
+  vedi `MainWindow.Everest60.cs`)
+
+### Makalu 67
+- [ ] Gestire il LED preview (mostrare lo stato luci corrente letto dal
+  device, non solo impostarlo — pattern già usato per DisplayPad/MacroPad)
+- [ ] Migliorare l'interfaccia delle azioni utilizzabili, renderla più simile
+  a Base Camp — oggi il Makalu non ha `IActionHost`/assegnazione azioni
+  per-tasto (solo remap firmware diretto, vedi nota architetturale in
+  `_PROJECT_MAP.md`); valutare cosa "più simile a Base Camp" implica qui
+  (UI del remap, o vera azione assegnabile)
+
+### Nice to have
+- [ ] Interfaccia che mostri l'intero setup Mountain (tutti i device
+  collegati insieme, dashboard unificata)
+- [ ] Sincronizzazione effetti luminosi coesa fra tutti i dispositivi (**già
+  presente più sopra** come voce "Da aggiungere ex novo" — stesso item,
+  duplicato qui dalla richiesta utente)
+- [ ] Mini interfaccia da icona tray (system tray)
+- [ ] Opzioni di accessibilità (richiesta utente 2026-07-13): modalità
+  daltonismo (palette alternative per gli indicatori a colori nell'UI, es.
+  stati/preview LED) + altre opzioni tipiche (dimensione testo/UI scalabile,
+  alto contrasto, riduzione animazioni). Da valutare in dettaglio quando si
+  inizia: quali elementi UI dipendono da colore per trasmettere informazione
+  (non solo LED preview, anche eventuali badge di stato) e se serve un
+  meccanismo di tema centralizzato oltre a `K2.Core/Themes/K2Theme.xaml`.
+
 ## Da portare da Base Camp
 
 - [x] Visualizzare effetti luminosi attivi sul dispositivo in tempo reale nell'app

@@ -28,6 +28,20 @@ public partial class MakaluCustomRgbWindow : Window
     private readonly (byte r, byte g, byte b)[] _leds = new (byte, byte, byte)[8];
     private readonly Button[] _ledButtons = new Button[8];
 
+    /// <summary>Fires with a snapshot of all 8 LED colors whenever one
+    /// changes (and once up front with the initial all-black state) — lets
+    /// MainWindow's LED ring preview mirror this editor live, same as how
+    /// MakaluRgbSettingsPanel.PreviewChanged mirrors the main effect combo.
+    /// See MainWindow.Makalu.cs / MakaluRgbSettingsPanel's Custom wiring.</summary>
+    internal event Action<(byte r, byte g, byte b)[]>? ColorsChanged;
+
+    /// <summary>Fires only when "Apply" actually succeeds, with the LEDs +
+    /// brightness that were sent — lets the owning panel persist exactly what
+    /// hit the device into the current profile slot (MakaluRgbSettingsPanel's
+    /// MkPersistLighting), as opposed to ColorsChanged which fires on every
+    /// color pick regardless of whether Apply was ever pressed.</summary>
+    internal event Action<(byte r, byte g, byte b)[], int>? Applied;
+
     internal MakaluCustomRgbWindow(MakaluService makalu, Action<string> log, int initialBrightnessPct)
     {
         InitializeComponent();
@@ -36,6 +50,12 @@ public partial class MakaluCustomRgbWindow : Window
         BuildLeds();
         SldBrightness.Value = initialBrightnessPct;
     }
+
+    /// <summary>Snapshot of the current 8 LED colors — call right after
+    /// construction (before anything can change them) to seed a
+    /// ColorsChanged subscriber with the initial all-black state; there are
+    /// no subscribers yet during the constructor itself.</summary>
+    internal (byte r, byte g, byte b)[] GetColors() => ((byte, byte, byte)[])_leds.Clone();
 
     private void BuildLeds()
     {
@@ -76,6 +96,7 @@ public partial class MakaluCustomRgbWindow : Window
         _leds[idx] = (dlg.Color.R, dlg.Color.G, dlg.Color.B);
         _ledButtons[idx].Background = new SolidColorBrush(Color.FromRgb(dlg.Color.R, dlg.Color.G, dlg.Color.B));
         _ledButtons[idx].Content = null;
+        ColorsChanged?.Invoke(GetColors());
     }
 
     private void SldBrightness_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -90,6 +111,7 @@ public partial class MakaluCustomRgbWindow : Window
         _log($"[CUSTOM] SetLightingCustom -> {ok}");
         LblStatus.Text = ok ? Loc.Get("makalu_applied") : Loc.Get("makalu_failed");
         LblStatus.Foreground = ok ? (Brush)FindResource("K2AccentBrush") : (Brush)FindResource("K2DangerBrush");
+        if (ok) Applied?.Invoke(GetColors(), (int)SldBrightness.Value);
     }
 
     private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();

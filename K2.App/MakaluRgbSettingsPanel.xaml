@@ -9,8 +9,13 @@
          SecRgb/SecSettings are toggled from MainWindow.Makalu.cs's
          MkSection_Changed. -->
     <Grid>
-        <!-- RGB -->
-        <Grid x:Name="SecRgb">
+        <!-- RGB / Lighting (no longer the default section — Key Binding is,
+             see InitMkSectionNav in MainWindow.Makalu.cs — so this must start
+             Collapsed like SecSettings, otherwise it stays visible underneath
+             whichever section IS shown first, since this control and
+             MakaluDpiRemapPanel are overlaid siblings in the same Grid cell
+             and only ONE Sec* per control is ever explicitly toggled. -->
+        <Grid x:Name="SecRgb" Visibility="Collapsed">
             <StackPanel>
                 <DockPanel Margin="0,0,0,8">
                     <Button DockPanel.Dock="Right" x:Name="BtnMkCustomOpen" Content="{loc:Get makalu_custom_open}"
@@ -23,20 +28,25 @@
                               SelectionChanged="CbMkEffect_SelectionChanged"/>
                     <StackPanel x:Name="PnlMkSpeed" Orientation="Horizontal" Margin="0,0,12,0">
                         <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <ComboBox x:Name="CbMkSpeed" Width="90" SelectionChanged="CbMkEffectParam_Changed"/>
+                        <Slider x:Name="SldMkSpeed" Minimum="0" Maximum="2" Width="80" TickFrequency="1" IsSnapToTickEnabled="True"
+                                ValueChanged="SldMkSpeed_ValueChanged" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LblMkSpeedVal" Text="Medium" Width="52" VerticalAlignment="Center" Margin="6,0,0,0"/>
                     </StackPanel>
                     <StackPanel x:Name="PnlMkDirection" Orientation="Horizontal">
                         <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <ComboBox x:Name="CbMkDirection" Width="90" SelectionChanged="CbMkEffectParam_Changed"/>
+                        <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="70">
+                            <UniformGrid Rows="1">
+                                <RadioButton x:Name="RbMkDirLeft" Content="←" GroupName="MkDirection"
+                                             Style="{StaticResource K2SegmentedButton}" Checked="RbMkDirection_Checked"/>
+                                <RadioButton x:Name="RbMkDirRight" Content="→" GroupName="MkDirection"
+                                             Style="{StaticResource K2SegmentedButton}" Checked="RbMkDirection_Checked"/>
+                            </UniformGrid>
+                        </Border>
                     </StackPanel>
                 </WrapPanel>
-                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-                    <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <Slider x:Name="SldMkBrightness" Minimum="0" Maximum="100" Width="140"
-                            TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
-                            ValueChanged="SldMkBrightness_ValueChanged" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="LblMkBrightness" Text="100%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
-                </WrapPanel>
+                <!-- Brightness lives in MainWindow's shared top-right bar (BrMakalu), not
+                     here — same convention as Everest Max/MacroPad/DisplayPad, see
+                     MainWindow.SectionNav.cs. MainWindow calls SetBrightness() on change. -->
                 <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
                     <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                     <Button x:Name="BtnMkColor1" Width="40" Height="22" Background="#900000"
@@ -53,17 +63,29 @@
             </StackPanel>
         </Grid>
 
-        <!-- Settings -->
+        <!-- Settings — two columns like Base Camp's own Makalu Settings page:
+             device settings at left, DPI levels at right (DPI used to be its
+             own sidebar section; folded in here, see MainWindow.xaml). Rows
+             get generous bottom margin (16px, was 6px) so controls don't read
+             as cramped/overlapping. -->
         <Grid x:Name="SecSettings" Visibility="Collapsed">
-            <StackPanel>
-                <TextBlock Text="{loc:Get makalu_settings_title}" FontWeight="Bold" Margin="0,0,0,8"/>
-                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="24"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="{loc:Get makalu_settings_title}" FontWeight="Bold" Margin="0,0,0,14"/>
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,16">
                     <TextBlock Text="{loc:Get makalu_setting_poll}" VerticalAlignment="Center" Width="130"/>
-                    <ComboBox x:Name="CbMkPolling" Width="100" Margin="0,0,8,0"/>
-                    <Button x:Name="BtnMkPollingApply" Content="{loc:Get makalu_apply}" Click="BtnMkPollingApply_Click" Padding="8,3" Margin="0,0,6,0"/>
+                    <Slider x:Name="SldMkPolling" Minimum="0" Maximum="3" Width="120" TickFrequency="1" IsSnapToTickEnabled="True"
+                            ValueChanged="SldMkPolling_ValueChanged" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="LblMkPollingVal" Text="1000 Hz" Width="56" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                    <Button x:Name="BtnMkPollingApply" Content="{loc:Get makalu_apply}" Click="BtnMkPollingApply_Click" Padding="8,3" Margin="6,0,6,0"/>
                     <TextBlock x:Name="LblMkPollingStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
                 </WrapPanel>
-                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,16">
                     <TextBlock Text="{loc:Get makalu_setting_debounce}" VerticalAlignment="Center" Width="130"/>
                     <Slider x:Name="SldMkDebounce" Minimum="0" Maximum="5" Width="120" TickFrequency="1" IsSnapToTickEnabled="True"
                             ValueChanged="SldMkDebounce_ValueChanged" VerticalAlignment="Center"/>
@@ -71,16 +93,51 @@
                     <Button x:Name="BtnMkDebounceApply" Content="{loc:Get makalu_apply}" Click="BtnMkDebounceApply_Click" Padding="8,3" Margin="6,0,6,0"/>
                     <TextBlock x:Name="LblMkDebounceStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
                 </WrapPanel>
-                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,16">
                     <TextBlock Text="{loc:Get makalu_setting_angle}" VerticalAlignment="Center" Width="130"/>
-                    <CheckBox x:Name="CkMkAngleSnap" Content="{loc:Get makalu_setting_on}" Click="CkMkAngleSnap_Click" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <TextBlock x:Name="LblMkAngleStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                    <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="120">
+                        <UniformGrid Rows="1">
+                            <RadioButton x:Name="RbMkAngleOff" Content="{loc:Get makalu_setting_off}" GroupName="MkAngle"
+                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkAngle_Checked"/>
+                            <RadioButton x:Name="RbMkAngleOn" Content="{loc:Get makalu_setting_on}" GroupName="MkAngle"
+                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkAngle_Checked"/>
+                        </UniformGrid>
+                    </Border>
+                    <TextBlock x:Name="LblMkAngleStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}" Margin="8,0,0,0"/>
                 </WrapPanel>
                 <WrapPanel Orientation="Horizontal">
                     <TextBlock Text="{loc:Get makalu_setting_liftoff}" VerticalAlignment="Center" Width="130"/>
-                    <CheckBox x:Name="CkMkLiftHigh" Content="{loc:Get makalu_setting_liftoff_high}" Click="CkMkLiftHigh_Click" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <TextBlock x:Name="LblMkLiftStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                    <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="120">
+                        <UniformGrid Rows="1">
+                            <RadioButton x:Name="RbMkLiftLow" Content="{loc:Get makalu_setting_liftoff_low}" GroupName="MkLift"
+                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkLift_Checked"/>
+                            <RadioButton x:Name="RbMkLiftHigh" Content="{loc:Get makalu_setting_liftoff_high}" GroupName="MkLift"
+                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkLift_Checked"/>
+                        </UniformGrid>
+                    </Border>
+                    <TextBlock x:Name="LblMkLiftStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}" Margin="8,0,0,0"/>
                 </WrapPanel>
+            </StackPanel>
+
+            <Rectangle Grid.Column="1" Width="1" Fill="{StaticResource K2BorderBrush}" Margin="0,2,0,2"/>
+
+            <StackPanel Grid.Column="2">
+                <TextBlock Text="{loc:Get makalu_dpi_title}" FontWeight="Bold" Margin="0,0,0,14"/>
+                <!-- Always one row, however many levels there are: a UniformGrid
+                     (not a WrapPanel) so entries stretch to share the full column
+                     width evenly instead of wrapping to a 2nd line. -->
+                <UniformGrid x:Name="PnlMkDpiLevels" Rows="1" Margin="0,0,0,12"/>
+                <DockPanel Margin="0,0,0,12">
+                    <TextBox x:Name="TxtMkDpi" DockPanel.Dock="Right" Width="60" Margin="8,0,0,0" TextAlignment="Center"
+                             KeyDown="TxtMkDpi_KeyDown" LostFocus="TxtMkDpi_LostFocus"/>
+                    <Slider x:Name="SldMkDpi" Minimum="50" Maximum="19000"
+                            TickFrequency="50" ValueChanged="SldMkDpi_ValueChanged" VerticalAlignment="Center"/>
+                </DockPanel>
+                <WrapPanel Orientation="Horizontal">
+                    <Button x:Name="BtnMkDpiApply" Content="{loc:Get makalu_apply}" Click="BtnMkDpiApply_Click" Padding="8,4" Margin="0,0,6,0"/>
+                    <Button x:Name="BtnMkDpiRefresh" Content="{loc:Get makalu_refresh}" Click="BtnMkDpiRefresh_Click" Padding="8,4"/>
+                </WrapPanel>
+                <TextBlock x:Name="LblMkDpiStatus" Margin="0,8,0,0" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
             </StackPanel>
         </Grid>
     </Grid>

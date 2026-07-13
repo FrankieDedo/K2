@@ -146,6 +146,8 @@
   <string name="settings_k2_autostart">Start K2 with Windows</string>
   <string name="settings_start_min_tray">Start directly minimized to tray</string>
   <string name="settings_start_min_tray_hint">K2 starts with its drivers active but the window hidden in the tray — open it anytime from the tray icon.</string>
+  <string name="settings_font_family">Font</string>
+  <string name="settings_font_family_hint">Changes the app-wide UI font immediately, no restart needed.</string>
   <string name="tray_show">Show K2</string>
   <string name="tray_exit">Exit</string>
 
@@ -209,7 +211,25 @@
   <string name="ev60_side_ring">Side ring</string>
   <string name="ev60_side_apply">Apply to side ring</string>
   <string name="ev60_side_hint">Applying a side-ring color switches the main keys to Custom mode (they go dark) — the device only addresses the ring through that mode.</string>
-  <string name="ev60_log">Log</string>
+  <string name="ev60_key_lighting">Key Lighting</string>
+  <string name="ev60_key_lighting_hint">Enable paint mode, pick a color and click keys on the keyboard above to color them. Software preview only — this raw-HID board has no live readback. Applying switches the side ring off (same Custom-mode limitation as the side ring panel).</string>
+  <string name="ev60_numpad_decorative_tip">Decorative only — no known lighting/remap protocol for this accessory.</string>
+  <string name="ev60_key_binding">Key Binding</string>
+  <string name="ev60_key_binding_hint">Click a key on the keyboard above to select it, then choose what it should do.</string>
+  <string name="ev60_selected_key">Selected key:</string>
+  <string name="ev60_remap_mode">Type:</string>
+  <string name="ev60_target_key">Target key:</string>
+  <string name="ev60_media_action">Action:</string>
+  <string name="ev60_remap_reset">Reset key</string>
+  <string name="ev60_remap_save_tip">Makes the current bindings permanent (survives unplug/restart).</string>
+  <string name="ev60_key_binding_unverified">Writes directly to the keyboard's firmware via the vendor SDK (Everest360_USB.dll) — not yet verified on real hardware. Media/OS action codes are unconfirmed (placeholder ordering); Remap Key/Fn Layer/Shortcut target keys were extracted from Base Camp's own decompiled catalog.</string>
+  <string name="ev60_key_binding_unmapped">no DLLKeyId — not remappable</string>
+  <string name="ev60_key_binding_select_first">Select a key on the keyboard first.</string>
+  <string name="ev60_key_binding_not_open">Everest 60 SDK driver not open — is the keyboard connected?</string>
+  <string name="ev60_key_binding_select_target">Select a target first.</string>
+  <string name="ev60_remap_applied">Applied.</string>
+  <string name="ev60_remap_failed">Failed.</string>
+  <string name="ev60_remap_reset_done">Key reset.</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
        MAKALU TAB (mouse — raw-HID, no vendor SDK — see MakaluHidNative)
@@ -269,7 +289,9 @@
   <string name="makalu_setting_debounce">Button response:</string>
   <string name="makalu_setting_angle">Angle snapping:</string>
   <string name="makalu_setting_on">On</string>
+  <string name="makalu_setting_off">Off</string>
   <string name="makalu_setting_liftoff">Lift-off distance:</string>
+  <string name="makalu_setting_liftoff_low">Low</string>
   <string name="makalu_setting_liftoff_high">High</string>
 
   <!-- Display Dial -->
@@ -518,6 +540,12 @@
   <!-- MacroPad import -->
   <string name="mp_no_profiles_in_bc">No MacroPad profiles found in the Base Camp database.</string>
   <string name="mp_imported_bc">Imported {0} MacroPad profiles ({1} keys) from Base Camp.</string>
+  <!-- Makalu import -->
+  <string name="mk_no_profiles_in_bc">No Makalu profiles found in the Base Camp database.</string>
+  <string name="mk_imported_bc">Imported {0} Makalu profiles ({1} remapped buttons) from Base Camp.</string>
+  <!-- Everest 60 import -->
+  <string name="ev60_no_profiles_in_bc">No Everest 60 profiles found in the Base Camp database.</string>
+  <string name="ev60_imported_bc">Imported {0} Everest 60 profiles ({1} keys) from Base Camp.</string>
   <!-- DisplayPad folder navigation -->
   <string name="dp_back">Back</string>
 

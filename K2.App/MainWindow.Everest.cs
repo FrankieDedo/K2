@@ -212,6 +212,7 @@ public partial class MainWindow
         Closed += (_, _) =>
         {
             CleanupMediaDock();
+            try { StopEvAccessoryPoll();  } catch { /* ignore */ }
             try { _evEngine?.Dispose(); } catch { /* ignore */ }
             try { _everest.Dispose();   } catch { /* ignore */ }
             try { _evStore.Dispose();   } catch { /* ignore */ }
@@ -603,7 +604,6 @@ public partial class MainWindow
 
     private void InitEverestSettingsPanel()
     {
-        InitKeyboardColorSelector();
         InitKeycapAppearanceControls();
         _evSettingsSuppress = true;
         try { LoadEverestSettingsFromStore(); }
@@ -630,37 +630,18 @@ public partial class MainWindow
             int.TryParse(_evStore.GetSetting("settings.indicator_led"), out var led) && led != 0;
 
         bool black = _evStore.GetSetting("settings.keyboard_color") == "black";
-        CbSettingsKeyboardColor.SelectedItem =
-            System.Array.Find(_keyboardColorChoices, c => c.IsBlack == black) ?? _keyboardColorChoices[0];
+        (black ? RbEvKbColorBlack : RbEvKbColorSilver).IsChecked = true;
         ApplyKeyboardColor(black);
 
         LoadKeycapAppearanceFromStore();
     }
 
-    private sealed record KeyboardColorChoice(bool IsBlack, string Label)
-    {
-        public override string ToString() => Label;
-    }
-
-    private KeyboardColorChoice[] _keyboardColorChoices = [];
-
-    private void InitKeyboardColorSelector()
-    {
-        _keyboardColorChoices =
-        [
-            new KeyboardColorChoice(false, Loc.Get("color_silver")),
-            new KeyboardColorChoice(true,  Loc.Get("color_black")),
-        ];
-        CbSettingsKeyboardColor.ItemsSource       = _keyboardColorChoices;
-        CbSettingsKeyboardColor.DisplayMemberPath = nameof(KeyboardColorChoice.Label);
-    }
-
-    private void CbSettingsKeyboardColor_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void RbEvKbColor_Checked(object sender, RoutedEventArgs e)
     {
         if (_evSettingsSuppress) return;
-        if (CbSettingsKeyboardColor.SelectedItem is not KeyboardColorChoice c) return;
-        _evStore.SetSetting("settings.keyboard_color", c.IsBlack ? "black" : "silver");
-        ApplyKeyboardColor(c.IsBlack);
+        bool black = ReferenceEquals(sender, RbEvKbColorBlack);
+        _evStore.SetSetting("settings.keyboard_color", black ? "black" : "silver");
+        ApplyKeyboardColor(black);
     }
 
     /// <summary>Swaps the keyboard body art (cosmetic only — matches the app's
@@ -1644,6 +1625,12 @@ public partial class MainWindow
     /// <summary>Direction index restored from settings (applied if valid for the effect).</summary>
     private int _evSavedDirIndex;
 
+    /// <summary>Backs GridEvDirection's segmented buttons — mirrors what
+    /// CbEvDirection.SelectedIndex used to provide before the direction
+    /// ComboBox became a dynamically-rebuilt RadioButton row (2-4 options
+    /// depending on the effect; see SegmentedButtonGroup).</summary>
+    private int _evDirIndex;
+
     /// <summary>
     /// Aligns RGB controls to the selected effect's capabilities:
     /// enables/disables speed, direction (with the right options),
@@ -1660,20 +1647,20 @@ public partial class MainWindow
         try
         {
             // Speed
-            CbEvSpeed.IsEnabled = caps.Speed;
+            PnlEvSpeed.Visibility = caps.Speed ? Visibility.Visible : Visibility.Collapsed;
 
             // Direction: options depend on the effect
             if (caps.DirLabels.Length > 0)
             {
-                CbEvDirection.ItemsSource = caps.DirLabels;
                 int di = (_evSavedDirIndex >= 0 && _evSavedDirIndex < caps.DirLabels.Length) ? _evSavedDirIndex : 0;
-                CbEvDirection.SelectedIndex = di;
-                CbEvDirection.IsEnabled = true;
+                _evDirIndex = di;
+                SegmentedButtonGroup.Rebuild(GridEvDirection, "EvDirection", caps.DirLabels, RbEvDirection_Checked, di);
+                PnlEvDirection.Visibility = Visibility.Visible;
             }
             else
             {
-                CbEvDirection.ItemsSource = null;
-                CbEvDirection.IsEnabled = false;
+                GridEvDirection.Children.Clear();
+                PnlEvDirection.Visibility = Visibility.Collapsed;
             }
 
             // Rainbow
@@ -1699,14 +1686,12 @@ public partial class MainWindow
             CbEvEffect.ItemsSource    = EvEffectList;
             CbEvEffect.DisplayMemberPath = "Label";
 
-            // Speed = 5 positions (wire scale 10..6 is mapped in ApplyCurrentEffect).
             // Direction is populated by UpdateEvCapabilities based on effect
             // (Wave 4-way, Tornado CW/CCW, others: none).
-            CbEvSpeed.ItemsSource     = new[] { "1 — slow", "2", "3", "4", "5 — fast" };
 
             // Defaults — overwritten if persisted settings exist.
             CbEvEffect.SelectedIndex     = 2; // Wave
-            CbEvSpeed.SelectedIndex      = 2; // middle
+            SldEvSpeed.Value             = 50;
             SldEvBrightness.Value        = 100;
 
             LoadEverestRgbFromStore();
@@ -1739,7 +1724,7 @@ public partial class MainWindow
             for (int i = 0; i < EvEffectList.Length; i++)
                 if ((byte)EvEffectList[i].Eff == eIdx) { CbEvEffect.SelectedIndex = i; break; }
         }
-        if (IntSetting("rgb.speed")      is int sp && sp is >= 0 and <= 4) CbEvSpeed.SelectedIndex = sp;
+        if (IntSetting("rgb.speed")      is int sp && sp is >= 0 and <= 100) SldEvSpeed.Value = sp;
         // Direction is set by UpdateEvCapabilities (depends on effect);
         // here we only restore the saved index, applied later if valid.
         if (IntSetting("rgb.direction")  is int dr && dr >= 0) _evSavedDirIndex = dr;
@@ -1757,8 +1742,8 @@ public partial class MainWindow
         if (!_evRgbInitialized || _evRgbSuppress) return;
         if (CbEvEffect.SelectedItem is not EvEffectChoice pick) return;
         _evStore.SetSetting("rgb.effect",     ((byte)pick.Eff).ToString());
-        _evStore.SetSetting("rgb.speed",      CbEvSpeed.SelectedIndex.ToString());
-        _evStore.SetSetting("rgb.direction",  CbEvDirection.SelectedIndex.ToString());
+        _evStore.SetSetting("rgb.speed",      ((int)SldEvSpeed.Value).ToString());
+        _evStore.SetSetting("rgb.direction",  _evDirIndex.ToString());
         _evStore.SetSetting("rgb.brightness", ((int)SldEvBrightness.Value).ToString());
         _evStore.SetSetting("rgb.color1",     _evColor1.ToString());
         _evStore.SetSetting("rgb.color2",     _evColor2.ToString());
@@ -1789,8 +1774,17 @@ public partial class MainWindow
         ApplyCurrentEffect();
     }
 
-    private void CbEvEffectParam_Changed(object sender, SelectionChangedEventArgs e) =>
+    private void SldEvSpeed_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (LblEvSpeed != null) LblEvSpeed.Text = $"{(int)SldEvSpeed.Value}%";
         ApplyCurrentEffect();
+    }
+
+    private void RbEvDirection_Checked(object sender, RoutedEventArgs e)
+    {
+        _evDirIndex = (int)((RadioButton)sender).Tag;
+        ApplyCurrentEffect();
+    }
 
     private void CkEvRainbow_Click(object sender, RoutedEventArgs e) =>
         ApplyCurrentEffect();
@@ -1892,15 +1886,15 @@ public partial class MainWindow
         var effect = pick.Eff;
         var caps   = CapsFor(effect);
 
-        // Speed: 5 UI positions -> scale 0..100 (pos0=0 slow … pos4=100 fast).
+        // Speed: slider already snaps to 0/25/50/75/100 (scale 0..100, 0=slow, 100=fast).
         // The DLL transforms internally for both ChangeEffect and ChangeBlockEffect.
-        int speedByte = caps.Speed ? Math.Clamp(CbEvSpeed.SelectedIndex, 0, 4) * 25 : -1;
+        int speedByte = caps.Speed ? (int)SldEvSpeed.Value : -1;
 
         // Direction: per-effect byte (Wave Right0/Down2/Left4/Up6,
         // Tornado CW9/CCW10). -1 = effect has no direction → use config.
         int dirByte = -1;
-        if (caps.DirCodes.Length > 0 && CbEvDirection.SelectedIndex >= 0)
-            dirByte = caps.DirCodes[Math.Clamp(CbEvDirection.SelectedIndex, 0, caps.DirCodes.Length - 1)];
+        if (caps.DirCodes.Length > 0)
+            dirByte = caps.DirCodes[Math.Clamp(_evDirIndex, 0, caps.DirCodes.Length - 1)];
 
         bool rainbow    = caps.Rainbow && CkEvRainbow.IsChecked == true;
         int  colorCount = rainbow ? 1 : caps.MaxColors;   // rainbow ignores color pickers
