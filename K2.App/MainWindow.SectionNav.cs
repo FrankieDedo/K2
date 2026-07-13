@@ -107,6 +107,10 @@ public partial class MainWindow
     /// gates whether clicking a key on the keyboard overlay opens the action dialog.</summary>
     private bool IsEvKeyBindingSectionActive => _activeEvSection == PnlSecKeyMapping;
 
+    /// <summary>True while the Everest "Settings" section is active — gates whether clicking a
+    /// key opens KeycapCustomizeDialog (only when "Edit individual keycaps" is also checked).</summary>
+    private bool IsEvSettingsSectionActive => _activeEvSection == PnlSecSettings;
+
     // ── MacroPad sidebar (Key Binding / Orientation / LED Lighting) ───
     private FrameworkElement? _activeMpSection;
 
@@ -145,6 +149,10 @@ public partial class MainWindow
     /// <summary>True while the MacroPad "Key Binding" section is the active one —
     /// gates whether clicking a key on the grid opens the action dialog.</summary>
     private bool IsMpKeyBindingSectionActive => _activeMpSection == PnlMpSecKeyBinding;
+
+    /// <summary>True while the MacroPad "Settings" section is active — gates whether clicking a
+    /// key opens KeycapCustomizeDialog (only when "Edit individual keycaps" is also checked).</summary>
+    private bool IsMpSettingsSectionActive => _activeMpSection == PnlMpSecSettings;
 
     // ── DisplayPad sidebar (Key Binding / Rotation) ───────────────────
     private FrameworkElement? _activeDpSection;

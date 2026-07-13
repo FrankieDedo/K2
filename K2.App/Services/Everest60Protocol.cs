@@ -209,4 +209,112 @@ internal static class Everest60Protocol
         Everest60HidNative.SendFeature(h, MakeBuf(0x36));
         log?.Invoke($"[Ev60] SendCustom: {stream.Count} LEDs ({(sideColors != null ? "keys+side" : "keys only")})");
     }
+
+    /// <summary>Number of RGB entries in a <see cref="ReadColorData"/> buffer —
+    /// same 192-entry address space as <c>Everest60SdkNative.GetColorData2</c>
+    /// (see its doc comment), just reached over raw HID instead of the vendor
+    /// SDK.</summary>
+    public const int ColorEntryCount = 192;
+
+    /// <summary>Max entries per page: (65-byte report - 1 report-ID byte -
+    /// 4-byte cmd+magic echo header) / 3 bytes-per-RGB-entry = 20.</summary>
+    private const int ColorPageSize = 20;
+
+    /// <summary>
+    /// Live LED-color readback (opcode 0x28) — reverse-engineered 2026-07-13
+    /// from a real Base Camp USB capture (<c>_reference/usb_dumps/ev60+mak.pcapng</c>,
+    /// captured specifically because <c>Everest60SdkNative.GetColorData2</c>/
+    /// <c>GetSubDeviceInfo</c> were found to reliably fail whenever a Makalu
+    /// mouse was also connected — see CHANGELOG). Base Camp's own traffic
+    /// showed this is NOT a separate vendor-SDK code path at all: it's plain
+    /// HID Feature Reports on the SAME interface 2 channel already used for
+    /// lighting writes (<see cref="SendMode"/>/<see cref="SendCustom"/>),
+    /// which — unlike the SDK session — kept working in every single test
+    /// even with a Makalu connected. Wire format: request = cmd 0x28 + magic
+    /// + int32 LE <c>offset</c> (entry index, byte 4) + int32 LE
+    /// <c>count</c> (entries, byte 8, max <see cref="ColorPageSize"/> since
+    /// 20 entries × 3 bytes + 4-byte echo header = 64 bytes, exactly one
+    /// report). Response echoes cmd+magic then <c>count</c>×3 raw RGB bytes
+    /// starting at firmware LED address <c>offset</c> — same addressing
+    /// Everest60Protocol already uses to WRITE colors
+    /// (<see cref="LedIndex"/>/<see cref="SideLedIndex"/>/<see cref="NumpadLedIndex"/>).
+    /// Base Camp reads the full 192-entry space (matching
+    /// <c>GetColorData2</c>'s documented 576-byte/192-FWColor buffer) in 10
+    /// pages: nine of 20 entries (offsets 0,20,...,160) plus one final page
+    /// of 12 (offset 180) — 9×20+12=192, confirmed byte-for-byte against the
+    /// capture, not guessed (see CLAUDE.md's reverse-engineering rule).
+    /// <paramref name="delayMs"/> defaults far below <see cref="Everest60HidNative.SendFeature"/>'s
+    /// normal 50ms: the capture showed Base Camp firing consecutive read
+    /// pages under 1ms apart, so a full 10-page sweep needs to stay well
+    /// under a slow poll interval — kept at 15ms (not 0-1ms like the
+    /// capture) as a safety margin since only one hardware sample exists so
+    /// far.
+    /// </summary>
+    public static bool ReadColorData(SafeFileHandle h, EverestSdkNative.FWColor[] colors, Action<string>? log = null, int delayMs = 15)
+    {
+        if (colors.Length != ColorEntryCount)
+            throw new ArgumentException($"colors must have {ColorEntryCount} entries", nameof(colors));
+
+        for (int offset = 0; offset < ColorEntryCount; offset += ColorPageSize)
+        {
+            int count = Math.Min(ColorPageSize, ColorEntryCount - offset);
+            var req = MakeBuf(0x28);
+            BitConverter.GetBytes(offset).CopyTo(req, 5);
+            BitConverter.GetBytes(count).CopyTo(req, 9);
+            var resp = Everest60HidNative.SendFeature(h, req, delayMs: delayMs);
+            if (resp is null || resp.Length < 5 + count * 3 || resp[1] != 0x28)
+            {
+                log?.Invoke($"[Ev60] ReadColorData: page offset={offset} count={count} failed");
+                return false;
+            }
+            for (int i = 0; i < count; i++)
+            {
+                int p = 5 + i * 3;
+                colors[offset + i] = new EverestSdkNative.FWColor(resp[p], resp[p + 1], resp[p + 2]);
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Numpad accessory presence (opcode 0x20) — reverse-engineered
+    /// 2026-07-13 from two real Base Camp USB captures with the accessory
+    /// unplugged then plugged (<c>_reference/usb_dumps/ev60stacca.pcapng</c>),
+    /// found the same session as <see cref="ReadColorData"/> after
+    /// <c>Everest60SdkNative.GetSubDeviceInfo</c> was confirmed to reliably
+    /// fail whenever a Makalu is also connected (see CHANGELOG). Request:
+    /// cmd 0x20 + magic + int32 LE <c>1</c> at byte 4 (sub-device index,
+    /// same convention <c>GetSubDeviceInfo(1, ...)</c> uses). Response
+    /// echoes cmd+magic+the same int32, followed by a 52-byte data region
+    /// that is ALL ZERO with no numpad attached and full of RGB-triplet-
+    /// shaped bytes (matching the numpad's own live LED preview, same
+    /// gradient pattern as <see cref="ReadColorData"/>'s output) once
+    /// attached — confirmed by diffing the exact same request/response
+    /// shape before vs. after the user plugged the accessory mid-capture,
+    /// not guessed. A trailing 4-byte tail (<c>05 05 01 02</c>) is constant
+    /// in EITHER state (some general status/checksum unrelated to the
+    /// accessory) and is deliberately excluded from the presence check —
+    /// including it would make every response look "present".
+    /// <para>
+    /// <b>Left/right side NOT yet determined</b> (only a right-side unit was
+    /// available across the sessions that captured this): callers should
+    /// treat the returned bool as presence-only and keep whatever side was
+    /// last known/assumed until a differential capture with the accessory on
+    /// the left is available — see MainWindow.Everest60.cs's caller.
+    /// </para>
+    /// </summary>
+    public static bool? ReadNumpadPresent(SafeFileHandle h, Action<string>? log = null)
+    {
+        var req = MakeBuf(0x20);
+        BitConverter.GetBytes(1).CopyTo(req, 5);
+        var resp = Everest60HidNative.SendFeature(h, req, delayMs: 15);
+        if (resp is null || resp.Length != Everest60HidNative.ReportSize || resp[1] != 0x20)
+        {
+            log?.Invoke("[Ev60] ReadNumpadPresent: request failed");
+            return null;
+        }
+        for (int i = 9; i < 61; i++) // wire bytes [8..59]: data region, excludes the constant trailer
+            if (resp[i] != 0) return true;
+        return false;
+    }
 }

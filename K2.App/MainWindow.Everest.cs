@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using K2.App.Models;
 using K2.App.Services;
 using K2.Core;
@@ -38,8 +39,19 @@ public partial class MainWindow
     private bool _evCapturing;
     private bool _evSuppressProfile;
 
+    /// <summary>Connection poll — mirrors Ev60/Makalu's own timers
+    /// (Ev60RefreshStatus/MkRefreshStatus): only drives TabEverest's
+    /// Visibility, deliberately quiet (no per-tick Log()) unlike the
+    /// verbose EvRefresh() used by the toolbar buttons.</summary>
+    private DispatcherTimer? _evPollTimer;
+
     /// <summary>Maps matrixId → Button in the keyboard Canvas for highlight.</summary>
     private readonly Dictionary<int, Button> _evKeyboardButtons = new();
+
+    // ---- Drag & drop (swap two keys' action) ----
+    private const string EverestKeyDragFormat = "K2.EverestKeyMatrixId";
+    private Point _evDragStartPoint;
+    private int? _evDragCandidateMatrix;
 
     // ---- Interactive key remapping (like MacroPad) ----
     /// <summary>Maps <c>SDK wMatrix → layout matrixId</c> to translate callback codes.</summary>
@@ -232,7 +244,29 @@ public partial class MainWindow
         InitKeyboardLayoutSelector();
         UpdateKeyboardLayout();
         LoadEverestKeyMap();
+
+        _evPollTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _evPollTimer.Tick += (_, _) => EvRefreshConnectionStatus();
+        _evPollTimer.Start();
+        EvRefreshConnectionStatus();
     }
+
+    /// <summary>Quiet connection check driving TabEverest's Visibility — separate from
+    /// the verbose EvRefresh() (device info/firmware log dump) used by the toolbar's
+    /// Open/Refresh buttons, so this can run unattended every 3s without flooding the
+    /// console.</summary>
+    private void EvRefreshConnectionStatus() => SetDeviceTabVisible(TabEverest, EvIsPhysicallyConnected());
+
+    /// <summary>Live, SDK-independent presence check: raw HID enumeration of the MI_03
+    /// command interface (same approach Everest60Service/MakaluService already use for
+    /// their own connection polls), NOT <see cref="EverestService.IsPlugged"/>. Confirmed
+    /// on real hardware (2026-07-13) that SDKDLL.dll's IsDevicePlug() keeps reporting
+    /// "plugged" after a full physical unplug — its internal state seems to only refresh
+    /// on the next OpenUSBDriver() call, not on every query — so it cannot drive tab
+    /// visibility reliably. EverestHidNative.FindCommandInterfacePath() opens each
+    /// candidate with 0 access rights (metadata query only), so it never conflicts with
+    /// whatever handle SDKDLL.dll itself holds.</summary>
+    private static bool EvIsPhysicallyConnected() => EverestHidNative.FindCommandInterfacePath() is not null;
 
     // ============================================================
     // Interactive keyboard overlay
@@ -524,6 +558,12 @@ public partial class MainWindow
                 };
 
                 btn.Click += EvKeyboardButton_Click;
+                btn.AllowDrop = true;
+                btn.PreviewMouseLeftButtonDown += EvKeyboardButton_PreviewMouseLeftButtonDown;
+                btn.PreviewMouseMove += EvKeyboardButton_PreviewMouseMove;
+                btn.DragEnter += EvKeyboardButton_DragEnter;
+                btn.DragLeave += EvKeyboardButton_DragLeave;
+                btn.Drop += EvKeyboardButton_Drop;
 
                 Canvas.SetLeft(btn, kd.X);
                 Canvas.SetTop(btn, kd.Y);
@@ -721,10 +761,24 @@ public partial class MainWindow
     /// </summary>
     private void EvKeyboardButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: int matrixId }) return;
+        if (sender is not Button { Tag: int matrixId } btn0) return;
+
+        // Edit-individual-keycaps mode (Settings section): open the per-key color/image
+        // customizer instead of anything else this click would normally do. _evKeyVisuals is
+        // keyed by LED index (not matrixId/VK), so find this button's entry to get its KeyId.
+        if (_evKeycapEditMode && IsEvSettingsSectionActive)
+        {
+            var match = _evKeyVisuals.FirstOrDefault(kv => ReferenceEquals(kv.Value.Button, btn0));
+            if (match.Value.Button != null)
+            {
+                string label = (btn0.Content as TextBlock)?.Text ?? $"0x{matrixId:X2}";
+                OpenEvKeycapCustomizeDialog(match.Key, label);
+            }
+            return;
+        }
 
         // Custom lighting paint mode: color the key and consume the click
-        if (sender is Button btn && TryCustomPaint(btn, matrixId))
+        if (TryCustomPaint(btn0, matrixId))
             return;
 
         // FN is reserved for the keyboard's own Fn-layer switching, not assignable
@@ -776,6 +830,70 @@ public partial class MainWindow
         key.ActionValue = key.ActionType is null ? null : dlg.ActionValue;
 
         EvPersistOrDiscardKey(key);
+    }
+
+    // ============================================================
+    // Drag & drop — swap two keys' action
+    // ============================================================
+
+    private void EvKeyboardButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _evDragStartPoint = e.GetPosition(null);
+        _evDragCandidateMatrix = (sender as Button)?.Tag as int?;
+    }
+
+    private void EvKeyboardButton_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _evDragCandidateMatrix is not int matrixId) return;
+        if (!IsEvKeyBindingSectionActive || _evCapturing || matrixId == 261 ||
+            !_evByMatrix.TryGetValue(matrixId, out var key) || !key.HasAction)
+        {
+            _evDragCandidateMatrix = null;
+            return;
+        }
+        if (!DragDropHelper.ExceedsDragThreshold(_evDragStartPoint, e.GetPosition(null))) return;
+
+        _evDragCandidateMatrix = null;
+        DragDrop.DoDragDrop((Button)sender, new DataObject(EverestKeyDragFormat, matrixId), DragDropEffects.Move);
+    }
+
+    private void EvKeyboardButton_DragEnter(object sender, DragEventArgs e)
+    {
+        bool ok = e.Data.GetDataPresent(EverestKeyDragFormat) && sender is Button { Tag: int tgt } && tgt != 261;
+        e.Effects = ok ? DragDropEffects.Move : DragDropEffects.None;
+        if (ok && sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, true);
+    }
+
+    private void EvKeyboardButton_DragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, false);
+    }
+
+    private void EvKeyboardButton_Drop(object sender, DragEventArgs e)
+    {
+        if (sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, false);
+        if (!IsEvKeyBindingSectionActive) return;
+        if (sender is not Button { Tag: int targetMatrix } || targetMatrix == 261) return;
+        if (!e.Data.GetDataPresent(EverestKeyDragFormat)) return;
+
+        int sourceMatrix = (int)e.Data.GetData(EverestKeyDragFormat);
+        if (sourceMatrix == targetMatrix || sourceMatrix == 261) return;
+        if (!_evByMatrix.TryGetValue(sourceMatrix, out var sourceKey)) return;
+
+        if (!_evByMatrix.TryGetValue(targetMatrix, out var targetKey))
+        {
+            targetKey = new EverestKey(targetMatrix);
+            _evKeys.Add(targetKey);
+            _evByMatrix[targetMatrix] = targetKey;
+        }
+
+        (sourceKey.ActionType, targetKey.ActionType)   = (targetKey.ActionType, sourceKey.ActionType);
+        (sourceKey.ActionValue, targetKey.ActionValue) = (targetKey.ActionValue, sourceKey.ActionValue);
+
+        EvPersistOrDiscardKey(sourceKey);
+        EvPersistOrDiscardKey(targetKey);
+
+        LogEverest($"[KEY ] swapped 0x{sourceMatrix:X2} <-> 0x{targetMatrix:X2}");
     }
 
     /// <summary>Highlights/un-highlights a key in the overlay when physically pressed. Uses the
@@ -993,6 +1111,7 @@ public partial class MainWindow
     {
         bool plugged = _everest.IsPlugged();
         LogEverest($"IsDevicePlug -> {plugged}");
+        SetDeviceTabVisible(TabEverest, EvIsPhysicallyConnected()); // see EvIsPhysicallyConnected's doc: IsDevicePlug() alone is not reliable
         if (!plugged) return;
 
         ushort fw = _everest.FirmwareVersion();

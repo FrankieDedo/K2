@@ -41,6 +41,15 @@ public partial class MainWindow
     /// <summary>Maps key index (0..11) → the Button + LedHalo border for the MacroPad preview.</summary>
     private readonly Dictionary<int, KeyVisual> _mpKeyVisuals = new();
 
+    /// <summary>Each key's original legend Content (TextBlock/StackPanel/Grid), captured once here
+    /// before any keycap-appearance pass ever runs. Used by the per-key "custom image" override
+    /// (MainWindow.KeycapAppearance.cs) to restore the legend when an override image is cleared —
+    /// rebuilding the original corner-legend/two-line Content from scratch isn't practical here, so
+    /// the pristine element is just cached instead. Same KeyId scheme as the visuals dictionaries
+    /// above (ledIndex for Everest, physical index for MacroPad).</summary>
+    private readonly Dictionary<int, FrameworkElement> _evOriginalKeyContent = new();
+    private readonly Dictionary<int, FrameworkElement> _mpOriginalKeyContent = new();
+
     private int _evColorLogCount;  // log only the first N ticks for diagnostics
     private int _mpColorLogCount;  // log only the first N ticks for diagnostics
 
@@ -199,7 +208,11 @@ public partial class MainWindow
 
             btn.ApplyTemplate();
             if (btn.Template?.FindName("LedHalo", btn) is Border halo)
+            {
                 _evKeyVisuals[ledIndex] = new KeyVisual(btn, halo); // last VK wins if multiple map to same ledIndex
+                if (btn.Content is FrameworkElement original)
+                    _evOriginalKeyContent[ledIndex] = original;
+            }
         }
     }
 
@@ -214,7 +227,11 @@ public partial class MainWindow
             var btn = _keyButtons[i];
             btn.ApplyTemplate();
             if (btn.Template?.FindName("LedHalo", btn) is Border halo)
+            {
                 _mpKeyVisuals[i] = new KeyVisual(btn, halo);
+                if (btn.Content is FrameworkElement original)
+                    _mpOriginalKeyContent[i] = original;
+            }
         }
     }
 

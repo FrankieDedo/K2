@@ -79,6 +79,22 @@
     <Resource Include="Assets\makalu_mouse_rainbow.png" />
     <Resource Include="Assets\everest60_board.png" />
     <Resource Include="Assets\everest60_numpad.png" />
+    <Resource Include="Assets\mountain_logo.png" />
+  </ItemGroup>
+
+  <!-- Home tab device tiles (Grafiche\png_home, see MainWindow.Home.cs) -->
+  <ItemGroup>
+    <Resource Include="Assets\Home\everest.png" />
+    <Resource Include="Assets\Home\everest_max.png" />
+    <Resource Include="Assets\Home\everest_mediadock.png" />
+    <Resource Include="Assets\Home\everest_numpad.png" />
+    <Resource Include="Assets\Home\everest60.png" />
+    <Resource Include="Assets\Home\everest60_left.png" />
+    <Resource Include="Assets\Home\everest60_right.png" />
+    <Resource Include="Assets\Home\makalu67.png" />
+    <Resource Include="Assets\Home\makalu_max.png" />
+    <Resource Include="Assets\Home\macropad.png" />
+    <Resource Include="Assets\Home\displaypad.png" />
   </ItemGroup>
 
   <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\..\_reference\native\MacroPadSDK.dll')">

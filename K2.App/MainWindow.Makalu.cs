@@ -732,6 +732,25 @@ public partial class MainWindow
         bool wasConnected = _mkConnected;
         bool connected = _makalu.IsConnected(out var info);
         _mkConnected = connected;
+
+        // _mkInfo (and the tab header) must be current BEFORE SetDeviceTabVisible below,
+        // since that call triggers RefreshHomeTiles() -> MkHomeImageFile(), which reads
+        // _mkInfo.Model — otherwise the very first connect of a session would build the
+        // Home tile from the stale default model (Makalu67) instead of the real one.
+        if (connected && (!wasConnected || info.Model != _mkInfo.Model))
+        {
+            _mkInfo = info;
+            MkRgbSettings.UpdateDeviceInfo(info);
+            MkDpiRemap.UpdateDeviceInfo(info);
+            BuildMkHotspots();
+            // Reflect the actual connected model (Makalu Max vs 67 sit in the same tab
+            // slot — only one is ever physically plugged in) unless the user renamed
+            // the tab themselves (AppSettings.MakaluDeviceName).
+            if (AppSettings.MakaluDeviceName is null)
+                TabMakalu.Header = info.Label;
+        }
+
+        SetDeviceTabVisible(TabMakalu, connected);
         MkRgbSettings.SetConnected(connected);
         LblMkStatus.Text = connected
             ? Loc.Get("makalu_status_connected", info.Label)
@@ -739,14 +758,6 @@ public partial class MainWindow
         LblMkStatus.Foreground = connected
             ? (Brush)FindResource("K2AccentBrush")
             : (Brush)FindResource("K2TextMutedBrush");
-
-        if (connected && (!wasConnected || info.Model != _mkInfo.Model))
-        {
-            _mkInfo = info;
-            MkRgbSettings.UpdateDeviceInfo(info);
-            MkDpiRemap.UpdateDeviceInfo(info);
-            BuildMkHotspots();
-        }
 
         // Freshly plugged in: push the currently selected profile so the
         // mouse reflects it even if it was switched while disconnected.

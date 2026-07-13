@@ -54,7 +54,51 @@ CREATE TABLE IF NOT EXISTS KeyBindings (
 CREATE TABLE IF NOT EXISTS Settings (
     Key   TEXT PRIMARY KEY,
     Value TEXT
+);
+
+CREATE TABLE IF NOT EXISTS KeycapOverrides (
+    KeyId     INTEGER PRIMARY KEY,
+    ColorHex  TEXT,
+    ImagePath TEXT
 );";
+        cmd.ExecuteNonQuery();
+    }
+
+    // ---------- per-key appearance overrides (color / custom image, incl. Esc Mountain logo) ----------
+    // Global (not per-profile) like the rest of Keycap Appearance — see MainWindow.Everest60.cs.
+    // KeyId = LED index (same identity as _ev60KeyVisuals); Esc is LED index 0.
+
+    public Dictionary<int, KeycapOverrideRecord> LoadAllKeycapOverrides()
+    {
+        var result = new Dictionary<int, KeycapOverrideRecord>();
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT KeyId, ColorHex, ImagePath FROM KeycapOverrides";
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            int keyId = r.GetInt32(0);
+            result[keyId] = new KeycapOverrideRecord(keyId, r.IsDBNull(1) ? null : r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2));
+        }
+        return result;
+    }
+
+    public void SetKeycapOverride(int keyId, string? colorHex, string? imagePath)
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = @"
+INSERT INTO KeycapOverrides(KeyId, ColorHex, ImagePath) VALUES ($k, $c, $i)
+ON CONFLICT(KeyId) DO UPDATE SET ColorHex=excluded.ColorHex, ImagePath=excluded.ImagePath";
+        cmd.Parameters.AddWithValue("$k", keyId);
+        cmd.Parameters.AddWithValue("$c", (object?)colorHex ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$i", (object?)imagePath ?? DBNull.Value);
+        cmd.ExecuteNonQuery();
+    }
+
+    public void ClearKeycapOverride(int keyId)
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM KeycapOverrides WHERE KeyId=$k";
+        cmd.Parameters.AddWithValue("$k", keyId);
         cmd.ExecuteNonQuery();
     }
 

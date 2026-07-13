@@ -9,7 +9,594 @@
 > mappa stabile in `_PROJECT_MAP.md`. Consultare qui solo per il contesto
 > di una modifica specifica passata (grep per parola chiave/data).
 
-> Last updated: 2026-07-13 (Gestione profili per Everest 60 e Makalu:
+> Last updated: 2026-07-13 (Tab Home: card ingrandite del 30%):
+>   - **Richiesta utente**: "ingrandisci le schede di un 30%". Ridimensionate
+>     tutte le misure della card in `MainWindow.xaml` (`Card` Width 270→351,
+>     Height 190→247, `CornerRadius` 10→13; barra accento 4→5; immagine
+>     220×150→286×195, margine negativo di sbordo -10→-13; nome device
+>     FontSize 22→29, margini testo 18/18/10/10→23/23/13/13; spaziatura tra
+>     card 16→21) — stesso fattore ×1.3 ovunque per mantenere le proporzioni.
+>   - Il build ha richiesto `Stop-Process K2.App` prima: un'istanza Debug
+>     era rimasta aperta e teneva bloccato l'exe (MSB3027, stesso scenario
+>     documentato per `stop-k2.bat` in `_PROJECT_MAP.md`/CLAUDE.md).
+>   - **Verificato**: `dotnet build K2.sln -p:Platform=x86` pulito (0
+>     errori/warning).
+>
+> Previous: 2026-07-13 (Tab Home: rimossa la dicitura categoria
+> KEYBOARD/MOUSE/KEYPAD/DISPLAY dalle card):
+>   - **Richiesta utente**: via l'etichetta piccola sopra il nome device
+>     nelle card della Home. `HomeDeviceTile.Category` rimosso dal modello
+>     (`Models/HomeDeviceTile.cs`) e da tutte le chiamate in `RefreshHomeTiles`
+>     (`MainWindow.Home.cs`); XAML della card semplificata a un solo
+>     `TextBlock` (il nome) al posto dello `StackPanel` con due righe.
+>     Rimosse anche le 4 chiavi loc ora inutilizzate (`home_cat_keyboard`/
+>     `_mouse`/`_keypad`/`_display`, EN+IT) — `home_heading` resta (titolo
+>     sopra la griglia, non sulla singola card).
+>   - **Verificato**: `dotnet build K2.sln -p:Platform=x86` pulito (0
+>     errori/warning).
+>
+> Previous: 2026-07-13 (Tab Home: stato "nessun device" con logo K2 +
+> testo, invece di icona casa + scritta "K2"):
+>   - **Richiesta utente**: quando `_homeTiles` è vuota (nessun dispositivo
+>     connesso), `PnlHomeEmpty` mostrava l'icona Segoe MDL2 casa + "K2" in
+>     grande — sostituito con il logo K2 (`Assets/K2_logo.png`, 96×96,
+>     stesso stile/dimensione già usato in `PnlLoading`) + testo "No device
+>     connected" sotto. Chiave loc `home_subtitle` rinominata
+>     `home_no_device` (era usata solo qui) con nuovo valore, EN+IT.
+>   - **Verificato**: `dotnet build K2.sln -p:Platform=x86` pulito (0
+>     errori/warning). Non ritestato su hardware fisico (modifica solo
+>     visuale/testuale).
+>
+> Previous: 2026-07-13 (Keycap Appearance: legende traslucide come
+> checkbox indipendente + personalizzazione per-tasto colore/immagine +
+> logo Mountain fisso su Esc):
+>   - **Richiesta utente**: (1) le legende traslucide non sono più un 4°
+>     valore della combo "Keycap type" ma un checkbox indipendente
+>     applicabile a qualunque stile (Normal/Pudding/Reverse Pudding); (2)
+>     possibilità di cambiare il colore del singolo keycap; (3) possibilità
+>     di mettere un'immagine personalizzata al posto della legenda di un
+>     singolo tasto (simula un keycap diverso); (4) per il tasto Esc,
+>     opzione fissa "usa il logo Mountain" senza dover scegliere un file.
+>     Tutto puramente cosmetico (anteprima a schermo), stessa scoping
+>     device-wide/non-per-profilo della feature preesistente. Applicato a
+>     tutti e 3 i device che hanno Keycap Appearance: Everest Max, Everest
+>     60, MacroPad.
+>   - **`KeycapStyle` enum ridotto a 3 valori** (Normal=0/Pudding=1/
+>     ReversePudding=2, era Normal/Translucent/Pudding/ReversePudding=0-3).
+>     Nuovo bool indipendente "Translucent legends"/"Legende traslucide"
+>     (`settings.keycap_translucent_legend`, stessa chiave k/v in
+>     EverestStore/MacroPadStore/Everest60Store — vedi voce successiva sul
+>     riallineamento della persistenza di Everest 60).
+>     **Migrazione automatica al primo caricamento**: l'assenza della
+>     chiave `translucent_legend` è il marker "schema vecchio" — il
+>     vecchio valore 1 (Translucent) diventa Normal+checkbox ON, i vecchi
+>     2/3 (Pudding/ReversePudding) scendono a 1/2; scritto subito nel nuovo
+>     schema così la migrazione scatta una volta sola. La logica si è
+>     semplificata pulita: il vecchio "Translucent" era già esattamente
+>     "Normal + tint della legenda", quindi l'alone (halo) resta legato solo
+>     a Normal (Pudding/ReversePudding mostrano già il LED via bordo/centro)
+>     e il tint della legenda ora è ortogonale allo stile.
+>   - **Override per-tasto colore/immagine** (2026-07-13): nuova tabella
+>     `KeycapOverrides(KeyId INTEGER PRIMARY KEY, ColorHex TEXT, ImagePath
+>     TEXT)` in `EverestStore`/`MacroPadStore`/`Everest60Store` (stesso
+>     pattern `CREATE TABLE IF NOT EXISTS` delle altre tabelle), global/
+>     device-wide come il resto di Keycap Appearance (non per-profilo).
+>     `KeyId` riusa l'identità già esistente delle dictionary `KeyVisual`
+>     (LED index per Everest Max/60, indice fisico 0-11 per MacroPad) —
+>     nessuna mappatura aggiuntiva necessaria. `KeyVisual` stesso non è
+>     stato esteso: le funzioni `ApplyKeycapAppearanceToAllKeys` (e
+>     equivalenti MacroPad/Everest 60) ora iterano le dictionary con le
+>     chiavi invece che solo `.Values`, per avere il KeyId a disposizione.
+>   - **Nuovo `KeycapCustomizeDialog.xaml(.cs)`**: checkbox "Override
+>     color" + swatch (stesso `ColorDialog` WinForms usato ovunque), bottone
+>     "Custom image..." che riusa la pipeline già esistente per la LCD del
+>     numpad Everest (`OpenFileDialog` → `ImageCropDialog`/`CropEditor`,
+>     NON `EverestImageUploader` — quello è specifico per l'upload RGB565
+>     verso l'LCD fisico del numpad, qui l'immagine è solo cosmetica),
+>     "Clear image", e — solo per il tasto Esc (`KeyId==0`, identico su
+>     Everest Max via `LedMatrixMapping` e su Everest 60 essendo il primo
+>     tasto del layout) — checkbox "Use Mountain logo" che punta a un
+>     sentinel (`MainWindow.MountainLogoImagePath`) invece di un file reale.
+>     Il dialog applica ogni modifica **live** via evento `Changed` (niente
+>     OK/Cancel: stesso stile "apply immediato" già usato dai color-picker
+>     esistenti in tutta l'app) — il chiamante persiste sullo store e
+>     rilancia `ApplyKeycap*AppearanceToAllKeys` ad ogni evento.
+>   - **Asset Mountain logo**: nessun logo Mountain era già presente in K2;
+>     trovato in `Mountain Base Camp/resources/bin/wwwroot/images/
+>     logo-square.png` (= `favicon-mountain.png`, 53×53, il simbolo "ala"
+>     del brand Mountain su sfondo blu) e copiato in
+>     `K2.App/Assets/mountain_logo.png` (stesso precedente di
+>     `makalu_mouse.png`/`everest60_board.png`: asset PNG di Base Camp
+>     copiati 1:1, non codice decompilato).
+>   - **Entry point modifica per-tasto**: nuovo checkbox "Edit individual
+>     keycaps"/"Personalizza singoli keycap" dentro la sezione Settings di
+>     ciascun device (`_evKeycapEditMode`/`_mpKeycapEditMode`/
+>     `_ev60KeycapEditMode`, transiente, non persistito). Il click sui
+>     tasti della tastiera/griglia (già sempre visibile in ogni sezione,
+>     solo il pannello laterale cambia) instrada al dialog quando la
+>     sezione Settings è attiva E il checkbox è spuntato — nuovo branch
+>     aggiunto in cima a `EvKeyboardButton_Click`/`Ev60KeyboardButton_Click`/
+>     `KeyButton_Click`, prima della paint-mode/action-dialog esistente.
+>   - **Swap Content legenda↔immagine sicuro**: `SetLegendForeground` fa già
+>     pattern-match su `Button.Content` (TextBlock/Panel) e non fa nulla per
+>     altri tipi — quindi impostare `Content` a un'`Image` non rompe il
+>     codice esistente di tint della legenda. Il Content originale (legenda
+>     costruita a build-time: TextBlock semplice, StackPanel 2 righe, o Grid
+>     4 angoli per Everest Max) viene cachato una volta in un nuovo
+>     dictionary (`_evOriginalKeyContent`/`_mpOriginalKeyContent`/
+>     `_ev60OriginalKeyContent`, popolato in `BuildEverestKeyVisuals`/
+>     `BuildMacroPadKeyVisuals`/`BuildEverest60KeyboardOverlay`) per poter
+>     ripristinare la legenda esatta quando l'override immagine viene
+>     rimosso, invece di provare a ricostruirla da zero.
+>   - **Icone Win colorate dal LED preview** (follow-up richiesta utente):
+>     `BuildWinIcon` (Everest Max) disegna il tasto Win come 4 `Rectangle`
+>     bianche fisse dentro un `Grid`, mai toccate da `SetLegendForeground`
+>     (che gestiva solo `TextBlock.Foreground`). Estesa `SetLegendForeground`
+>     per settare anche `.Fill` su ogni `System.Windows.Shapes.Shape` dentro
+>     un `Panel` — ora le icone Win seguono lo stesso colore statico/tint
+>     LED live del resto delle legende (nessun impatto su MacroPad/
+>     Everest 60, che non hanno icone non-testuali).
+>   - **Persistenza Keycap Appearance di Everest 60 riallineata a Everest
+>     Max/MacroPad** (follow-up richiesta utente "allinea le impostazioni
+>     keycap"): color mode/custom hex/text color/text custom hex/style/
+>     translucent-legend erano le UNICHE impostazioni Keycap rimaste in
+>     `AppSettings` (JSON condiviso da tutta l'app) invece che nel proprio
+>     store per-device, eredità di quando Everest60Store non esisteva
+>     ancora — asimmetria trovata confrontando le 3 sezioni Settings a
+>     comando dell'utente, nessun'altra differenza reale trovata (le uniche
+>     2 legittime: "Keyboard color" Silver/Black esiste solo su Everest Max
+>     perché è l'unico con asset per entrambi gli chassis; le icone Win
+>     sopra, idem, solo Everest Max ha tasti Windows). Spostate in
+>     `Everest60Store`'s tabella `Settings` k/v, stesse chiavi
+>     `settings.keycap_*` di EverestStore/MacroPadStore (prima erano le
+>     uniche impostazioni Keycap Appearance NON nel proprio store — la
+>     tabella `KeycapOverrides` per-tasto, introdotta nella stessa sessione,
+>     usava già Everest60Store, quindi risultava incoerente con le altre).
+>     **Nessuna migrazione dati necessaria**: i campi `AppSettings.
+>     Everest60Keycap*` non sono mai stati scritti da nessuna sessione reale
+>     (il tab Everest 60 richiede hardware rilevato per essere visibile, e
+>     nessun Everest 60 è mai stato collegato finora) — rimossi
+>     completamente da `K2.Core/AppSettings.cs` invece di lasciarli come
+>     fallback morto.
+>   - **Build pulita** (dotnet build --rebuild, entrambe le solution, 0
+>     errori/0 warning). **Da fare**: verifica su hardware fisico/UI reale
+>     di tutto il flusso (nessun device disponibile in questa sessione per
+>     testare click→dialog→persistenza→re-render dal vivo); nessun asset
+>     "Mountain logo" alternativo è stato mostrato all'utente per scelta,
+>     preso quello che sembrava più adatto a un keycap quadrato.
+>
+> Previous: 2026-07-13 (Tab Home: griglia di riquadri per dispositivo
+> connesso, ispirata al device-picker di Base Camp):
+>   - **Richiesta utente**: riquadri nella tab Home in base ai dispositivi
+>     connessi, nome grande, ispirati a uno screenshot di Base Camp
+>     (categoria piccola in alto + nome grande + immagine dispositivo +
+>     barra accento laterale), click → va al tab del dispositivo. Immagini
+>     fornite dall'utente in `Grafiche/png_home/` con regole di scelta
+>     specifiche per Everest Max (dock/numpad) ed Everest 60 (lato numpad).
+>   - **Asset**: copiate in `K2.App/Assets/Home/` (11 PNG) + `<Resource
+>     Include>` in `K2.App.csproj` (nessun glob nel csproj esistente, ogni
+>     file elencato a mano, stesso pattern degli altri Assets). Caricate a
+>     runtime via `pack://application:,,,/Assets/Home/{file}` (helper
+>     `HomeImage` in `MainWindow.Home.cs`).
+>   - **Nuovo `MainWindow.Home.cs`** (partial) + `Models/HomeDeviceTile.cs`
+>     (Category/Name/ImagePath/Target). `RefreshHomeTiles()` ricostruisce
+>     `_homeTiles` (ObservableCollection, bindata a `IcHomeTiles` in XAML)
+>     da zero ad ogni chiamata — costo trascurabile (manciata di item) —
+>     nello stesso ordine fisso dei tab (Everest Max → Everest 60 → Makalu
+>     → DisplayPad → MacroPad), un tile per ogni `TabItem` con
+>     `Visibility=Visible`. Chiamata da **4 punti**: `SetDeviceTabVisible`
+>     (MainWindow.xaml.cs, copre Everest Max/60/Makalu/MacroPad),
+>     `DpRefreshDevices` (DisplayPad, tab aggiunti/rimossi per davvero, non
+>     via `SetDeviceTabVisible`), `UpdateKeyboardLayout` (MainWindow.Layout.cs,
+>     quando cambia dock/numpad Everest Max), `ApplyEv60NumpadPosition`
+>     (quando cambia lato/presenza numpad Everest 60).
+>   - **Regole immagine Everest Max** (utente): entrambi dock+numpad →
+>     `everest_max.png`; solo dock → `everest_mediadock.png`; solo numpad →
+>     `everest_numpad.png`; nessuno dei due → `everest.png`. Lette da due
+>     nuovi campi cache `_evDockConnected`/`_evNumpadConnected`
+>     (`MainWindow.Layout.cs`) invece di ri-interrogare l'SDK ad ogni tile
+>     refresh — **limite noto**: questi si aggiornano solo quando
+>     `UpdateKeyboardLayout` gira (apertura driver + tab Everest Max aperto,
+>     poll ogni 3s SOLO mentre quel tab è selezionato, scelta di scope
+>     esistente e deliberata — vedi voce Layout.cs più sotto), quindi il
+>     tile può mostrare uno stato dock/numpad non aggiornato finché l'utente
+>     non apre almeno una volta il tab Everest Max nella sessione. Non
+>     esteso il poll per non riaprire quella decisione di scope.
+>   - **Regole immagine Everest 60** (utente): numpad assente →
+>     `everest60.png`; presente → `everest60_left.png`/`_right.png` in base
+>     al lato. Letto da `_ev60NumpadPosition`, sempre fresco (il poll
+>     Everest 60 gira incondizionatamente ogni 3s, non solo a tab aperta) —
+>     nessuna limitazione qui.
+>   - **Bug di ordinamento trovato e fissato in `MkRefreshStatus`**
+>     (Makalu): `SetDeviceTabVisible(TabMakalu, connected)` — che dentro
+>     chiama `RefreshHomeTiles()` — girava PRIMA che `_mkInfo` (il modello
+>     rilevato, letto da `MkHomeImageFile()`) venisse aggiornato: al primo
+>     collegamento della sessione il tile veniva costruito con il modello
+>     di default (Makalu 67) anche se il device reale era il Max, e non si
+>     autocorreggeva più finché non scattava un altro cambio di visibilità.
+>     Fix: spostato il blocco che aggiorna `_mkInfo`/header PRIMA della
+>     chiamata a `SetDeviceTabVisible`. Verificato che Everest 60 non ha lo
+>     stesso problema: lì `ApplyEv60NumpadPosition` chiama
+>     `RefreshHomeTiles()` una seconda volta subito dopo (stesso tick
+>     sincrono), quindi si autocorregge comunque prima che l'utente veda
+>     nulla.
+>   - **Verificato**: `dotnet build` di entrambe le solution puliti (0
+>     errori/warning) DOPO clean di bin/obj — un primo tentativo senza clean
+>     ha dato un falso errore CS0246 (`KeycapOverrideRecord` non trovato in
+>     `EverestStore.cs`, tipo definito nello stesso file, causa quasi
+>     certamente cache di build incrementale/csproj temporaneo WPF stale,
+>     non un vero errore — sparito dopo `rm -rf */bin */obj`). **Non
+>     verificato su hardware fisico** (nessun test di collegamento/
+>     scollegamento reale in questa sessione) — da confermare: comparsa/
+>     sparizione dei riquadri, scelta immagine corretta per ogni
+>     combinazione dock/numpad Everest Max e lato Everest 60, click →
+>     navigazione al tab giusto.
+>
+> Previous: 2026-07-13 (Tab Home sempre presente; fix rilevamento
+> disconnessione Everest Max; Everest 60 default su Key Binding):
+>   - **Richiesta utente** (follow-up al giro tab dispositivi sotto, dopo
+>     conferma "ok funziona" su hardware reale): 3 richieste — (1) tab
+>     "Home" iniziale con icona casa, sempre presente; (2) il tab Everest
+>     Max ("Everest Core" — nome che il tab assume via `UpdateEverestAutoName`
+>     quando nessun accessorio dock/numpad è agganciato, vedi
+>     `MainWindow.Layout.cs`) non spariva quando la tastiera veniva
+>     scollegata del tutto; (3) Everest 60 deve aprirsi sulla sezione Key
+>     Binding invece di Lighting.
+>   - **Bug reale trovato (2)**: `EvRefreshConnectionStatus`/`EvRefresh`
+>     usavano `EverestService.IsPlugged()` → `SDKDLL.dll`'s `IsDevicePlug()`
+>     per pilotare la visibilità del tab — confermato su hardware che
+>     questa chiamata continua a riportare "plugged" anche dopo uno
+>     scollegamento fisico completo (il suo stato interno sembra
+>     aggiornarsi solo alla prossima `OpenUSBDriver()`, non ad ogni query).
+>     Fix: **`EvIsPhysicallyConnected()`** (`MainWindow.Everest.cs`) usa
+>     invece `EverestHidNative.FindCommandInterfacePath()` — enumerazione
+>     HID raw dal vivo della command interface MI_03, stesso approccio già
+>     usato da `Everest60Service`/`MakaluService` per il loro poll di
+>     connessione (mai affidarsi allo stato cache dell'SDK vendor — lezione
+>     già imparata più volte in questo progetto, vedi bug MacroPad/Makalu
+>     analoghi in `_PROJECT_MAP.md`). L'apertura è a 0 permessi di accesso
+>     (query-only), quindi non confligge mai con l'handle che `SDKDLL.dll`
+>     tiene aperto sulla stessa interfaccia. Sia il poll (`EvRefreshConnectionStatus`,
+>     ogni 3s) sia il refresh manuale (`EvRefresh`, bottone toolbar) ora
+>     usano questo check per la visibilità del tab.
+>   - **Tab Home (1)**: `TabHome` (Tag="home") aggiunto come primo elemento
+>     di `TcDevices`, **mai** `Visibility="Collapsed"` (a differenza degli
+>     altri 4 tab statici) — header icona-only (`&#xE80F;`, Segoe MDL2
+>     Assets "Home"), tooltip da `Loc.Get("tab_home")`. Contenuto
+>     (`PnlHome`): titolo "K2" + sottotitolo (`home_subtitle`) centrati,
+>     nessuna logica oltre al semplice show/hide in `TcDevices_SelectionChanged`
+>     (aggiunto anche a `BtnSettingsTab_Click`/`BtnMacroTab_Click`, che
+>     gestiscono i pannelli a mano). Essendo sempre visibile e sempre primo,
+>     diventa automaticamente il tab selezionato di default sia
+>     all'avvio (`AutoOpenDrivers`'s `FirstOrDefault(Visible)`) sia come
+>     fallback quando l'ultimo device connesso si scollega (il ramo
+>     "nessun tab visibile" di `SetDeviceTabVisible`, che prima poteva
+>     deselezionare tutto, ora di fatto non scatta mai più — tenuto come
+>     fallback difensivo). **Nessun rischio del bug "evento XAML durante
+>     InitializeComponent" già documentato in questo progetto** (RbMkSecRgb/
+>     SldMkDpi/SldEv60Brightness): quel bug scatta quando un attributo XAML
+>     esplicito (`IsChecked="True"`, `Value="100"` ≠ default) forza un
+>     evento *CLR* sincrono verso un campo non ancora assegnato; la
+>     selezione di default del *primo TabItem* di un `TabControl` non è
+>     governata da un attributo del genere (nessun `IsSelected="True"`/
+>     `SelectedIndex` espliciti in XAML) — prova empirica: `TabEverest` era
+>     già il primo tab prima di questa sessione con `PnlEverest` dichiarato
+>     molto più avanti nello stesso file, e non ha mai causato questo
+>     crash.
+>   - **Everest 60 default section (3)**: `InitEv60SectionNav` ora imposta
+>     `RbEv60SecKeyBinding.IsChecked = true` invece di `RbEv60SecLighting`
+>     (era stata una scelta deliberata 2026-07-11 per non aprire eager la
+>     sessione SDK non ancora verificata — vedi `_PROJECT_MAP.md` — ora
+>     superata dal test hardware reale di questa sessione).
+>   - **Verificato**: `dotnet build K2.sln -p:Platform=x86` e `dotnet build
+>     K2.DisplayPad.sln -p:Platform=x64` entrambi puliti (0 errori, 0
+>     warning). **Non riverificato su hardware fisico in questa sessione**
+>     (l'utente aveva testato la versione precedente, non queste 3 modifiche)
+>     — da confermare: che il tab Everest Max sparisca davvero entro 3s da
+>     uno scollegamento fisico reale con il nuovo check raw-HID, che Home
+>     compaia/si comporti come atteso, e che Everest 60 apra su Key Binding.
+>
+> Previous: 2026-07-13 (Tab dispositivi: nascosti se scollegati,
+> ordine fisso Everest Max > Everest 60 > Makalu > DisplayPad > MacroPad):
+>   - **Richiesta utente**: "Assicurati che ogni dispositivo non abbia la
+>     scheda visibile se è scollegato e che quando viene collegato, compaia
+>     la scheda" + ordine esplicito dei tab. Prima di questa sessione solo
+>     i tab DisplayPad (multi-istanza, aggiunti/rimossi da `DpRefreshDevices`)
+>     rispettavano già questa regola; Everest Max/Everest 60/Makalu/MacroPad
+>     erano tab statici sempre presenti in `MainWindow.xaml`, MacroPad e
+>     Everest Max senza nemmeno un check di connessione periodico.
+>   - **Everest 60 e Makalu avevano già un poll ogni 3s** (`Ev60RefreshStatus`/
+>     `MkRefreshStatus`, timer avviati incondizionatamente in `InitEverest60Module`/
+>     `InitMakaluModule`) — bastava agganciarci `SetDeviceTabVisible` (nuovo
+>     helper in `MainWindow.xaml.cs`). **Everest Max non aveva alcun poll**:
+>     aggiunto `_evPollTimer`/`EvRefreshConnectionStatus()` in
+>     `MainWindow.Everest.cs`, deliberatamente silenzioso (nessun `Log()` per
+>     tick, a differenza del verboso `EvRefresh()` usato dai bottoni toolbar)
+>     per non floodare la console ogni 3s — chiama comunque `_everest.
+>     IsPlugged()` prima che il driver sia mai stato aperto, pattern già
+>     tollerato dal codice esistente (`BtnEvOpen_Click` chiama `EvRefresh()`
+>     anche quando `Open()` fallisce). **MacroPad**: nessun poll nuovo, il
+>     plug/unplug arriva già via `WM_DEVICE_PLUG` → `RefreshDevices()`;
+>     bastava chiamare `SetDeviceTabVisible(TabMacroPad, items.Count > 0)`
+>     lì e in `BtnClose_Click`.
+>   - **`SetDeviceTabVisible(TabItem, bool)`** (`MainWindow.xaml.cs`, vicino
+>     a `RemoveDeviceTabs`): helper condiviso per i 4 tab statici (Everest
+>     Max/60, Makalu, MacroPad — i tab DisplayPad restano gestiti con add/
+>     remove vero, non Visibility, essendo multi-istanza). Se il tab
+>     nascosto è quello attualmente selezionato, sposta la selezione sul
+>     prossimo tab visibile, o — se non ne resta nessuno — pulisce
+>     esplicitamente tutti i `Pnl*`/`Br*` e `TcDevices.SelectedIndex = -1`
+>     (stesso stato di `BtnSettingsTab_Click`): necessario perché
+>     `TcDevices_SelectionChanged` fa un early-return silenzioso quando
+>     `SelectedItem` diventa `null`, altrimenti il pannello dell'ultimo
+>     device disconnesso resterebbe visibile senza un tab selezionato.
+>   - **Ordine tab fisso in XAML**: `TabEverest` → `TabEverest60` →
+>     `TabMakalu` → (tab DisplayPad inseriti qui da `DpRefreshDevices`,
+>     `insertIdx` spostato da `TabMacroPad` a `TabMakalu`) → `TabMacroPad`
+>     (era `Everest, MacroPad, Everest60, Makalu` prima). Tutti e 4 i tab
+>     statici partono `Visibility="Collapsed"` in XAML (prima solo 3 su 4 —
+>     `PnlEverest`/`BrEverest` erano Visible di default, essendo il primo
+>     tab storico): innocuo perché `PnlLoading` (ZIndex 10, copre tab strip
+>     + contenuto) resta visibile per tutta `AutoOpenDrivers()`, quindi
+>     nessun flash all'avvio. Selezione finale in `AutoOpenDrivers`
+>     (`TcDevices.SelectedItem = ... FirstOrDefault(t => t.Visibility ==
+>     Visible)`, prima sceglieva il primo tab a prescindere dallo stato di
+>     connessione).
+>   - **Makalu Max vs Makalu 67**: restano UN SOLO tab (`TabMakalu`), non
+>     due — l'hardware attuale (`MakaluHidNative.FindDevice()`) trova UN
+>     mouse alla volta (PID 0x0002 Max / 0x0003 67), quindi i due modelli
+>     occupano lo stesso slot nell'ordine richiesto invece di due slot
+>     indipendenti; supportare Max+67 collegati simultaneamente sarebbe un
+>     redesign più ampio (oggi `MakaluService` non traccia un path HID per
+>     device, riapre find-first ad ogni chiamata) e non richiesto qui.
+>     `MkRefreshStatus` ora aggiorna anche `TabMakalu.Header` al modello
+>     rilevato (`info.Label`, "Makalu Max"/"Makalu 67") **solo se**
+>     `AppSettings.MakaluDeviceName` è null, per non calpestare un rename
+>     utente esistente (che prima non veniva comunque mai riapplicato
+>     all'avvio — bug preesistente, non toccato in questa sessione, fuori
+>     scope).
+>   - **Verificato**: `dotnet build K2.sln -p:Platform=x86` e `dotnet build
+>     K2.DisplayPad.sln -p:Platform=x64` entrambi puliti (0 errori, 0
+>     warning). **Non verificato su hardware fisico** (nessun test di
+>     plug/unplug reale in questa sessione) — da confermare: che i tab
+>     compaiano/spariscano davvero entro 3s dal collegamento/scollegamento
+>     fisico per Everest Max/60/Makalu, e che MacroPad reagisca al vero
+>     evento `WM_DEVICE_PLUG` (non solo al refresh manuale).
+>
+> Previous: 2026-07-13 (Drag & drop: scambio azione+icona tra due
+> bottoni, per tutti i device con vere azioni K2 — MacroPad, Everest Max
+> tastiera + numpad display keys, DisplayPad):
+>   - **Richiesta utente**: "imposta, per tutti i dispositivi, lo
+>     spostamento drag & drop delle azioni ed eventuali icone da un
+>     bottone a un altro". Chiarito con l'utente (AskUserQuestion) lo
+>     scope prima di implementare: **solo** i device con un vero oggetto
+>     "azione" `IActionHost`/`ButtonActionEngine` (MacroPad, Everest Max,
+>     DisplayPad) — Everest 60 (Key Binding via `Everest360_USB.dll`) e
+>     Makalu (remap funzione firmware) non hanno azioni K2 assegnabili,
+>     restano fuori da questo giro. Comportamento: **scambio (swap)**,
+>     mai sovrascrittura silenziosa — trascinare A su B scambia
+>     ActionType/ActionValue (e ImagePath dove esiste) tra i due, nessuna
+>     azione va persa.
+>   - **Nessun pattern drag & drop preesistente in tutto il repo**
+>     (verificato: zero `DoDragDrop`/`AllowDrop`/`QueryContinueDrag`
+>     ovunque) — introdotto da zero. Pattern condiviso: `PreviewMouseLeft
+>     ButtonDown` registra punto iniziale + candidato; `PreviewMouseMove`
+>     controlla soglia (`SystemParameters.MinimumHorizontal/VerticalDrag
+>     Distance`) e solo se superata chiama `DragDrop.DoDragDrop`, che
+>     assorbe la cattura del mouse — il `Button.Click` normale (click
+>     senza trascinamento) continua a funzionare invariato, perché parte
+>     solo su un vero rilascio senza passare da `DoDragDrop`. Helper
+>     condiviso nuovo **`K2.Core/DragDropHelper.cs`** (soglia +
+>     evidenziazione drop-target via `Button.Opacity`), riusato dai
+>     quattro punti di innesto per non duplicare la stessa logica in
+>     K2.App/K2.DisplayPad (progetti/piattaforme diverse, x86 vs x64,
+>     entrambi referenziano K2.Core).
+>   - **MacroPad** (`MainWindow.Keys.cs`): tasti indicizzati per indice
+>     fisico stabile (`_keyButtons[i].Tag = MacroPadKey`, la rotazione è
+>     un `LayoutTransform` sul Canvas — non richiede alcuna traduzione
+>     visuale→fisica per il drag). Scambia `ActionType`/`ActionValue`,
+>     due `_store.SaveKey(...)`.
+>   - **Everest Max tastiera** (`MainWindow.Everest.cs`): `Tag` è
+>     `int matrixId`, non l'oggetto modello (la tastiera ha 100+ tasti,
+>     nessuna griglia fissa pre-allocata — un tasto esiste in `_evByMatrix`
+>     solo se già configurato). Drop su un tasto non ancora configurato fa
+>     get-or-create (stesso pattern già usato da `EvKeyboardButton_Click`),
+>     poi `EvPersistOrDiscardKey` su entrambi i lati (gestisce già la
+>     cancellazione quando un lato risulta vuoto dopo lo scambio). Tasto
+>     FN (matrixId 261, riservato al layer switching) escluso sia come
+>     sorgente che come target.
+>   - **Everest Max numpad display keys** (`MainWindow.NumpadDisplayKeys.cs`,
+>     4 tasti con icona 72×72 — l'unico dei tre moduli K2.App con
+>     immagine per-tasto): stato in array paralleli (`_ndkActions[]`/
+>     `_ndkImagePaths[]`, nessuna classe modello). Scambio locale degli
+>     array, poi per lato con immagine non vuota: se il device è connesso
+>     ri-carica l'immagine in firmware via `NdkApplyImage` (l'immagine
+>     vive fisicamente sulla tastiera, indicizzata per tasto — uno scambio
+>     solo-locale lascerebbe il device fisico a mostrare le figure
+>     pre-scambio); se non connesso, solo thumbnail + persistenza locale.
+>   - **DisplayPad** (`K2.DisplayPad/MainWindow.xaml.cs`): stesso pattern
+>     "Tag = oggetto modello direttamente" di MacroPad (`ButtonCell`), la
+>     rotazione riordina i `Children` del `UniformGrid` ma sono sempre le
+>     stesse istanze `Button` per indice fisico — nessuna traduzione
+>     richiesta al momento del drag. Scambio: `ActionType`/`ActionValue`
+>     diretti sui due `ButtonCell`, `ImagePath` invece passa da
+>     `UploadAndPersist` per ciascun lato (re-invia l'icona al device
+>     nella nuova posizione, rispettando la rotazione corrente via
+>     `IconRotator.ResolveForUpload` già usata dal resto del file — anche
+>     qui l'icona vive in firmware per indice bottone, non solo nel DB).
+>   - **Verificato**: `build-check.bat` pulito su entrambe le solution
+>     (0 errori/0 warning). **Da verificare dall'utente**: il gesto stesso
+>     (trascinare un tasto/bottone configurato su un altro) sul MacroPad/
+>     Everest Max/DisplayPad reali o anche solo in UI — questo ambiente
+>     non ha un tool di automazione GUI per simulare un vero drag WPF, la
+>     sola build pulita non prova che `DoDragDrop` si comporti come
+>     previsto a runtime (in particolare: che il click semplice, senza
+>     trascinamento, resti intatto su tutti e quattro i punti di innesto).
+>
+> Previous: 2026-07-13 (DisplayPad: import profilo Base Camp — un
+> bottone "Back" senza icona propria nei dati BC ora riceve l'icona
+> auto-generata invece di restare senza immagine):
+>   - **Richiesta**: "quando viene importato un profilo di base camp, se è
+>     presente un bottone back senza icone modificate, aggiungi di default
+>     quella auto generata" — completamento della sessione precedente
+>     (icona freccia+"Back" auto-generata per `dp_back`, vedi entry sotto):
+>     lì la generazione avveniva solo per "Set as Back button" (menu tasto
+>     destro, in-app) e per la Key #0 di default di una pagina senza alcuna
+>     riga — un bottone "Back" che ARRIVA già così dai dati Base Camp
+>     (XML o BaseCamp.db) restava senza icona, perché BC quasi mai porta un
+>     `<base64Image>`/`Base64Image` reale per il suo bottone Back (spesso
+>     solo chrome interno BC, non un'immagine decodificabile — vedi il
+>     ramo "else: BC internal path" già esistente).
+>   - **Fix — entrambi i percorsi di import**:
+>     `MainWindow.DisplayPad.cs` (import XML, blocco `funcType == "Back"`)
+>     e `BaseCampDbImporter.cs::ImportProfile` (import BaseCamp.db, blocco
+>     `btn.FunctionType == "Back"`): se `imagePath` è ancora `null` dopo il
+>     tentativo di decodifica dell'immagine BC, generano l'icona con
+>     `IconImageGenerator.TryGenerateBackIcon(Loc.Get("dp_back"), ...)` —
+>     stessa funzione introdotta per `DpMnuSetBack_Click` — e la assegnano
+>     a `imagePath` prima del `SaveButton`/salvataggio su disco. Se BC
+>     aveva invece fornito un'icona reale e decodificabile, `imagePath` è
+>     già valorizzato a quel punto e il ramo non scatta: un'icona
+>     effettivamente personalizzata nei dati importati non viene mai
+>     sovrascritta.
+>   - **Percorso file icona**: XML import riusa la stessa cache condivisa
+>     hash-based di `DpMnuSetBack_Click`/`DpEnsureDefaultBackButton`
+>     (`DpAutoIconCachePath("dpback", caption)`, in
+>     `%LocalAppData%\K2.DisplayPad\auto_icons\`); l'import BaseCamp.db
+>     (classe statica separata, senza accesso a quell'helper privato di
+>     `MainWindow`) scrive invece nella stessa cartella `iconsDir` per-
+>     profilo già usata per le altre icone importate
+>     (`key_{btn}_back.png`/`key_p{page}_{btn}_back.png`), aggiunta
+>     `using K2.Core;` per `IconImageGenerator`/`Loc`.
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` e
+>     `dotnet build K2.DisplayPad.sln -c Debug -p:Platform=x64` puliti
+>     (0/0). **Da verificare su hardware/dati reali dall'utente**:
+>     importare un profilo XML o BaseCamp.db con un bottone Back senza
+>     immagine propria e confermare che compaia l'icona freccia+"Back"
+>     invece del solo glifo "◂" di fallback.
+>
+> Previous: 2026-07-13 (DisplayPad: cambio pagina lasciava l'icona
+> precedente sui tasti vuoti della pagina nuova — non venivano mai
+> "sbiancati" sul pannello fisico):
+>   - **Bug segnalato dall'utente**: "quando si cambia pagina, i pulsanti
+>     vuoti non si refreshano e resta l'eventuale icona precedente".
+>   - **Causa**: `DpReloadCurrentProfile`/`DpUploadPageForDevice`
+>     (`MainWindow.DisplayPad.cs`) caricano le righe della pagina e
+>     accodano un upload SOLO per i tasti che hanno un'immagine — un tasto
+>     senza riga/immagine sulla pagina di destinazione non riceveva MAI un
+>     comando di blank esplicito, a meno di `blankFirst: true` (un
+>     `ResetPictures` a pannello intero, riservato agli switch di profilo
+>     via `DpRequestRepaint`). La navigazione tra cartelle
+>     (`DpNavigateToPage`/`DpNavigateBack`/`DpBgNavigateToPage`/
+>     `DpBgNavigateBack`) chiama invece sempre `blankFirst: false` (un
+>     `ResetPictures` ad ogni click sarebbe uno sfarfallio inutile per
+>     quello che di solito è 1-2 tasti stantii) — quindi l'icona della
+>     pagina precedente restava fisicamente sul tasto finché qualcosa non
+>     lo sovrascriveva.
+>   - **Fix**: entrambe le funzioni ora calcolano `toBlank` = l'insieme dei
+>     12 indici tasto SENZA immagine sulla pagina appena caricata (a meno
+>     che `blankFirst` o un'immagine fullscreen non coprano già tutto il
+>     pannello) e mandano un blank per-tasto mirato (`DpClearKeyOnDevice`,
+>     lo stesso già usato da "Remove action") per ciascuno, dentro la stessa
+>     catena di upload in background — nessun full-panel `ResetPictures`
+>     aggiuntivo, solo i tasti realmente vuoti vengono toccati. La griglia
+>     UI (`_dpKeys`) era già corretta prima di questo fix (resettata a inizio
+>     `DpReloadCurrentProfile`) — il bug riguardava solo il pannello fisico.
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` e
+>     `dotnet build K2.DisplayPad.sln -c Debug -p:Platform=x64` puliti
+>     (0/0). **Da verificare su hardware dall'utente**: pagina A con
+>     un'icona sul tasto #3, navigare su pagina B senza icona sul tasto #3,
+>     confermare che il tasto #3 diventi nero sul pannello fisico invece di
+>     mostrare ancora l'icona di A.
+>
+> Previous: 2026-07-13 (DisplayPad: Key #0 di ogni pagina/cartella
+> torna "Back" di default, con icona freccia+didascalia auto-generata,
+> personalizzabile via tasto destro — richiesta esplicita utente):
+>   - **Richiesta**: il tasto in alto a sinistra (Key #0) di una pagina
+>     DisplayPad deve di default essere un pulsante "Back" (freccia +
+>     etichetta localizzata), anche quando la pagina arriva da un profilo
+>     XML di Base Camp importato — con un modo per personalizzarne comunque
+>     l'icona (tasto destro).
+>   - **Stato pre-esistente**: l'azione `dp_back` esisteva già (menu tasto
+>     destro "Set as Back button"/`DpMnuSetBack_Click`, gestione navigazione
+>     in `OnDpKey`/`DpHandleBackgroundKey`), ma (1) non generava mai
+>     un'icona — a differenza di `dp_folder` (vedi
+>     `DpMnuCreateFolder_Click`/`IconImageGenerator.TryGenerateFolderIcon`),
+>     lasciava il tasto con la sola label di fallback "◂"
+>     (`DisplayPadKey.Display`); (2) nessuna pagina (creata in-app o
+>     importata) riceveva mai un back-button di default sulla Key #0 — andava
+>     impostato a mano ogni volta.
+>   - **Fix — icona**: nuovo `IconImageGenerator.TryGenerateBackIcon(caption,
+>     size, path)` (`K2.Core/IconImageGenerator.cs`), stesso schema di
+>     `TryGenerateFolderIcon` (canvas nero, `DrawCaption` condiviso) ma con
+>     un glifo "Back" di Segoe MDL2 Assets (U+E72B) tinto del colore accent
+>     al posto del template cartella — riusa lo stesso `IconBox` per
+>     allineare le due varianti di tile. `DpMnuSetBack_Click` ora lo chiama
+>     (via `DpUploadAndPersist`, upload+persist live) quando il tasto non ha
+>     già un'immagine propria — se ce l'ha, la lascia intatta (l'utente può
+>     comunque sostituirla in qualsiasi momento con "Change image" dal menu
+>     tasto destro, invariato).
+>   - **Fix — default automatico**: nuovo
+>     `DpEnsureDefaultBackButton(id, profile, pageId)`: no-op sulla pagina
+>     radice (pageId 0, nessun "indietro" possibile) e se la Key #0 ha già
+>     una riga in `Buttons` per quella pagina (azione impostata dall'utente O
+>     dati Base Camp importati, incl. una riga esplicitamente "nessuna
+>     azione" dopo un "Remove action" manuale — rispettata, non
+>     ri-forzata); altrimenti genera l'icona e salva `dp_back` sulla Key #0.
+>     Chiamato in testa a `DpReloadCurrentProfile` (tab foreground) e
+>     `DpUploadPageForDevice` (pad in background) — **unici due punti** da
+>     cui qualunque pagina viene letta/caricata (navigazione cartella,
+>     switch profilo, pad non-foreground, E dopo un import XML/BaseCamp.db,
+>     dato che una pagina importata passa comunque da uno di questi due
+>     loader alla prima apertura) — quindi nessuna necessità di toccare
+>     `BaseCampDbImporter`/l'importer XML separatamente: il default scatta
+>     lazy alla prima volta che la pagina viene davvero mostrata,
+>     indipendentemente da come è stata creata.
+>   - **Stringhe**: nessuna nuova stringa necessaria — `dp_back`="Back"/
+>     "Indietro" esisteva già in `Strings.xml`/`Strings.it.xml` (era definita
+>     ma mai usata come didascalia fino ad ora).
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` e
+>     `dotnet build K2.DisplayPad.sln -c Debug -p:Platform=x64` puliti (0/0)
+>     — `TryGenerateBackIcon` vive in `K2.Core`, compilato per entrambe le
+>     piattaforme. **Da verificare su hardware dall'utente**: creare una
+>     cartella, navigarci dentro, controllare che Key #0 mostri
+>     l'icona freccia+"Back" sul pannello fisico; importare un profilo XML
+>     con una sotto-pagina che non definisce la Key #0 e verificare lo
+>     stesso; personalizzare l'icona via tasto destro > "Change image" e
+>     confermare che resti quella scelta al prossimo caricamento pagina.
+>
+> Previous: 2026-07-13 (DisplayPad: il "bounce" di pressione tasto non
+> partiva sui pad non-foreground con più DisplayPad collegati):
+>   - **Bug segnalato dall'utente**: con 3 DisplayPad collegati, "l'effetto
+>     animazione si attiva solo se è già stata selezionata la pagina del pad
+>     corrispondente" — chiarito che "animazione" = l'effetto zoom/bounce che
+>     rimpicciolisce l'icona a key-down e la riporta a piena dimensione a
+>     key-up (vedi entry 2026-07-07 sotto per la sua introduzione).
+>   - **Causa**: `DpHandleBackgroundKey` (`MainWindow.DisplayPad.cs`, percorso
+>     per i DisplayPad NON foreground introdotto il 2026-07-09) aveva un
+>     `if (!pressed) return;` esplicito con commento "background pads skip the
+>     UI press-bounce visual" — il bounce era stato deliberatamente scartato
+>     come fuori scope in quella sessione, perché `DpUploadPressVisual`
+>     leggeva solo lo stato UI-bound del tab foreground (`_dpKeys`,
+>     `_dpRotation`). Risultato: il bounce funzionava SOLO sul pad con la tab
+>     aperta in K2 — esattamente il sintomo riportato.
+>   - **Fix**: `DpUploadPressVisual` scomposto in un core device-agnostic
+>     `DpUploadPressVisualForDevice(id, btnIndex, imgPath, rotation, pressed)`
+>     che prende image path/rotazione come parametri invece di leggerli da
+>     `_dpKeys`/`_dpRotation`; il vecchio `DpUploadPressVisual` ora è un thin
+>     wrapper che passa lo stato foreground. `DpHandleBackgroundKey` non
+>     ritorna più subito su key-up: per ogni matrice risolta cerca la riga
+>     corrente (`_dpStore.LoadPage`) e chiama sempre il bounce device-agnostic
+>     con `_dpStore.GetRotation(devId)` (sia su press che su release);
+>     l'esecuzione dell'azione resta condizionata a `pressed && row is not
+>     null`, invariata. Stessi guard di skip del path foreground (GIF animata,
+>     fullscreen attivo) riusati via la funzione condivisa.
+>   - **Verificato**: `dotnet build K2.sln -c Debug -p:Platform=x86` pulito
+>     (0/0). **Da verificare su hardware dall'utente**: con 2+ DisplayPad
+>     collegati, che il bounce compaia anche sui pad non ancora aperti come
+>     tab in K2.
+>
+> Previous: 2026-07-13 (Gestione profili per Everest 60 e Makalu:
 > persistenza SQLite nuova, riapplica-su-switch, import da BaseCamp.db,
 > export XML — colma il gap "profilo non disponibile" rimasto per questi
 > due device):

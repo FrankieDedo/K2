@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Media;
 using K2.App.Models;
 using K2.App.Services;
@@ -37,6 +38,11 @@ public partial class MainWindow
     private MacroPadRotation _rotation = MacroPadRotation.None;
 
     private bool _suppressRotationUpdate;
+
+    // ---- Drag & drop (swap two keys' action) ----
+    private const string MacroPadDragFormat = "K2.MacroPadKeyIndex";
+    private Point _mpDragStartPoint;
+    private MacroPadKey? _mpDragCandidate;
 
     // ============================================================
     // Grid construction
@@ -87,6 +93,12 @@ public partial class MainWindow
                 Style       = (Style)FindResource("MacroKeyStyle"),
             };
             btn.Click += KeyButton_Click;
+            btn.AllowDrop = true;
+            btn.PreviewMouseLeftButtonDown += KeyButton_PreviewMouseLeftButtonDown;
+            btn.PreviewMouseMove += KeyButton_PreviewMouseMove;
+            btn.DragEnter += KeyButton_DragEnter;
+            btn.DragLeave += KeyButton_DragLeave;
+            btn.Drop += KeyButton_Drop;
             _keyButtons[key.Index] = btn;
         }
 
@@ -291,8 +303,17 @@ public partial class MainWindow
 
     private void KeyButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: MacroPadKey key })
-            ConfigureAction(key);
+        if (sender is not Button { Tag: MacroPadKey key }) return;
+
+        // Edit-individual-keycaps mode (Settings section): open the per-key color/image
+        // customizer instead of the action-configuration dialog.
+        if (_mpKeycapEditMode && IsMpSettingsSectionActive)
+        {
+            OpenMpKeycapCustomizeDialog(key.Index, key.Display);
+            return;
+        }
+
+        ConfigureAction(key);
     }
 
     private void MnuConfigureAction_Click(object sender, RoutedEventArgs e)
@@ -326,6 +347,64 @@ public partial class MainWindow
         key.ActionValue = null;
         _store.SaveKey(new MacroKeyRecord(id, CurrentProfile(), key.Index, null, null));
         Log($"[ACT ] key #{key.Index} action removed");
+    }
+
+    // ============================================================
+    // Drag & drop — swap two keys' action (grid rearrangement)
+    // ============================================================
+
+    private void KeyButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _mpDragStartPoint = e.GetPosition(null);
+        _mpDragCandidate = (sender as Button)?.Tag as MacroPadKey;
+    }
+
+    private void KeyButton_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _mpDragCandidate is null) return;
+        if (!IsMpKeyBindingSectionActive || !_mpDragCandidate.HasAction)
+        {
+            _mpDragCandidate = null;
+            return;
+        }
+        if (!DragDropHelper.ExceedsDragThreshold(_mpDragStartPoint, e.GetPosition(null))) return;
+
+        var key = _mpDragCandidate;
+        _mpDragCandidate = null;
+        DragDrop.DoDragDrop((Button)sender, new DataObject(MacroPadDragFormat, key.Index), DragDropEffects.Move);
+    }
+
+    private void KeyButton_DragEnter(object sender, DragEventArgs e)
+    {
+        bool ok = e.Data.GetDataPresent(MacroPadDragFormat);
+        e.Effects = ok ? DragDropEffects.Move : DragDropEffects.None;
+        if (ok && sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, true);
+    }
+
+    private void KeyButton_DragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, false);
+    }
+
+    private void KeyButton_Drop(object sender, DragEventArgs e)
+    {
+        if (sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, false);
+        if (!IsMpKeyBindingSectionActive) return;
+        if (CurrentDeviceId() is not int id) return;
+        if (sender is not Button { Tag: MacroPadKey targetKey }) return;
+        if (!e.Data.GetDataPresent(MacroPadDragFormat)) return;
+
+        int sourceIndex = (int)e.Data.GetData(MacroPadDragFormat);
+        if (sourceIndex < 0 || sourceIndex >= _keys.Length) return;
+        var sourceKey = _keys[sourceIndex];
+        if (ReferenceEquals(sourceKey, targetKey)) return;
+
+        (sourceKey.ActionType, targetKey.ActionType)   = (targetKey.ActionType, sourceKey.ActionType);
+        (sourceKey.ActionValue, targetKey.ActionValue) = (targetKey.ActionValue, sourceKey.ActionValue);
+
+        _store.SaveKey(new MacroKeyRecord(id, CurrentProfile(), sourceKey.Index, sourceKey.ActionType, sourceKey.ActionValue));
+        _store.SaveKey(new MacroKeyRecord(id, CurrentProfile(), targetKey.Index, targetKey.ActionType, targetKey.ActionValue));
+        Log($"[ACT ] swapped key #{sourceKey.Index} <-> #{targetKey.Index}");
     }
 
     // ============================================================

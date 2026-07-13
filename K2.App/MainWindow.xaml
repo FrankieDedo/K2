@@ -525,11 +525,23 @@
                             <TabPanel IsItemsHost="True" HorizontalAlignment="Left" Margin="2,0,0,0"/>
                         </ControlTemplate>
                     </TabControl.Template>
-                    <TabItem x:Name="TabEverest"   Tag="everest"   Header="{loc:Get tab_everest}"/>
-                    <TabItem x:Name="TabMacroPad" Tag="macropad" Header="{loc:Get tab_macropad}"/>
-                    <TabItem x:Name="TabEverest60" Tag="everest60" Header="{loc:Get tab_everest60}"/>
-                    <TabItem x:Name="TabMakalu"    Tag="makalu"    Header="{loc:Get tab_makalu}"/>
+                    <!-- Home: icon-only tab, always present (not gated by any device connection) —
+                         the app's landing tab, always first regardless of what's plugged in. -->
+                    <TabItem x:Name="TabHome" Tag="home" ToolTip="{loc:Get tab_home}">
+                        <TabItem.Header>
+                            <TextBlock Text="&#xE80F;" FontFamily="Segoe MDL2 Assets" FontSize="16"/>
+                        </TabItem.Header>
+                    </TabItem>
+                    <!-- Fixed device order: Everest Max > Everest 60 > Makalu > DisplayPad > MacroPad
+                         (DisplayPad tabs inserted dynamically after TabMakalu by DpRefreshDevices).
+                         Every tab starts Collapsed and is only made Visible once its device is
+                         confirmed connected (see SetDeviceTabVisible in MainWindow.xaml.cs) — a
+                         disconnected device must never show a tab. -->
+                    <TabItem x:Name="TabEverest"   Tag="everest"   Header="{loc:Get tab_everest}"   Visibility="Collapsed"/>
+                    <TabItem x:Name="TabEverest60" Tag="everest60" Header="{loc:Get tab_everest60}" Visibility="Collapsed"/>
+                    <TabItem x:Name="TabMakalu"    Tag="makalu"    Header="{loc:Get tab_makalu}"    Visibility="Collapsed"/>
                     <!-- DisplayPad tabs added dynamically by DpRefreshDevices -->
+                    <TabItem x:Name="TabMacroPad" Tag="macropad" Header="{loc:Get tab_macropad}" Visibility="Collapsed"/>
                 </TabControl>
 
                 <!-- Macro: icon + label button, left of Settings -->
@@ -589,7 +601,7 @@
                  shown (toggled in TcDevices_SelectionChanged / BtnSettingsTab_Click,
                  same as the Pnl* content panels below). -->
             <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,4,6">
-                <StackPanel x:Name="BrEverest" Orientation="Horizontal">
+                <StackPanel x:Name="BrEverest" Orientation="Horizontal" Visibility="Collapsed">
                     <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                     <Slider x:Name="SldEvBrightness" Minimum="0" Maximum="100" Value="100"
                             Width="140" TickFrequency="25" IsSnapToTickEnabled="True"
@@ -659,8 +671,79 @@
             <!-- Content panels: one visible at a time -->
             <Grid Grid.Row="2">
 
+            <!-- ==================== Home ====================
+                 Grid of cards, one per currently connected device (RefreshHomeTiles in
+                 MainWindow.Home.cs) — inspired by Base Camp's own device picker. Only one
+                 of PnlHomeEmpty/IcHomeTiles is visible at a time (nothing connected yet vs.
+                 at least one tile), toggled by RefreshHomeTiles itself. -->
+            <Grid x:Name="PnlHome">
+                <StackPanel x:Name="PnlHomeEmpty" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Image Source="Assets/K2_logo.png" Width="96" Height="96"
+                           HorizontalAlignment="Center"
+                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <TextBlock Text="{loc:Get home_no_device}" FontSize="15"
+                               Foreground="{StaticResource K2TextMutedBrush}"
+                               HorizontalAlignment="Center" Margin="0,16,0,0"/>
+                </StackPanel>
+
+                <ScrollViewer x:Name="ScrHomeTiles" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                    <StackPanel Margin="24">
+                        <TextBlock Text="{loc:Get home_heading}" FontSize="15" FontWeight="SemiBold"
+                                   Margin="4,0,0,14"/>
+                        <ItemsControl x:Name="IcHomeTiles">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Click="HomeTile_Click" Cursor="Hand" Margin="0,0,21,21"
+                                            Background="Transparent" BorderThickness="0" Padding="0"
+                                            HorizontalContentAlignment="Stretch">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="Card" Width="351" Height="247" CornerRadius="13"
+                                                        Background="#221F26" BorderBrush="#2A2A32"
+                                                        BorderThickness="1" ClipToBounds="True">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="5"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <Border Grid.Column="0"
+                                                                Background="{StaticResource K2AccentBrush}"
+                                                                CornerRadius="5,0,0,5"/>
+                                                        <Image Grid.Column="1" Source="{Binding ImagePath}"
+                                                               Stretch="Uniform" HorizontalAlignment="Right"
+                                                               VerticalAlignment="Bottom"
+                                                               Width="286" Height="195"
+                                                               Margin="0,0,-13,-13"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding Name}"
+                                                                   FontSize="29" FontWeight="Bold"
+                                                                   Foreground="{StaticResource K2TextBrush}"
+                                                                   Margin="23,23,13,13" TextWrapping="Wrap"
+                                                                   VerticalAlignment="Top"/>
+                                                    </Grid>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Card" Property="BorderBrush"
+                                                                Value="{StaticResource K2AccentBrush}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
             <!-- ==================== Everest Max ==================== -->
-            <Grid x:Name="PnlEverest">
+            <Grid x:Name="PnlEverest" Visibility="Collapsed">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
                         <!-- Fixed (not Auto): keeps the sidebar/content start position
@@ -1133,7 +1216,18 @@
                                                 <ComboBox x:Name="CbEvKeycapStyle" Width="230"
                                                           SelectionChanged="CbEvKeycapStyle_SelectionChanged"/>
                                             </WrapPanel>
+                                            <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                <CheckBox x:Name="CkEvKeycapTranslucentLegend" Content="{loc:Get settings_keycap_translucent_legend}"
+                                                          Click="CkEvKeycapTranslucentLegend_Click"/>
+                                            </WrapPanel>
                                             <TextBlock Text="{loc:Get settings_keycap_hint}" Foreground="#9A9AA2"
+                                                       TextWrapping="Wrap" Margin="0,0,0,10" FontSize="12"/>
+
+                                            <WrapPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                <CheckBox x:Name="CkEvKeycapEditMode" Content="{loc:Get settings_keycap_edit_individual}"
+                                                          Click="CkEvKeycapEditMode_Click"/>
+                                            </WrapPanel>
+                                            <TextBlock Text="{loc:Get settings_keycap_edit_individual_hint}" Foreground="#9A9AA2"
                                                        TextWrapping="Wrap" Margin="0,0,0,10" FontSize="12"/>
 
                                             <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
@@ -1339,6 +1433,14 @@
                             <Border Grid.Row="0" Background="#18181C" CornerRadius="6" Padding="8">
                                 <StackPanel x:Name="SpEv60Layout" Orientation="Horizontal"
                                             HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <!-- +20% zoom on request, same as Everest Max's SpEvLayout:
+                                         LayoutTransform (not RenderTransform) so the Grid/Border
+                                         re-measures at the scaled size and WPF's hit-testing keeps
+                                         mapping clicks to the right Button automatically — no changes
+                                         needed to Everest60KeyboardLayout's X/Y/W/H math. -->
+                                    <StackPanel.LayoutTransform>
+                                        <ScaleTransform ScaleX="1.2" ScaleY="1.2"/>
+                                    </StackPanel.LayoutTransform>
                                     <Canvas x:Name="CvsEv60Numpad" Width="154" Height="186"
                                             ClipToBounds="True" Margin="0,0,6,0"
                                             Visibility="Collapsed">
@@ -1420,7 +1522,18 @@
                                                 <ComboBox x:Name="CbEv60KeycapStyle" Width="230"
                                                           SelectionChanged="CbEv60KeycapStyle_SelectionChanged"/>
                                             </WrapPanel>
+                                            <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                <CheckBox x:Name="CkEv60KeycapTranslucentLegend" Content="{loc:Get settings_keycap_translucent_legend}"
+                                                          Click="CkEv60KeycapTranslucentLegend_Click"/>
+                                            </WrapPanel>
                                             <TextBlock Text="{loc:Get settings_keycap_hint}" Foreground="#9A9AA2"
+                                                       TextWrapping="Wrap" Margin="0,0,0,10" FontSize="12"/>
+
+                                            <WrapPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                <CheckBox x:Name="CkEv60KeycapEditMode" Content="{loc:Get settings_keycap_edit_individual}"
+                                                          Click="CkEv60KeycapEditMode_Click"/>
+                                            </WrapPanel>
+                                            <TextBlock Text="{loc:Get settings_keycap_edit_individual_hint}" Foreground="#9A9AA2"
                                                        TextWrapping="Wrap" Margin="0,0,0,10" FontSize="12"/>
 
                                             <Separator Style="{StaticResource K2SideSeparator}" Margin="0,0,0,10"/>
@@ -1917,7 +2030,18 @@
                                             <ComboBox x:Name="CbMpKeycapStyle" Width="230"
                                                       SelectionChanged="CbMpKeycapStyle_SelectionChanged"/>
                                         </WrapPanel>
+                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <CheckBox x:Name="CkMpKeycapTranslucentLegend" Content="{loc:Get settings_keycap_translucent_legend}"
+                                                      Click="CkMpKeycapTranslucentLegend_Click"/>
+                                        </WrapPanel>
                                         <TextBlock Text="{loc:Get settings_keycap_hint}" Foreground="#9A9AA2"
+                                                   TextWrapping="Wrap" Margin="0,0,0,10" FontSize="12"/>
+
+                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                            <CheckBox x:Name="CkMpKeycapEditMode" Content="{loc:Get settings_keycap_edit_individual}"
+                                                      Click="CkMpKeycapEditMode_Click"/>
+                                        </WrapPanel>
+                                        <TextBlock Text="{loc:Get settings_keycap_edit_individual_hint}" Foreground="#9A9AA2"
                                                    TextWrapping="Wrap" Margin="0,0,0,4" FontSize="12"/>
                                     </StackPanel>
                                 </Grid>

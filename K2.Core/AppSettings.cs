@@ -40,11 +40,6 @@ public static class AppSettings
         public List<string> RecentFolderPaths { get; set; } = new();
         public string? MakaluDeviceName { get; set; }
         public string? Everest60DeviceName { get; set; }
-        public string? Everest60KeycapColorMode { get; set; }
-        public string? Everest60KeycapCustomHex { get; set; }
-        public string? Everest60KeycapTextColorMode { get; set; }
-        public string? Everest60KeycapTextCustomHex { get; set; }
-        public int? Everest60KeycapStyle { get; set; }
         public string AppFontFamily { get; set; } = Services.FontCatalog.DefaultKey;
     }
 
@@ -250,100 +245,6 @@ public static class AppSettings
         {
             if (_data.Everest60DeviceName == value) return;
             _data.Everest60DeviceName = value;
-            Save();
-        }
-        Changed?.Invoke();
-    }
-
-    /// <summary>Keycap Appearance for the Everest 60's on-screen key overlay
-    /// (base color / custom hex / text color / text custom hex) — purely
-    /// cosmetic, same idea as Everest Max's <c>settings.keycap_*</c> EverestStore
-    /// keys, but Everest 60 has no per-device SQLite store so this lives in
-    /// AppSettings instead (same reasoning as <see cref="Everest60DeviceName"/>).</summary>
-    public static string? Everest60KeycapColorMode
-    {
-        get { EnsureLoaded(); return _data.Everest60KeycapColorMode; }
-    }
-
-    public static void SetEverest60KeycapColorMode(string? value)
-    {
-        EnsureLoaded();
-        lock (_lock)
-        {
-            if (_data.Everest60KeycapColorMode == value) return;
-            _data.Everest60KeycapColorMode = value;
-            Save();
-        }
-        Changed?.Invoke();
-    }
-
-    public static string? Everest60KeycapCustomHex
-    {
-        get { EnsureLoaded(); return _data.Everest60KeycapCustomHex; }
-    }
-
-    public static void SetEverest60KeycapCustomHex(string? value)
-    {
-        EnsureLoaded();
-        lock (_lock)
-        {
-            if (_data.Everest60KeycapCustomHex == value) return;
-            _data.Everest60KeycapCustomHex = value;
-            Save();
-        }
-        Changed?.Invoke();
-    }
-
-    public static string? Everest60KeycapTextColorMode
-    {
-        get { EnsureLoaded(); return _data.Everest60KeycapTextColorMode; }
-    }
-
-    public static void SetEverest60KeycapTextColorMode(string? value)
-    {
-        EnsureLoaded();
-        lock (_lock)
-        {
-            if (_data.Everest60KeycapTextColorMode == value) return;
-            _data.Everest60KeycapTextColorMode = value;
-            Save();
-        }
-        Changed?.Invoke();
-    }
-
-    public static string? Everest60KeycapTextCustomHex
-    {
-        get { EnsureLoaded(); return _data.Everest60KeycapTextCustomHex; }
-    }
-
-    public static void SetEverest60KeycapTextCustomHex(string? value)
-    {
-        EnsureLoaded();
-        lock (_lock)
-        {
-            if (_data.Everest60KeycapTextCustomHex == value) return;
-            _data.Everest60KeycapTextCustomHex = value;
-            Save();
-        }
-        Changed?.Invoke();
-    }
-
-    /// <summary>Keycap style (Normal/Translucent/Pudding/ReversePudding) for
-    /// the Everest 60's on-screen overlay — imported from Everest Max's
-    /// identically-named Settings control. Stored as the enum's raw int
-    /// value (K2.Core has no reference to K2.App's KeycapStyle enum).</summary>
-    public static int? Everest60KeycapStyle
-    {
-        get { EnsureLoaded(); return _data.Everest60KeycapStyle; }
-    }
-
-    public static void SetEverest60KeycapStyle(int value)
-    {
-        EnsureLoaded();
-        lock (_lock)
-        {
-            if (_data.Everest60KeycapStyle == value) return;
-            _data.Everest60KeycapStyle = value;
             Save();
         }
         Changed?.Invoke();

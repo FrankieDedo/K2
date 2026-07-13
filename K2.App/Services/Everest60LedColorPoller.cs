@@ -1,42 +1,49 @@
 using System;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 
 namespace K2.App.Services;
 
 /// <summary>
 /// Periodic polling of the Everest 60's current LED colors via
-/// <see cref="Everest60SdkService.TryGetColorData"/>, mirroring
-/// <see cref="LedColorPoller"/>'s role for Everest Max/MacroPad.
+/// <see cref="Everest60Service.TryGetColorData"/> (raw HID, NOT the vendor
+/// SDK — see its doc comment for why: <c>Everest60SdkNative.GetColorData2</c>
+/// was found 2026-07-13, via a real Base Camp USB capture, to reliably fail
+/// whenever a Makalu mouse is also connected, while raw-HID lighting on the
+/// same interface never failed in any test). Mirrors <see cref="LedColorPoller"/>'s
+/// role for Everest Max/MacroPad.
 ///
 /// <para>
-/// 60ms interval, same cadence as Everest Max/MacroPad (see LedColorPoller).
-/// Originally 300ms (Base Camp's own verified cadence for this device,
+/// 300ms interval (Base Camp's own verified cadence for this device,
 /// decompiled 2026-07-11 from <c>BaseCamp.UI.dll</c>'s
-/// <c>EverestMiniController.GetColorData</c> websocket handler — a plain
-/// <c>Thread.Sleep(300)</c> loop), kept gentle out of caution because the
-/// SDK-session/raw-HID coexistence on this device was unverified. 2026-07-12:
-/// verified stable on real hardware across a full debugging session (numpad
-/// detection + full-keyboard LED preview, no contention observed) — sped up
-/// to 120ms, then to 60ms on user request once that held up too.
+/// <c>EverestMiniController.GetColorData</c> websocket handler). Was sped up
+/// to 60ms while backed by the SDK session (a single fast P/Invoke call);
+/// reverted to 300ms 2026-07-13 switching to raw HID, since a full readback
+/// is now <see cref="Everest60Protocol.ReadColorData"/>'s 10 sequential
+/// Feature Report round-trips (~15ms apart each, see its doc comment) — a
+/// tighter interval would overlap ticks. The read itself runs on a
+/// background thread (<see cref="Task.Run(Action)"/>) with an in-flight
+/// guard, NOT on the DispatcherTimer's own UI-thread callback, since ~150ms
+/// of blocking HID I/O on the UI thread would stutter the window every tick.
 /// </para>
 /// </summary>
 internal sealed class Everest60LedColorPoller : IDisposable
 {
-    private readonly Everest60SdkService _sdk;
+    private readonly Everest60Service _ev60;
     private readonly DispatcherTimer _timer;
-    private readonly EverestSdkNative.FWColor[] _buf = new EverestSdkNative.FWColor[Everest60SdkService.ColorEntryCount];
-    private int _tick;
+    private readonly EverestSdkNative.FWColor[] _buf = new EverestSdkNative.FWColor[Everest60Protocol.ColorEntryCount];
+    private volatile bool _inFlight;
 
     /// <summary>Updated colors, 192 elements indexed by firmware LED hardware
     /// address (see Everest60Protocol.LedIndex/SideLedIndex). Raised on the UI thread.</summary>
     public event Action<EverestSdkNative.FWColor[]>? ColorsUpdated;
 
-    public Everest60LedColorPoller(Everest60SdkService sdk)
+    public Everest60LedColorPoller(Everest60Service ev60)
     {
-        _sdk = sdk;
-        _timer = new DispatcherTimer(DispatcherPriority.Render)
+        _ev60 = ev60;
+        _timer = new DispatcherTimer(DispatcherPriority.Background)
         {
-            Interval = TimeSpan.FromMilliseconds(60),
+            Interval = TimeSpan.FromMilliseconds(300),
         };
         _timer.Tick += OnTick;
     }
@@ -46,8 +53,7 @@ internal sealed class Everest60LedColorPoller : IDisposable
     public void Start()
     {
         if (_timer.IsEnabled) return;
-        _tick = 0;
-        App.WriteLog($"[Ev60-POLL] started (sdk.IsOpen={_sdk.IsOpen})");
+        App.WriteLog("[Ev60-POLL] started (raw HID)");
         _timer.Start();
     }
 
@@ -58,17 +64,22 @@ internal sealed class Everest60LedColorPoller : IDisposable
         _timer.Stop();
     }
 
-    /// <summary>Per-tick diagnostic logging (added 2026-07-12 while chasing the
-    /// numpad/LED-preview hardware bugs, since confirmed fixed and verified on
-    /// real hardware) is intentionally NOT here on the happy path anymore — at
-    /// 120ms it would flood the log for no ongoing benefit. Only failures are
+    /// <summary>Skips a tick if the previous read hasn't finished yet (10
+    /// sequential HID round-trips can occasionally run past 300ms) rather
+    /// than piling up overlapping background reads. Only failures are
     /// logged, same as a plain error path.</summary>
     private void OnTick(object? sender, EventArgs e)
     {
-        _tick++;
-        if (!_sdk.IsOpen) return;
-        if (_sdk.TryGetColorData(_buf))
-            ColorsUpdated?.Invoke(_buf);
+        if (_inFlight) return;
+        _inFlight = true;
+        var dispatcher = _timer.Dispatcher;
+        Task.Run(() =>
+        {
+            bool ok = _ev60.TryGetColorData(_buf);
+            _inFlight = false;
+            if (ok)
+                dispatcher.BeginInvoke(() => ColorsUpdated?.Invoke(_buf));
+        });
     }
 
     public void Dispose() => _timer.Stop();

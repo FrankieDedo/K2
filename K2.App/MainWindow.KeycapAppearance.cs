@@ -15,13 +15,14 @@
 //
 // Independent choices (KeycapColorMode/KeycapStyle below, shared by both devices):
 //   - keycap color: Black / White / Custom (a picked RGB), default Black — the key's base/fill
-//     color, and (Normal/Translucent/ReversePudding) also the border + bottom Mount strip color.
+//     color, and (Normal/ReversePudding) also the border + bottom Mount strip color.
 //   - text color: Black / White / Custom (a picked RGB), default White — used for the legend
-//     when style != Translucent (Translucent's legend is always dynamically tinted with the
-//     live LED color instead).
+//     unless the "Translucent legends" checkbox is on, in which case the legend is always
+//     dynamically tinted with the live LED color instead (independent of style, see
+//     _evKeycapTranslucentLegend below).
 //   - keycap style: how the live LED color combines with the keycap color
-//     (Normal/Translucent = halo glow around the key, border + Mount strip = the static keycap
-//     color; Pudding = border + Mount follow the live LED color, center = keycap color;
+//     (Normal = halo glow around the key, border + Mount strip = the static keycap color;
+//     Pudding = border + Mount follow the live LED color, center = keycap color;
 //     Reverse Pudding = border + Mount are the static keycap color, center follows the live LED color)
 //
 // The live per-tick LED color is applied by MainWindow.LedPreview.cs via
@@ -35,9 +36,13 @@
 // the template's Hover trigger (a value set directly from code on Mount would permanently
 // outrank that trigger).
 
+using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using K2.App.Services;
 using K2.Core;
 
 namespace K2.App;
@@ -56,16 +61,19 @@ internal enum KeycapColorMode
 /// preview (Everest and MacroPad):
 ///   Normal         — keycap solid color (incl. border + bottom Mount strip), LED shown
 ///                    as a glow/halo around the key.
-///   Translucent    — same solid-color body, plus the legend tinted with the LED color.
 ///   Pudding        — border and bottom Mount strip colored like the LED, center = keycap color.
 ///   ReversePudding — border and bottom Mount strip = keycap color, center = LED color.
+/// Independent of the style, the "Translucent legends" checkbox (see
+/// _evKeycapTranslucentLegend below) makes the legend track the live LED color instead of the
+/// static configured text color — orthogonal to which of the 3 styles above is active. Before
+/// 2026-07-13 this was a 4th style value ("Translucent" = Normal + legend tint bundled
+/// together); it's now a checkbox so it can be combined with Pudding/ReversePudding too.
 /// </summary>
 internal enum KeycapStyle
 {
     Normal = 0,
-    Translucent = 1,
-    Pudding = 2,
-    ReversePudding = 3,
+    Pudding = 1,
+    ReversePudding = 2,
 }
 
 public partial class MainWindow
@@ -82,6 +90,59 @@ public partial class MainWindow
     /// Mount strip, and Reverse Pudding's center, when no LED effect is lighting the key.</summary>
     private static readonly Color LedOffColor = Color.FromRgb(0xD0, 0xD0, 0xD0);
 
+    /// <summary>LED index of the Esc key — identical on both Everest Max (LedMatrixMapping.
+    /// EverestKeyboard maps VK 27 → 0) and Everest 60 (Everest60KeyboardLayout.MainBoard's first
+    /// key). Used by KeycapCustomizeDialog to decide whether to offer the "Use Mountain logo"
+    /// checkbox. The MacroPad has no Esc key, so this never applies there.</summary>
+    internal const int EscKeyId = 0;
+
+    /// <summary>Sentinel ImagePath value (stored in KeycapOverrides.ImagePath) meaning "the
+    /// bundled Mountain logo asset", not a real file on disk — see LoadKeycapOverrideImage.</summary>
+    internal const string MountainLogoImagePath = "::mountain-logo::";
+
+    /// <summary>Loads a per-key custom image override — either the bundled Mountain logo asset
+    /// (Esc-only sentinel) or a user-picked file (already cropped/cached on disk by
+    /// ImageCropDialog/CropEditor, same pipeline as the numpad display keys). Returns null if the
+    /// file no longer exists (e.g. the cropped-image cache was cleared). Frozen so it's safe to
+    /// share/reuse across threads and cheap to reassign on every appearance refresh.
+    /// Internal (not private): also used by KeycapCustomizeDialog's own image preview.</summary>
+    internal static BitmapImage? LoadKeycapOverrideImage(string imagePath)
+    {
+        try
+        {
+            var uri = imagePath == MountainLogoImagePath
+                ? new Uri("pack://application:,,,/K2.App;component/Assets/mountain_logo.png")
+                : new Uri(imagePath, UriKind.Absolute);
+            if (uri.IsFile && !System.IO.File.Exists(uri.LocalPath)) return null;
+
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.UriSource = uri;
+            bmp.EndInit();
+            bmp.Freeze();
+            return bmp;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>Swaps a key's Content between its cached original legend and a custom image
+    /// override, shared by all 3 devices (Everest Max, Everest 60, MacroPad). Safe to call every
+    /// appearance refresh: a no-op re-swap when nothing changed. Background/BorderBrush styling
+    /// (Pudding/Reverse Pudding border tint, halo, etc.) is untouched — it still applies to the
+    /// Button underneath the image.</summary>
+    private static void ApplyKeycapImageOverride(Button btn, FrameworkElement? originalContent, string? imagePath)
+    {
+        if (imagePath is { Length: > 0 } && LoadKeycapOverrideImage(imagePath) is { } bmp)
+        {
+            btn.Content = new Image { Source = bmp, Stretch = Stretch.Uniform };
+        }
+        else if (originalContent != null && !ReferenceEquals(btn.Content, originalContent))
+        {
+            btn.Content = originalContent;
+        }
+    }
+
     // In-memory cache of the persisted settings.keycap_* values (read once at load,
     // avoids hitting the SQLite store on every ~100ms LED poll tick).
     private KeycapColorMode _evKeycapColorMode = KeycapColorMode.Black;
@@ -89,6 +150,52 @@ public partial class MainWindow
     private KeycapColorMode _evKeycapTextColorMode = KeycapColorMode.White;
     private string _evKeycapTextCustomHex = "#FFFFFF";
     private KeycapStyle _evKeycapStyleValue = KeycapStyle.Normal;
+
+    /// <summary>"Translucent legends" checkbox (2026-07-13, replaces the old 4th
+    /// KeycapStyle.Translucent value): independent of style, makes the legend track the live
+    /// LED color instead of the static configured text color. See LoadKeycapAppearanceFromStore
+    /// for the one-time migration from the old combined style value.</summary>
+    private bool _evKeycapTranslucentLegend;
+
+    /// <summary>Per-key color/image overrides (KeyId = LED index, same identity as
+    /// _evKeyVisuals), loaded once from _evStore alongside the rest of Keycap Appearance and
+    /// refreshed after every KeycapCustomizeDialog edit. See MainWindow.Everest.cs's keyboard
+    /// click handler for how the dialog is opened (Edit-individual-keycaps mode).</summary>
+    private readonly Dictionary<int, KeycapOverrideRecord> _evKeycapOverrides = new();
+
+    /// <summary>"Edit individual keycaps" checkbox — transient UI mode (not persisted), reset to
+    /// off on every app start. While checked and the Settings section is active, clicking a key
+    /// opens KeycapCustomizeDialog instead of that section's normal (no-op) click behavior — see
+    /// EvKeyboardButton_Click in MainWindow.Everest.cs.</summary>
+    private bool _evKeycapEditMode;
+
+    private void CkEvKeycapEditMode_Click(object sender, RoutedEventArgs e) =>
+        _evKeycapEditMode = CkEvKeycapEditMode.IsChecked == true;
+
+    /// <summary>Opens KeycapCustomizeDialog for the given key (KeyId = LED index) and persists/
+    /// re-renders live on every change — called from EvKeyboardButton_Click when edit mode is
+    /// active. Shared logic (dialog wiring identical across all 3 devices) factored here since
+    /// only the store/apply-function/label differ.</summary>
+    private void OpenEvKeycapCustomizeDialog(int keyId, string label)
+    {
+        _evKeycapOverrides.TryGetValue(keyId, out var current);
+        var dlg = new KeycapCustomizeDialog(label, keyId == EscKeyId, current?.ColorHex, current?.ImagePath) { Owner = this };
+        dlg.Changed += () =>
+        {
+            if (dlg.ColorHex is null && dlg.ImagePath is null)
+            {
+                _evStore.ClearKeycapOverride(keyId);
+                _evKeycapOverrides.Remove(keyId);
+            }
+            else
+            {
+                _evStore.SetKeycapOverride(keyId, dlg.ColorHex, dlg.ImagePath);
+                _evKeycapOverrides[keyId] = new KeycapOverrideRecord(keyId, dlg.ColorHex, dlg.ImagePath);
+            }
+            ApplyKeycapAppearanceToAllKeys();
+        };
+        dlg.ShowDialog();
+    }
 
     private sealed record KeycapStyleChoice(KeycapStyle Style, string Label)
     {
@@ -98,7 +205,6 @@ public partial class MainWindow
     private static readonly KeycapStyleChoice[] KeycapStyleChoices =
     {
         new(KeycapStyle.Normal,         Loc.Get("settings_keycap_style_normal")),
-        new(KeycapStyle.Translucent,    Loc.Get("settings_keycap_style_translucent")),
         new(KeycapStyle.Pudding,        Loc.Get("settings_keycap_style_pudding")),
         new(KeycapStyle.ReversePudding, Loc.Get("settings_keycap_style_reverse_pudding")),
     };
@@ -120,9 +226,35 @@ public partial class MainWindow
         _evKeycapCustomHex = _evStore.GetSetting("settings.keycap_custom_hex") is { Length: > 0 } hex ? hex : "#404040";
         _evKeycapTextColorMode = ParseColorMode(_evStore.GetSetting("settings.keycap_text_color_mode"), KeycapColorMode.White);
         _evKeycapTextCustomHex = _evStore.GetSetting("settings.keycap_text_custom_hex") is { Length: > 0 } txt ? txt : "#FFFFFF";
-        _evKeycapStyleValue = int.TryParse(_evStore.GetSetting("settings.keycap_style"), out var s) && s is >= 0 and <= 3
-            ? (KeycapStyle)s
-            : KeycapStyle.Normal;
+
+        // Migration (2026-07-13): the old KeycapStyle had 4 values (Normal/Translucent/Pudding/
+        // ReversePudding = 0/1/2/3); Translucent is now the independent checkbox below and
+        // Pudding/ReversePudding shifted down to 1/2. "settings.keycap_translucent_legend" never
+        // existing yet is the marker that settings.keycap_style (if present) is still in the old
+        // scheme — migrate once, then persist both in the new scheme so this never re-runs.
+        int rawStyle = int.TryParse(_evStore.GetSetting("settings.keycap_style"), out var s) ? s : 0;
+        if (_evStore.GetSetting("settings.keycap_translucent_legend") is not { } translucentRaw)
+        {
+            _evKeycapTranslucentLegend = rawStyle == 1; // old Translucent
+            _evKeycapStyleValue = rawStyle switch
+            {
+                2 => KeycapStyle.Pudding,
+                3 => KeycapStyle.ReversePudding,
+                _ => KeycapStyle.Normal, // covers old Normal (0) and old Translucent (1)
+            };
+            _evStore.SetSetting("settings.keycap_style", ((int)_evKeycapStyleValue).ToString());
+            _evStore.SetSetting("settings.keycap_translucent_legend", _evKeycapTranslucentLegend ? "1" : "0");
+        }
+        else
+        {
+            _evKeycapTranslucentLegend = translucentRaw == "1";
+            _evKeycapStyleValue = rawStyle is >= 0 and <= 2 ? (KeycapStyle)rawStyle : KeycapStyle.Normal;
+        }
+        CkEvKeycapTranslucentLegend.IsChecked = _evKeycapTranslucentLegend;
+
+        _evKeycapOverrides.Clear();
+        foreach (var (keyId, rec) in _evStore.LoadAllKeycapOverrides())
+            _evKeycapOverrides[keyId] = rec;
 
         switch (_evKeycapColorMode)
         {
@@ -244,6 +376,14 @@ public partial class MainWindow
         ApplyKeycapAppearanceToAllKeys();
     }
 
+    private void CkEvKeycapTranslucentLegend_Click(object sender, RoutedEventArgs e)
+    {
+        if (_evSettingsSuppress) return;
+        _evKeycapTranslucentLegend = CkEvKeycapTranslucentLegend.IsChecked == true;
+        _evStore.SetSetting("settings.keycap_translucent_legend", _evKeycapTranslucentLegend ? "1" : "0");
+        ApplyKeycapAppearanceToAllKeys();
+    }
+
     private Color ResolveEverestKeycapColor() => _evKeycapColorMode switch
     {
         KeycapColorMode.White  => Color.FromRgb(0xE4, 0xE4, 0xE4),
@@ -280,12 +420,17 @@ public partial class MainWindow
     /// </summary>
     private void ApplyKeycapAppearanceToAllKeys()
     {
-        var keycapBrush    = new SolidColorBrush(ResolveEverestKeycapColor());
-        var ledOffBrush    = new SolidColorBrush(LedOffColor);
-        var textBrush      = new SolidColorBrush(ResolveEverestKeycapTextColor());
+        var defaultKeycapBrush = new SolidColorBrush(ResolveEverestKeycapColor());
+        var ledOffBrush        = new SolidColorBrush(LedOffColor);
+        var textBrush          = new SolidColorBrush(ResolveEverestKeycapTextColor());
 
-        foreach (var v in _evKeyVisuals.Values)
+        foreach (var (keyId, v) in _evKeyVisuals)
         {
+            _evKeycapOverrides.TryGetValue(keyId, out var ov);
+            var keycapBrush = ov?.ColorHex is { Length: > 0 } hex && TryParseHexColor(hex, out var c)
+                ? new SolidColorBrush(c)
+                : defaultKeycapBrush;
+
             switch (_evKeycapStyleValue)
             {
                 case KeycapStyle.Pudding:
@@ -301,19 +446,23 @@ public partial class MainWindow
                     SetKeyBackground(v.Button, ledOffBrush);
                     SetKeyBorderBrush(v.Button, keycapBrush);
                     break;
-                default: // Normal, Translucent — border (+ Mount) = the static keycap color.
+                default: // Normal — border (+ Mount) = the static keycap color.
                     SetKeyBackground(v.Button, keycapBrush);
                     SetKeyBorderBrush(v.Button, keycapBrush);
                     break;
             }
 
             v.Halo.Background = Brushes.Transparent;
-            SetLegendForeground(v.Button, _evKeycapStyleValue == KeycapStyle.Translucent ? Brushes.White : textBrush);
+            SetLegendForeground(v.Button, _evKeycapTranslucentLegend ? Brushes.White : textBrush);
+
+            _evOriginalKeyContent.TryGetValue(keyId, out var original);
+            ApplyKeycapImageOverride(v.Button, original, ov?.ImagePath);
         }
     }
 
     /// <summary>Applies one LED-poll tick's live color to a single Everest key, routed to the
-    /// visual element that matches the current keycap style.</summary>
+    /// visual element that matches the current keycap style; independently of style, the
+    /// "Translucent legends" checkbox additionally tints the legend with the live color.</summary>
     private void ApplyEverestLedColor(KeyVisual v, byte r, byte g, byte b)
     {
         bool lit = r != 0 || g != 0 || b != 0;
@@ -328,14 +477,13 @@ public partial class MainWindow
             case KeycapStyle.ReversePudding:
                 SetKeyBackground(v.Button, ledBrush ?? new SolidColorBrush(LedOffColor));
                 break;
-            case KeycapStyle.Translucent:
-                v.Halo.Background = lit ? new SolidColorBrush(Color.FromArgb(160, r, g, b)) : Brushes.Transparent;
-                SetLegendForeground(v.Button, ledBrush ?? Brushes.White);
-                break;
-            default: // Normal
+            default: // Normal — Pudding/ReversePudding already visualize the LED via border/center.
                 v.Halo.Background = lit ? new SolidColorBrush(Color.FromArgb(160, r, g, b)) : Brushes.Transparent;
                 break;
         }
+
+        if (_evKeycapTranslucentLegend)
+            SetLegendForeground(v.Button, ledBrush ?? Brushes.White);
     }
 
     /// <summary>Resets a single key to its "LED off" appearance for the current style — used
@@ -375,10 +523,12 @@ public partial class MainWindow
             tint.Background = brush;
     }
 
-    /// <summary>Sets the Foreground of the legend TextBlock(s) inside a key's Content — which is
-    /// either a single TextBlock (MacroPad, always; Everest, most keys), a StackPanel (Everest
-    /// two-line legend), or a Grid (Everest 4-corner legend from BuildCornerLegend); see
-    /// BuildEverestKeyboardOverlay in MainWindow.Everest.cs / InitKeysModule in MainWindow.Keys.cs.</summary>
+    /// <summary>Sets the Foreground of the legend TextBlock(s) — or the Fill of the legend
+    /// Shape(s) — inside a key's Content, which is either a single TextBlock (MacroPad, always;
+    /// Everest, most keys), a StackPanel (Everest two-line legend), or a Grid (Everest 4-corner
+    /// legend from BuildCornerLegend, or the 4-square Win-key icon from BuildWinIcon — the only
+    /// non-text legend today, hence the Shape branch below); see BuildEverestKeyboardOverlay in
+    /// MainWindow.Everest.cs / InitKeysModule in MainWindow.Keys.cs.</summary>
     private static void SetLegendForeground(Button btn, Brush brush)
     {
         switch (btn.Content)
@@ -388,7 +538,10 @@ public partial class MainWindow
                 break;
             case Panel panel:
                 foreach (var child in panel.Children)
+                {
                     if (child is TextBlock ctb) ctb.Foreground = brush;
+                    else if (child is System.Windows.Shapes.Shape shape) shape.Fill = brush;
+                }
                 break;
         }
     }

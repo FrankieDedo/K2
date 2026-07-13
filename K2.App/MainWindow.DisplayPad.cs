@@ -1007,6 +1007,20 @@ public partial class MainWindow
                 {
                     actionType  = "dp_back";
                     actionValue = null;
+
+                    // BC's XML rarely carries a real per-key icon for its "Back" button (no
+                    // <base64Image>, or a BC-internal path with nothing to decode — see the
+                    // image block above). Give it the same auto-generated arrow+caption tile
+                    // as the in-app "Set as Back button" menu item (DpMnuSetBack_Click) /
+                    // DpEnsureDefaultBackButton, instead of leaving it iconless. Only when the
+                    // XML genuinely had no image — a real customized icon is left untouched.
+                    if (imagePath is null)
+                    {
+                        string caption = Loc.Get("dp_back");
+                        string dest = DpAutoIconCachePath("dpback", caption);
+                        if (IconImageGenerator.TryGenerateBackIcon(caption, DpHidNative.IconSize, dest))
+                            imagePath = dest;
+                    }
                 }
                 else
                 {
@@ -1501,7 +1515,10 @@ public partial class MainWindow
     }
 
     /// <summary>Binds this key to navigate back to the parent page — the in-app equivalent
-    /// of Base Camp's "Back" button (see <see cref="DpMnuCreateFolder_Click"/> remarks).</summary>
+    /// of Base Camp's "Back" button (see <see cref="DpMnuCreateFolder_Click"/> remarks).
+    /// Auto-generates the arrow+caption tile the same way folder creation does, unless the
+    /// key already carries a picture the user presumably wants kept (still replaceable
+    /// afterwards via the "Change image" context-menu item).</summary>
     private void DpMnuSetBack_Click(object sender, RoutedEventArgs e)
     {
         if (!IsDpKeyBindingSectionActive) return;
@@ -1510,8 +1527,47 @@ public partial class MainWindow
 
         key.ActionType  = "dp_back";
         key.ActionValue = null;
+
+        if (string.IsNullOrEmpty(key.ImagePath) || !File.Exists(key.ImagePath))
+        {
+            string caption = Loc.Get("dp_back");
+            string dest = DpAutoIconCachePath("dpback", caption);
+            if (IconImageGenerator.TryGenerateBackIcon(caption, DpHidNative.IconSize, dest))
+            {
+                DpUploadAndPersist(id, DpCurrentProfile(), key, dest);
+                DpLog($"[ACT] key #{key.Index} <- dp_back (auto icon)");
+                return;
+            }
+        }
+
         _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, key.ImagePath, key.ActionType, key.ActionValue);
         DpLog($"[ACT] key #{key.Index} <- dp_back");
+    }
+
+    /// <summary>
+    /// Materializes the "top-left key = Back" default for a non-root (folder sub-)page
+    /// whose button #0 has no persisted row yet — a freshly created page, or one imported
+    /// from Base Camp (XML or BaseCamp.db, see <see cref="BaseCampDbImporter"/>) whose data
+    /// simply never defined an equivalent tile there. Generates the same arrow+caption icon
+    /// <see cref="DpMnuSetBack_Click"/> uses and persists a "dp_back" action, so a page's way
+    /// out is never missing — regardless of how the page came to exist.
+    /// Called from <see cref="DpReloadCurrentProfile"/>/<see cref="DpUploadPageForDevice"/>,
+    /// i.e. every entry point into a page (foreground tab, background device, both
+    /// import paths, since imported pages only ever get read through those two loaders) —
+    /// so this needs no special-casing at import time. A no-op once button #0 has ANY row,
+    /// including one the user (or Base Camp's own data) explicitly left actionless: only a
+    /// genuinely never-touched page gets the default.
+    /// </summary>
+    private void DpEnsureDefaultBackButton(int id, int profile, int pageId)
+    {
+        if (pageId == 0) return; // root page has nowhere to go back to
+        if (_dpStore.LoadPage(id, profile, pageId).Any(r => r.ButtonIndex == 0)) return;
+
+        string caption = Loc.Get("dp_back");
+        string dest = DpAutoIconCachePath("dpback", caption);
+        string? imagePath = IconImageGenerator.TryGenerateBackIcon(caption, DpHidNative.IconSize, dest) ? dest : null;
+        _dpStore.SaveButton(id, profile, pageId, 0, imagePath, "dp_back", null);
+        DpLog($"[ACT] device {id} page {pageId}: key #0 defaulted to dp_back");
     }
 
     /// <summary>
@@ -1583,9 +1639,10 @@ public partial class MainWindow
             progressive++;
         }
 
-        // Sync top-level device tabs for DisplayPad (after MacroPad tab)
+        // Sync top-level device tabs for DisplayPad (fixed order: Everest Max > Everest 60 >
+        // Makalu > DisplayPad > MacroPad — see the comment above TabEverest in MainWindow.xaml)
         RemoveDeviceTabs("dp_");
-        int insertIdx = TcDevices.Items.IndexOf(TabMacroPad) + 1;
+        int insertIdx = TcDevices.Items.IndexOf(TabMakalu) + 1;
         foreach (var item in items)
         {
             var tab = new TabItem { Header = item.Label, Tag = $"dp_{item.SdkId}" };
@@ -1628,6 +1685,8 @@ public partial class MainWindow
             if (_dpBgPageId.ContainsKey(item.SdkId)) continue;
             DpActivateBackgroundDevice(item.SdkId);
         }
+
+        RefreshHomeTiles(); // DisplayPad tabs are added/removed outright, not toggled via SetDeviceTabVisible
     }
 
     private int DpCurrentProfile() => CbDpProfile.SelectedItem is DpProfileItem pi ? pi.Slot : 1;
@@ -1651,6 +1710,7 @@ public partial class MainWindow
         int profile = DpCurrentProfile();
         int pageId = _currentDpPageId;
         int rotation = _dpRotation;
+        DpEnsureDefaultBackButton(id, profile, pageId);
         foreach (var k in _dpKeys) { k.ImagePath = null; k.ActionType = null; k.ActionValue = null; }
         var rows = _dpStore.LoadPage(id, profile, pageId);
         DpLog($"[DB] loaded {rows.Count} records for device={id} profile={profile} page={pageId}");
@@ -1677,6 +1737,7 @@ public partial class MainWindow
 
         var toUpload = new List<(int btnIndex, string imagePath)>();
         var toAnimate = new List<(int btnIndex, string imagePath)>();
+        var keysWithImage = new HashSet<int>();
         foreach (var r in rows)
         {
             if (r.ButtonIndex < 0 || r.ButtonIndex >= _dpKeys.Length) continue;
@@ -1686,6 +1747,7 @@ public partial class MainWindow
             if (!string.IsNullOrEmpty(r.ImagePath) && File.Exists(r.ImagePath))
             {
                 key.ImagePath = r.ImagePath;
+                keysWithImage.Add(r.ButtonIndex);
                 if (fullscreenActive) continue;   // hardware won't show per-key icons anyway
                 if (DpGifAnimator.IsAnimatedGif(r.ImagePath))
                     toAnimate.Add((r.ButtonIndex, r.ImagePath));
@@ -1694,10 +1756,18 @@ public partial class MainWindow
             }
         }
 
+        // Any key without an image on THIS page must go blank on the panel — otherwise it
+        // keeps showing whatever the previously-displayed page (or profile) had there. Only
+        // matters when neither blankFirst (ResetPictures already blanks the whole panel) nor
+        // fullscreenActive (a fullscreen image already owns all 12 slots) is in play.
+        var toBlank = (blankFirst || fullscreenActive)
+            ? Array.Empty<int>()
+            : Enumerable.Range(0, _dpKeys.Length).Where(i => !keysWithImage.Contains(i)).ToArray();
+
         // The app's own grid above is already updated (instant). The hardware write is the
         // slow part — run it on a background thread, chained per device. A newer reload
         // supersedes the queued (not yet started) uploads of the previous one via the CTS.
-        if (toUpload.Count > 0 || toAnimate.Count > 0 || fullscreenActive || blankFirst)
+        if (toUpload.Count > 0 || toAnimate.Count > 0 || fullscreenActive || blankFirst || toBlank.Length > 0)
         {
             if (_dpUploadCts.TryGetValue(id, out var oldCts)) oldCts.Cancel();
             var cts = new System.Threading.CancellationTokenSource();
@@ -1715,6 +1785,12 @@ public partial class MainWindow
                     DpFullscreenAnimator.Start(_dpClient, DpLogAsync, id,
                         fullscreen!.Value.Path, fullscreen.Value.Rotation, rotation);
                     return;
+                }
+
+                foreach (int btnIndex in toBlank)
+                {
+                    if (ct.IsCancellationRequested) return;
+                    DpClearKeyOnDevice(id, btnIndex);
                 }
 
                 foreach (var (btnIndex, imagePath) in toUpload)
@@ -1844,17 +1920,28 @@ public partial class MainWindow
     /// reserved for the foreground tab). Chained onto the same per-device <see cref="_dpUploadChain"/>,
     /// so it can never race the foreground reload's uploads on the wire.
     /// <paramref name="blankFirst"/> mirrors <see cref="DpReloadCurrentProfile"/>'s own flag: pass
-    /// true on a real profile switch so a button with NO image in the new profile actually goes
-    /// blank instead of keeping the previous profile's icon on screen (buttons that DO have an
-    /// image get overwritten right after anyway, so this only matters for the empty ones).
+    /// true on a real profile switch for a full-panel <see cref="IDisplayPadClient.ResetPictures"/>
+    /// (BC's own "UploadLogo" reset). Independently of that flag, any key with NO image on
+    /// THIS page always gets an explicit per-key blank below — otherwise it keeps showing
+    /// whatever the previously-displayed page/profile had there (a folder-navigation reload
+    /// never sets blankFirst, since a full ResetPictures per click would be needless flicker
+    /// for what's usually only 1-2 stale keys).
     /// </summary>
     private void DpUploadPageForDevice(int id, int profile, int pageId, bool persistent, bool blankFirst = false)
     {
+        DpEnsureDefaultBackButton(id, profile, pageId);
         int rotation = _dpStore.GetRotation(id);
         var rows = _dpStore.LoadPage(id, profile, pageId);
         var fullscreen = _dpStore.GetFullscreenImage(id, profile, pageId);
         bool fullscreenActive = fullscreen.HasValue && File.Exists(fullscreen.Value.Path);
         _dpFullscreenByDevice[id] = fullscreenActive;
+
+        var keysWithImage = new HashSet<int>(
+            rows.Where(r => !string.IsNullOrEmpty(r.ImagePath) && File.Exists(r.ImagePath))
+                .Select(r => r.ButtonIndex));
+        var toBlank = (blankFirst || fullscreenActive)
+            ? Array.Empty<int>()
+            : Enumerable.Range(0, 12).Where(i => !keysWithImage.Contains(i)).ToArray();
 
         var previous = _dpUploadChain.TryGetValue(id, out var p) ? p : Task.CompletedTask;
         var next = previous.ContinueWith(_ =>
@@ -1867,6 +1954,9 @@ public partial class MainWindow
                     fullscreen!.Value.Path, fullscreen.Value.Rotation, rotation);
                 return;
             }
+            foreach (int btnIndex in toBlank)
+                DpClearKeyOnDevice(id, btnIndex);
+
             foreach (var r in rows)
             {
                 if (string.IsNullOrEmpty(r.ImagePath) || !File.Exists(r.ImagePath)) continue;
@@ -1890,16 +1980,21 @@ public partial class MainWindow
     /// </summary>
     private void DpHandleBackgroundKey(int devId, int matrix, bool pressed)
     {
-        if (!pressed) return; // background pads skip the UI press-bounce visual
         if (!DpDefaultMatrixToIndex.TryGetValue(matrix, out int idx) || idx >= 12) return;
-
-        if (AppSettings.LogLevel == K2LogLevel.Verbose)
-            DpLog($"[KEY][bg {devId}] matrix 0x{matrix:X2} down");
 
         int profile = _dpStore.GetCurrentProfile(devId);
         int pageId = _dpBgPageId.GetValueOrDefault(devId, 0);
         var row = _dpStore.LoadPage(devId, profile, pageId).FirstOrDefault(r => r.ButtonIndex == idx);
-        if (row is null) return;
+
+        // Press-bounce visual on every physical press AND release, same as the foreground
+        // path (DpUploadPressVisual) — see that method's remarks. Runs regardless of whether
+        // the key has an action, mirroring an icon-only (no-action) key on the foreground tab.
+        DpUploadPressVisualForDevice(devId, idx, row?.ImagePath, _dpStore.GetRotation(devId), pressed);
+
+        if (!pressed || row is null) return;
+
+        if (AppSettings.LogLevel == K2LogLevel.Verbose)
+            DpLog($"[KEY][bg {devId}] matrix 0x{matrix:X2} down");
 
         if (row.ActionType == "dp_folder" && int.TryParse(row.ActionValue, out int folderPageId))
             DpBgNavigateToPage(devId, folderPageId);
@@ -2058,14 +2153,21 @@ public partial class MainWindow
     /// Skipped for animated GIFs (already live-looping via <see cref="DpGifAnimator"/>) and while
     /// a fullscreen image owns the hardware's icons (no per-key icon to shrink).
     /// </summary>
-    private void DpUploadPressVisual(int id, int btnIndex, bool pressed)
+    private void DpUploadPressVisual(int id, int btnIndex, bool pressed) =>
+        DpUploadPressVisualForDevice(id, btnIndex, _dpKeys[btnIndex].ImagePath, _dpRotation, pressed);
+
+    /// <summary>Device-agnostic core of <see cref="DpUploadPressVisual"/> — takes the image path
+    /// and rotation explicitly instead of reading the foreground-only <c>_dpKeys</c>/<c>_dpRotation</c>,
+    /// so it also works for a background (non-foreground-tab) DisplayPad — see
+    /// <see cref="DpHandleBackgroundKey"/>. Previously the press-bounce was foreground-only,
+    /// which with multiple DisplayPads connected made it look like "the press animation only
+    /// works once you've opened that pad's tab".</summary>
+    private void DpUploadPressVisualForDevice(int id, int btnIndex, string? imgPath, int rotation, bool pressed)
     {
-        string? imgPath = _dpKeys[btnIndex].ImagePath;
         if (string.IsNullOrEmpty(imgPath) || !File.Exists(imgPath)) return;
         if (DpGifAnimator.IsAnimatedGif(imgPath)) return;
         if (_dpFullscreenByDevice.TryGetValue(id, out bool fs) && fs) return;
 
-        int rotation = _dpRotation;
         var previous = _dpUploadChain.TryGetValue(id, out var p) ? p : Task.CompletedTask;
         var next = previous.ContinueWith(_ => _dpClient.UploadImage(id, imgPath, btnIndex, rotation, pressed),
             TaskScheduler.Default);

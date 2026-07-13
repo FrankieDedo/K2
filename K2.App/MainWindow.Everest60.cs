@@ -55,12 +55,13 @@ public partial class MainWindow
     private Everest60Store _ev60Store = null!;
     private bool _ev60SuppressProfile;
 
-    /// <summary>Live LED-color readback poller (Everest60SdkService.TryGetColorData,
-    /// GetColorData2 under the hood) — started/stopped by
-    /// <see cref="UpdateEv60LedPreviewActive"/> whenever the Lighting section
-    /// becomes visible/hidden, same gating pattern as Everest Max/MacroPad in
-    /// MainWindow.LedPreview.cs. See Everest60LedColorPoller's doc comment for
-    /// why 300ms (not the other devices' 120ms).</summary>
+    /// <summary>Live LED-color readback poller (raw HID, Everest60Service.TryGetColorData
+    /// — see Everest60Protocol.ReadColorData's doc comment for why not the
+    /// vendor SDK) — started/stopped by <see cref="UpdateEv60LedPreviewActive"/>
+    /// whenever the Lighting section becomes visible/hidden, same gating
+    /// pattern as Everest Max/MacroPad in MainWindow.LedPreview.cs. See
+    /// Everest60LedColorPoller's doc comment for why 300ms (not the other
+    /// devices' 120ms).</summary>
     private Everest60LedColorPoller? _ev60LedPoller;
 
     /// <summary>Button + LedHalo border per main-board key (keyed by LED
@@ -68,6 +69,11 @@ public partial class MainWindow
     /// Keycap Appearance's style-blend rendering (reuses the
     /// <c>KeyVisual</c> record from MainWindow.KeycapAppearance.cs).</summary>
     private readonly Dictionary<int, KeyVisual> _ev60KeyVisuals = new();
+
+    /// <summary>Each main-board key's original legend TextBlock, captured at build time — see
+    /// _evOriginalKeyContent (MainWindow.LedPreview.cs) for the full doc; used to restore the
+    /// legend when a per-key custom-image override is cleared.</summary>
+    private readonly Dictionary<int, FrameworkElement> _ev60OriginalKeyContent = new();
     private readonly List<KeyVisual> _ev60NumpadVisuals = new();
 
     /// <summary>Called once from the MainWindow constructor.</summary>
@@ -88,7 +94,7 @@ public partial class MainWindow
         Ev60RefreshProfiles();
         Ev60ReloadProfile(Ev60CurrentProfile());
 
-        _ev60LedPoller = new Everest60LedColorPoller(_ev60Sdk);
+        _ev60LedPoller = new Everest60LedColorPoller(_ev60);
         _ev60LedPoller.ColorsUpdated += OnEv60ColorsUpdated;
 
         Closed += (_, _) =>
@@ -443,7 +449,11 @@ public partial class MainWindow
 
             btn.ApplyTemplate();
             if (btn.Template?.FindName("LedHalo", btn) is Border halo)
+            {
                 _ev60KeyVisuals[kd.MatrixId] = new KeyVisual(btn, halo);
+                if (btn.Content is FrameworkElement original)
+                    _ev60OriginalKeyContent[kd.MatrixId] = original;
+            }
         }
 
         foreach (var kd in Everest60KeyboardLayout.Numpad)
@@ -483,6 +493,15 @@ public partial class MainWindow
     {
         if (sender is not Button { Tag: int ledIndex } btn) return;
 
+        // Edit-individual-keycaps mode (Settings section): open the per-key color/image
+        // customizer instead of anything else this click would normally do.
+        if (_ev60KeycapEditMode && IsEv60SettingsSectionActive)
+        {
+            string editLabel = (btn.Content as TextBlock)?.Text ?? $"#{ledIndex}";
+            OpenEv60KeycapCustomizeDialog(ledIndex, editLabel);
+            return;
+        }
+
         // Key Binding section active: clicking a key selects it as the remap
         // source (Everest60KeyBindingPanel.SelectKey), instead of painting it.
         if (ReferenceEquals(_activeEv60Section, Ev60KeyBindingPanel))
@@ -500,9 +519,12 @@ public partial class MainWindow
     }
 
     /// <summary>Current numpad position, updated by Ev60RefreshStatus's poll
-    /// (Everest60SdkService.QueryNumpadPosition) — auto-detected, no manual
-    /// toggle (see CHANGELOG 2026-07-11: GetSubDeviceInfo(1, ...) confirmed
-    /// as the real detection mechanism, same one Base Camp's own app uses).</summary>
+    /// — auto-detected, no manual toggle. Presence comes from raw HID
+    /// (Everest60Service.TryGetNumpadPresent, 2026-07-13, replacing the SDK's
+    /// GetSubDeviceInfo after it was found to reliably fail with a Makalu
+    /// also connected — see Everest60Protocol.ReadNumpadPresent's doc
+    /// comment); side (left/right) is NOT re-derived each poll, only
+    /// presence is — see Ev60RefreshStatus for why.</summary>
     private Ev60NumpadPosition _ev60NumpadPosition = Ev60NumpadPosition.None;
 
     /// <summary>Moves/mirrors/shows-or-hides CvsEv60Numpad for the given
@@ -515,6 +537,7 @@ public partial class MainWindow
     {
         if (position == _ev60NumpadPosition) return;
         _ev60NumpadPosition = position;
+        RefreshHomeTiles(); // Home tile artwork depends on numpad presence/side — see EvHomeImageFile's Ev60 counterpart
 
         if (position == Ev60NumpadPosition.None)
         {
@@ -551,8 +574,12 @@ public partial class MainWindow
 
     /// <summary>Sets the default section AFTER InitializeComponent() has
     /// fully run — see the class doc comment for why this isn't
-    /// IsChecked="True" in XAML.</summary>
-    private void InitEv60SectionNav() => RbEv60SecLighting.IsChecked = true; // fires Ev60Section_Changed -> ShowEv60Section
+    /// IsChecked="True" in XAML. Key Binding (2026-07-13, user request —
+    /// was Lighting until now, deliberately, to avoid eagerly opening the
+    /// not-yet-hardware-verified SDK session; now confirmed working on
+    /// real hardware, so this matches the Everest Max/MacroPad/Makalu
+    /// convention of defaulting to Key Binding).</summary>
+    private void InitEv60SectionNav() => RbEv60SecKeyBinding.IsChecked = true; // fires Ev60Section_Changed -> ShowEv60Section
 
     private void Ev60Section_Changed(object sender, RoutedEventArgs e)
     {
@@ -591,11 +618,16 @@ public partial class MainWindow
     /// <summary>Starts/stops the live LED-color poller and, when deactivating,
     /// reverts every key to its painted/baseline appearance (no leftover live
     /// colors) — mirrors UpdateEverestLedPreviewActive/UpdateMpLedPreviewActive
-    /// in MainWindow.LedPreview.cs.</summary>
+    /// in MainWindow.LedPreview.cs. Unlike the old SDK-backed poller, this no
+    /// longer needs an open SDK session (2026-07-13: color readback moved to
+    /// raw HID, see Everest60LedColorPoller's doc comment) — the poller's own
+    /// find-open-send-close cycle (Everest60Service.TryGetColorData) handles
+    /// "device not connected yet" by itself, same as every other raw-HID call
+    /// on this device.</summary>
     private void UpdateEv60LedPreviewActive(bool active)
     {
         if (_ev60LedPoller == null) return;
-        if (active && _ev60Sdk.IsOpen)
+        if (active)
             _ev60LedPoller.Start();
         else
         {
@@ -707,6 +739,7 @@ public partial class MainWindow
         bool wasConnected = _ev60Connected;
         bool connected = _ev60.IsConnected(out string model);
         _ev60Connected = connected;
+        SetDeviceTabVisible(TabEverest60, connected);
         Ev60RgbPanel.SetConnected(connected);
 
         // Freshly plugged in: push the currently selected profile's lighting
@@ -724,24 +757,38 @@ public partial class MainWindow
         // Retry the persistent SDK session if Ev60AutoOpen()'s single attempt
         // didn't land (2026-07-12 real-hardware log: OpenUSBDriver failed the
         // first 1-2 tries after a fresh connect/AutoStop-BaseCamp cycle, then
-        // started succeeding reliably on later tries) — once it succeeds here,
-        // kick the LED preview poller if Lighting is the active section, since
-        // it only starts when _ev60Sdk.IsOpen is already true (see
-        // UpdateEv60LedPreviewActive) and nothing else re-checks that later.
+        // started succeeding reliably on later tries). Only needed for Key
+        // Binding now — LED preview and numpad detection moved to raw HID
+        // 2026-07-13 (see Everest60Protocol.ReadColorData/ReadNumpadPresent's
+        // doc comments), so this retry no longer gates either of those.
         if (connected && !_ev60Sdk.IsOpen)
         {
             bool opened = _ev60Sdk.Open(_hWnd, LogEverest60);
             if (opened)
-            {
-                UpdateEv60LedPreviewActive(ReferenceEquals(_activeEv60Section, Ev60RgbPanel));
                 Ev60KeyBindingPanel.Ev60ReloadKeyBindings(Ev60CurrentProfile());
-            }
         }
 
-        // Numpad auto-detect: SDK-only (GetSubDeviceInfo), so only polled
-        // while the main keyboard itself is connected — no point opening
-        // Everest360_USB.dll for a disconnected device.
-        var numpadPos = connected ? _ev60Sdk.QueryNumpadPosition(LogEverest60) : Ev60NumpadPosition.None;
+        // Numpad auto-detect (2026-07-13, raw HID — see
+        // Everest60Protocol.ReadNumpadPresent's doc comment): the SDK's
+        // GetSubDeviceInfo was found to reliably fail whenever a Makalu is
+        // also connected, real Base Camp captures showed this isn't a
+        // separate SDK code path at all, just HID Feature Reports on the
+        // SAME interface already used for lighting. Only presence is
+        // confirmed from the captures available so far (both sessions that
+        // captured this had the accessory on the right) — side is NOT
+        // re-derived from the wire, it just keeps whatever side was already
+        // known and defaults to Right the first time presence flips on, same
+        // as the only physical unit seen in every capture/log so far.
+        Ev60NumpadPosition numpadPos;
+        if (!connected)
+            numpadPos = Ev60NumpadPosition.None;
+        else
+        {
+            bool? present = _ev60.TryGetNumpadPresent();
+            numpadPos = present == true
+                ? (_ev60NumpadPosition == Ev60NumpadPosition.None ? Ev60NumpadPosition.Right : _ev60NumpadPosition)
+                : Ev60NumpadPosition.None;
+        }
         ApplyEv60NumpadPosition(numpadPos);
     }
 
@@ -802,8 +849,10 @@ public partial class MainWindow
     // painted per-key color (Ev60RgbPanel.TryGetPaintedColor) — see
     // ApplyEv60KeyOverlay/OnEv60ColorsUpdated. Applies to the numpad too
     // (always the "off" baseline there, since it's never painted or polled).
-    // Persisted in AppSettings (no per-device SQLite store for Everest 60 —
-    // same reasoning as Everest60DeviceName).
+    // Persisted in Everest60Store's Settings k/v table (2026-07-13, moved from AppSettings for
+    // consistency with Everest Max/MacroPad, which always used their own per-device store for
+    // this — same key names as EverestStore/MacroPadStore's settings.keycap_* so the pattern is
+    // identical across all 3 devices; only the per-key KeycapOverrides table predates this move).
     // ------------------------------------------------------------
 
     private bool _ev60SettingsSuppress = true; // default true — see Everest60RgbPanel's _ev60Suppress doc comment
@@ -813,6 +862,50 @@ public partial class MainWindow
     private string _ev60KeycapTextCustomHex = "#FFFFFF";
     private KeycapStyle _ev60KeycapStyleValue = KeycapStyle.Normal;
 
+    /// <summary>"Translucent legends" checkbox — see the Everest Max equivalent
+    /// (_evKeycapTranslucentLegend in MainWindow.KeycapAppearance.cs) for the full doc.</summary>
+    private bool _ev60KeycapTranslucentLegend;
+
+    /// <summary>Per-key color/image overrides (KeyId = LED index, same identity as
+    /// _ev60KeyVisuals; Esc = EscKeyId = 0) — see the Everest Max equivalent
+    /// (_evKeycapOverrides in MainWindow.KeycapAppearance.cs) for the full doc. Main board only,
+    /// not the decorative numpad (_ev60NumpadVisuals has no per-key identity).</summary>
+    private readonly Dictionary<int, KeycapOverrideRecord> _ev60KeycapOverrides = new();
+
+    /// <summary>"Edit individual keycaps" checkbox — see the Everest Max equivalent
+    /// (_evKeycapEditMode in MainWindow.KeycapAppearance.cs) for the full doc.</summary>
+    private bool _ev60KeycapEditMode;
+
+    private void CkEv60KeycapEditMode_Click(object sender, RoutedEventArgs e) =>
+        _ev60KeycapEditMode = CkEv60KeycapEditMode.IsChecked == true;
+
+    /// <summary>True while the Everest 60 "Settings" section is active — gates whether clicking
+    /// a key opens KeycapCustomizeDialog (only when "Edit individual keycaps" is also checked).</summary>
+    private bool IsEv60SettingsSectionActive => ReferenceEquals(_activeEv60Section, PnlEv60Settings);
+
+    /// <summary>Opens KeycapCustomizeDialog for the given key (KeyId = LED index) — see the
+    /// Everest Max equivalent (OpenEvKeycapCustomizeDialog) for the full doc.</summary>
+    private void OpenEv60KeycapCustomizeDialog(int keyId, string label)
+    {
+        _ev60KeycapOverrides.TryGetValue(keyId, out var current);
+        var dlg = new KeycapCustomizeDialog(label, keyId == EscKeyId, current?.ColorHex, current?.ImagePath) { Owner = this };
+        dlg.Changed += () =>
+        {
+            if (dlg.ColorHex is null && dlg.ImagePath is null)
+            {
+                _ev60Store.ClearKeycapOverride(keyId);
+                _ev60KeycapOverrides.Remove(keyId);
+            }
+            else
+            {
+                _ev60Store.SetKeycapOverride(keyId, dlg.ColorHex, dlg.ImagePath);
+                _ev60KeycapOverrides[keyId] = new KeycapOverrideRecord(keyId, dlg.ColorHex, dlg.ImagePath);
+            }
+            ApplyEv60KeycapAppearanceToAllKeys();
+        };
+        dlg.ShowDialog();
+    }
+
     private void InitEv60SettingsPanel()
     {
         _ev60SettingsSuppress = true;
@@ -821,13 +914,36 @@ public partial class MainWindow
             CbEv60KeycapStyle.ItemsSource       = KeycapStyleChoices;
             CbEv60KeycapStyle.DisplayMemberPath = "Label";
 
-            _ev60KeycapColorMode = ParseKeycapColorMode(AppSettings.Everest60KeycapColorMode, KeycapColorMode.Black);
-            _ev60KeycapCustomHex = AppSettings.Everest60KeycapCustomHex is { Length: > 0 } hex ? hex : "#404040";
-            _ev60KeycapTextColorMode = ParseKeycapColorMode(AppSettings.Everest60KeycapTextColorMode, KeycapColorMode.White);
-            _ev60KeycapTextCustomHex = AppSettings.Everest60KeycapTextCustomHex is { Length: > 0 } txt ? txt : "#FFFFFF";
-            _ev60KeycapStyleValue = AppSettings.Everest60KeycapStyle is { } s && s is >= 0 and <= 3
-                ? (KeycapStyle)s
-                : KeycapStyle.Normal;
+            _ev60KeycapColorMode = ParseKeycapColorMode(_ev60Store.GetSetting("settings.keycap_color_mode"), KeycapColorMode.Black);
+            _ev60KeycapCustomHex = _ev60Store.GetSetting("settings.keycap_custom_hex") is { Length: > 0 } hex ? hex : "#404040";
+            _ev60KeycapTextColorMode = ParseKeycapColorMode(_ev60Store.GetSetting("settings.keycap_text_color_mode"), KeycapColorMode.White);
+            _ev60KeycapTextCustomHex = _ev60Store.GetSetting("settings.keycap_text_custom_hex") is { Length: > 0 } txt ? txt : "#FFFFFF";
+
+            // Migration — see the Everest Max equivalent in LoadKeycapAppearanceFromStore
+            // (MainWindow.KeycapAppearance.cs) for the full explanation of the old 4-value scheme.
+            int rawStyle = int.TryParse(_ev60Store.GetSetting("settings.keycap_style"), out var s) ? s : 0;
+            if (_ev60Store.GetSetting("settings.keycap_translucent_legend") is not { } translucentRaw)
+            {
+                _ev60KeycapTranslucentLegend = rawStyle == 1; // old Translucent
+                _ev60KeycapStyleValue = rawStyle switch
+                {
+                    2 => KeycapStyle.Pudding,
+                    3 => KeycapStyle.ReversePudding,
+                    _ => KeycapStyle.Normal,
+                };
+                _ev60Store.SetSetting("settings.keycap_style", ((int)_ev60KeycapStyleValue).ToString());
+                _ev60Store.SetSetting("settings.keycap_translucent_legend", _ev60KeycapTranslucentLegend ? "1" : "0");
+            }
+            else
+            {
+                _ev60KeycapTranslucentLegend = translucentRaw == "1";
+                _ev60KeycapStyleValue = rawStyle is >= 0 and <= 2 ? (KeycapStyle)rawStyle : KeycapStyle.Normal;
+            }
+            CkEv60KeycapTranslucentLegend.IsChecked = _ev60KeycapTranslucentLegend;
+
+            _ev60KeycapOverrides.Clear();
+            foreach (var (keyId, rec) in _ev60Store.LoadAllKeycapOverrides())
+                _ev60KeycapOverrides[keyId] = rec;
 
             switch (_ev60KeycapColorMode)
             {
@@ -862,7 +978,15 @@ public partial class MainWindow
         if (_ev60SettingsSuppress) return;
         if (CbEv60KeycapStyle.SelectedItem is not KeycapStyleChoice pick) return;
         _ev60KeycapStyleValue = pick.Style;
-        AppSettings.SetEverest60KeycapStyle((int)pick.Style);
+        _ev60Store.SetSetting("settings.keycap_style", ((int)pick.Style).ToString());
+        ApplyEv60KeycapAppearanceToAllKeys();
+    }
+
+    private void CkEv60KeycapTranslucentLegend_Click(object sender, RoutedEventArgs e)
+    {
+        if (_ev60SettingsSuppress) return;
+        _ev60KeycapTranslucentLegend = CkEv60KeycapTranslucentLegend.IsChecked == true;
+        _ev60Store.SetSetting("settings.keycap_translucent_legend", _ev60KeycapTranslucentLegend ? "1" : "0");
         ApplyEv60KeycapAppearanceToAllKeys();
     }
 
@@ -893,7 +1017,7 @@ public partial class MainWindow
         _ev60KeycapColorMode = sender == RbEv60KeycapWhite  ? KeycapColorMode.White
                               : sender == RbEv60KeycapCustom ? KeycapColorMode.Custom
                               :                                 KeycapColorMode.Black;
-        AppSettings.SetEverest60KeycapColorMode(KeycapColorModeToString(_ev60KeycapColorMode));
+        _ev60Store.SetSetting("settings.keycap_color_mode", KeycapColorModeToString(_ev60KeycapColorMode));
         BtnEv60KeycapCustomColor.IsEnabled = _ev60KeycapColorMode == KeycapColorMode.Custom;
         ApplyEv60KeycapAppearanceToAllKeys();
     }
@@ -904,7 +1028,7 @@ public partial class MainWindow
         _ev60KeycapTextColorMode = sender == RbEv60KeycapTextBlack  ? KeycapColorMode.Black
                                    : sender == RbEv60KeycapTextCustom ? KeycapColorMode.Custom
                                    :                                    KeycapColorMode.White;
-        AppSettings.SetEverest60KeycapTextColorMode(KeycapColorModeToString(_ev60KeycapTextColorMode));
+        _ev60Store.SetSetting("settings.keycap_text_color_mode", KeycapColorModeToString(_ev60KeycapTextColorMode));
         BtnEv60KeycapTextColor.IsEnabled = _ev60KeycapTextColorMode == KeycapColorMode.Custom;
         ApplyEv60KeycapAppearanceToAllKeys();
     }
@@ -920,7 +1044,7 @@ public partial class MainWindow
         if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
         _ev60KeycapCustomHex = $"#{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
-        AppSettings.SetEverest60KeycapCustomHex(_ev60KeycapCustomHex);
+        _ev60Store.SetSetting("settings.keycap_custom_hex", _ev60KeycapCustomHex);
         BtnEv60KeycapCustomColor.Background = new SolidColorBrush(Color.FromRgb(dlg.Color.R, dlg.Color.G, dlg.Color.B));
 
         if (RbEv60KeycapCustom.IsChecked != true)
@@ -940,7 +1064,7 @@ public partial class MainWindow
         if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
         _ev60KeycapTextCustomHex = $"#{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
-        AppSettings.SetEverest60KeycapTextCustomHex(_ev60KeycapTextCustomHex);
+        _ev60Store.SetSetting("settings.keycap_text_custom_hex", _ev60KeycapTextCustomHex);
         BtnEv60KeycapTextColor.Background = new SolidColorBrush(Color.FromRgb(dlg.Color.R, dlg.Color.G, dlg.Color.B));
 
         if (RbEv60KeycapTextCustom.IsChecked != true)
@@ -975,18 +1099,26 @@ public partial class MainWindow
     /// </summary>
     private void ApplyEv60KeycapAppearanceToAllKeys()
     {
-        var keycapBrush = new SolidColorBrush(ResolveEv60KeycapColor());
-        var textBrush   = new SolidColorBrush(ResolveEv60KeycapTextColor());
+        var defaultKeycapBrush = new SolidColorBrush(ResolveEv60KeycapColor());
+        var textBrush          = new SolidColorBrush(ResolveEv60KeycapTextColor());
 
         foreach (var (ledIndex, v) in _ev60KeyVisuals)
         {
+            _ev60KeycapOverrides.TryGetValue(ledIndex, out var ov);
+            var keycapBrush = ov?.ColorHex is { Length: > 0 } hex && TryParseKeycapHexColor(hex, out var c2)
+                ? new SolidColorBrush(c2)
+                : defaultKeycapBrush;
+
             ApplyEv60KeyBaseline(v, keycapBrush, textBrush);
             Color? painted = Ev60RgbPanel.TryGetPaintedColor(ledIndex, out var c) ? c : null;
             ApplyEv60KeyOverlay(v, painted);
+
+            _ev60OriginalKeyContent.TryGetValue(ledIndex, out var original);
+            ApplyKeycapImageOverride(v.Button, original, ov?.ImagePath);
         }
         foreach (var v in _ev60NumpadVisuals)
         {
-            ApplyEv60KeyBaseline(v, keycapBrush, textBrush);
+            ApplyEv60KeyBaseline(v, defaultKeycapBrush, textBrush);
             ApplyEv60KeyOverlay(v, null);
         }
     }
@@ -1008,13 +1140,13 @@ public partial class MainWindow
                 SetKeyBackground(v.Button, ledOffBrush);
                 SetKeyBorderBrush(v.Button, keycapBrush);
                 break;
-            default: // Normal, Translucent
+            default: // Normal
                 SetKeyBackground(v.Button, keycapBrush);
                 SetKeyBorderBrush(v.Button, keycapBrush);
                 break;
         }
         v.Halo.Background = Brushes.Transparent;
-        SetLegendForeground(v.Button, _ev60KeycapStyleValue == KeycapStyle.Translucent ? Brushes.White : textBrush);
+        SetLegendForeground(v.Button, _ev60KeycapTranslucentLegend ? Brushes.White : textBrush);
     }
 
     /// <summary>Applies the "live" overlay for a single key — the painted
@@ -1034,14 +1166,13 @@ public partial class MainWindow
             case KeycapStyle.ReversePudding:
                 SetKeyBackground(v.Button, paintBrush ?? new SolidColorBrush(LedOffColor));
                 break;
-            case KeycapStyle.Translucent:
-                v.Halo.Background = lit ? new SolidColorBrush(Color.FromArgb(160, painted!.Value.R, painted.Value.G, painted.Value.B)) : Brushes.Transparent;
-                SetLegendForeground(v.Button, paintBrush ?? Brushes.White);
-                break;
-            default: // Normal
+            default: // Normal — Pudding/ReversePudding already visualize the color via border/center.
                 v.Halo.Background = lit ? new SolidColorBrush(Color.FromArgb(160, painted!.Value.R, painted.Value.G, painted.Value.B)) : Brushes.Transparent;
                 break;
         }
+
+        if (_ev60KeycapTranslucentLegend)
+            SetLegendForeground(v.Button, paintBrush ?? Brushes.White);
     }
 
     // ------------------------------------------------------------

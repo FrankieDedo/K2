@@ -1,0 +1,73 @@
+<Window x:Class="K2.App.KeycapCustomizeDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+        Title="Customize keycap"
+        Width="420" SizeToContent="Height"
+        MinWidth="380"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Style="{DynamicResource K2WindowStyle}">
+
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- title -->
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="Auto"/>  <!-- color override -->
+            <RowDefinition Height="10"/>
+            <RowDefinition Height="Auto"/>  <!-- image preview + buttons -->
+            <RowDefinition Height="10"/>
+            <RowDefinition Height="Auto"/>  <!-- mountain logo (Esc only) -->
+            <RowDefinition Height="14"/>
+            <RowDefinition Height="Auto"/>  <!-- bottom buttons -->
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="LblHeader" Grid.Row="0" FontSize="16" FontWeight="Bold"/>
+
+        <WrapPanel Grid.Row="2" Orientation="Horizontal">
+            <CheckBox x:Name="CkOverrideColor" Content="{loc:Get keycap_customize_override_color}"
+                      VerticalAlignment="Center" Margin="0,0,10,0" Click="CkOverrideColor_Click"/>
+            <Button x:Name="BtnColorSwatch" Width="32" Height="20"
+                    Background="#404040" BorderThickness="2" BorderBrush="#3A3A40"
+                    Click="BtnColorSwatch_Click"/>
+        </WrapPanel>
+
+        <Grid Grid.Row="4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="14"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Width="72" Height="72"
+                    Background="#222228" BorderBrush="#444" BorderThickness="1"
+                    CornerRadius="4">
+                <Grid>
+                    <TextBlock x:Name="LblNoImage" Text="—" HorizontalAlignment="Center"
+                               VerticalAlignment="Center" Foreground="#555" FontSize="12"/>
+                    <Image x:Name="ImgPreview" Stretch="Uniform" Margin="4"/>
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                <Button x:Name="BtnCustomImage" Content="{loc:Get keycap_customize_custom_image}"
+                        Margin="0,0,0,6" Click="BtnCustomImage_Click"/>
+                <Button x:Name="BtnClearImage" Content="{loc:Get keycap_customize_clear_image}"
+                        Click="BtnClearImage_Click"/>
+            </StackPanel>
+        </Grid>
+
+        <CheckBox x:Name="CkUseMountainLogo" Grid.Row="6"
+                  Content="{loc:Get keycap_customize_use_mountain_logo}"
+                  Click="CkUseMountainLogo_Click"/>
+
+        <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="{loc:Get keycap_customize_clear_all}" MinWidth="120"
+                    Click="BtnClearAll_Click" Margin="0,0,8,0"/>
+            <Button Content="{loc:Get keycap_customize_close}" IsDefault="True" IsCancel="True"
+                    MinWidth="72" Style="{StaticResource K2IconAccentButton}"
+                    Click="BtnClose_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

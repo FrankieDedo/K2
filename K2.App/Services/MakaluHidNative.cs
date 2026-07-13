@@ -37,8 +37,58 @@ internal static class MakaluHidNative
 
     public readonly record struct FoundDevice(string Path, ushort Pid);
 
-    /// <summary>Enumerates the Makalu's interface-1 HID collection, if connected.</summary>
+    /// <summary>Last known-good device path, so steady-state polling doesn't
+    /// need to re-walk every HID interface on the system each time (see
+    /// <see cref="FindDevice"/>'s doc comment).</summary>
+    private static FoundDevice? _cached;
+
+    /// <summary>
+    /// Returns the Makalu's interface-1 HID collection, if connected.
+    /// <para>
+    /// 2026-07-13: cheaply re-validates <see cref="_cached"/> (a single
+    /// CreateFile+HidD_GetAttributes on the one known path) before falling
+    /// back to <see cref="FindDeviceUncached"/>'s full
+    /// SetupDiGetClassDevsW/SetupDiEnumDeviceInterfaces walk over EVERY HID
+    /// interface on the machine. That full walk runs on every single poll
+    /// (3s timer) plus several times back-to-back on every profile
+    /// reload/apply — since Makalu shares Mountain's VID (0x3282) with every
+    /// other K2-supported device, it was opening (query-only) and
+    /// immediately closing handles on Everest 60's own device interfaces
+    /// just to reject them by PID. Real-hardware report: with a Makalu
+    /// connected, Everest 60's SDK reads (<c>GetSubDeviceInfo</c>,
+    /// <c>GetColorData2</c> — the only two Everest60SdkNative calls that need
+    /// a live HID round-trip, unlike the simple state-toggle calls that kept
+    /// succeeding) failed 100% of the time; unplugging the Makalu alone (no
+    /// other change) made them succeed every time. Caching removes the
+    /// systemic full-tree enumeration from the steady-state path — it only
+    /// runs again once the cached path actually stops answering (unplug/
+    /// reconnect/enumeration-order change), which is exactly when it's
+    /// needed. See CLAUDE.md's "no guessing bit-layout" rule: this is
+    /// deliberately NOT a guess at Everest360_USB.dll's internals, just a
+    /// reduction of K2's own contribution to shared HID-stack traffic.
+    /// </para>
+    /// </summary>
     public static FoundDevice? FindDevice(Action<string>? log = null)
+    {
+        if (_cached is { } cached && StillValid(cached))
+            return cached;
+
+        var found = FindDeviceUncached(log);
+        _cached = found;
+        return found;
+    }
+
+    /// <summary>Single CreateFile+HidD_GetAttributes check on one already-known
+    /// path — no system-wide enumeration.</summary>
+    private static bool StillValid(FoundDevice cached)
+    {
+        using var h = OpenHandle(cached.Path, throwOnFail: false, queryOnly: true);
+        if (h is null || h.IsInvalid) return false;
+        var attrs = new HIDD_ATTRIBUTES { Size = Marshal.SizeOf<HIDD_ATTRIBUTES>() };
+        return HidD_GetAttributes(h, ref attrs) && attrs.VendorID == VID && attrs.ProductID == cached.Pid;
+    }
+
+    private static FoundDevice? FindDeviceUncached(Action<string>? log)
     {
         HidD_GetHidGuid(out Guid hidGuid);
         IntPtr devs = SetupDiGetClassDevsW(ref hidGuid, null, IntPtr.Zero,

@@ -31,6 +31,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         InitLanguageMenu();      // Language switcher in the status bar
         LvDevices.ItemsSource = _devices;
+        IcHomeTiles.ItemsSource = _homeTiles;
 
         InitKeysModule();        // MacroPad: 12-key grid (2×6 rotatable) + profile selector
         InitMacroLedPanel();     // MacroPad: LED lighting panel (firmware presets)
@@ -152,9 +153,15 @@ public partial class MainWindow : Window
         // --- DisplayPad satellite ---
         DpOpenDriver();
 
-        // --- All drivers attempted: hide loading overlay, select the first available tab ---
+        // --- All drivers attempted: hide loading overlay, land on the first visible tab.
+        // TabHome is always visible and always first, so this normally lands on Home — the
+        // intended landing page. Every device tab starts Collapsed until SetDeviceTabVisible
+        // confirms a connection (see the comment above TabHome in MainWindow.xaml), so this
+        // only falls through to a device tab in the (currently impossible, kept defensive)
+        // case where TabHome itself isn't found. ---
         PnlLoading.Visibility = Visibility.Collapsed;
-        TcDevices.SelectedItem = TcDevices.Items.OfType<TabItem>().FirstOrDefault();
+        TcDevices.SelectedItem = TcDevices.Items.OfType<TabItem>()
+            .FirstOrDefault(t => t.Visibility == Visibility.Visible);
     }
 
     // ---- Toolbar -----------------------------------------------------------
@@ -188,6 +195,7 @@ public partial class MainWindow : Window
         _macroPad.Close();
         _devices.Clear();
         _activeMpDeviceId = null;
+        SetDeviceTabVisible(TabMacroPad, false);
         LblStatus.Text = "Driver closed.";
         Log("CloseUSBDriver");
     }
@@ -209,6 +217,7 @@ public partial class MainWindow : Window
         // Show/hide content panels
         PnlSettings.Visibility   = Visibility.Collapsed;
         PnlMacro.Visibility      = Visibility.Collapsed;
+        PnlHome.Visibility       = tag == "home"             ? Visibility.Visible : Visibility.Collapsed;
         PnlEverest.Visibility    = tag == "everest"          ? Visibility.Visible : Visibility.Collapsed;
         PnlEverest60.Visibility  = tag == "everest60"        ? Visibility.Visible : Visibility.Collapsed;
         PnlMakalu.Visibility     = tag == "makalu"           ? Visibility.Visible : Visibility.Collapsed;
@@ -248,6 +257,7 @@ public partial class MainWindow : Window
     private void BtnSettingsTab_Click(object sender, RoutedEventArgs e)
     {
         PnlSettings.Visibility   = Visibility.Visible;
+        PnlHome.Visibility       = Visibility.Collapsed;
         PnlMacro.Visibility      = Visibility.Collapsed;
         PnlEverest.Visibility    = Visibility.Collapsed;
         PnlEverest60.Visibility  = Visibility.Collapsed;
@@ -273,6 +283,7 @@ public partial class MainWindow : Window
     {
         PnlMacro.Visibility      = Visibility.Visible;
         PnlSettings.Visibility   = Visibility.Collapsed;
+        PnlHome.Visibility       = Visibility.Collapsed;
         PnlEverest.Visibility    = Visibility.Collapsed;
         PnlEverest60.Visibility  = Visibility.Collapsed;
         PnlMakalu.Visibility     = Visibility.Collapsed;
@@ -311,6 +322,36 @@ public partial class MainWindow : Window
                      .Where(t => (t.Tag as string)?.StartsWith(prefix) == true)
                      .ToList())
             TcDevices.Items.Remove(t);
+    }
+
+    /// <summary>Shows or hides a static top-level device tab (Everest Max/60, Makalu,
+    /// MacroPad — DisplayPad's per-device tabs are added/removed outright instead, see
+    /// <see cref="RemoveDeviceTabs"/>) based on live connection state. If the tab being
+    /// hidden is the one currently selected, moves selection to the next connected tab,
+    /// or fully deselects (same as <see cref="BtnSettingsTab_Click"/>) if none are left —
+    /// a disconnected device must never leave its content panel on screen.</summary>
+    private void SetDeviceTabVisible(TabItem tab, bool connected)
+    {
+        var vis = connected ? Visibility.Visible : Visibility.Collapsed;
+        if (tab.Visibility == vis) return;
+        tab.Visibility = vis;
+        RefreshHomeTiles();
+        if (connected || !ReferenceEquals(TcDevices.SelectedItem, tab)) return;
+
+        var next = TcDevices.Items.OfType<TabItem>().FirstOrDefault(t => t.Visibility == Visibility.Visible);
+        if (next is not null)
+        {
+            TcDevices.SelectedItem = next; // fires TcDevices_SelectionChanged, swaps the content panel
+            return;
+        }
+
+        // Nothing left connected: clear every panel, same deselected state as the gear/macro buttons.
+        TcDevices.SelectedIndex = -1;
+        PnlEverest.Visibility = PnlEverest60.Visibility = PnlMakalu.Visibility =
+            PnlMacroPad.Visibility = PnlDisplayPad.Visibility = Visibility.Collapsed;
+        BrEverest.Visibility = BrEverest60.Visibility = BrMakalu.Visibility =
+            BrMacroPad.Visibility = BrDisplayPad.Visibility = Visibility.Collapsed;
+        StopEvAccessoryPoll();
     }
 
     private void BtnApOn_Click(object sender, RoutedEventArgs e) => ApEnable(true);
@@ -371,7 +412,8 @@ public partial class MainWindow : Window
             progressive++;
         }
 
-        // Set active device (MacroPad tab is always static — no dynamic tab management)
+        // Set active device (the MacroPad tab itself is static in XAML — only its
+        // Visibility is dynamic, toggled below based on whether any unit is plugged)
         if (items.Count > 0)
         {
             uint keep = (uint?)_activeMpDeviceId is uint prev && items.Any(x => x.SdkId == prev)
@@ -381,6 +423,7 @@ public partial class MainWindow : Window
             if (PnlMacroPad.Visibility == Visibility.Visible)
                 CbDevice_SelectionChanged(this, null!);
         }
+        SetDeviceTabVisible(TabMacroPad, items.Count > 0);
 
         LblStatus.Text = $"Connected MacroPad devices: {items.Count}.";
         Log($"Connected devices -> [{string.Join(", ", items.ConvertAll(x => $"{x.SdkId}({x.Label})"))}]");

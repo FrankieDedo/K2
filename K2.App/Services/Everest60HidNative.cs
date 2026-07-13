@@ -131,9 +131,15 @@ internal static class Everest60HidNative
     /// <paramref name="retries"/> times until the echoed command byte
     /// (resp[1]) matches what was sent — mirrors BaseCampLinux's
     /// <c>_send()</c>, which found the device occasionally busy on the
-    /// first attempt.
+    /// first attempt. <paramref name="delayMs"/> defaults to 50 (matching
+    /// BaseCampLinux's conservative inter-command delay for lighting
+    /// WRITES) but a real Base Camp USB capture of the paginated color
+    /// readback (opcode 0x28, see <see cref="Everest60Protocol.ReadColorData"/>)
+    /// showed Base Camp itself firing consecutive read pages with well under
+    /// 1ms between them — pass a smaller value for read-only polling loops
+    /// where 50ms×N would be too slow.
     /// </summary>
-    public static byte[]? SendFeature(SafeFileHandle h, byte[] report65, int retries = 3)
+    public static byte[]? SendFeature(SafeFileHandle h, byte[] report65, int retries = 3, int delayMs = 50)
     {
         if (report65.Length != ReportSize)
             throw new ArgumentException($"report must be {ReportSize} bytes", nameof(report65));
@@ -143,10 +149,10 @@ internal static class Everest60HidNative
         {
             if (!HidD_SetFeature(h, report65, report65.Length))
             {
-                Thread.Sleep(50);
+                Thread.Sleep(delayMs);
                 continue;
             }
-            Thread.Sleep(50);
+            Thread.Sleep(delayMs);
 
             var resp = new byte[ReportSize];
             if (HidD_GetFeature(h, resp, resp.Length))
@@ -154,7 +160,7 @@ internal static class Everest60HidNative
                 last = resp;
                 if (resp.Length >= 2 && resp[1] == cmd) return resp;
             }
-            Thread.Sleep(50);
+            Thread.Sleep(delayMs);
         }
         return last;
     }

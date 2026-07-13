@@ -32,6 +32,11 @@ public partial class MainWindow
     /// <summary>Action associated with each display key (type, value).</summary>
     private readonly (string? Type, string? Value)[] _ndkActions = new (string?, string?)[NdkCount];
 
+    // ---- Drag & drop (swap two display keys' action + image) ----
+    private const string NdkDragFormat = "K2.NdkIndex";
+    private Point _ndkDragStartPoint;
+    private int? _ndkDragCandidate;
+
     // ─────────────────────── Init ───────────────────────
 
     /// <summary>
@@ -91,6 +96,12 @@ public partial class MainWindow
             };
 
             btn.Click += NdkButton_Click;
+            btn.AllowDrop = true;
+            btn.PreviewMouseLeftButtonDown += NdkButton_PreviewMouseLeftButtonDown;
+            btn.PreviewMouseMove += NdkButton_PreviewMouseMove;
+            btn.DragEnter += NdkButton_DragEnter;
+            btn.DragLeave += NdkButton_DragLeave;
+            btn.Drop += NdkButton_Drop;
 
             Canvas.SetLeft(btn, startX + i * (NdkBtnSize + gap));
             Canvas.SetTop(btn, startY);
@@ -193,6 +204,85 @@ public partial class MainWindow
 
         SaveNdkKey(keyIndex);
         LogEverest($"[NDK] key={keyIndex} <- action={dlg.ActionType ?? "none"}, image {(dlg.ImageChanged ? "changed" : "unchanged")}");
+    }
+
+    // ─────────────────────── Drag & drop: swap two display keys ───────────────────────
+
+    private void NdkButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _ndkDragStartPoint = e.GetPosition(null);
+        _ndkDragCandidate = (sender as Button)?.Tag as int?;
+    }
+
+    private void NdkButton_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _ndkDragCandidate is not int keyIndex) return;
+        bool hasContent = _ndkActions[keyIndex].Type is not null || !string.IsNullOrEmpty(_ndkImagePaths[keyIndex]);
+        if (!hasContent)
+        {
+            _ndkDragCandidate = null;
+            return;
+        }
+        if (!DragDropHelper.ExceedsDragThreshold(_ndkDragStartPoint, e.GetPosition(null))) return;
+
+        _ndkDragCandidate = null;
+        DragDrop.DoDragDrop((Button)sender, new DataObject(NdkDragFormat, keyIndex), DragDropEffects.Move);
+    }
+
+    private void NdkButton_DragEnter(object sender, DragEventArgs e)
+    {
+        bool ok = e.Data.GetDataPresent(NdkDragFormat);
+        e.Effects = ok ? DragDropEffects.Move : DragDropEffects.None;
+        if (ok && sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, true);
+    }
+
+    private void NdkButton_DragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, false);
+    }
+
+    private void NdkButton_Drop(object sender, DragEventArgs e)
+    {
+        if (sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, false);
+        if (sender is not Button { Tag: int targetIndex }) return;
+        if (!e.Data.GetDataPresent(NdkDragFormat)) return;
+
+        int sourceIndex = (int)e.Data.GetData(NdkDragFormat);
+        if (sourceIndex == targetIndex) return;
+
+        (_ndkActions[sourceIndex], _ndkActions[targetIndex])       = (_ndkActions[targetIndex], _ndkActions[sourceIndex]);
+        (_ndkImagePaths[sourceIndex], _ndkImagePaths[targetIndex]) = (_ndkImagePaths[targetIndex], _ndkImagePaths[sourceIndex]);
+
+        NdkRefreshAfterSwap(sourceIndex);
+        NdkRefreshAfterSwap(targetIndex);
+
+        LogEverest($"[NDK] swapped key={sourceIndex} <-> key={targetIndex}");
+    }
+
+    /// <summary>Refreshes the on-screen thumbnail and persists a display key after its
+    /// entry in <see cref="_ndkImagePaths"/>/<see cref="_ndkActions"/> was swapped
+    /// locally. Re-uploads the image to hardware (if any and the device is connected)
+    /// since each display key's picture actually lives in the keyboard's firmware,
+    /// keyed by key index — a local-only swap would leave the physical device showing
+    /// the pre-swap pictures.</summary>
+    private void NdkRefreshAfterSwap(int index)
+    {
+        string? path = _ndkImagePaths[index];
+        if (!string.IsNullOrEmpty(path) && File.Exists(path))
+        {
+            if (_everest.IsOpen)
+                NdkApplyImage(index, path); // re-uploads, sets thumbnail + persists on success
+            else
+            {
+                NdkSetThumbnail(index, path);
+                SaveNdkKey(index);
+            }
+        }
+        else
+        {
+            NdkClearThumbnail(index);
+            SaveNdkKey(index);
+        }
     }
 
     /// <summary>

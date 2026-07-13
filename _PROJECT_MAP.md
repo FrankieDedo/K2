@@ -237,7 +237,49 @@ platform (x86 or x64).
 - `K2.App.csproj` — referenzia `K2.Core` + `Microsoft.Data.Sqlite`;
   `App.xaml(.cs)` entry point (`WriteLog`, `NativeDependencyResolver`)
 - `MainWindow.xaml(.cs)` — tab MacroPad + tab Everest Max; verifica
-  `MacroPadSDK.dll` all'avvio
+  `MacroPadSDK.dll` all'avvio. **Tab dispositivi (2026-07-13)**: ordine
+  fisso in XAML `TabEverest → TabEverest60 → TabMakalu → (tab DisplayPad,
+  inseriti qui da `DpRefreshDevices`) → TabMacroPad`. Ogni tab statico
+  parte `Visibility="Collapsed"` e diventa `Visible` solo quando il
+  relativo poll di connessione lo conferma (`SetDeviceTabVisible` in
+  `MainWindow.xaml.cs`, usato da `EvRefreshConnectionStatus`/
+  `Ev60RefreshStatus`/`MkRefreshStatus`/`RefreshDevices` — MacroPad) — un
+  device scollegato non deve mai mostrare il suo tab. I tab DisplayPad
+  (multi-istanza) restano invece aggiunti/rimossi per davvero da
+  `DpRefreshDevices`, non nascosti via Visibility. Makalu Max e Makalu 67
+  condividono UN SOLO tab (`TabMakalu`, header aggiornato al modello
+  rilevato): l'hardware trova un mouse alla volta, nessun redesign per
+  supportarne due contemporaneamente. **`TabHome` (2026-07-13)**: primo
+  tab in assoluto, icona-only (casa), **mai** `Collapsed` — landing tab
+  sempre presente indipendentemente da cosa è collegato; essendo sempre
+  visibile e sempre primo diventa il default sia all'avvio sia quando
+  l'ultimo device connesso si scollega. **Rilevamento connessione Everest
+  Max corretto (2026-07-13)**: `EverestService.IsPlugged()` (wrapper di
+  `SDKDLL.dll`'s `IsDevicePlug()`) NON è affidabile per pilotare
+  `TabEverest` — confermato su hardware che resta "plugged" anche dopo
+  scollegamento fisico completo (stato interno del DLL, si aggiorna solo
+  alla prossima `OpenUSBDriver()`). `EvRefreshConnectionStatus`/`EvRefresh`
+  usano invece `EvIsPhysicallyConnected()` → `EverestHidNative.
+  FindCommandInterfacePath()` (enumerazione HID raw dal vivo, stesso
+  approccio di `Everest60Service`/`MakaluService` — mai fidarsi dello stato
+  cache dell'SDK vendor per questo tipo di check, lezione ricorrente in
+  questo progetto).
+- `MainWindow.Home.cs` (2026-07-13) — partial: contenuto della tab Home,
+  griglia di card (`IcHomeTiles`, una per `TabItem` device con
+  `Visibility=Visible`, stesso ordine fisso dei tab) ispirata al
+  device-picker di Base Camp. `RefreshHomeTiles()` ricostruita da zero ad
+  ogni chiamata, invocata da 4 punti: `SetDeviceTabVisible`
+  (MainWindow.xaml.cs), `DpRefreshDevices` (DisplayPad),
+  `UpdateKeyboardLayout` (dock/numpad Everest Max), `ApplyEv60NumpadPosition`
+  (lato numpad Everest 60). Immagini: `K2.App/Assets/Home/*.png` (da
+  `Grafiche/png_home/`, regole di scelta per-device in `EvHomeImageFile`/
+  `Ev60HomeImageFile`/`MkHomeImageFile`). Modello `Models/HomeDeviceTile.cs`.
+  **Attenzione ordine**: qualunque campo letto da queste funzioni immagine
+  (`_evDockConnected`/`_evNumpadConnected`, `_ev60NumpadPosition`,
+  `_mkInfo.Model`) deve essere aggiornato PRIMA di chiamare
+  `SetDeviceTabVisible`/`RefreshHomeTiles`, altrimenti il tile usa lo stato
+  stale — bug reale trovato e fissato in `MkRefreshStatus` questa sessione
+  (vedi CHANGELOG 2026-07-13).
 - `MainWindow.Keys.cs` — partial MacroPad: griglia **2×6 ruotabile**
   (0/90/270 via `MacroPadLayout`; modello sempre in indici fisici), dialog
   azioni, rimappa matrice-tasti, persistenza, esecuzione. Combo orientamento
@@ -309,7 +351,13 @@ platform (x86 or x64).
   disabilitato) — stesso ordine di Everest Max, 2026-07-11 su richiesta
   utente (sezione di default all'apertura resta "Lighting", non "Key
   Binding": evita di aprire eager la sessione SDK non ancora verificata su
-  hardware). `Ev60Section_Changed`/`ShowEv60Section` (il click su
+  hardware). **2026-07-13**: Keycap Style ridotto a 3 valori (Normal/
+  Pudding/ReversePudding) + checkbox indipendente "Translucent legends";
+  nuova personalizzazione per-tasto (override colore + immagine custom,
+  incl. logo Mountain fisso su Esc) via `KeycapCustomizeDialog`, dietro il
+  checkbox "Edit individual keycaps" — vedi `MainWindow.KeycapAppearance.cs`
+  (tipi/logica condivisi dai 3 device) e CHANGELOG per il dettaglio completo.
+  `Ev60Section_Changed`/`ShowEv60Section` (il click su
   `RbEv60SecKeyBinding` apre anche lazy la sessione SDK `_ev60Sdk.Open()` —
   non eager all'avvio, a differenza del path raw-HID di lighting).
   **Tastiera interattiva a 64 tasti** (`BuildEverest60KeyboardOverlay`,
@@ -659,6 +707,14 @@ platform (x86 or x64).
 - `IconImageGenerator.cs` — genera l'immagine di un tasto da un'azione "exec" (icona
   eseguibile via Shell `IShellItemImageFactory`, fallback `Icon.ExtractAssociatedIcon`) o
   "folder" (glyph Segoe MDL2 + nome cartella)
+- `DragDropHelper.cs` (2026-07-13) — soglia drag WPF (`ExceedsDragThreshold`) +
+  evidenziazione drop-target (`SetDropTargetHighlight`, via `Button.Opacity`),
+  condiviso dai 4 punti che implementano "trascina un tasto/bottone su un
+  altro per scambiarne azione+icona" (MacroPad, Everest Max tastiera,
+  Everest Max numpad display keys in `K2.App`; DisplayPad in
+  `K2.DisplayPad`) — ognuno mantiene la propria logica di scambio
+  (i dati differiscono per device), solo soglia+feedback visivo sono
+  fattorizzati qui. Vedi CHANGELOG 2026-07-13.
 - `ButtonActionDialog.xaml(.cs)` + partial `.Exec.cs`/`.Browser.cs`/`.Profile.cs`/
   `.Simple.cs`/`.Keys.cs` — dialog "Configura azione tasto": pannello dedicato per tipo
   (path+icona+recenti per exec, path+recenti per folder, radio browser rilevati per

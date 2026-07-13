@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using K2.Core;
 using K2.DisplayPad.Dialogs;
@@ -44,6 +45,11 @@ public partial class MainWindow : Window
     private bool _suppressBrightnessUpdate;
     private bool _suppressProfileUpdate;
 
+    // ---- Drag & drop (swap two cells' action + icon) ----
+    private const string DisplayPadDragFormat = "K2.DisplayPadCellIndex";
+    private Point _dpDragStartPoint;
+    private ButtonCell? _dpDragCandidate;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -62,6 +68,12 @@ public partial class MainWindow : Window
             };
             btn.Click += BtnCell_Click;
             btn.ContextMenu = BuildCellContextMenu();
+            btn.AllowDrop = true;
+            btn.PreviewMouseLeftButtonDown += CellButton_PreviewMouseLeftButtonDown;
+            btn.PreviewMouseMove += CellButton_PreviewMouseMove;
+            btn.DragEnter += CellButton_DragEnter;
+            btn.DragLeave += CellButton_DragLeave;
+            btn.Drop += CellButton_Drop;
             _cellButtons[cell.Index] = btn;
         }
         LayoutGrid(_rotation);
@@ -297,6 +309,87 @@ public partial class MainWindow : Window
             _store.SaveButton(new ButtonRecord(id, profile, cell.Index, path, cell.ActionType, cell.ActionValue));
         }
         catch (Exception ex) { Log($"[ERR ] Upload: {ex}"); }
+    }
+
+    // ---- drag & drop: swap two cells' action + icon ----
+
+    private void CellButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _dpDragStartPoint = e.GetPosition(null);
+        _dpDragCandidate = (sender as Button)?.Tag as ButtonCell;
+    }
+
+    private void CellButton_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _dpDragCandidate is null) return;
+        var cell = _dpDragCandidate;
+        if (!cell.HasAction && !cell.HasImage)
+        {
+            _dpDragCandidate = null;
+            return;
+        }
+        if (!DragDropHelper.ExceedsDragThreshold(_dpDragStartPoint, e.GetPosition(null))) return;
+
+        _dpDragCandidate = null;
+        DragDrop.DoDragDrop((Button)sender, new DataObject(DisplayPadDragFormat, cell.Index), DragDropEffects.Move);
+    }
+
+    private void CellButton_DragEnter(object sender, DragEventArgs e)
+    {
+        bool ok = e.Data.GetDataPresent(DisplayPadDragFormat);
+        e.Effects = ok ? DragDropEffects.Move : DragDropEffects.None;
+        if (ok && sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, true);
+    }
+
+    private void CellButton_DragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, false);
+    }
+
+    private void CellButton_Drop(object sender, DragEventArgs e)
+    {
+        if (sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, false);
+        if (CbDevice.SelectedItem is not int id) return;
+        if (sender is not Button { Tag: ButtonCell targetCell }) return;
+        if (!e.Data.GetDataPresent(DisplayPadDragFormat)) return;
+
+        int sourceIndex = (int)e.Data.GetData(DisplayPadDragFormat);
+        if (sourceIndex < 0 || sourceIndex >= _cells.Length) return;
+        var sourceCell = _cells[sourceIndex];
+        if (ReferenceEquals(sourceCell, targetCell)) return;
+
+        SwapCells(id, CurrentProfile(), sourceCell, targetCell);
+    }
+
+    /// <summary>Swaps action + icon between two cells, re-uploading icons to the
+    /// physical device at their new positions (each cell's picture lives in
+    /// firmware, keyed by button index — a local-only swap would leave the
+    /// device showing the pre-swap pictures).</summary>
+    private void SwapCells(int id, int profile, ButtonCell a, ButtonCell b)
+    {
+        (a.ActionType, b.ActionType)   = (b.ActionType, a.ActionType);
+        (a.ActionValue, b.ActionValue) = (b.ActionValue, a.ActionValue);
+
+        string? aImage = a.ImagePath;
+        string? bImage = b.ImagePath;
+
+        if (!string.IsNullOrEmpty(bImage) && System.IO.File.Exists(bImage))
+            UploadAndPersist(id, profile, a, bImage);
+        else
+        {
+            a.ImagePath = null;
+            _store.SaveButton(new ButtonRecord(id, profile, a.Index, null, a.ActionType, a.ActionValue));
+        }
+
+        if (!string.IsNullOrEmpty(aImage) && System.IO.File.Exists(aImage))
+            UploadAndPersist(id, profile, b, aImage);
+        else
+        {
+            b.ImagePath = null;
+            _store.SaveButton(new ButtonRecord(id, profile, b.Index, null, b.ActionType, b.ActionValue));
+        }
+
+        Log($"[ACT ] swapped cell #{a.Index} <-> #{b.Index}");
     }
 
     // ---- context menu (in code-behind to avoid connection-id collisions) ----

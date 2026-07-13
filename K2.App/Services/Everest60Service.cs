@@ -77,4 +77,29 @@ internal sealed class Everest60Service
     /// </summary>
     public bool SetCustomKeys(IReadOnlyList<(byte r, byte g, byte b)> keys, int brightnessPct) =>
         WithDevice(h => Everest60Protocol.SendCustom(h, keys, brightnessPct, sideColors: null, _log));
+
+    /// <summary>
+    /// Live LED-color readback, over the SAME raw-HID channel as the lighting
+    /// writes above (not the vendor SDK — see <see cref="Everest60Protocol.ReadColorData"/>
+    /// for why: <c>Everest60SdkNative.GetColorData2</c> was found to reliably
+    /// fail whenever a Makalu mouse is also connected, while this raw-HID
+    /// path kept working in every test). Powers <see cref="Everest60LedColorPoller"/>.
+    /// </summary>
+    public bool TryGetColorData(EverestSdkNative.FWColor[] colors)
+    {
+        bool ok = false;
+        WithDevice(h => ok = Everest60Protocol.ReadColorData(h, colors, _log));
+        return ok;
+    }
+
+    /// <summary>Numpad accessory presence, over raw HID (see
+    /// Everest60Protocol.ReadNumpadPresent's doc comment for why — the SDK's
+    /// GetSubDeviceInfo was found to reliably fail with a Makalu also
+    /// connected). Returns null if the main keyboard itself isn't reachable.</summary>
+    public bool? TryGetNumpadPresent()
+    {
+        bool? present = null;
+        WithDevice(h => present = Everest60Protocol.ReadNumpadPresent(h, _log));
+        return present;
+    }
 }

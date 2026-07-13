@@ -19,9 +19,11 @@
 // runtime like Everest's layout-dependent canvas), so — unlike the Everest half — there is no
 // "canvas rebuild" case to re-apply after.
 
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using K2.App.Services;
 
 namespace K2.App;
 
@@ -39,6 +41,46 @@ public partial class MainWindow
     private KeycapColorMode _mpKeycapTextColorMode = KeycapColorMode.White;
     private string _mpKeycapTextCustomHex = "#FFFFFF";
     private KeycapStyle _mpKeycapStyleValue = KeycapStyle.Normal;
+
+    /// <summary>"Translucent legends" checkbox — see the Everest Max equivalent
+    /// (_evKeycapTranslucentLegend in MainWindow.KeycapAppearance.cs) for the full doc.</summary>
+    private bool _mpKeycapTranslucentLegend;
+
+    /// <summary>Per-key color/image overrides (KeyId = physical key index 0..11, same identity
+    /// as _mpKeyVisuals) — see the Everest Max equivalent (_evKeycapOverrides in
+    /// MainWindow.KeycapAppearance.cs) for the full doc. No Esc key on the MacroPad.</summary>
+    private readonly Dictionary<int, KeycapOverrideRecord> _mpKeycapOverrides = new();
+
+    /// <summary>"Edit individual keycaps" checkbox — see the Everest Max equivalent
+    /// (_evKeycapEditMode in MainWindow.KeycapAppearance.cs) for the full doc.</summary>
+    private bool _mpKeycapEditMode;
+
+    private void CkMpKeycapEditMode_Click(object sender, RoutedEventArgs e) =>
+        _mpKeycapEditMode = CkMpKeycapEditMode.IsChecked == true;
+
+    /// <summary>Opens KeycapCustomizeDialog for the given key (KeyId = physical index 0..11) —
+    /// see the Everest Max equivalent (OpenEvKeycapCustomizeDialog) for the full doc. The
+    /// MacroPad has no Esc key, so isEscKey is always false.</summary>
+    private void OpenMpKeycapCustomizeDialog(int keyId, string label)
+    {
+        _mpKeycapOverrides.TryGetValue(keyId, out var current);
+        var dlg = new KeycapCustomizeDialog(label, isEscKey: false, current?.ColorHex, current?.ImagePath) { Owner = this };
+        dlg.Changed += () =>
+        {
+            if (dlg.ColorHex is null && dlg.ImagePath is null)
+            {
+                _store.ClearKeycapOverride(keyId);
+                _mpKeycapOverrides.Remove(keyId);
+            }
+            else
+            {
+                _store.SetKeycapOverride(keyId, dlg.ColorHex, dlg.ImagePath);
+                _mpKeycapOverrides[keyId] = new KeycapOverrideRecord(keyId, dlg.ColorHex, dlg.ImagePath);
+            }
+            ApplyMacroKeycapAppearanceToAllKeys();
+        };
+        dlg.ShowDialog();
+    }
 
     /// <summary>One-time control setup (ItemsSource) + persisted-value load, guarded by
     /// _mpSettingsSuppress. Called once from the constructor.</summary>
@@ -60,9 +102,32 @@ public partial class MainWindow
         _mpKeycapCustomHex = _store.GetSetting("settings.keycap_custom_hex") is { Length: > 0 } hex ? hex : "#404040";
         _mpKeycapTextColorMode = ParseColorMode(_store.GetSetting("settings.keycap_text_color_mode"), KeycapColorMode.White);
         _mpKeycapTextCustomHex = _store.GetSetting("settings.keycap_text_custom_hex") is { Length: > 0 } txt ? txt : "#FFFFFF";
-        _mpKeycapStyleValue = int.TryParse(_store.GetSetting("settings.keycap_style"), out var s) && s is >= 0 and <= 3
-            ? (KeycapStyle)s
-            : KeycapStyle.Normal;
+
+        // Migration — see the Everest Max equivalent in LoadKeycapAppearanceFromStore
+        // (MainWindow.KeycapAppearance.cs) for the full explanation of the old 4-value scheme.
+        int rawStyle = int.TryParse(_store.GetSetting("settings.keycap_style"), out var s) ? s : 0;
+        if (_store.GetSetting("settings.keycap_translucent_legend") is not { } translucentRaw)
+        {
+            _mpKeycapTranslucentLegend = rawStyle == 1; // old Translucent
+            _mpKeycapStyleValue = rawStyle switch
+            {
+                2 => KeycapStyle.Pudding,
+                3 => KeycapStyle.ReversePudding,
+                _ => KeycapStyle.Normal,
+            };
+            _store.SetSetting("settings.keycap_style", ((int)_mpKeycapStyleValue).ToString());
+            _store.SetSetting("settings.keycap_translucent_legend", _mpKeycapTranslucentLegend ? "1" : "0");
+        }
+        else
+        {
+            _mpKeycapTranslucentLegend = translucentRaw == "1";
+            _mpKeycapStyleValue = rawStyle is >= 0 and <= 2 ? (KeycapStyle)rawStyle : KeycapStyle.Normal;
+        }
+        CkMpKeycapTranslucentLegend.IsChecked = _mpKeycapTranslucentLegend;
+
+        _mpKeycapOverrides.Clear();
+        foreach (var (keyId, rec) in _store.LoadAllKeycapOverrides())
+            _mpKeycapOverrides[keyId] = rec;
 
         switch (_mpKeycapColorMode)
         {
@@ -167,6 +232,14 @@ public partial class MainWindow
         ApplyMacroKeycapAppearanceToAllKeys();
     }
 
+    private void CkMpKeycapTranslucentLegend_Click(object sender, RoutedEventArgs e)
+    {
+        if (_mpSettingsSuppress) return;
+        _mpKeycapTranslucentLegend = CkMpKeycapTranslucentLegend.IsChecked == true;
+        _store.SetSetting("settings.keycap_translucent_legend", _mpKeycapTranslucentLegend ? "1" : "0");
+        ApplyMacroKeycapAppearanceToAllKeys();
+    }
+
     private Color ResolveMpKeycapColor() => _mpKeycapColorMode switch
     {
         KeycapColorMode.White  => Color.FromRgb(0xE4, 0xE4, 0xE4),
@@ -188,12 +261,17 @@ public partial class MainWindow
     /// </summary>
     private void ApplyMacroKeycapAppearanceToAllKeys()
     {
-        var keycapBrush = new SolidColorBrush(ResolveMpKeycapColor());
-        var ledOffBrush = new SolidColorBrush(LedOffColor);
-        var textBrush   = new SolidColorBrush(ResolveMpKeycapTextColor());
+        var defaultKeycapBrush = new SolidColorBrush(ResolveMpKeycapColor());
+        var ledOffBrush        = new SolidColorBrush(LedOffColor);
+        var textBrush          = new SolidColorBrush(ResolveMpKeycapTextColor());
 
-        foreach (var v in _mpKeyVisuals.Values)
+        foreach (var (keyId, v) in _mpKeyVisuals)
         {
+            _mpKeycapOverrides.TryGetValue(keyId, out var ov);
+            var keycapBrush = ov?.ColorHex is { Length: > 0 } hex && TryParseHexColor(hex, out var c)
+                ? new SolidColorBrush(c)
+                : defaultKeycapBrush;
+
             switch (_mpKeycapStyleValue)
             {
                 case KeycapStyle.Pudding:
@@ -209,19 +287,23 @@ public partial class MainWindow
                     SetKeyBackground(v.Button, ledOffBrush);
                     SetKeyBorderBrush(v.Button, keycapBrush);
                     break;
-                default: // Normal, Translucent — border (+ Mount) = the static keycap color.
+                default: // Normal — border (+ Mount) = the static keycap color.
                     SetKeyBackground(v.Button, keycapBrush);
                     SetKeyBorderBrush(v.Button, keycapBrush);
                     break;
             }
 
             v.Halo.Background = Brushes.Transparent;
-            SetLegendForeground(v.Button, _mpKeycapStyleValue == KeycapStyle.Translucent ? Brushes.White : textBrush);
+            SetLegendForeground(v.Button, _mpKeycapTranslucentLegend ? Brushes.White : textBrush);
+
+            _mpOriginalKeyContent.TryGetValue(keyId, out var original);
+            ApplyKeycapImageOverride(v.Button, original, ov?.ImagePath);
         }
     }
 
     /// <summary>Applies one LED-poll tick's live color to a single MacroPad key, routed to the
-    /// visual element that matches the current keycap style.</summary>
+    /// visual element that matches the current keycap style; independently of style, the
+    /// "Translucent legends" checkbox additionally tints the legend with the live color.</summary>
     private void ApplyMacroPadLedColor(KeyVisual v, byte r, byte g, byte b)
     {
         bool lit = r != 0 || g != 0 || b != 0;
@@ -236,14 +318,13 @@ public partial class MainWindow
             case KeycapStyle.ReversePudding:
                 SetKeyBackground(v.Button, ledBrush ?? new SolidColorBrush(LedOffColor));
                 break;
-            case KeycapStyle.Translucent:
-                v.Halo.Background = lit ? new SolidColorBrush(Color.FromArgb(160, r, g, b)) : Brushes.Transparent;
-                SetLegendForeground(v.Button, ledBrush ?? Brushes.White);
-                break;
-            default: // Normal
+            default: // Normal — Pudding/ReversePudding already visualize the LED via border/center.
                 v.Halo.Background = lit ? new SolidColorBrush(Color.FromArgb(160, r, g, b)) : Brushes.Transparent;
                 break;
         }
+
+        if (_mpKeycapTranslucentLegend)
+            SetLegendForeground(v.Button, ledBrush ?? Brushes.White);
     }
 
     /// <summary>Resets a single key to its "LED off" appearance for the current style.</summary>

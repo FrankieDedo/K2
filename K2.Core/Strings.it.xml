@@ -10,6 +10,9 @@
        COMUNE / CONDIVISO
        ═══════════════════════════════════════════════════════════════ -->
   <string name="app_title">K2</string>
+  <string name="tab_home">Home</string>
+  <string name="home_no_device">Nessun dispositivo connesso</string>
+  <string name="home_heading">Dispositivi connessi</string>
   <string name="app_already_running">Un'altra istanza di K2 è già in esecuzione.</string>
   <string name="driver_not_opened">Driver non aperto.</string>
   <string name="open_driver">Apri driver</string>
@@ -355,10 +358,19 @@
   <string name="settings_keycap_text_color">Colore testo</string>
   <string name="settings_keycap_style">Tipo keycap</string>
   <string name="settings_keycap_style_normal">Normale (alone intorno al tasto)</string>
-  <string name="settings_keycap_style_translucent">Traslucido (alone + lettere colorate)</string>
   <string name="settings_keycap_style_pudding">Pudding (bordo colorato, centro del colore keycap)</string>
   <string name="settings_keycap_style_reverse_pudding">Reverse pudding (bordo del colore keycap, centro colorato)</string>
+  <string name="settings_keycap_translucent_legend">Legende traslucide (la legenda segue il colore LED live)</string>
   <string name="settings_keycap_hint">Solo estetico — cambia come l'anteprima a schermo qui in K2 abbina i colori LED ai tasti, non modifica l'effetto RGB inviato alla tastiera.</string>
+  <string name="settings_keycap_edit_individual">Personalizza singoli keycap</string>
+  <string name="settings_keycap_edit_individual_hint">Quando attivo, clicca un tasto sulla tastiera qui sopra per personalizzarne colore o immagine.</string>
+  <string name="keycap_customize_title">Personalizza keycap — {0}</string>
+  <string name="keycap_customize_override_color">Sovrascrivi colore keycap</string>
+  <string name="keycap_customize_custom_image">Immagine personalizzata…</string>
+  <string name="keycap_customize_clear_image">Rimuovi immagine</string>
+  <string name="keycap_customize_use_mountain_logo">Usa logo Mountain (fisso)</string>
+  <string name="keycap_customize_clear_all">Rimuovi personalizzazioni</string>
+  <string name="keycap_customize_close">Chiudi</string>
   <string name="settings_factory_reset">Ripristina impostazioni di fabbrica</string>
   <string name="settings_factory_reset_confirm">Questo ripristina Modalità gioco, LED indicatori ed effetti di illuminazione della tastiera alle impostazioni di fabbrica. Continuare?</string>
 

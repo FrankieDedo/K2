@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using K2.Core;
 using Microsoft.Data.Sqlite;
 
 namespace K2.App.Services;
@@ -227,6 +228,22 @@ public sealed class BaseCampDbImporter
             {
                 actionType  = "dp_back";
                 actionValue = null;
+
+                // BC's own data rarely carries a real per-key icon for its "Back" button
+                // (usually just BC's internal chrome, not a base64 image — see the
+                // "else: BC internal path" case above). Give it the same auto-generated
+                // arrow+caption tile the in-app "Set as Back button" context-menu item
+                // uses (MainWindow.DisplayPad.cs::DpMnuSetBack_Click), instead of leaving
+                // it iconless. Only when BC's XML/db genuinely had NO image for this key —
+                // an actually-customized icon (imagePath already set above) is left alone.
+                if (imagePath is null)
+                {
+                    string dest = Path.Combine(iconsDir, pageId == 0
+                        ? $"key_{btn.ButtonIndex}_back.png"
+                        : $"key_p{pageId}_{btn.ButtonIndex}_back.png");
+                    if (IconImageGenerator.TryGenerateBackIcon(Loc.Get("dp_back"), DpHidNative.IconSize, dest))
+                        imagePath = dest;
+                }
             }
             else
             {

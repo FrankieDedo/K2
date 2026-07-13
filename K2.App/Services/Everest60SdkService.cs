@@ -222,6 +222,8 @@ internal sealed class Everest60SdkService : IDisposable
     /// GetColorData2(ptr,576) → copy out → FreeHGlobal). Returns false (buffer
     /// left unchanged) if the SDK isn't open or the call fails.
     /// </summary>
+    private DateTime _lastColorDataFailLog = DateTime.MinValue;
+
     public bool TryGetColorData(EverestSdkNative.FWColor[] colors)
     {
         if (!_opened || colors.Length != ColorEntryCount) return false;
@@ -230,7 +232,18 @@ internal sealed class Everest60SdkService : IDisposable
         try
         {
             bool ok = Everest60SdkNative.GetColorData2(buf, Everest60SdkNative.ColorBufferSize);
-            if (!ok) return false;
+            if (!ok)
+            {
+                // Throttled (poller ticks every 60ms — an unthrottled log here
+                // would flood K2.App.log): logs at most once/sec, same pattern
+                // as OnEv60ColorsUpdated's unknown-LED diagnostic.
+                if (DateTime.UtcNow - _lastColorDataFailLog > TimeSpan.FromSeconds(1))
+                {
+                    _lastColorDataFailLog = DateTime.UtcNow;
+                    App.WriteLog("[Ev60SDK] GetColorData2 returned false");
+                }
+                return false;
+            }
 
             var raw = new byte[Everest60SdkNative.ColorBufferSize];
             Marshal.Copy(buf, raw, 0, raw.Length);
@@ -238,7 +251,15 @@ internal sealed class Everest60SdkService : IDisposable
                 colors[i] = new EverestSdkNative.FWColor(raw[i * 3], raw[i * 3 + 1], raw[i * 3 + 2]);
             return true;
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            if (DateTime.UtcNow - _lastColorDataFailLog > TimeSpan.FromSeconds(1))
+            {
+                _lastColorDataFailLog = DateTime.UtcNow;
+                App.WriteLog("[Ev60SDK] GetColorData2 threw: " + ex.Message);
+            }
+            return false;
+        }
         finally { Marshal.FreeHGlobal(buf); }
     }
 

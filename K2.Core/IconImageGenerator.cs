@@ -96,6 +96,56 @@ public static class IconImageGenerator
     }
 
     /// <summary>
+    /// Renders a hand-drawn "back" glyph (Segoe MDL2 Assets, same icon-font already used for
+    /// every other chrome glyph in K2 — see <c>K2Theme.xaml</c>'s <c>K2IconButton</c>) tinted
+    /// to the K2 accent color, plus <paramref name="caption"/> as a caption, on a size×size
+    /// black canvas, saved as PNG, upright — for a DisplayPad key bound to the "dp_back"
+    /// action (both the explicit "Set as Back button" context-menu item and the automatic
+    /// default Key #0 of a freshly-opened folder sub-page, see
+    /// <c>MainWindow.DisplayPad.cs</c>'s <c>DpEnsureDefaultBackButton</c>). Same caption
+    /// layout as <see cref="TryGenerateFolderIcon"/>, so a "back" tile and a "folder" tile
+    /// line up.
+    /// </summary>
+    public static bool TryGenerateBackIcon(string caption, int size, string outputPngPath)
+    {
+        try
+        {
+            using var canvas = new Bitmap(size, size);
+            using (var g = Graphics.FromImage(canvas))
+            {
+                g.SmoothingMode = SmoothingMode.HighQuality;
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                g.Clear(FolderBackgroundColor);
+
+                DrawBackGlyph(g, size);
+                DrawCaption(g, size, caption);
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
+            canvas.Save(outputPngPath, ImageFormat.Png);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Draws the Segoe MDL2 Assets "Back" glyph (U+E72B) centered in the same
+    /// square icon area <see cref="TryGenerateFolderIcon"/>/<see cref="TryGenerateDiskFolderIcon"/>
+    /// use, so all three auto-generated tile flavors align.</summary>
+    private static void DrawBackGlyph(Graphics g, int size)
+    {
+        var (boxLeft, boxTop, boxSize) = IconBox(size);
+        using var font = new Font("Segoe MDL2 Assets", boxSize * 0.75f, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var brush = new SolidBrush(AccentColor);
+        using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        var rect = new RectangleF(boxLeft, boxTop, boxSize, boxSize);
+        g.DrawString("", font, brush, rect, format);
+    }
+
+    /// <summary>
     /// Renders <paramref name="folderPath"/>'s own Windows Explorer icon (same
     /// shell lookup as <see cref="TryGenerateExecIcon"/> — <see cref="GetBestIcon"/>
     /// works for directories too) + its name as a caption below, on a size×size black

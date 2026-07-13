@@ -11,6 +11,9 @@
        COMMON / SHARED
        ═══════════════════════════════════════════════════════════════ -->
   <string name="app_title">K2</string>
+  <string name="tab_home">Home</string>
+  <string name="home_no_device">No device connected</string>
+  <string name="home_heading">Connected devices</string>
   <string name="app_already_running">Another instance of K2 is already running.</string>
   <string name="driver_not_opened">Driver not opened.</string>
   <string name="open_driver">Open driver</string>
@@ -356,10 +359,19 @@
   <string name="settings_keycap_text_color">Text color</string>
   <string name="settings_keycap_style">Keycap type</string>
   <string name="settings_keycap_style_normal">Normal (halo around the key)</string>
-  <string name="settings_keycap_style_translucent">Translucent (halo + colored legend)</string>
   <string name="settings_keycap_style_pudding">Pudding (colored border, keycap-colored center)</string>
   <string name="settings_keycap_style_reverse_pudding">Reverse pudding (keycap-colored border, colored center)</string>
+  <string name="settings_keycap_translucent_legend">Translucent legends (legend follows the live LED color)</string>
   <string name="settings_keycap_hint">Cosmetic only — changes how the on-screen preview here in K2 matches the LED colors to your keycaps, it does not affect the RGB effect sent to the keyboard.</string>
+  <string name="settings_keycap_edit_individual">Edit individual keycaps</string>
+  <string name="settings_keycap_edit_individual_hint">While enabled, click a key on the board above to customize its color or image.</string>
+  <string name="keycap_customize_title">Customize keycap — {0}</string>
+  <string name="keycap_customize_override_color">Override keycap color</string>
+  <string name="keycap_customize_custom_image">Custom image…</string>
+  <string name="keycap_customize_clear_image">Clear image</string>
+  <string name="keycap_customize_use_mountain_logo">Use Mountain logo (fixed)</string>
+  <string name="keycap_customize_clear_all">Clear overrides</string>
+  <string name="keycap_customize_close">Close</string>
   <string name="settings_factory_reset">Reset to factory default</string>
   <string name="settings_factory_reset_confirm">This resets the keyboard's Game Mode, indicator LEDs and lighting effects to factory defaults. Continue?</string>
 

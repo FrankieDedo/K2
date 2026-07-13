@@ -31,6 +31,15 @@ public partial class MainWindow
     /// </summary>
     private DispatcherTimer? _evAccessoryPollTimer;
 
+    /// <summary>Last known dock/numpad attach state — cached here (not just passed
+    /// through locally) so the Home tab's tile (MainWindow.Home.cs, EvHomeImageFile)
+    /// can pick the right artwork without re-querying the SDK: UpdateKeyboardLayout
+    /// only runs at Everest open + every 3s while the Everest tab itself is selected
+    /// (see StartEvAccessoryPoll), so this is the freshest info available while the
+    /// user is elsewhere, e.g. on Home.</summary>
+    private bool _evDockConnected;
+    private bool _evNumpadConnected;
+
     /// <summary>
     /// Starts the 3s dock/numpad poll (same cadence as Ev60RefreshStatus).
     /// Idempotent — safe to call every time the Everest tab is (re)selected.
@@ -64,6 +73,15 @@ public partial class MainWindow
         LogEverest($"[LAYOUT] dockPos={dockPos} numpadPos={numpadPos}");
 
         UpdateEverestAutoName(dockPos != 0, numpadPos != 0);
+
+        bool dockConnected = dockPos != 0;
+        bool numpadConnected = numpadPos != 0;
+        if (dockConnected != _evDockConnected || numpadConnected != _evNumpadConnected)
+        {
+            _evDockConnected = dockConnected;
+            _evNumpadConnected = numpadConnected;
+            RefreshHomeTiles();
+        }
 
         // ---- Dock (overlaid on the top edge of the keyboard) ----
         // GrdEvDock carries both the artwork (ImgEvDock) and the clickable
