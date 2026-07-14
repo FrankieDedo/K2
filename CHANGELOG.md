@@ -9,7 +9,868 @@
 > mappa stabile in `_PROJECT_MAP.md`. Consultare qui solo per il contesto
 > di una modifica specifica passata (grep per parola chiave/data).
 
-> Last updated: 2026-07-13 (Tab Home: card ingrandite del 30%):
+> Last updated: 2026-07-14 (due voci TODO chiuse su richiesta utente,
+> stessa giornata, sessione separata dalle due sotto): (1) **NDK esclusi dal
+> paint mode Everest Max** — `ClearAllOverlays`/`FindKeyInCanvas`
+> (`MainWindow.CustomLighting.cs`) iteravano tutti i Button di `CvsEvNumpad`
+> inclusi i 4 bottoni NDK (`_ndkButtons`, aggiunti allo stesso Canvas da
+> `InitNumpadDisplayKeys`): il paint mode gli stripppava il background
+> distintivo via `ClearValue`, e c'era rischio di collisione di Tag (NDK
+> `Tag` = keyIndex 0-3, stesso range piccolo del LED matrixId usato da
+> `FindKeyInCanvas`). Ora entrambi i metodi saltano esplicitamente i bottoni
+> presenti in `_ndkButtons`. (2) **Layout tastiera multi-lingua/ISO per
+> Everest 60** — `Everest60KeyboardLayout.MainBoard` era un solo layout
+> ANSI-like fisso e la ComboBox "Layout" in Settings era
+> `IsEnabled="False"` con un tooltip che puntava a una chiave loc
+> (`ev60_layout_not_available_tip`) mai esistita in nessun file Strings.
+> Aggiunto `Everest60KeyboardLayout.GetMainBoard(KeyboardLayoutType)`:
+> stessa geometria/LED-index di `MainBoard` (board fisica FISSA, confermato
+> nessun tasto backtick e nessun tasto ISO-102 — quindi nessuna vera
+> variante ISO su questo hardware), solo le legende stampate cambiano per
+> locale, tabella `LocaleLegends` interna rieditata dagli stessi contenuti
+> di `EverestKeyboardLayout.IsoLegends` (Everest Max) ma rimappata da VK a
+> LED index e privata delle due voci che qui non hanno un tasto fisico (VK
+> 192 backtick, VK 226 ISO-102). `MainWindow.Everest60.cs`: nuovo campo
+> `_ev60LayoutType` (auto-detect da `EverestKeyboardLayout.DetectLayout()`
+> all'avvio, stesso meccanismo di Everest Max), `BuildEverest60KeyboardOverlay`
+> ora pulisce i due Canvas + `_ev60OriginalKeyContent` prima di ricostruire
+> (prima veniva chiamata una sola volta all'avvio, mai pensata per un
+> rebuild a runtime) e usa `GetMainBoard(_ev60LayoutType)` invece del campo
+> statico; nuovo `InitEv60KeyboardLayoutSelector`/`OnEv60KeyboardLayoutChanged`
+> (stesso pattern di `InitKeyboardLayoutSelector` per Everest Max). La
+> ComboBox in `MainWindow.xaml` è stata riabilitata (rimosso
+> `IsEnabled="False"` e il tooltip morto). `Everest60KeyBindingPanel.
+> BoardLabelForLed` (fallback legenda per tasti senza label salvata) ora
+> prende anch'esso in considerazione la locale corrente — `Init` ha un
+> nuovo parametro `Func<KeyboardLayoutType> currentLayout`. Build pulita
+> (0 errori) verificata con `dotnet build` diretto sia prima che dopo
+> entrambe le modifiche — **nessuna delle due è stata provata su hardware
+> fisico** (l'overlay/paint mode NDK richiede un Everest Max fisico, il
+> selettore layout Everest 60 non altera nulla lato firmware quindi il
+> rischio è basso, ma la resa visiva reale non è stata vista).
+>
+> Previous: 2026-07-14 (Everest 60 Key Binding — pulizia finale dopo
+> il rewrite K2Action e il redesign del riquadro lista (vedi le due voci
+> "Previous" sotto per il dettaglio di entrambi, fatti in parallelo nella
+> stessa giornata da due sessioni Claude Code diverse sullo stesso
+> repository): rimosse ~14 stringhe loc ormai morte (`ev60_remap_*`,
+> `ev60_selected_key`, `ev60_target_key`, `ev60_media_action`,
+> `ev60_key_binding_select_*`, `ev60_key_binding_not_open`,
+> `ev60_key_binding_unmapped`) da `Strings.xml`/`Strings.it.xml` (uniche
+> due lingue che le avevano — erano legate al vecchio dialog Type/Target-
+> key, mai avute dalle altre 9 traduzioni). Aggiornato il commento di
+> classe di `Everest60SdkService.cs` per chiarire che
+> `ChangeKey`/`ChangeFnKey`/`ChangeShortcutKey`/`SetMediaKey`/`ResetKeys`/
+> `SaveFlash` restano capacità reale del device (reverse-engineering
+> verificato, non rimossi) ma non sono più chiamati da nessuna UI dopo il
+> rewrite K2Action. Aggiornato `_PROJECT_MAP.md` (nota architetturale
+> Everest 60 + voce `Everest60KeyBindingPanel.xaml(.cs)` + nuove voci
+> `Ev60ActionHost.cs`/`Models/Ev60Key.cs`). Build pulita su entrambe le
+> solution dopo tutti i merge (0 errori/0 warning, verificato con
+> `dotnet build` diretto — `build-check.bat` lanciato da Claude Code non
+> torna un log aggiornato in questa shell non interattiva, stesso problema
+> già annotato in una sessione precedente).
+>
+> Previous: 2026-07-14 (Everest 60 Key Binding: il riquadro con
+> l'elenco dei tasti mappati ora è strutturato ESATTAMENTE come quello di
+> Everest Max, su richiesta utente. `Everest60KeyBindingPanel.xaml`:
+> root passato da `StackPanel` a `Grid` con righe Auto/Auto/*/Auto (title/
+> hint/lista+bottoni/hint finale) — mirror di `PnlSecKeyMapping` in
+> `MainWindow.xaml` — rimosso il `MaxHeight="260"` fisso su `LvEv60Keys`:
+> ora la lista si allunga davvero a riempire lo spazio residuo del
+> riquadro invece di lasciare spazio vuoto sotto, esattamente come
+> `LvEvKeys`. Perché questo avesse un effetto reale è servita anche una
+> modifica in `MainWindow.xaml`: le tre sezioni Ev60 (Lighting/Key
+> Binding/Settings) condividevano UN SOLO `ScrollViewer` attorno a tutte
+> e tre — uno ScrollViewer da' altezza infinita al suo contenuto, quindi
+> una riga `*` dentro non può mai "riempire" nulla di concreto (stesso
+> bug, causa, e fix già documentati per Everest Max nel commento di
+> `BdrEvSettingsPanel`, mai applicato a Ev60). Rimosso quel wrapper
+> condiviso; ogni sezione ora gestisce il proprio overflow: `Ev60RgbPanel`
+> aveva già un suo `ScrollViewer` interno (MaxHeight=260, invariato),
+> `PnlEv60Settings` (Keycap Appearance) ne ha ricevuto uno tutto suo —
+> stesso pattern di Everest Max, dove `PnlSecRgb`/`PnlSecDial`/
+> `PnlSecSettings` SONO il proprio `ScrollViewer` (`x:Name` sull'elemento
+> scrollabile stesso, non su un wrapper esterno), quindi il codice che fa
+> toggle di `PnlEv60Settings.Visibility` continua a funzionare invariato.
+> Durante la build ripulita è emerso un errore di compilazione
+> PREESISTENTE (non introdotto in questa sessione, ereditato dalla
+> riscrittura K2Action di `Everest60KeyBindingPanel` fatta esternamente
+> in precedenza): `MainWindow.Everest60.cs`'s `BtnEv60ImportXml_Click`
+> chiamava ancora `_ev60Store.SaveKeyBinding(slot, ledIndex, mode, value,
+> mask)`, un metodo dell'API vecchia (remap firmware grezzo) rimosso dal
+> nuovo `Everest60Store` (ora `SaveKey(Ev60KeyRecord)`, schema
+> ActionType/ActionValue). Sistemato mirror-ando `BtnEvImportXml_Click`
+> di Everest Max (`MainWindow.Everest.cs`): il branch nativo Base Camp
+> non serve qui (il commento del metodo dice esplicitamente "Import
+> K2-only XML, prodotto da Ev60ProfileExporter.ExportK2", che scrive
+> sempre `FunctionType="K2Action"` + `SubFunctionType`=ActionType +
+> `FunctionValue`=ActionValue, vedi `Ev60ProfileExporter.cs` riga ~71) —
+> quindi ora legge quei tre campi direttamente invece di reinterpretarli
+> come mode/value/mask. Build pulita su entrambe le solution dopo il fix
+> (0 errori/0 warning).
+>
+> Previous: 2026-07-14 (Everest 60 Key Binding: sostituito il remap
+> firmware grezzo con l'intera pipeline K2Action, su richiesta esplicita
+> utente — "devi usare proprio lo stesso popup, con le stesse opzioni e
+> mappature" [di Everest Max]. Fino a questo momento della giornata Key
+> Binding scriveva Remap Key/Fn Layer/Shortcut/Media direttamente nel
+> firmware via `Everest60SdkService`; ora usa lo STESSO
+> `K2.Core.ButtonActionDialog` e lo stesso catalogo azioni (url/exec/
+> folder/browser/profile/oscmd/media/mouse/keys/command/text/macro/
+> pyscript) di Everest Max/MacroPad/DisplayPad. File nuovi:
+> `K2.App/Models/Ev60Key.cs` (mirror di `EverestKey.cs`, identità =
+> ledIndex) e `K2.App/Ev60ActionHost.cs` (mirror di `EverestActionHost.cs`,
+> device singolo, nessuna pagina). `Everest60Store.cs`: tabella
+> `KeyBindings` (Profile/LedIndex/Mode/Value/ModifierMask) sostituita da
+> `Keys` (Profile/LedIndex/Label/ActionType/ActionValue, stesso schema di
+> `EverestStore`) — `LoadKeyBindings`/`SaveKeyBinding`/`RemoveKeyBinding`/
+> `ResetKeyBindings` rimossi, sostituiti da `LoadProfile`/`SaveKey`/
+> `RemoveKey`/`GetKeysByAction`/`ResetProfileToDefaults`.
+> `Everest60KeyBindingPanel` riscritto: possiede `_keys`/`_byLed`
+> (`ObservableCollection<Ev60Key>`/`Dictionary`, mirror di `_evKeys`/
+> `_evByMatrix`), `SelectKey`/`BtnEv60Configure_Click` aprono
+> `ButtonActionDialog` direttamente (stesso trigger di
+> `EvKeyboardButton_Click`/`BtnEvConfig_Click`); l'host viene iniettato
+> dopo la costruzione via `SetActionHost` per rompere la dipendenza
+> circolare pannello↔host (l'host ha bisogno della lista del pannello per
+> `GetButtons`, il pannello ha bisogno dell'host per aprire il dialog).
+> `MainWindow.Everest60.cs`: costruisce `_ev60ActionHost`/`_ev60Engine`
+> (mirror di `_evActionHost`/`_evEngine`), sottoscrive
+> `Everest60SdkService.KeyEvent` (esisteva già, mai collegato a nulla) e
+> traduce wMatrix→ledIndex tramite `_ev60DllKeyIdToLedIndex` (reverse di
+> `Everest60RemapData.LedIndexToDllKeyIdArray`) prima di eseguire l'azione
+> via `ButtonActionEngine` — **ipotesi non verificata**: che il callback
+> riporti il tasto fisico con lo stesso DllKeyId usato dai (ormai
+> pensionati) export ChangeKey/ChangeFnKey, non un wMatrix di uno spazio
+> diverso come per Everest Max (che ha richiesto una vera calibrazione
+> guidata, `_evWMatrixToLayout`/`BtnEvMapKeys`, mai portata qui per
+> mancanza di controprova che serva). Aggiunta `Ev60HighlightKeyboardButton`
+> (mirror di `EvHighlightKeyboardButton`) per il tint sul tasto fisico
+> premuto, e `Ev60SwitchProfile` (mirror di `EvSwitchProfile` ma senza
+> alcuna chiamata firmware — l'Everest 60 non ha profili firmware, vedi
+> nota architetturale in _PROJECT_MAP.md) — Everest 60 aggiunto come
+> target "switch profile" in `MainWindow.ActionHost.cs`'s
+> `ListAllProfileTargets`/`SwitchProfileByKey` (chiave `"everest60:1"`).
+> `BaseCampDbImporter.ImportEverest60Profile` e `Ev60ProfileExporter`
+> riscritti per usare `TranslateAction`/lo stesso vocabolario
+> FunctionType/SubFunctionType/FunctionValue di `EvProfileExporter`,
+> invece del parsing ad-hoc Mode/Value legato al vecchio schema. Export
+> firmware (`ChangeKey`/`ChangeFnKey`/`ChangeShortcutKey`/`SetMediaKey`/
+> `ResetKeys`/`SaveFlash`) LASCIATI in `Everest60SdkNative`/
+> `Everest60SdkService` (capacità reale del device, reverse-engineering
+> verificato) ma non più chiamati da nessuna UI — documentato nel loro
+> commento di classe. **Non verificato su hardware fisico** —
+> l'assunzione wMatrix==DllKeyId sopra è la parte più a rischio da
+> confermare appena disponibile un Everest 60 reale.
+>
+> Previous: 2026-07-14 (Everest 60 Key Binding: nascosti bottone
+> "Save" device-wide e hint "not yet verified on real hardware", su
+> richiesta utente con screenshot cerchiato in rosso —
+> `K2.App/Everest60KeyBindingPanel.xaml`, `BtnEv60SaveFlash`+relativo
+> `Separator` avvolti in `PnlEv60SaveFlash Visibility="Collapsed"`,
+> `LblEv60FlashStatus` collassata anch'essa (feedback del bottone ormai
+> nascosto), hint finale avvolto in `PnlEv60UnverifiedHint
+> Visibility="Collapsed"` — stesso pattern "Collapsed sull'intero blocco,
+> code-behind invariato" delle voci precedenti. Incontrato durante la
+> build un K2.App.exe zombie (PID di una sessione precedente) che
+> bloccava `K2.App.exe` in copia — killato con `taskkill /F /IM
+> K2.App.exe /T` (stesso scenario per cui esiste `stop-k2.bat`). Build
+> pulita dopo il kill (0 errori/0 warning).
+>
+> Previous: 2026-07-14 (Lighting: nascoste temporaneamente le sezioni
+> "LED painting" e "ring" su tutti i device con una sezione Lighting, su
+> richiesta utente — "per il momento nascondiamo le sezioni di led
+> painting e ring su tutti i dispositivi che hanno la sezione lighting").
+> Nascosto via `Visibility="Collapsed"` sull'intero blocco XAML (elementi
+> restano nel tree, code-behind invariato — riattivare e' un flip di una
+> riga): Everest Max, `MainWindow.xaml` — "Per-key custom lighting
+> section" avvolta in `PnlEvCustomLighting`. Everest 60,
+> `Everest60RgbPanel.xaml` — "Side ring" avvolta in
+> `PnlEv60SideRingSection`, "Key Lighting" (paint) avvolta in
+> `PnlEv60KeyLightingSection`. Makalu, `MakaluRgbSettingsPanel.xaml` —
+> bottone `BtnMkCustomOpen` (apre `MakaluCustomRgbWindow`, l'editor
+> per-LED che E' sia il painting che l'anello per questo device)
+> collassato; inoltre `MkUpdateMouseImage` in `MainWindow.Makalu.cs` ora
+> forza sempre `makalu_mouse_rainbow.png` (immagine opaca) invece di
+> switchare al cutout trasparente quando la sezione Lighting e' attiva —
+> altrimenti il buco trasparente nel PNG sarebbe rimasto visibile senza
+> l'anello colorato dietro a coprirlo. L'anello continua a essere
+> disegnato in background da `BuildMkLedRing` (nessuna modifica li'),
+> semplicemente non e' piu' visibile. MacroPad verificato: la sua sezione
+> Lighting non ha ne' painting ne' ring, nessuna modifica necessaria.
+> Build pulita (`dotnet build` diretto su entrambe le solution, x86+x64,
+> 0 errori/0 warning).
+>
+> Previous: 2026-07-14 (Everest 60 Key Binding, seconda passata nella
+> stessa giornata — il popup di configurazione ora ha la STESSA FORMA del
+> `ButtonActionDialog` di Everest Max, su richiesta esplicita utente, non
+> solo lo stesso hint+ListView+Configure/Remove del pannello attorno
+> (quello era gia' stato allineato nella prima passata di oggi, vedi
+> entry precedente per il dettaglio). `K2.App/Everest60KeyBindingDialog.
+> xaml(.cs)` riscritto: header in grassetto, label+ComboBox "Type" subito
+> sotto, un'area contenuto che cambia pannello in base al tipo scelto, e
+> Cancel/Save in basso a destra con stessa dimensione/wording del
+> `ButtonActionDialog` (`K2.Core/ButtonActionDialog.xaml`) — Save scrive
+> in firmware via `Everest60SdkService` e chiude il dialog solo se la
+> scrittura riesce (a differenza del ButtonActionDialog, che non tocca
+> l'hardware direttamente e quindi chiude sempre). Aggiunta una voce
+> **"None"** in testa al ComboBox "Type" (`Modes`, ora con `("none",
+> Loc.Get("act_none"))` come primo elemento) — pseudo-modo mai salvato in
+> `_bindings`, selezionarlo e premere Save resetta il tasto alla funzione
+> nativa e rimuove il binding, stesso effetto di scegliere "None" + Save
+> nel ButtonActionDialog di Everest Max. Il pannello Shortcut riusa le
+> stesse label del pannello "Keys" del ButtonActionDialog
+> (`keys_modifiers_label`/`keys_key_label`) per coerenza testuale. Rimossi
+> da questa versione del dialog i pulsanti "Reset key" (assorbito da
+> "None"+Save) e "Save to flash" (operazione device-wide, non per-tasto:
+> spostata su `Everest60KeyBindingPanel` stesso, sotto Configure/Remove,
+> con la propria label di stato `LblEv60FlashStatus`). Nuova stringa
+> `ev60_remap_mode_none_hint` (EN+IT). Build pulita su entrambe le
+> solution (verificata con `dotnet build` diretto, non `build-check.bat`
+> — vedi nota sotto). Non verificato su hardware fisico (stesso caveat
+> gia' noto della sezione Key Binding Everest 60).
+>
+> **Nota tooling-only**: in questa sessione `build-check.bat` lanciato da
+> Claude Code (Bash tool, `cmd /c build-check.bat`) e' tornato subito con
+> log non aggiornato — probabile causa il `pause` finale dello script in
+> una shell non interattiva. Verificato invece con `dotnet build K2.sln
+> -c Debug -p:Platform=x86` / `dotnet build K2.DisplayPad.sln -c Debug
+> -p:Platform=x64` diretti, entrambi puliti. Incontrato anche un
+> MSB3027/MSB3021 legittimo (non tooling) perche' un K2.App.exe di una
+> sessione precedente teneva ancora aperto il lock su K2.Core.dll —
+> risolto killando il processo (PID via `tasklist`/`taskkill`) prima di
+> ricompilare, stesso scenario per cui esiste `stop-k2.bat`.
+>
+> Previous: 2026-07-14 (Lighting: rimossi Reset/Save da Everest Max,
+> layout allineato tra tutti i device, su richiesta utente — "togli i
+> bottoni reset e save dalla sezione lighting di Everest Max" + "per
+> everest 60, makalu e macropad copia la sezione lighting di everest max
+> mantenendo ovviamente gli effetti specifici di ogni dispositivo").
+> **Everest Max** (`MainWindow.xaml` `PnlSecRgb`): rimossi `BtnEvLightReset`/
+> `BtnEvLightSave` (chiamavano `EverestService.ResetEffects`/`SaveFlash`) —
+> restano solo OFF/ON. Handler `BtnEvLightReset_Click`/`BtnEvLightSave_Click`
+> rimossi da `MainWindow.Everest.cs` (dead code, nessun altro riferimento).
+> **MacroPad** (`PnlMpSecLed`): era l'unico device con un layout diverso
+> (`Grid` a 5 colonne fisse invece delle due `WrapPanel` di Everest Max) —
+> riscritto per rispecchiare esattamente `PnlSecRgb`: riga 1 = Effect,
+> Speed, Direction, Rainbow, Sync in una `WrapPanel`; riga 2 = colori +
+> OFF/ON in un'altra. `BtnMacroLightReset`/`Save` rimossi (idem
+> `BtnMacroLightReset_Click`/`Save_Click` da `MainWindow.MacroLed.cs`,
+> chiamavano `MacroPadService.ResetEffects`/`SaveFlash`, nessun altro
+> riferimento). Chiavi `led_reset_effects`/`led_save_flash`, ora senza
+> alcun uso, rimosse da tutti gli 11 `K2.Core/Strings*.xml`. **Everest 60**
+> (`Everest60RgbPanel.xaml`): lo slider Speed viveva in una `WrapPanel` a
+> sé sotto la riga Effect/Direction/Rainbow — unito nella stessa riga,
+> ordine Effect→Speed→Direction→Rainbow come Everest Max (Sync non
+> esiste per questo device, nessuna sincronizzazione cross-profilo
+> implementata: omesso correttamente, non è un'omissione da correggere).
+> Nessun Reset/Save/OFF/ON da rimuovere: Ev60 non li ha mai avuti,
+> "Off" è semplicemente una voce della combo effetti, non un bottone
+> a parte. **Makalu** (`MakaluRgbSettingsPanel.xaml`): già nello stesso
+> schema (`WrapPanel` Effect/Speed/Direction, poi colori), Rainbow/Sync
+> assenti perché il device non li supporta — lasciato invariato, nessun
+> Reset/Save/OFF/ON qui nemmeno in origine. Build pulita (0 errori/0
+> warning su entrambe le solution). Non richiede verifica hardware (solo
+> riorganizzazione UI, nessuna logica di comunicazione device toccata).
+>
+> Previous: 2026-07-14 (MacroPad: sidebar SECTIONS, "LED Lighting"
+> rinominato in "Lighting" su richiesta utente. Invece di ritradurre la
+> chiave `led_lighting` esistente in 10 lingue, `RbMpSecLed` in
+> `K2.App/MainWindow.xaml` ora riusa `{loc:Get rgb_lighting}` — la stessa
+> chiave già usata dalla sezione Lighting di Everest Max/Everest 60/
+> Makalu, che vale già "Lighting" in EN (e ha traduzioni coerenti nelle
+> altre lingue) — invece di mantenerne una gemella. `led_lighting`
+> (ora senza alcun riferimento) rimosso da tutti gli 11 file
+> `K2.Core/Strings*.xml`. Build pulita (0 errori/0 warning).
+>
+> Previous: 2026-07-14 (SECTIONS sidebar: fix font non allineato alla
+> scelta in Settings > Font, segnalato dall'utente — `SectionTabStyle`
+> fissava `FontFamily="Roboto Medium, Segoe UI"` letterale invece della
+> `DynamicResource K2AppFontFamily` che il resto dell'app usa (vedi
+> `K2Theme.xaml`'s `K2WindowStyle` + `FontCatalog.Apply`, che sovrascrive
+> quella risorsa a runtime quando l'utente cambia font in Settings): un
+> valore letterale rompe l'ereditarietà della `FontFamily` dalla Window e
+> resta sempre "Roboto Medium" a prescindere dal font scelto. Bug
+> preesistente alla sessione odierna (lo stesso valore c'era già nello
+> style originale prima del redesign a tile quadrate), solo notato ora.
+> Fix: un edit su `K2.App/MainWindow.xaml` (`FontFamily` ora
+> `{DynamicResource K2AppFontFamily}`), propaga a tutte le 5 sidebar
+> SECTIONS visto lo style condiviso. `FontSize="15"` (l'ingrandimento
+> richiesto in precedenza) resta fisso, non legato a `K2AppFontSize` —
+> scelta intenzionale, l'ingrandimento del titolo era una richiesta
+> indipendente dalla scelta del font. Build pulita (0 errori/0 warning).
+>
+> Previous: 2026-07-14 (SECTIONS sidebar: titolo del tab allineato in
+> alto a sinistra, su richiesta utente — "per tutte le sezioni... il testo
+> del titolo nella scheda in alto a sinistra, anche se con un po' di
+> padding", per tutti i dispositivi visto il singolo `SectionTabStyle`
+> condiviso). `HorizontalContentAlignment`/`VerticalContentAlignment` da
+> `Center`/`Center` a `Left`/`Top` (sia sul `RadioButton` sia sul
+> `ContentPresenter` nel `ControlTemplate`), `Padding` da `8,10` a
+> `12,10` per un margine più leggibile dall'angolo. `TextAlignment="Left"`
+> nel `ContentTemplate` (già presente) resta coerente col nuovo
+> allineamento. Build pulita (0 errori/0 warning).
+>
+> Previous: 2026-07-14 (DisplayPad: sidebar SECTIONS riordinata su
+> richiesta utente — Settings spostato sotto Pages, ordine ora Key
+> Binding → Pages → Settings, invece di Key Binding → Settings → Pages.
+> Solo riordino di due `RadioButton` in `K2.App/MainWindow.xaml`
+> (`RbDpSecPages` prima di `RbDpSecSettings`); nessuna modifica al
+> code-behind (`DpSection_Changed` in `MainWindow.SectionNav.cs` risolve
+> per nome, non per posizione). Build pulita (0 errori/0 warning).
+>
+> Previous: 2026-07-14 (SECTIONS sidebar: voci trasformate in tab
+> quadrate, su richiesta utente — "trasforma le voci delle sezioni in tab
+> quadrate (simili come sfondo e forma a quelli dei dpi) che stiano dentro
+> la stessa colonna e ingrandisci il titolo", per tutti i dispositivi).
+> Un solo style condiviso, `SectionTabStyle` in `K2.App/MainWindow.xaml`
+> (usato da tutte e 5 le sidebar SECTIONS — Everest Max/Everest 60/Makalu/
+> MacroPad/DisplayPad — un solo edit propaga ovunque): prima era una barra
+> sottile piatta (`Background="Transparent"`, bordo accent 3px solo a
+> sinistra, testo piccolo FontSize 13 allineato a sx); ora è un tile pieno
+> — sfondo `K2SurfaceAltBrush` a riposo/`K2HoverBrush` in hover/
+> `K2AccentBrush` da selezionato (stessa progressione di stati usata dai
+> tile DPI del Makalu, `MakaluRgbSettingsPanel.xaml.cs`
+> `BuildMkDpiLevelButtons`), `CornerRadius` uniforme 8 (non più "flag"
+> 0,4,4,0), `MinHeight` 58, testo centrato FontSize 15 (da 13). Aggiunto
+> `ContentTemplate` con `TextBlock TextWrapping="Wrap"` perché
+> `TextWrapping` non è una proprietà ereditata: senza, un titolo lungo
+> (es. "Device settings" di Makalu) si sarebbe tagliato invece di andare
+> a capo su due righe dentro il tile. Restano impilate verticalmente
+> nella stessa colonna sidebar da 160px di prima — nessuna modifica di
+> layout/Grid, solo lo style del singolo `RadioButton`. Build pulita
+> (`build-check.bat`, 0 errori/0 warning su entrambe le solution). Non
+> richiede verifica hardware (solo styling).
+>
+> Previous: 2026-07-14 (Positioning spostato dentro Settings per
+> MacroPad e DisplayPad, su richiesta utente — "spostiamo i dati del
+> positioning dentro i settings del dispositivo e togliamo la sezione
+> positioning dalle sezioni a sinistra"). Erano gli unici due device con
+> una sezione "Positioning" a sé nella sidebar SECTIONS (Everest Max/
+> Everest 60/Makalu non ruotano fisicamente, quindi non l'hanno mai
+> avuta). **MacroPad**: rimossa `RbMpSecOrientation`/`PnlMpSecOrientation`
+> dalla sidebar/dal Grid dei pannelli; il combo rotazione (`CbMacroRotation`,
+> logica invariata in `MainWindow.Keys.cs`) è stato spostato in cima a
+> `PnlMpSecSettings` (già esistente per il keycap appearance), sotto un
+> header "Positioning" (`{loc:Get positioning}`) prima dell'header
+> "Keycap Appearance" esistente. **DisplayPad**: non aveva ancora una
+> sezione Settings a sé — la vecchia sezione "Rotation"
+> (`RbDpSecRotation`/`PnlDpSecRotation`) è stata rinominata a
+> `RbDpSecSettings`/`PnlDpSecSettings` (etichetta sidebar da
+> `{loc:Get positioning}` a `{loc:Get ev_settings}`, stesso testo
+> "Settings" usato da Everest Max/MacroPad), contenuto invariato (combo
+> rotazione + 2 bottoni rotazione icone) sotto lo stesso header
+> "Positioning" interno. Nessuna nuova stringa di traduzione necessaria
+> (`positioning`/`ev_settings` esistevano già). `MainWindow.SectionNav.cs`
+> aggiornato di conseguenza (switch `MpSection_Changed`/`DpSection_Changed`,
+> commenti). Stesso pattern già usato per la rimozione della sezione DPI
+> standalone di Makalu (vedi voce 2026-07-13 più sotto). Build pulita
+> (`build-check.bat`, 0 errori/0 warning su entrambe le solution). Non
+> richiede verifica hardware (solo riorganizzazione UI, nessuna logica di
+> comunicazione device toccata).
+>
+> Previous: 2026-07-14 (Everest 60 Key Binding: sezione allineata al
+> layout di Everest Max, su richiesta utente — prima era un editor sempre
+> inline sotto la lista mappature (Selected key/Type/Target key/Apply-
+> Reset-Save tutti visibili in permanenza), ora e' hint+ListView+bottoni
+> Configure/Remove come Everest Max/MacroPad/DisplayPad
+> (`K2.App/Everest60KeyBindingPanel.xaml`), e cliccare un tasto sulla
+> tastiera o "Configure" apre un dialog dedicato
+> (`K2.App/Everest60KeyBindingDialog.xaml(.cs)`, nuovo file) con Type/
+> Target key/Shortcut/Media + Apply to device/Reset key/Save — stesso
+> trigger pattern di `ButtonActionDialog` per Everest Max
+> (`EvKeyboardButton_Click`/`BtnEvConfig_Click`), ma il dialog scrive
+> direttamente in firmware via `Everest60SdkService` invece di limitarsi a
+> restituire un tipo/valore azione (nessun `IActionHost` per questo
+> device, vedi nota architetturale in _PROJECT_MAP.md). `_bindings`
+> (Dictionary ledIndex->binding) passato per riferimento al dialog, che lo
+> muta e richiama `RefreshRows` via callback cosi' la lista resta in
+> sincrono mentre il dialog e' aperto. `Modes`/`RemapModeChoice`/
+> `DllKeyIdToLabel` promossi a `internal static` in
+> `Everest60KeyBindingPanel` per essere riusati dal dialog senza
+> duplicarli. Nuova stringa `ev60_key_binding_close` (EN+IT). Build
+> pulita (`build-check.bat`, 0 errori/0 warning su entrambe le solution).
+> Non verificato su hardware fisico (stesso caveat gia' noto della sezione
+> Key Binding Everest 60).
+>
+> Previous: 2026-07-14 (Macro: due bug fix + una migliorìa, tutti nel
+> pannello Macro top-level, K2.App/MainWindow.Macro.cs +
+> K2.App/Services/MacroRecorder.cs + K2.App/Services/MacroPlayer.cs):
+> 1) **Registrazione AltGr rotta**: su layout ISO/internazionali (incl.
+> italiano) Windows genera un keydown/keyup fittizio di Left-Ctrl subito
+> prima/dopo il vero Right-Alt quando si preme AltGr — un artefatto del
+> driver tastiera, non una pressione reale. `MacroRecorder` leggeva solo
+> `vkCode` da `Marshal.ReadInt32(lParam)` (primo campo di
+> `KBDLLHOOKSTRUCT`) e registrava quel Ctrl fittizio come se fosse stato
+> premuto davvero, trasformando ogni AltGr registrato in un falso
+> "Ctrl+AltGr". Fix: letta la struct completa (`vkCode`/`scanCode`/`flags`/
+> `time`/`dwExtraInfo`) e filtrato l'evento quando `vkCode==VK_LCONTROL
+> (0xA2)` e `scanCode==0x21D` — valore di scan code che Windows usa solo
+> per questo artefatto sintetico, distinto sia dal vero Left-Ctrl (0x1D)
+> sia dal vero Right-Ctrl (0x11D). 2) **Playback AltGr/Right-Ctrl/frecce
+> sbagliato**: `MacroPlayer.SendKeyInput` passava a `SendInput` solo
+> `wVk`, senza mai impostare `KEYEVENTF_EXTENDEDKEY` — per le doc
+> Microsoft di `SendInput`, senza quel flag il sistema deriva lo scan code
+> dal solo VK e Right-Alt/Right-Ctrl collassano sullo stesso scan code non
+> esteso del tasto sinistro, quindi un AltGr registrato veniva ripiegato
+> silenziosamente su un normale Alt sinistro alla riproduzione. Aggiunto
+> `IsExtendedKey()` (RMenu/RControl/frecce/Home/End/PageUp/PageDown/
+> NumLock) che imposta il flag quando serve. 3) **Nomi tasti nell'elenco
+> registrazioni**: `KeyName()` usava `System.Windows.Forms.Keys.ToString()`
+> grezzo, mostrando nomi interni .NET invece dei nomi stampati sulla
+> tastiera — "Menu"/"LMenu"/"RMenu" per Alt (Right-Alt in particolare è
+> quello che gli utenti conoscono come "Alt Gr" sui layout ISO/
+> internazionali, non "RMenu"), "ControlKey"/"LControlKey"/"RControlKey"
+> per Ctrl, "Return" per Enter, "Back" per Backspace, ecc. Aggiunta una
+> tabella di traduzione per i codici più comuni prima del fallback
+> all'enum grezzo (stesso approccio non localizzato già usato per i nomi
+> tasto in `Everest60RemapData.cs` — "Ctrl (Left)"/"Alt (Right)" ecc. —
+> qui semplificato a "Ctrl"/"Alt"/"Alt Gr"/"Shift"/"Win" senza suffisso
+> Left/Right dato che è quello che è fisicamente stampato sul tasto).
+> Nessuna verifica su hardware fisico in questa sessione (solo build
+> pulita in locale) — utente da riconfermare che AltGr funzioni ora sia in
+> registrazione che in riproduzione.
+>
+> **Aggiunta stessa sessione — "Alt non viene davvero tenuto premuto"**
+> (`MacroPlayer.cs`): l'utente ha segnalato che tenendo Alt premuto e
+> componendo un codice Alt+Numpad (es. Alt+0192 per "À") durante la
+> riproduzione di una macro, Alt non risultava davvero premuto per tutta
+> la sequenza. Diagnosticato con un piccolo harness di test standalone
+> (WinForms + SendInput, girato in locale su questa macchina, poi
+> eliminato) confermando che un singolo `SendInput` keydown per Alt
+> seguito da vari Numpad down/up produce testo vuoto — né il carattere
+> Alt-code né le cifre letterali, quindi silenziosamente inefficace, sia
+> passando solo `wVk` sia passando lo scan code esplicito via
+> `KEYEVENTF_SCANCODE`; root cause esatta nel componente Alt+Numpad di
+> Windows non isolata oltre questo punto. **Fix su suggerimento
+> dell'utente**: `PlayInternal` ora traccia in un `HashSet<ushort>
+> heldKeys` i tasti il cui keydown è stato inviato ma il cui keyup non è
+> ancora arrivato nella sequenza registrata; l'attesa tra un input e il
+> successivo (`HoldRepeat`, ex `Thread.Sleep` diretto) è spezzata in slice
+> da 30ms e ad ogni slice viene re-inviato un keydown per ciascun tasto
+> ancora "tenuto" — imita l'auto-repeat reale della tastiera invece di un
+> keydown singolo e silenzioso, così un consumer come il compositore
+> Alt+Numpad di Windows continua a vedere Alt riasserito per tutta la
+> durata della sequenza. Aggiunta anche una release di sicurezza a fine
+> iterazione per qualunque tasto rimasto in `heldKeys` (macro troncata/
+> editata a mano senza keyup corrispondente non deve lasciare un
+> modificatore incollato a livello di sistema). **Non riverificato con il
+> vero harness di test dopo il fix** (l'utente ha chiesto di fermare i
+> test che aprivano/pilotavano applicazioni reali come Notepad a metà
+> sessione) — da confermare dall'utente su hardware/uso reale.
+>
+> Previous: 2026-07-13 (Everest Max: rimosso il bottone "Capture key";
+> Key Binding box ancora tagliato dopo il fix Grid-stretch della sessione
+> precedente — root cause trovata via calcolo statico, non verificata a
+> schermo):
+>   - **Richiesta utente**: rimuovere il bottone "Capture key" dalla
+>     sezione Key Binding di Everest Max; il box tasti mappati continuava
+>     a non mostrarsi per intero nonostante il fix Grid-stretch della
+>     sessione precedente (screenshot allegato).
+>   - **"Capture key" rimosso** (`MainWindow.xaml`/`MainWindow.Everest.cs`):
+>     era un flusso ridondante — cliccare un tasto sulla grafica della
+>     tastiera già aggiunge/configura il tasto in un solo passaggio
+>     (`EvKeyboardButton_Click`), "Capture key" faceva solo la metà
+>     (aggiungeva alla lista senza aprire subito il dialog azione,
+>     richiedendo poi "Configure..." a parte). Rimossi: bottone XAML,
+>     `BtnEvCapture_Click`, campo `_evCapturing` e tutti i rami che lo
+>     controllavano (in `EvKeyboardButton_Click`, `PreviewMouseMove`,
+>     `HandleEverestKey`), le 4 stringhe `ev_capture_key`/
+>     `ev_cancel_capture`/`ev_capture_prompt`/`ev_capture_cancelled` da
+>     **tutti** i file `Strings.*.xml` (10 lingue).
+>   - **Root cause del box ancora tagliato — calcolo statico, non
+>     verificato a schermo** (niente hardware Everest Max fisico in questa
+>     sessione, e il PC dell'utente aveva un gioco a schermo intero sopra
+>     la finestra K2 già avviata per test, niente screenshot dal vivo
+>     possibile senza rubare il focus): sommando le righe fisse/Auto sopra
+>     `BdrEvSettingsPanel` (tab strip + brightness bar + toolbar 32px +
+>     status bar + margini, ~145px) più la riga dispositivo fissa 526px
+>     (526 = canvas ruotato 510 + padding 8px/lato, condivisa da TUTTI i
+>     tab dispositivo) più il `MinHeight` del pannello settings, il totale
+>     per Everest Max (145+526+270=941) supera l'`Height` di default della
+>     finestra (897) di ~44px — un `Border` non fa clip di default, quindi
+>     l'eccedenza si disegna oltre il bordo inferiore della finestra,
+>     invisibile (stessa classe di bug descritta nella sessione
+>     precedente, reintrodotta stavolta tramite il valore del floor
+>     invece che un converter). Gli altri device restano sotto budget
+>     (Ev60 150/Makalu 180/MacroPad 130/DisplayPad 90, tutti ≤226) — combacia
+>     col fatto che SOLO Everest Max è stato segnalato rotto. Inoltre:
+>     `MinHeight` di `BdrEvSettingsPanel` era 220 nella sessione
+>     precedente (fix Grid-stretch iniziale) ed è stato alzato a 270
+>     nell'ultima riscrittura della STESSA sessione — l'aumento è
+>     probabilmente ciò che ha fatto traboccare il totale.
+>   - **Fix**: `BdrEvSettingsPanel.MinHeight` riportato a `220` (il valore
+>     della sessione precedente, non un numero nuovo). `Window.Height`
+>     alzato da `897` a `930` come margine di sicurezza aggiuntivo, poi
+>     su richiesta esplicita dell'utente alzato di un ulteriore 10%
+>     (`930 * 1.10 ≈ 1023`) invece di continuare ad affinare a numeri
+>     piccoli (`Window.MinHeight` lasciato a `713` — alzarlo avrebbe reso
+>     la finestra troppo alta per schermi comuni da 768px, un rischio
+>     peggiore del bug che si sta risolvendo).
+>   - **NON verificato a schermo**: `dotnet build` pulito su entrambe le
+>     solution, ma zero verifica visiva del box Key Binding — root cause e
+>     numeri derivati leggendo l'XAML, non misurati a runtime. Da
+>     confermare al prossimo avvio: se il box è ancora tagliato, servono i
+>     numeri reali (altezza finestra all'apertura, quanto testo/quante
+>     righe della lista si vedono) per stringere il calcolo invece di
+>     ritentare a occhio.
+>
+> Previous: 2026-07-13 (Liste tasti mappati Everest Max/MacroPad: fix
+> reale dell'expand-con-la-finestra, ora un Grid-stretch invece di un
+> binding ad altezza calcolata; Makalu DPI: livelli 1-5 aggiungibili/
+> rimuovibili con tab a larghezza fissa + scroll-arrows condizionali,
+> scoperto e sfruttato il campo firmware dpi_level_num mai letto prima):
+>   - **Richiesta utente**: la lista Everest Max "spariva sotto" di default
+>     (bug nel fix della sessione precedente) — chiesto di renderla
+>     interamente visibile E comunque espandibile con la finestra. Per
+>     Makalu: "non c'è modo di aggiungere altri livelli dpi", bottone "+"
+>     come ultimo tab della serie, frecce mostrate solo se i tab non ci
+>     stanno tutti, dimensione dei tab fissa (non a restringersi).
+>   - **Root cause del bug "sparisce sotto"**: il fix precedente bindava
+>     `LvEvKeys.Height`/`LvMpKeys.Height` all'`ActualHeight` di un `Border`
+>     tramite un converter (`HeightOffsetConverter`, sottraeva un offset
+>     fisso in px) — ma quell'offset era una stima "a occhio" (mai
+>     verificata a schermo), e se calcolava un'altezza maggiore di quella
+>     realmente disponibile, WPF non taglia il contenuto (`Border` non fa
+>     clip di default): la lista semplicemente si disegnava OLTRE il bordo
+>     inferiore del pannello, invisibile. **Fix strutturale, non un altro
+>     numero magico**: rimossa la `ScrollViewer` che avvolgeva TUTTE le
+>     sezioni di Key Binding/RGB/Dial/Settings/USB Recorder (Everest Max) e
+>     Key Binding/Orientation/LED/Settings (MacroPad) — uno `ScrollViewer`
+>     dà altezza infinita al proprio contenuto, quindi nessuna riga `"*"`
+>     annidata lì dentro può mai "riempire lo spazio disponibile" (gotcha
+>     WPF noto, la causa di fondo anche del vecchio approccio col
+>     converter). Ogni sezione ora gestisce il proprio overflow da sola:
+>     Key Binding (`PnlSecKeyMapping`/`PnlMpSecKeyBinding`) è diventata un
+>     `Grid` (non più `StackPanel` — uno `StackPanel` dimensiona sempre i
+>     figli alla loro altezza naturale, ignora lo spazio disponibile, quindi
+>     non può MAI far crescere un figlio) con riga `"*"`, così `LvEvKeys`/
+>     `LvMpKeys` si espandono per davvero (nessun binding, nessun converter,
+>     nessun offset stimato — l'`Height`/`MinHeight` espliciti sono stati
+>     rimossi del tutto). Le altre sezioni (Display Dial/Settings/USB
+>     Recorder per Everest Max, Orientation/LED Lighting/Settings per
+>     MacroPad) hanno ricevuto ciascuna una propria `ScrollViewer` (RGB ce
+>     l'aveva già, usata come riferimento del pattern) così non perdono la
+>     rete di sicurezza contro overflow su finestre piccole.
+>     `HeightOffsetConverter.cs` è stato eliminato (nessun altro uso
+>     rimasto).
+>   - **Makalu DPI — scoperta protocollo**: leggendo per intero
+>     `BaseCampLinux/devices/makalu67/controller.py` (già presente nel repo,
+>     mai letto interamente prima) è emerso che il pacchetto `SetAllDpi`
+>     porta un campo `dpi_level_num` (`buf[6]`, range 1-5) — quante delle 5
+>     posizioni DPI sono "attive" (quelle su cui il tasto fisico DPI+ del
+>     mouse cicla) — e il GET corrispondente lo restituisce in `resp[21]`
+>     ("total number of DPI levels"). **`MakaluProtocol.cs`/`MakaluService.cs`
+>     in K2 hardcodavano sempre `buf[6] = 5` e non leggevano mai `resp[21]`**:
+>     il limite "sempre e solo 5 livelli, invariabile" che avevo descritto
+>     nella sessione precedente era quindi un limite della UI di K2, non del
+>     firmware — il firmware supporta nativamente 1-5 livelli attivi. Non è
+>     un limite forzabile OLTRE 5 (il wire format ha esattamente 5 slot
+>     `ushort` fissi nel pacchetto, per costruzione — quello resta un tetto
+>     hardware reale), ma la UI ora rispecchia fedelmente 1-5 invece di
+>     essere bloccata a 5.
+>     `GetDpi` ora ritorna anche `Count`; `SetAllDpi` accetta un nuovo
+>     parametro opzionale `levelCount` (default 5, retrocompatibile).
+>   - **UI Makalu (`MakaluRgbSettingsPanel.xaml(.cs)`)**: nuovo campo
+>     `_mkDpiCount` (1-5, default 5 — nessuna regressione per i profili già
+>     salvati, sempre a 5 elementi). Persistenza: `MakaluDpiRecord.Levels`
+>     usa la propria LUNGHEZZA come count implicito (nessun nuovo campo nello
+>     schema, retrocompatibile con JSON già salvati). I 5 pulsanti-livello
+>     (ex `UniformGrid`, che li restringeva per farli stare tutti in riga)
+>     sono ora larghezza FISSA (130px) dentro una `StackPanel` orizzontale
+>     avvolta in una `ScrollViewer` (`SvMkDpiLevels`, scrollbar nativa
+>     nascosta) — "mantieni la dimensione fissa" del bottone, come chiesto.
+>     Nuovo tab "+" (`BuildMkDpiAddButton`, ultimo della fila, sparisce a
+>     quota 5) aggiunge un livello con valore di default dalla stessa
+>     progressione 400/800/1600/3200/6400 già usata da sempre. Click destro
+>     su un tab → "Remove level" (disabilitato se resta un solo livello,
+>     necessario dato che non c'era altrimenti modo di tornare indietro una
+>     volta premuto "+" — non esplicitamente richiesto ma strettamente
+>     necessario per rendere "+" utile in pratica). Frecce prev/next
+>     (aggiunte la sessione precedente per scorrere la SELEZIONE) ora
+>     scorrono invece la STRIP orizzontale (`SvMkDpiLevels.
+>     ScrollToHorizontalOffset`) e sono `Visibility="Collapsed"` di default,
+>     mostrate solo quando `SvMkDpiLevels.ExtentWidth > ViewportWidth`
+>     (evento `ScrollChanged`, si ricalcola da solo sia al resize sia
+>     all'aggiunta/rimozione di un livello — nessuna soglia in pixel
+>     indovinata, usa le misure di layout reali di WPF).
+>   - **Verificato**: `dotnet build` pulito (0 errori/warning, dopo un fix
+>     di un'ambiguità di overload `Math.Clamp(byte,...)` vs
+>     `Math.Clamp(int,...)` in `MakaluProtocol.GetDpi`) su entrambe le
+>     solution. **Non verificato a schermo né su hardware fisico** (nessun
+>     ambiente con UI/device in questa sessione) — il campo
+>     `dpi_level_num`/`resp[21]` in particolare non è mai stato osservato su
+>     una risposta reale del mouse, solo dedotto dal commento di offset nel
+>     sorgente Python di BaseCampLinux; da confermare con `GetDpi` su
+>     hardware reale prima di fidarsi ciecamente del valore letto.
+>
+> Previous: 2026-07-13 (Liste tasti mappati (Everest Max/MacroPad) si
+> espandono con la finestra; rimosso del tutto il bottone "Capture HW Key";
+> fix bug overlap Lighting/Key Binding su Everest 60 al primo apertura tab;
+> colonna lista Everest 60 allineata a Everest Max in larghezza):
+>   - **Richiesta utente**, follow-up della sessione precedente:
+>     1. **Liste tasti mappati che si espandono con la finestra** (Everest Max
+>        `LvEvKeys`, MacroPad `LvMpKeys`): prima erano un `MaxHeight` fisso
+>        (340/180px) dentro uno `StackPanel` a sua volta dentro una
+>        `ScrollViewer` — uno `ScrollViewer` dà altezza infinita al suo
+>        contenuto, quindi nessuna riga "*" avrebbe mai potuto "riempire lo
+>        spazio disponibile" annidata lì dentro (gotcha WPF noto). Fix: nuovo
+>        `HeightOffsetConverter.cs` (IValueConverter, sottrae un offset fisso
+>        da un valore double) + `Height` bindata via `ElementName` al
+>        `Border` dei settings che le contiene (`BdrEvSettingsPanel`/
+>        `BdrMpSettingsPanel`, nuovi `x:Name`) — quel Border VIVE fuori dalla
+>        ScrollViewer e riceve un'altezza reale, guidata dalla finestra
+>        (`RowDefinition Height="*"` del Grid device+settings), quindi la sua
+>        `ActualHeight` è un numero vero da cui sottrarre il padding fisso.
+>        `MinHeight` (220/180) tenuto come pavimento. Offset (40/90px) stimati
+>        a occhio per il padding del Border + eventuale hint text sopra la
+>        lista MacroPad — **non verificato visivamente** (nessun accesso a
+>        schermo in questa sessione), possibile piccolo aggiustamento se il
+>        valore risultasse leggermente sbagliato all'uso reale.
+>     2. **"Capture HW Key" rimosso del tutto** (non solo spostato, come
+>        nella sessione precedente): il pulsante generico (`BtnCaptureHwKey`)
+>        è sparito, la cattura matrixId per i 6 hotspot del Media
+>        Dock/crown resta raggiungibile SOLO dal menu contestuale per-slot
+>        già esistente ("Capture matrixId…", `HwMnuCapture_Click` →
+>        `StartHwCapture(slot)` in `MainWindow.DockActions.cs`) — il vecchio
+>        percorso di "cattura generica" (nessuno slot target, raggiungibile
+>        solo cliccando quel bottone) è stato eliminato con lui, dato che non
+>        aveva altro punto d'ingresso. `LblCapturedKey` resta come testo di
+>        solo feedback dentro `PnlHwCaptureBar` (ancora sincronizzato con
+>        `GrdEvDock.Visibility`). `TryHwCapture`/`StopHwCapture` semplificati
+>        di conseguenza (rimosso il ramo "generic capture" ormai
+>        irraggiungibile). Stringhe loc `dock_capture_hw`/`dock_cancel_capture`/
+>        `dock_press_hw` lasciate nei file Strings (10 lingue, non solo
+>        EN/IT) invece di scorporarle ovunque — innocue se non referenziate.
+>     3. **Bug reale trovato e sistemato: overlap Lighting/Key Binding su
+>        Everest 60 alla prima apertura della tab.** Causa: `Ev60RgbPanel`
+>        (sezione Lighting) non aveva `Visibility="Collapsed"` in XAML — a
+>        differenza dei suoi due fratelli (`Ev60KeyBindingPanel`/
+>        `PnlEv60Settings`, entrambi Collapsed by default) — mentre
+>        `InitEv60SectionNav()` imposta `RbEv60SecKeyBinding.IsChecked = true`
+>        via codice all'avvio (nessun `IsChecked="True"` in XAML, per il
+>        bug noto su questo controllo — vedi `_PROJECT_MAP.md`), il che fa
+>        scattare `Ev60Section_Changed` → `ShowEv60Section(Ev60KeyBindingPanel)`
+>        — ma `ShowEv60Section` COLLASSA solo la sezione precedentemente
+>        attiva (`_activeEv60Section`), che al primo avvio è `null`: nessuno
+>        nasconde esplicitamente `Ev60RgbPanel`, che quindi restava visibile
+>        di default sotto/sopra Key Binding — da qui l'overlap. Si "puliva"
+>        solo cliccando manualmente in Lighting una volta (a quel punto
+>        `ShowEv60Section` la traccia come `_activeEv60Section` e da lì in
+>        poi il collasso funziona normalmente), esattamente come descritto
+>        dall'utente. Fix: aggiunto `Visibility="Collapsed"` a `Ev60RgbPanel`
+>        in `MainWindow.xaml`, stesso pattern dei suoi fratelli.
+>     4. **Colonna della lista Everest 60 allineata a Everest Max**: larghezza
+>        140px → 170px in `Everest60KeyBindingPanel.xaml` (`LvEv60Keys`),
+>        stessa larghezza della colonna pulsanti di `LvEvKeys`. Non applicato
+>        invece l'expand-con-la-finestra della lista Everest 60
+>        (`LvEv60Keys`): vive in uno `UserControl` separato con un proprio
+>        NameScope XAML, quindi un binding `ElementName` verso un elemento di
+>        `MainWindow.xaml` non risolverebbe — richiederebbe un aggancio da
+>        codice (`SizeChanged` sul Border dei settings + un setter esposto
+>        dalla UserControl) invece di un semplice binding XAML; non
+>        esplicitamente richiesto per Everest 60 in questa sessione, quindi
+>        lasciato con `MaxHeight="200"` fisso com'era.
+>   - **Verificato**: `dotnet build` pulito (0 errori/warning) su entrambe le
+>     solution. **Non verificato a schermo** (nessun ambiente con UI in
+>     questa sessione) — in particolare gli offset in pixel del punto 1 e il
+>     fix overlap del punto 3 andrebbero confermati aprendo davvero il tab
+>     Everest 60 e ridimensionando la finestra su Everest Max/MacroPad.
+>
+> Previous: 2026-07-13 (Key Binding Everest Max: nomi tasti invece di hex +
+> rimosso Capture HW Key; Everest 60 Key Binding allineato a Everest Max;
+> Makalu: navigazione DPI con frecce + fix clipping; MacroPad: keycap non più
+> riscritto dall'azione, solo triangolino rosso + lista tasti mappati):
+>   - **Richiesta utente**, 4 device in un colpo solo:
+>     1. **Everest Max Key Binding**: la lista `LvEvKeys` mostrava l'hex
+>        (`0x..`) quando un tasto non aveva un nome assegnato; ora
+>        `EverestKey.Label` viene popolato subito alla cattura (fisica o via
+>        click sull'overlay) cercando il matrixId in `EverestKeyboardLayout`
+>        (nuovo helper `EvKeyLabelForMatrix`, in `MainWindow.Everest.cs`), e
+>        i record già salvati in DB con label vuota vengono retrofittati allo
+>        stesso modo in `ReloadEverestProfile`. Fallback finale (tasti fuori
+>        layout, es. dock/crown) cambiato da `0x{hex}` a `Key {n}` in
+>        `EverestKey.Name` — niente hex in UI in nessun caso.
+>     2. **Rimosso "Capture HW Key" dalla sezione Key Binding**: era un
+>        pulsante/etichetta generico ridondante ora che cliccare un tasto
+>        sull'overlay cattura+nomina direttamente. Il meccanismo sottostante
+>        (`BtnCaptureHwKey`/`LblCapturedKey`/`StartHwCapture`/`TryHwCapture`
+>        in `MainWindow.DockActions.cs`) serve ancora al Media Dock/crown
+>        (nessun overlay cliccabile per quei 6 hotspot), quindi non è stato
+>        eliminato ma **spostato** fuori da `PnlSecKeyMapping`: nuova riga
+>        `PnlHwCaptureBar` (Grid.Row centrale, tra device image e settings
+>        panel) la cui Visibility ora segue `GrdEvDock.Visibility` (mirror in
+>        `MainWindow.Layout.cs`, entrambi i branch if/else) — visibile solo
+>        quando un dock è fisicamente collegato, invece di sempre. `LvEvKeys`
+>        MaxHeight alzato 180→340 per "estendere la sezione della
+>        configurazione" (richiesta esplicita) ora che quella riga in basso
+>        non c'è più.
+>     3. **Everest 60 Key Binding allineato a Everest Max**: prima mostrava
+>        solo il tasto correntemente selezionato, nessuna vista d'insieme dei
+>        binding esistenti. Aggiunta `LvEv60Keys` (stesso layout lista+colonna
+>        di Everest Max) in `Everest60KeyBindingPanel.xaml/.cs`, popolata da
+>        `_bindings` (nuovo `RefreshRows()`, chiamato da Apply/Reset/
+>        RestoreDefaults/Ev60ReloadKeyBindings). Selezionare una riga richiama
+>        `SelectKey()` (stesso path del click sulla board) e ora **pre-popola
+>        anche mode/target/modificatori/media-action dal binding salvato**
+>        (nuovo `PopulateEditorForBinding`, prima riselezionare un tasto già
+>        mappato non mostrava cosa gli era assegnato — bug preesistente,
+>        sistemato di riflesso). Pulsante "Remove" nella colonna accanto alla
+>        lista riusa `BtnEv60RemapReset_Click` (nessun handler duplicato).
+>        Nessuna stringa loc nuova (riusa `ev_remove` di Everest Max).
+>     4. **Makalu DPI**: i 5 livelli DPI sono un limite FIRMWARE fisso
+>        (`MakaluProtocol.GetDpi`/`SetAllDpi` — wire format a 5 slot fissi,
+>        confermato leggendo il protocollo, non un limite UI arbitrario), non
+>        estendibile senza nuovo reverse engineering — quindi "aggiungere
+>        livelli" è stato interpretato come "rendere i 5 esistenti più
+>        navigabili": nuovi pulsanti `BtnMkDpiPrev`/`BtnMkDpiNext` (frecce
+>        Segoe MDL2 `&#xE76B;`/`&#xE76C;`) ai lati della striscia
+>        `PnlMkDpiLevels` in `MakaluRgbSettingsPanel.xaml`, richiamano
+>        `MkDpiSelectLevel(idx±1)` clampato. Fix clipping: altezza dei
+>        pulsanti-livello 52→64px (`BuildMkDpiLevelButtons` in
+>        `MakaluRgbSettingsPanel.xaml.cs`) — il valore DPI in grassetto veniva
+>        tagliato in basso. Nuove stringhe loc EN+IT: `makalu_dpi_prev`,
+>        `makalu_dpi_next` (tooltip).
+>     5. **MacroPad**: due modifiche distinte.
+>        - **Keycap non più riscritto dall'azione**: `MacroPadKey.Display`
+>          (bindato al testo del tasto in `InitKeysModule`) prima mostrava il
+>          contenuto dell'azione assegnata (URL/nome file/...) al posto di
+>          "M1".."M12" — la lamentela esplicita dell'utente ("non modificare
+>          il keycap in alcun modo"). Nuova `MacroPadKey.KeyLabel` (sempre
+>          statica, "M{n}") ora bindata al posto di `Display`; `Display` è
+>          stata ridefinita come il testo della NUOVA lista (punto sotto),
+>          stesso schema "Nome — riepilogo azione" di `EverestKey.Display`.
+>          Il trigger che ricoloriva il `BorderBrush` del tasto per
+>          `HasAction` è stato tolto da `MacroKeyStyle`; al suo posto un
+>          piccolo triangolo rosso (`Polygon x:Name="MpMappedMarker"`,
+>          stesso `Fill="#DDCC0000"` del `WarnTriangle` del DisplayPad)
+>          aggiunto al `ControlTemplate` condiviso `KeyCapStyle` (usato solo
+>          da `MacroKeyStyle` in pratica — `EverestKeyStyle` ha un suo
+>          template separato), mostrato via `DataTrigger` su `HasAction`
+>          dentro `ControlTemplate.Triggers` (non `Style.Triggers` +
+>          `TargetName`, per evitare l'incertezza di risoluzione nomi con
+>          `BasedOn`).
+>        - **Lista tasti mappati sotto la griglia, come su Everest**: sezione
+>          "KEY BINDING" (`PnlMpSecKeyBinding`) aveva solo un hint testuale.
+>          Aggiunta `LvMpKeys` (stesso layout lista+colonna di `LvEvKeys`),
+>          alimentata da una nuova `ObservableCollection<MacroPadKey>
+>          _mpMappedKeys` (**solo i tasti con `HasAction`**, a differenza di
+>          `_keys` che ha sempre 12 elementi fissi per la griglia) —
+>          `RefreshMpMappedKeys()` richiamata da ogni punto che muta le azioni
+>          (`ConfigureAction`, rimozione da menu contestuale, drag&drop swap,
+>          `ReloadCurrentProfile` incl. il ramo early-return). Pulsanti
+>          "Configure"/"Remove" accanto alla lista riusano
+>          `ConfigureAction()`/la stessa logica di rimozione, operando su
+>          `LvMpKeys.SelectedItem`. Nessuna stringa loc nuova (riusa
+>          `ev_configure`/`ev_remove`).
+>   - **Verificato**: `dotnet build` pulito (0 errori/warning) su entrambe le
+>     solution (`K2.sln` x86, `K2.DisplayPad.sln` x64) — ambiente locale
+>     Windows, build lanciata direttamente. **UI non testata a schermo** (no
+>     avvio/interazione reale in questa sessione) e **nessuna verifica su
+>     hardware fisico** per nessuno dei 4 device — in particolare Everest 60
+>     Key Binding resta comunque nello stato "non verificato su hardware"
+>     preesistente (invariato da questa sessione).
+>
+> Previous: 2026-07-13 (Restart automatico dopo il reset generale + prompt
+> "Importa da Base Camp" al primo avvio):
+>   - **Richiesta utente**: (1) il reset generale ai default deve riavviare
+>     l'app; (2) serve un messaggio iniziale che chiede di importare tutti i
+>     profili/impostazioni possibili da Base Camp, mostrato una sola volta al
+>     primo avvio, ma richiamabile a mano dalle Impostazioni generali; (3) il
+>     reset generale ai default deve far ricomparire quel messaggio al
+>     riavvio successivo.
+>   - **AppSettings**: nuovo flag persistito `BcImportPromptShown` (default
+>     `false`) — resettato gratis da `ResetToDefaults()` visto che ricrea
+>     l'intero oggetto `Data`.
+>   - **`MainWindow.Settings.cs`**: `CheckFirstRunBcImport()` (agganciato a
+>     `Loaded`, non inline nel costruttore, così il dialog compare sopra la
+>     finestra già visibile invece che bloccare la costruzione) controlla il
+>     flag, lo marca subito `true` per evitare doppie richieste, poi chiama
+>     `RunBaseCampImportPrompt(silentIfNotFound: true)`: cerca il DB di Base
+>     Camp (`BaseCampDbImporter.FindBaseCampDb`), se non lo trova non mostra
+>     nulla (nessun popup per chi Base Camp non l'ha mai avuto installato),
+>     se lo trova chiede UNA volta "vuoi importare?" e poi richiama in
+>     sequenza gli handler Click già esistenti e testati di ogni device
+>     (`BtnEvImportBc_Click`/`BtnEv60ImportBc_Click`/`BtnMkImportBc_Click`/
+>     `BtnMpImportBc_Click`/`BtnDpImportBc_Click`) invece di reimplementare
+>     la logica di import — ognuno mostra comunque il proprio riepilogo/
+>     conferma per-device (nessun import "alla cieca"), e i device non
+>     connessi o senza profili corrispondenti nel DB fanno no-op da soli
+>     (comportamento già esistente, non toccato). Stesso metodo richiamabile
+>     a mano dal nuovo bottone "Importa da Base Camp…" in Impostazioni
+>     generali (`BtnAppImportFromBaseCamp_Click`, `silentIfNotFound: false`
+>     — in quel caso mostra un avviso se il DB non c'è, dato che l'utente
+>     l'ha chiesto esplicitamente).
+>   - **`BtnAppRestoreDefaults_Click`**: dopo aver azzerato `AppSettings` e
+>     tutti gli store, ora chiama `RestartApp()` (già esistente in
+>     `MainWindow.Language.cs`, usata finora solo dal cambio lingua) invece
+>     di ricostruire manualmente lo stato di una dozzina di pannelli sul
+>     posto — molto più semplice e garantisce che ogni tab riparta leggendo
+>     gli store realmente vuoti da disco. Il riavvio, unito al reset del
+>     flag `BcImportPromptShown`, fa ricomparire da solo il prompt di
+>     import Base Camp al richiavvio, come richiesto.
+>   - Nuove stringhe loc (EN+IT): `settings_bc_import_group`,
+>     `settings_bc_import_btn`, `settings_bc_import_hint`,
+>     `bc_import_prompt_title`, `bc_import_prompt_text`.
+>   - **Verificato**: `build-check.bat` pulito (0 errori/warning) su
+>     entrambe le solution. **Non verificato runtime** (nessun ambiente con
+>     UI in questa sessione) — in particolare il timing di `Loaded` rispetto
+>     al rilevamento asincrono dei device (MacroPad/DisplayPad) al primo
+>     avvio: se un device non è ancora stato rilevato nel breve istante in
+>     cui il prompt scatta, il suo import viene silenziosamente saltato (log
+>     "no device"/"not connected") — l'utente può comunque rilanciarlo dalle
+>     Impostazioni una volta che il device è online.
+>
+> Previous: 2026-07-13 (Restore defaults: generale + per-dispositivo):
+>   - **Richiesta utente**: un "restore defaults" generale dentro Impostazioni
+>     generali, più uno specifico per singolo dispositivo come ultimo tasto
+>     della colonna Profilo/Import/Export/Device, per tutti e 5 i device
+>     (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). Chiarito con
+>     l'utente lo scope prima di implementare: generale = preferenze app +
+>     wipe di TUTTI i profili/dati di TUTTI i device; per-device = reset del
+>     SOLO profilo attualmente selezionato (tasti/illuminazione/impostazioni
+>     dove applicabile), riscritto anche sull'hardware se connesso — non
+>     tocca gli altri profili salvati.
+>   - **Store**: nuovi metodi per-profilo che NON toccano il nome del
+>     profilo (a differenza di `ClearProfile`, usato da "Delete profile"):
+>     `EverestStore.ResetProfileToDefaults`, `Everest60Store.ResetKeyBindings`,
+>     `MakaluStore.ResetKeyRemap`. Più `ResetAllData()` (wipe totale tabelle)
+>     su tutti gli store (`EverestStore`, `Everest60Store`, `MakaluStore`,
+>     `MacroPadStore`, `DisplayPadStore`, `MacroStore`) e
+>     `AppSettings.ResetToDefaults()`, usati solo dal reset generale.
+>   - **Scoperta importante durante l'implementazione**: `Ev60ReloadProfile`/
+>     `Everest60KeyBindingPanel.Ev60ReloadKeyBindings` fanno no-op (o
+>     ripropagano lo stato stale) quando lo store non ha nulla per quello
+>     slot — semplicemente *svuotare* il DB e richiamare il reload esistente
+>     (come fa già "Delete profile" da tempo, stesso limite pre-esistente,
+>     non toccato in questa sessione) NON resetta davvero l'hardware.
+>     `MakaluRgbSettingsPanel.MkReloadProfile` invece già gestiva bene il
+>     caso (applica comunque l'ultimo stato noto in UI), e
+>     `MakaluDpiRemapPanel.MkLoadAssignments` addirittura fa merge coi
+>     default reali (`MakaluRemapData.RemapDefaults`) quando il DB è vuoto —
+>     quindi per il remap Makalu è bastato svuotare le righe e richiamare
+>     `MkReloadRemap`. Per lighting Ev60/Makalu e per il Key Binding Ev60,
+>     "Restore defaults" invece SCRIVE record di default espliciti (gli
+>     stessi valori che `Init()` usa per un profilo mai configurato — Wave/
+>     Static, colori 0x900000/0x000000, ecc.) prima di richiamare il reload,
+>     così l'hardware riceve davvero un reset. Per il Key Binding Ev60,
+>     scrive `ChangeKey(id, DisabledKeyId=255)` su tutti i 64 tasti quando
+>     la sessione SDK è aperta (stesso sentinel già usato dal bottone
+>     "Reset" per-tasto esistente) — non verificato su hardware fisico
+>     (stesso caveat del resto del Key Binding Ev60).
+>   - RGB/illuminazione di Everest Max e MacroPad sono globali (non per
+>     profilo — vedi nota architetturale in `_PROJECT_MAP.md`), quindi il
+>     loro "Restore defaults" per-profilo resetta solo i tasti assegnati.
+>   - Nuove stringhe loc (EN+IT, stessa sessione): `restore_defaults`,
+>     `restore_defaults_profile_confirm`, `restore_defaults_app(_hint|_confirm|_done)`,
+>     `settings_danger_zone`.
+>   - **Verificato**: `build-check.bat` pulito (0 errori/warning) su
+>     entrambe le solution. **Non verificato su hardware fisico** (nessun
+>     device disponibile nella sessione) — in particolare il loop di reset
+>     dei 64 tasti Ev60 e le chiamate SetEffect/SetLighting di Makalu/Ev60.
+>
+> Previous: 2026-07-13 (Tab Home: card ingrandite del 30%):
 >   - **Richiesta utente**: "ingrandisci le schede di un 30%". Ridimensionate
 >     tutte le misure della card in `MainWindow.xaml` (`Card` Width 270→351,
 >     Height 190→247, `CornerRadius` 10→13; barra accento 4→5; immagine

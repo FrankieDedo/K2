@@ -20,3 +20,7 @@ lib/python-embed/
 
 # --- Log a runtime --------------------------------------------------------
 *.log
+
+# --- Junk locale (scorciatoie Windows, file temporanei) --------------------
+*.lnk
+*.tmp

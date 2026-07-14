@@ -88,19 +88,33 @@ public sealed class MacroRecorder : IDisposable
     {
         if (nCode >= 0 && _recording)
         {
-            int vkCode = Marshal.ReadInt32(lParam);
-            int msg = (int)wParam;
-            string type = (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) ? "keydown" : "keyup";
+            var hookStruct = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
 
-            var input = new MacroInput
+            // AltGr on ISO/international keyboard layouts is delivered by
+            // Windows as a synthetic Left-Ctrl keydown/keyup immediately
+            // around the real Right-Alt one — a driver-level artifact, not
+            // an actual keystroke. Windows tags it with this specific scan
+            // code so it can be told apart; recording it verbatim turns a
+            // single AltGr press into a bogus "Ctrl+AltGr" combo on playback.
+            bool isFakeAltGrCtrl = hookStruct.vkCode == VK_LCONTROL
+                && hookStruct.scanCode == ALTGR_FAKE_LCONTROL_SCANCODE;
+
+            if (!isFakeAltGrCtrl)
             {
-                Type = type,
-                Key = vkCode,
-                DelayMs = (int)_sw.ElapsedMilliseconds
-            };
-            _sw.Restart();
-            _inputs.Add(input);
-            InputRecorded?.Invoke(input);
+                int vkCode = hookStruct.vkCode;
+                int msg = (int)wParam;
+                string type = (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) ? "keydown" : "keyup";
+
+                var input = new MacroInput
+                {
+                    Type = type,
+                    Key = vkCode,
+                    DelayMs = (int)_sw.ElapsedMilliseconds
+                };
+                _sw.Restart();
+                _inputs.Add(input);
+                InputRecorded?.Invoke(input);
+            }
         }
         return CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
     }
@@ -186,6 +200,8 @@ public sealed class MacroRecorder : IDisposable
     private const int WM_RBUTTONDOWN = 0x0204;
     private const int WM_RBUTTONUP   = 0x0205;
     private const int WM_MOUSEMOVE   = 0x0200;
+    private const int VK_LCONTROL    = 0xA2;
+    private const int ALTGR_FAKE_LCONTROL_SCANCODE = 0x21D;
 
     private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
     private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
@@ -195,6 +211,16 @@ public sealed class MacroRecorder : IDisposable
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT { public int Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KBDLLHOOKSTRUCT
+    {
+        public int vkCode;
+        public int scanCode;
+        public int flags;
+        public int time;
+        public IntPtr dwExtraInfo;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MSLLHOOKSTRUCT

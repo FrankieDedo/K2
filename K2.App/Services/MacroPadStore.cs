@@ -164,6 +164,16 @@ ON CONFLICT(DeviceId, Profile, KeyIndex) DO UPDATE SET
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>Wipes every device's keys/settings/keycap overrides — used by the app-wide
+    /// "Restore all defaults" (Settings tab). Per-device "Restore defaults" instead reuses
+    /// <see cref="ClearProfile"/> directly (it already keeps the profile's name).</summary>
+    public void ResetAllData()
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM Keys; DELETE FROM Settings; DELETE FROM KeycapOverrides;";
+        cmd.ExecuteNonQuery();
+    }
+
     // ---------- generic settings ----------
 
     public string? GetSetting(string key)

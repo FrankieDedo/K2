@@ -472,8 +472,35 @@ public partial class MainWindow
         };
     }
 
+    /// <summary>
+    /// Friendly, keyboard-printed key names — not .NET's internal
+    /// <see cref="System.Windows.Forms.Keys"/> spelling, which calls Alt
+    /// "Menu"/"LMenu"/"RMenu", Ctrl "ControlKey"/"LControlKey"/"RControlKey",
+    /// Enter "Return", Backspace "Back", etc. Right Alt in particular is
+    /// what users know as "Alt Gr" on ISO/international keyboards, not
+    /// "RMenu" — showing the system name there is what prompted this fix.
+    /// </summary>
     private static string KeyName(int vk)
     {
+        switch (vk)
+        {
+            case 0x12: case 0xA4: return "Alt";        // VK_MENU / VK_LMENU
+            case 0xA5: return "Alt Gr";                // VK_RMENU
+            case 0x11: case 0xA2: case 0xA3: return "Ctrl";   // VK_CONTROL/L/R
+            case 0x10: case 0xA0: case 0xA1: return "Shift";  // VK_SHIFT/L/R
+            case 0x5B: case 0x5C: return "Win";        // VK_LWIN / VK_RWIN
+            case 0x5D: return "Menu";                  // VK_APPS (context menu key)
+            case 0x0D: return "Enter";
+            case 0x1B: return "Esc";
+            case 0x08: return "Backspace";
+            case 0x14: return "Caps Lock";
+            case 0x90: return "Num Lock";
+            case 0x91: return "Scroll Lock";
+            case 0x2C: return "Print Screen";
+            case 0x21: return "Page Up";
+            case 0x22: return "Page Down";
+        }
+
         var key = (System.Windows.Forms.Keys)vk;
         string s = key.ToString();
         // "D1".."D0" -> plain digit

@@ -144,6 +144,20 @@
   <string name="settings_bc_autostart_hint">Enables/disables the Windows autostart entries of Base Camp (same mechanism as Task Manager's Startup tab — reversible). Entries in HKLM may require running K2 as administrator.</string>
   <string name="settings_bc_autostart_none">No Base Camp autostart entry found in the registry.</string>
   <string name="settings_bc_autostart_done">Base Camp autostart: {0} entries updated.</string>
+  <!-- Base Camp import prompt -->
+  <string name="settings_bc_import_group">Base Camp import</string>
+  <string name="settings_bc_import_btn">Import from Base Camp…</string>
+  <string name="settings_bc_import_hint">Looks for an existing Base Camp installation and offers to import its profiles and settings for every K2 device (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). Shown automatically the first time K2 runs — use this button to run it again any time.</string>
+  <string name="bc_import_prompt_title">Import from Base Camp</string>
+  <string name="bc_import_prompt_text">A Base Camp installation was detected on this PC. Would you like to import its existing profiles and settings into K2? You'll get a chance to review what's found for each connected device before anything is imported.</string>
+  <!-- Restore defaults -->
+  <string name="settings_danger_zone">Danger zone</string>
+  <string name="restore_defaults">Restore defaults</string>
+  <string name="restore_defaults_profile_confirm">Reset profile '{0}' back to K2's defaults on this device (key bindings, lighting and settings, where applicable)? This cannot be undone.</string>
+  <string name="restore_defaults_app">Restore all defaults</string>
+  <string name="restore_defaults_app_hint">Resets every app preference above AND erases every saved profile, key binding, lighting setting and macro for every device (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). This cannot be undone.</string>
+  <string name="restore_defaults_app_confirm">This resets ALL app preferences and ERASES every saved profile, key binding, lighting setting and macro for every device (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). This cannot be undone. Continue?</string>
+  <string name="restore_defaults_app_done">All app settings and device profiles have been restored to defaults.</string>
   <string name="settings_general">General options</string>
   <string name="settings_close_to_tray">Close to tray instead of exiting</string>
   <string name="settings_k2_autostart">Start K2 with Windows</string>
@@ -169,15 +183,11 @@
   <string name="ev_crash_recovering">Driver crashed — attempting auto-recovery in 3 s…</string>
   <string name="ev_crash_recovered">Driver recovered — LED preview restarted.</string>
   <string name="ev_crash_recovery_failed">Driver recovery failed — please restart K2.App.</string>
-  <string name="ev_capture_key">Capture key</string>
-  <string name="ev_cancel_capture">Cancel capture</string>
-  <string name="ev_capture_prompt">Capture: press the physical key to add…</string>
-  <string name="ev_capture_cancelled">Capture cancelled.</string>
   <string name="ev_cancel_mapping">Cancel mapping</string>
   <string name="ev_mapping_step">Mapping [{0}/{1}]: press the physical key «{2}»…</string>
   <string name="ev_mapping_done">Mapping complete: {0} keys saved.</string>
   <string name="ev_mapped_keys">Mapped keys</string>
-  <string name="ev_configure">Configure…</string>
+  <string name="ev_configure">Configure</string>
   <string name="ev_remove">Remove</string>
   <string name="ev_sdk_log">SDK Log</string>
 
@@ -219,20 +229,6 @@
   <string name="ev60_numpad_decorative_tip">Decorative only — no known lighting/remap protocol for this accessory.</string>
   <string name="ev60_key_binding">Key Binding</string>
   <string name="ev60_key_binding_hint">Click a key on the keyboard above to select it, then choose what it should do.</string>
-  <string name="ev60_selected_key">Selected key:</string>
-  <string name="ev60_remap_mode">Type:</string>
-  <string name="ev60_target_key">Target key:</string>
-  <string name="ev60_media_action">Action:</string>
-  <string name="ev60_remap_reset">Reset key</string>
-  <string name="ev60_remap_save_tip">Makes the current bindings permanent (survives unplug/restart).</string>
-  <string name="ev60_key_binding_unverified">Writes directly to the keyboard's firmware via the vendor SDK (Everest360_USB.dll) — not yet verified on real hardware. Media/OS action codes are unconfirmed (placeholder ordering); Remap Key/Fn Layer/Shortcut target keys were extracted from Base Camp's own decompiled catalog.</string>
-  <string name="ev60_key_binding_unmapped">no DLLKeyId — not remappable</string>
-  <string name="ev60_key_binding_select_first">Select a key on the keyboard first.</string>
-  <string name="ev60_key_binding_not_open">Everest 60 SDK driver not open — is the keyboard connected?</string>
-  <string name="ev60_key_binding_select_target">Select a target first.</string>
-  <string name="ev60_remap_applied">Applied.</string>
-  <string name="ev60_remap_failed">Failed.</string>
-  <string name="ev60_remap_reset_done">Key reset.</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
        MAKALU TAB (mouse — raw-HID, no vendor SDK — see MakaluHidNative)
@@ -253,6 +249,10 @@
   <string name="makalu_custom_hint">Click an LED to pick its color, then Apply. Physical layout: 4 LEDs on the left side, 4 on the right.</string>
 
   <string name="makalu_dpi_title">DPI</string>
+  <string name="makalu_dpi_prev">Previous level</string>
+  <string name="makalu_dpi_next">Next level</string>
+  <string name="makalu_dpi_add">Add DPI level</string>
+  <string name="makalu_dpi_remove_level">Remove level</string>
 
   <string name="makalu_remap_title">Button remapping</string>
   <string name="makalu_remap_category">Category:</string>
@@ -441,12 +441,9 @@
   <string name="mp_cancel_mapping">Cancel mapping</string>
 
   <!-- MacroPad LED Lighting -->
-  <string name="led_lighting">LED Lighting</string>
   <string name="led_sync_profiles">Sync across profiles</string>
   <string name="led_backlight_off">Backlight OFF</string>
   <string name="led_backlight_on">Backlight ON</string>
-  <string name="led_reset_effects">Reset effects</string>
-  <string name="led_save_flash">Save to flash</string>
   <string name="led_save_flash_tip">Make the applied effect permanent (survives unplug/restart).</string>
 
   <!-- ═══════════════════════════════════════════════════════════════

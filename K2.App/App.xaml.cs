@@ -54,15 +54,6 @@ public partial class App : Application
     [DllImport("kernel32.dll")]
     private static extern IntPtr AddVectoredExceptionHandler(uint first, VectoredHandlerDelegate handler);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GetModuleHandleExW(uint flags, string moduleName, out IntPtr hModule);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    private static extern uint GetModuleFileNameW(IntPtr hModule, System.Text.StringBuilder lpFilename, uint nSize);
-
-    [DllImport("kernel32.dll")]
-    private static extern void RaiseFailFastException(IntPtr exceptionRecord, IntPtr contextRecord, uint flags);
-
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr GetModuleHandleW(string moduleName);
 

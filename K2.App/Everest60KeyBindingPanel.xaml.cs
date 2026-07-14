@@ -1,9 +1,10 @@
-using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
+using K2.App.Models;
 using K2.App.Services;
 using K2.Core;
 
@@ -11,252 +12,194 @@ namespace K2.App;
 
 /// <summary>
 /// Key Binding section content for the Everest 60 tab — see
-/// Everest60KeyBindingPanel.xaml for the architecture note (firmware-side
-/// remap via Everest60SdkNative, no IActionHost involvement).
+/// Everest60KeyBindingPanel.xaml for the architecture note. As of 2026-07-14
+/// (second pass, on explicit user request) this is no longer a raw firmware
+/// remap: it's a K2Action like Everest Max/MacroPad/DisplayPad, using the
+/// SAME <see cref="ButtonActionDialog"/> and the same action catalog, routed
+/// through <see cref="Ev60ActionHost"/>/<see cref="ButtonActionEngine"/>
+/// (owned by MainWindow.Everest60.cs, same split as MainWindow.Everest.cs's
+/// _evActionHost/_evEngine). This panel owns the key list/lookup (mirroring
+/// MainWindow.Everest.cs's _evKeys/_evByMatrix) since it's the one with the
+/// UI (list + Configure/Remove); MainWindow.Everest60.cs reads it via
+/// <see cref="Keys"/>/<see cref="ByLed"/> to implement the IActionHost
+/// delegates and to execute an action when the physical key's SDK callback
+/// fires (see MainWindow.Everest60.cs's OnEv60Key).
 /// </summary>
 public partial class Everest60KeyBindingPanel : UserControl
 {
-    private Everest60SdkService _sdk = null!;
     private Action<string> _log = _ => { };
-    private bool _suppress = true; // see Everest60RgbPanel's _ev60Suppress doc comment — same defense-in-depth reasoning
-
-    private int _selectedLedIndex = -1;
-    private int _selectedDllKeyId = -1;
-
-    /// <summary>In-memory mirror of what's been sent to firmware for this
-    /// profile — ledIndex -> (mode, target DllKeyId/media code, modifier mask).
-    /// Didn't exist before profile support: every "Apply" used to be a
-    /// one-shot SDK write with nothing tracked locally. Now the single source
-    /// used both to persist (MakaluStore-style) and to replay the whole
-    /// keymap to firmware on profile switch (<see cref="Ev60ReloadKeyBindings"/>).</summary>
-    private readonly Dictionary<int, (string Mode, int Value, int Mask)> _bindings = new();
+    private IActionHost? _actionHost;
 
     /// <summary>Profile persistence — set once from Init, same pattern as
     /// Everest60RgbPanel._ev60Store/_ev60Slot.</summary>
     private Everest60Store? _ev60Store;
     private Func<int>? _ev60Slot;
+    private Func<KeyboardLayoutType>? _ev60Layout;
     private int CurrentSlot => _ev60Slot?.Invoke() ?? 1;
 
-    private sealed record RemapModeChoice(string Key, string Label)
-    {
-        public override string ToString() => Label;
-    }
+    private readonly ObservableCollection<Ev60Key> _keys = new();
+    private readonly Dictionary<int, Ev60Key> _byLed = new();
 
-    private static readonly RemapModeChoice[] Modes =
+    /// <summary>Every key currently in the profile's list (only keys with an
+    /// assigned action — unmapped board keys aren't tracked), for
+    /// Ev60ActionHost.GetButtons.</summary>
+    internal IReadOnlyList<Ev60Key> Keys => _keys;
+
+    internal Ev60Key? ByLed(int ledIndex) => _byLed.TryGetValue(ledIndex, out var k) ? k : null;
+
+    internal int IndexOf(Ev60Key key) => _keys.IndexOf(key);
+
+    /// <summary>Board legend for a LED index (0-63) in the current locale layout
+    /// (see MainWindow.Everest60.cs's _ev60LayoutType), no hex/raw-index fallback.</summary>
+    private string BoardLabelForLed(int ledIndex)
     {
-        new("key",      "Remap Key"),
-        new("fn",       "Fn Layer"),
-        new("shortcut", "Shortcut"),
-        new("media",    "Media / OS"),
-    };
+        var layout = _ev60Layout?.Invoke() ?? KeyboardLayoutType.AnsiUs;
+        foreach (var kd in Everest60KeyboardLayout.GetMainBoard(layout))
+            if (kd.MatrixId == ledIndex) return string.IsNullOrEmpty(kd.Label) ? $"Key {ledIndex}" : kd.Label;
+        return $"Key {ledIndex}";
+    }
 
     public Everest60KeyBindingPanel()
     {
         InitializeComponent();
     }
 
-    internal void Init(Everest60SdkService sdk, Action<string> log, Everest60Store store, Func<int> currentSlot)
+    internal void Init(Everest60Store store, Func<int> currentSlot, Action<string> log, Func<KeyboardLayoutType> currentLayout)
     {
-        _sdk = sdk;
-        _log = log;
         _ev60Store = store;
         _ev60Slot = currentSlot;
-        _suppress = true;
-        try
-        {
-            CbEv60RemapMode.ItemsSource = Modes;
-            CbEv60RemapMode.SelectedIndex = 0;
-
-            var keyLabels = Everest60RemapData.KeyCatalog.Keys.OrderBy(k => k).ToArray();
-            CbEv60TargetKey.ItemsSource = keyLabels;
-            CbEv60ShortcutKey.ItemsSource = keyLabels;
-            if (keyLabels.Length > 0)
-            {
-                CbEv60TargetKey.SelectedIndex = 0;
-                CbEv60ShortcutKey.SelectedIndex = 0;
-            }
-
-            CbEv60MediaAction.ItemsSource = Everest60RemapData.MediaActions.Select(m => m.Label).ToArray();
-            if (Everest60RemapData.MediaActions.Length > 0) CbEv60MediaAction.SelectedIndex = 0;
-        }
-        finally { _suppress = false; }
-
-        UpdateModeVisibility();
+        _ev60Layout = currentLayout;
+        _log = log;
+        LvEv60Keys.ItemsSource = _keys;
+        UpdateListButtons();
     }
+
+    /// <summary>Set once the shared Ev60ActionHost/ButtonActionEngine exist
+    /// (constructed after this Init, since the host's delegates need
+    /// <see cref="Keys"/> — see MainWindow.Everest60.cs's InitEverest60Module).</summary>
+    internal void SetActionHost(IActionHost host) => _actionHost = host;
 
     /// <summary>Called by MainWindow when a key on the 64-key overlay is
-    /// clicked while the Key Binding section is active.</summary>
+    /// clicked while the Key Binding section is active — same trigger/flow as
+    /// Everest Max's EvKeyboardButton_Click: get-or-create the key, open
+    /// ButtonActionDialog directly (adding it to the profile list only if the
+    /// dialog is actually confirmed with a real action).</summary>
     internal void SelectKey(int ledIndex, string label)
     {
-        _selectedLedIndex = ledIndex;
-        var table = Everest60RemapData.LedIndexToDllKeyIdArray;
-        _selectedDllKeyId = ledIndex >= 0 && ledIndex < table.Length ? table[ledIndex] : -1;
-        LblEv60SelectedKey.Text = _selectedDllKeyId >= 0
-            ? $"{label}  (DLLKeyId {_selectedDllKeyId})"
-            : $"{label}  ({Loc.Get("ev60_key_binding_unmapped")})";
-        LblEv60RemapStatus.Text = "";
-    }
-
-    private void CbEv60RemapMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_suppress) return;
-        UpdateModeVisibility();
-    }
-
-    private void UpdateModeVisibility()
-    {
-        string mode = (CbEv60RemapMode.SelectedItem as RemapModeChoice)?.Key ?? "key";
-        PnlEv60RemapTargetKey.Visibility = mode is "key" or "fn" ? Visibility.Visible : Visibility.Collapsed;
-        PnlEv60RemapShortcut.Visibility  = mode == "shortcut" ? Visibility.Visible : Visibility.Collapsed;
-        PnlEv60RemapMedia.Visibility     = mode == "media" ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void BtnEv60RemapApply_Click(object sender, RoutedEventArgs e)
-    {
-        if (_selectedDllKeyId < 0)
+        bool isNewKey = !_byLed.ContainsKey(ledIndex);
+        if (!_byLed.TryGetValue(ledIndex, out var key))
         {
-            LblEv60RemapStatus.Text = Loc.Get("ev60_key_binding_select_first");
-            LblEv60RemapStatus.Foreground = (Brush)FindResource("K2DangerBrush");
-            return;
+            key = new Ev60Key(ledIndex) { Label = label };
+            _keys.Add(key);
+            _byLed[ledIndex] = key;
+            _log($"[KeyBind] new key led={ledIndex} added via overlay click");
         }
-        if (!_sdk.IsOpen)
+
+        LvEv60Keys.SelectedItem = key;
+
+        var dlg = new ButtonActionDialog(ledIndex, key.ActionType, key.ActionValue, _actionHost)
+                  { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() != true)
         {
-            LblEv60RemapStatus.Text = Loc.Get("ev60_key_binding_not_open");
-            LblEv60RemapStatus.Foreground = (Brush)FindResource("K2DangerBrush");
+            if (isNewKey && key.ActionType is null)
+            {
+                _keys.Remove(key);
+                _byLed.Remove(ledIndex);
+            }
             return;
         }
 
-        string mode = (CbEv60RemapMode.SelectedItem as RemapModeChoice)?.Key ?? "key";
-        bool ok;
-        int value = -1, mask = 0;
-        switch (mode)
-        {
-            case "fn":
-            {
-                string? label = CbEv60TargetKey.SelectedItem as string;
-                int target = label != null ? Everest60RemapData.KeyCatalog.GetValueOrDefault(label, -1) : -1;
-                if (target < 0) { ShowMissingTarget(); return; }
-                ok = _sdk.ChangeFnKey(_selectedDllKeyId, target);
-                _log($"[KeyBind] ChangeFnKey({_selectedDllKeyId} -> {target}) -> {ok}");
-                value = target;
-                break;
-            }
-            case "shortcut":
-            {
-                string? label = CbEv60ShortcutKey.SelectedItem as string;
-                int target = label != null ? Everest60RemapData.KeyCatalog.GetValueOrDefault(label, -1) : -1;
-                if (target < 0) { ShowMissingTarget(); return; }
-                mask = (CkEv60ModCtrl.IsChecked  == true ? Everest60RemapData.ModCtrl  : 0)
-                     | (CkEv60ModShift.IsChecked == true ? Everest60RemapData.ModShift : 0)
-                     | (CkEv60ModAlt.IsChecked   == true ? Everest60RemapData.ModAlt   : 0)
-                     | (CkEv60ModWin.IsChecked   == true ? Everest60RemapData.ModWin   : 0);
-                ok = _sdk.ChangeShortcutKey(_selectedDllKeyId, target, mask);
-                _log($"[KeyBind] ChangeShortcutKey({_selectedDllKeyId} -> {target}, mask=0x{mask:X}) -> {ok}");
-                value = target;
-                break;
-            }
-            case "media":
-            {
-                int idx = CbEv60MediaAction.SelectedIndex;
-                if (idx < 0 || idx >= Everest60RemapData.MediaActions.Length) { ShowMissingTarget(); return; }
-                int code = Everest60RemapData.MediaActions[idx].Code;
-                ok = _sdk.SetMediaKey(_selectedDllKeyId, code);
-                _log($"[KeyBind] SetMediaKey({_selectedDllKeyId}, code={code}) -> {ok}");
-                value = code;
-                break;
-            }
-            default: // "key"
-            {
-                string? label = CbEv60TargetKey.SelectedItem as string;
-                int target = label != null ? Everest60RemapData.KeyCatalog.GetValueOrDefault(label, -1) : -1;
-                if (target < 0) { ShowMissingTarget(); return; }
-                ok = _sdk.ChangeKey(_selectedDllKeyId, target);
-                _log($"[KeyBind] ChangeKey({_selectedDllKeyId} -> {target}) -> {ok}");
-                value = target;
-                break;
-            }
-        }
+        key.ActionType  = string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none"
+                          ? null : dlg.ActionType;
+        key.ActionValue = key.ActionType is null ? null : dlg.ActionValue;
 
-        if (ok)
-        {
-            _bindings[_selectedLedIndex] = (mode, value, mask);
-            _ev60Store?.SaveKeyBinding(CurrentSlot, _selectedLedIndex, mode, value, mask);
-        }
-
-        LblEv60RemapStatus.Text = ok ? Loc.Get("ev60_remap_applied") : Loc.Get("ev60_remap_failed");
-        LblEv60RemapStatus.Foreground = ok ? (Brush)FindResource("K2AccentBrush") : (Brush)FindResource("K2DangerBrush");
+        PersistOrDiscardKey(key);
     }
 
-    private void ShowMissingTarget()
+    private void UpdateListButtons()
     {
-        LblEv60RemapStatus.Text = Loc.Get("ev60_key_binding_select_target");
-        LblEv60RemapStatus.Foreground = (Brush)FindResource("K2DangerBrush");
+        bool hasSelection = LvEv60Keys.SelectedItem is not null;
+        BtnEv60Configure.IsEnabled = hasSelection;
+        BtnEv60Remove.IsEnabled = hasSelection;
     }
 
-    private void BtnEv60RemapReset_Click(object sender, RoutedEventArgs e)
+    private void LvEv60Keys_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateListButtons();
+
+    private void BtnEv60Configure_Click(object sender, RoutedEventArgs e)
     {
-        if (_selectedDllKeyId < 0 || !_sdk.IsOpen) return;
-        bool ok = _sdk.ChangeKey(_selectedDllKeyId, Everest60RemapData.DisabledKeyId);
-        _log($"[KeyBind] ChangeKey({_selectedDllKeyId} -> {Everest60RemapData.DisabledKeyId} [reset]) -> {ok}");
-        if (ok)
+        if (LvEv60Keys.SelectedItem is not Ev60Key key) return;
+
+        var dlg = new ButtonActionDialog(key.LedIndex, key.ActionType, key.ActionValue, _actionHost)
+                  { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() != true) return;
+
+        key.ActionType  = string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none"
+                          ? null : dlg.ActionType;
+        key.ActionValue = key.ActionType is null ? null : dlg.ActionValue;
+
+        PersistOrDiscardKey(key);
+    }
+
+    private void BtnEv60Remove_Click(object sender, RoutedEventArgs e)
+    {
+        if (LvEv60Keys.SelectedItem is not Ev60Key key) return;
+        _keys.Remove(key);
+        _byLed.Remove(key.LedIndex);
+        _ev60Store?.RemoveKey(CurrentSlot, key.LedIndex);
+        _log($"[KeyBind] key led={key.LedIndex} removed");
+    }
+
+    /// <summary>Persists a key's current action, or — if it has no action assigned —
+    /// discards it entirely (list + DB) instead of keeping an empty entry. Mirrors
+    /// MainWindow.Everest.cs's EvPersistOrDiscardKey.</summary>
+    private void PersistOrDiscardKey(Ev60Key key)
+    {
+        if (key.ActionType is null)
         {
-            _bindings.Remove(_selectedLedIndex);
-            _ev60Store?.RemoveKeyBinding(CurrentSlot, _selectedLedIndex);
+            _keys.Remove(key);
+            _byLed.Remove(key.LedIndex);
+            _ev60Store?.RemoveKey(CurrentSlot, key.LedIndex);
+            _log($"[KeyBind] key led={key.LedIndex} emptied, removed");
         }
-        LblEv60RemapStatus.Text = ok ? Loc.Get("ev60_remap_reset_done") : Loc.Get("ev60_remap_failed");
-        LblEv60RemapStatus.Foreground = ok ? (Brush)FindResource("K2AccentBrush") : (Brush)FindResource("K2DangerBrush");
+        else
+        {
+            _ev60Store?.SaveKey(new Ev60KeyRecord(CurrentSlot, key.LedIndex, key.Label, key.ActionType, key.ActionValue));
+            _log($"[KeyBind] key led={key.LedIndex} <- type={key.ActionType}");
+        }
     }
 
-    private void BtnEv60RemapSave_Click(object sender, RoutedEventArgs e)
+    /// <summary>Clears every key of this profile (no firmware to reset —
+    /// see class doc comment, actions are now software-only). Called by
+    /// MainWindow.Everest60.cs's "Restore defaults" button.</summary>
+    internal void RestoreDefaults()
     {
-        if (!_sdk.IsOpen) return;
-        bool ok = _sdk.SaveFlash();
-        _log($"[KeyBind] SaveFlash() -> {ok}");
-        LblEv60RemapStatus.Text = ok ? Loc.Get("ev60_remap_applied") : Loc.Get("ev60_remap_failed");
-        LblEv60RemapStatus.Foreground = ok ? (Brush)FindResource("K2AccentBrush") : (Brush)FindResource("K2DangerBrush");
+        _keys.Clear();
+        _byLed.Clear();
+        _ev60Store?.ResetProfileToDefaults(CurrentSlot);
+        _log("[KeyBind] restore defaults: all keys cleared");
     }
 
-    // ------------------------------------------------------------
-    // Profile switch: replay every stored binding of this slot to firmware.
-    // Does NOT call SaveFlash (see _PROJECT_MAP.md rationale — avoids wearing
-    // the keyboard's flash on every switch; permanent save stays behind the
-    // manual Save button above). Called by MainWindow.Everest60.cs on combo
-    // switch, module init, and whenever the Key Binding section is opened
-    // (the SDK session itself opens lazily there, see Ev60Section_Changed).
-    // ------------------------------------------------------------
-
+    /// <summary>Reloads this profile's keys from the store. No firmware
+    /// replay needed anymore (unlike the pre-K2Action design): actions
+    /// execute in K2 software when the SDK reports a key press, not via a
+    /// live firmware remap table — see MainWindow.Everest60.cs's OnEv60Key.</summary>
     internal void Ev60ReloadKeyBindings(int slot)
     {
+        _keys.Clear();
+        _byLed.Clear();
         if (_ev60Store is null) return;
-        _bindings.Clear();
-        var stored = _ev60Store.LoadKeyBindings(slot);
-        foreach (var b in stored)
-            _bindings[b.LedIndex] = (b.Mode, b.Value, b.ModifierMask);
 
-        if (!_sdk.IsOpen)
+        foreach (var r in _ev60Store.LoadProfile(slot))
         {
-            _log("[PROFILE] reload key bindings: SDK session not open yet, will apply when opened");
-            return;
-        }
-
-        int applied = 0;
-        foreach (var kv in _bindings)
-        {
-            int ledIndex = kv.Key;
-            var (mode, value, mask) = kv.Value;
-            var table = Everest60RemapData.LedIndexToDllKeyIdArray;
-            if (ledIndex < 0 || ledIndex >= table.Length) continue;
-            int srcDllKeyId = table[ledIndex];
-
-            bool ok = mode switch
+            var k = new Ev60Key(r.LedIndex)
             {
-                "fn"       => _sdk.ChangeFnKey(srcDllKeyId, value),
-                "shortcut" => _sdk.ChangeShortcutKey(srcDllKeyId, value, mask),
-                "media"    => _sdk.SetMediaKey(srcDllKeyId, value),
-                _          => _sdk.ChangeKey(srcDllKeyId, value),
+                Label       = string.IsNullOrEmpty(r.Label) ? BoardLabelForLed(r.LedIndex) : r.Label,
+                ActionType  = r.ActionType,
+                ActionValue = r.ActionValue,
             };
-            if (ok) applied++;
+            _keys.Add(k);
+            _byLed[r.LedIndex] = k;
         }
-        _log($"[PROFILE] reload key bindings slot={slot}: {applied}/{_bindings.Count} applied");
+        _log($"[PROFILE] Ev60 reload keys slot={slot}: {_keys.Count} loaded");
     }
 }

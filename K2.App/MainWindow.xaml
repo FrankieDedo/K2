@@ -5,8 +5,8 @@
         xmlns:local="clr-namespace:K2.App"
         Title="{loc:Get app_title}"
         Icon="Assets/K2_logo.png"
-        Height="897" Width="1426"
-        MinHeight="713" MinWidth="1196"
+        Height="1024" Width="1440"
+        MinHeight="768" MinWidth="1280"
         WindowStartupLocation="CenterScreen"
         Style="{StaticResource K2WindowStyle}">
 
@@ -106,6 +106,21 @@
                                                       Margin="2"/>
                                 </Grid>
                             </Border>
+
+                            <!-- Mapped-key marker: small red triangle, MacroPad only (Everest/DisplayPad
+                                 have their own equivalents) — same idea as DisplayPad's WarnTriangle, but
+                                 flags "this key HAS an action" instead of "image without action". Replaces
+                                 the previous approach of recoloring the whole keycap border, which the
+                                 keycap-appearance feature (MainWindow.MacroKeycapAppearance.cs) already
+                                 owns via Background/BorderBrush — this way the two never fight over the
+                                 same properties. -->
+                            <Polygon x:Name="MpMappedMarker"
+                                     Points="0,10 10,10 10,0"
+                                     Fill="#DDCC0000"
+                                     HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                     Margin="0,0,2,12"
+                                     Visibility="Collapsed"
+                                     IsHitTestVisible="False"/>
                         </Grid>
 
                         <ControlTemplate.Triggers>
@@ -121,18 +136,20 @@
                                 <Setter TargetName="Face" Property="Margin"     Value="0,3,0,7"/>
                                 <Setter TargetName="Tint" Property="Background" Value="#33000000"/>
                             </Trigger>
+                            <!-- MacroPad only: MacroPadKey.HasAction. Silently never matches on any
+                                 other DataContext (e.g. a bare KeyCapStyle button with none). -->
+                            <DataTrigger Binding="{Binding HasAction}" Value="True">
+                                <Setter TargetName="MpMappedMarker" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
 
-        <!-- MacroPad key: KeyCapStyle (7px/10px) + DataTriggers HasAction / IsHighlighted -->
+        <!-- MacroPad key: KeyCapStyle (7px/10px, incl. the mapped-key triangle marker) + DataTrigger IsHighlighted -->
         <Style x:Key="MacroKeyStyle" TargetType="Button" BasedOn="{StaticResource KeyCapStyle}">
             <Style.Triggers>
-                <DataTrigger Binding="{Binding HasAction}" Value="True">
-                    <Setter Property="BorderBrush" Value="#4FB87A"/>
-                </DataTrigger>
                 <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
                     <Setter Property="Background" Value="#900000"/>
                     <Setter Property="Foreground" Value="#10302F"/>
@@ -299,33 +316,55 @@
             </Setter>
         </Style>
 
-        <!-- Sidebar section navigation tab style -->
+        <!-- Sidebar section navigation tab style. Square tiles (2026-07-14, on
+             request — same background/shape language as the Makalu DPI level
+             tiles in MakaluRgbSettingsPanel.xaml.cs's BuildMkDpiLevelButtons:
+             solid fill at rest, not just an accent border, uniform rounded
+             corners instead of a flag-shaped left edge, and a bigger title
+             instead of small text) — still stacked vertically inside the
+             same 160px sidebar column as before, just taller/blockier per
+             entry. Title sits top-left with padding (not centered — on
+             request), via HorizontalContentAlignment/VerticalContentAlignment
+             "Left"/"Top" both on the RadioButton and its ContentPresenter.
+             ContentTemplate (not a plain ContentPresenter) is required for
+             wrapping: TextWrapping isn't an inherited property, so a longer
+             title (e.g. "Device settings") can still wrap onto a second line
+             within the tile instead of clipping. -->
         <Style x:Key="SectionTabStyle" TargetType="RadioButton">
-            <Setter Property="Foreground" Value="#9A9AA2"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="FontFamily" Value="Roboto Medium, Segoe UI"/>
-            <Setter Property="Padding" Value="10,9"/>
+            <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
+            <Setter Property="Background" Value="{StaticResource K2SurfaceAltBrush}"/>
+            <Setter Property="FontFamily" Value="{DynamicResource K2AppFontFamily}"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="Padding" Value="12,10"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="VerticalContentAlignment" Value="Top"/>
+            <Setter Property="MinHeight" Value="120"/>
+            <Setter Property="Margin" Value="0,3"/>
+            <Setter Property="ContentTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Left"/>
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
                         <Border x:Name="Bd"
                                 Background="{TemplateBinding Background}"
-                                BorderThickness="3,0,0,0"
-                                BorderBrush="Transparent"
-                                CornerRadius="0,4,4,0"
+                                BorderThickness="1"
+                                BorderBrush="{StaticResource K2BorderBrush}"
+                                CornerRadius="8"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Left"
-                                              VerticalAlignment="Center"/>
+                                              VerticalAlignment="Top"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#1E1E26"/>
-                                <Setter Property="Foreground" Value="#DCDCE0"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource K2HoverBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource K2AccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource K2AccentBrush}"/>
@@ -819,6 +858,7 @@
                                      rendered footprint to 370x510, so 510 + 8px padding each side = 526
                                      is the tallest a device box needs to be. -->
                                 <RowDefinition Height="526"/>  <!-- device -->
+                                <RowDefinition Height="Auto"/> <!-- HW capture bar (media dock / crown only) -->
                                 <RowDefinition Height="*"/>    <!-- settings: grows with window height -->
                             </Grid.RowDefinitions>
 
@@ -870,34 +910,80 @@
                                 </DockPanel>
                             </Border>
 
+                            <!-- HW capture bar: feedback-only text for the media dock / crown "Capture
+                                 matrixId…" context-menu action (MainWindow.DockActions.cs) — no button
+                                 here anymore (the old standalone "Capture HW Key" trigger was removed;
+                                 the only way to start a capture now is that per-slot context-menu item).
+                                 Only relevant when a dock is physically attached, so it mirrors
+                                 GrdEvDock's visibility (see MainWindow.Layout.cs). -->
+                            <WrapPanel x:Name="PnlHwCaptureBar" Grid.Row="1" Orientation="Horizontal"
+                                       Margin="0,8,0,0" Visibility="Collapsed">
+                                <TextBlock x:Name="LblCapturedKey" Text=""
+                                           VerticalAlignment="Center" Foreground="#900000"/>
+                            </WrapPanel>
+
                             <!-- Bottom settings panel: grows with the window (Row="*" above); MinHeight
                                  keeps its old fixed size as a floor so it doesn't collapse below the
-                                 tallest section (Key Binding/RGB vs. Display Dial vs. USB Recorder) —
-                                 a ScrollViewer absorbs any section taller than the current area. -->
-                            <Border Grid.Row="1" Background="#14141A"
+                                 tallest section (Key Binding/RGB vs. Display Dial vs. USB Recorder).
+                                 NOTE: no outer ScrollViewer anymore — that used to wrap ALL sections,
+                                 but a ScrollViewer gives its content infinite available height, so
+                                 nothing inside it can ever "fill remaining space" (a plain
+                                 MaxHeight/Height-binding on LvEvKeys below either stayed too small or,
+                                 worse, could compute TALLER than what's actually visible and silently
+                                 render past the bottom of the window — exactly the "disappears below"
+                                 bug this replaced). Each section now owns its own overflow behavior
+                                 instead: Key Binding's Grid+ListView genuinely stretch (Grid.Row="0"
+                                 below is "*", a real bounded size once nothing wraps it in a
+                                 ScrollViewer); RGB/Dial/Settings/USB Recorder each have their own
+                                 ScrollViewer (RGB already did; the other three were wrapped to match).
+                                 MinHeight=220 (not 270, the value from the very first pass of this
+                                 fix): the fixed chrome above this Border (tab strip + brightness bar +
+                                 toolbar + status bar + margins, ~145px) plus the fixed 526px device row
+                                 plus this floor must all fit inside the window's default Height (see
+                                 Window.Height below) — 270 pushed that sum ~44px past 897, so on launch
+                                 the bottom of the key list/buttons rendered past the window's bottom
+                                 edge (Border doesn't clip by default, same root cause as the bug
+                                 described above, just reintroduced via the floor value instead of a
+                                 converter). Ev60(150)/Makalu(180)/MacroPad(130)/DisplayPad(90) all stay
+                                 under that budget, which is why only Everest Max showed it. -->
+                            <Border x:Name="BdrEvSettingsPanel" Grid.Row="2" Background="#14141A"
                                     BorderBrush="#2A2A32" BorderThickness="1"
                                     CornerRadius="6" Padding="12,10" Margin="0,8,0,0"
-                                    MinHeight="270">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    MinHeight="220">
                                 <Grid>
                                     <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>  <!-- active section content -->
+                                        <RowDefinition Height="*"/>     <!-- active section content: fills the Border -->
                                         <RowDefinition Height="Auto"/>  <!-- debug SDK log -->
                                     </Grid.RowDefinitions>
 
                                     <!-- ─── All section panels (one visible at a time) ─── -->
                                     <Grid Grid.Row="0">
 
-                                        <!-- ── KEY BINDING (mapped keys + HW capture utility for the
-                                             media dock / crown / display-key hotspots drawn on the
-                                             device graphic above) ── -->
-                                        <StackPanel x:Name="PnlSecKeyMapping">
-                                            <Grid>
+                                        <!-- ── KEY BINDING (mapped keys — click a key on the device
+                                             graphic above to configure its action). A Grid (not
+                                             StackPanel): StackPanel always sizes
+                                             children to their natural/desired height regardless of
+                                             available space, so it can never stretch a child to fill —
+                                             only a Grid cell (default child alignment = Stretch)
+                                             actually lets LvEvKeys grow with the window. Same
+                                             hint-row + list/buttons layout as MacroPad's
+                                             PnlMpSecKeyBinding (shared "key_binding_hint" string) — kept
+                                             in sync across every device's Key Binding section except
+                                             Makalu, per user request. ── -->
+                                        <Grid x:Name="PnlSecKeyMapping">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/> <!-- hint text -->
+                                                <RowDefinition Height="*"/>    <!-- list + buttons: fills remaining height -->
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Grid.Row="0" Text="{loc:Get key_binding_hint}" Foreground="#9A9AA2"
+                                                       TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                            <Grid Grid.Row="1">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="170"/>
                                                 </Grid.ColumnDefinitions>
-                                                <ListView Grid.Column="0" x:Name="LvEvKeys" MaxHeight="180" Margin="0,0,8,0">
+                                                <ListView Grid.Column="0" x:Name="LvEvKeys" Margin="0,0,8,0"
+                                                          SelectionChanged="LvEvKeys_SelectionChanged">
                                                     <ListView.ItemContainerStyle>
                                                         <Style TargetType="ListViewItem">
                                                             <Style.Triggers>
@@ -915,10 +1001,6 @@
                                                     </ListView.ItemTemplate>
                                                 </ListView>
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Top">
-                                                    <Button x:Name="BtnEvCapture" Content="{loc:Get ev_capture_key}"
-                                                            Click="BtnEvCapture_Click"
-                                                            Style="{StaticResource K2IconButton}" Tag="&#xE765;"
-                                                            HorizontalAlignment="Stretch" Margin="0,0,0,4"/>
                                                     <Button x:Name="BtnEvMapKeys" Content="{loc:Get remap_keys}"
                                                             Click="BtnEvMapKeys_Click"
                                                             Style="{StaticResource K2IconButton}" Tag="&#xE8CB;"
@@ -928,21 +1010,15 @@
                                                                Margin="0,0,0,10" Visibility="Collapsed"/>
                                                     <Button x:Name="BtnEvConfig" Content="{loc:Get ev_configure}"
                                                             Padding="8,4" Click="BtnEvConfig_Click"
-                                                            HorizontalAlignment="Stretch" Margin="0,0,0,4"/>
+                                                            HorizontalAlignment="Stretch" Margin="0,0,0,4"
+                                                            IsEnabled="False"/>
                                                     <Button x:Name="BtnEvRemove" Content="{loc:Get ev_remove}"
                                                             Padding="8,4" Click="BtnEvRemove_Click"
-                                                            HorizontalAlignment="Stretch"/>
+                                                            HorizontalAlignment="Stretch"
+                                                            IsEnabled="False"/>
                                                 </StackPanel>
                                             </Grid>
-                                            <Separator Style="{StaticResource K2SideSeparator}" Margin="0,10,0,8"/>
-                                            <WrapPanel Orientation="Horizontal">
-                                                <Button x:Name="BtnCaptureHwKey" Content="{loc:Get dock_capture_hw}"
-                                                        Padding="8,2" Click="BtnCaptureHwKey_Click"
-                                                        Style="{StaticResource K2IconButton}" Tag="&#xE765;"/>
-                                                <TextBlock x:Name="LblCapturedKey" Text="" Margin="8,0,0,0"
-                                                           VerticalAlignment="Center" Foreground="#900000"/>
-                                            </WrapPanel>
-                                        </StackPanel>
+                                        </Grid>
 
                                         <!-- ── RGB & LIGHTING ── -->
                                         <ScrollViewer x:Name="PnlSecRgb" Visibility="Collapsed"
@@ -994,12 +1070,13 @@
                                                                 BorderBrush="#3A3A40" Click="BtnEvColor_Click" Tag="3"/>
                                                     </StackPanel>
                                                     <Button x:Name="BtnEvLightOff"   Content="OFF"               Padding="6,2" Margin="0,0,4,0" Click="BtnEvLightOff_Click"/>
-                                                    <Button x:Name="BtnEvLightOn"    Content="ON"                Padding="6,2" Margin="0,0,4,0" Click="BtnEvLightOn_Click"/>
-                                                    <Button x:Name="BtnEvLightReset" Content="{loc:Get reset}"   Padding="6,2" Margin="0,0,4,0" Click="BtnEvLightReset_Click"/>
-                                                    <Button x:Name="BtnEvLightSave"  Content="{loc:Get save}"    Padding="6,2" Click="BtnEvLightSave_Click"
-                                                            ToolTip="Makes the applied effect permanent (survives unplug/restart)."/>
+                                                    <Button x:Name="BtnEvLightOn"    Content="ON"                Padding="6,2" Click="BtnEvLightOn_Click"/>
                                                 </WrapPanel>
-                                                <!-- Per-key custom lighting section -->
+                                                <!-- Per-key custom lighting section — hidden for now (2026-07-14,
+                                                     user request: hide LED painting/ring sections on every device
+                                                     with a Lighting section). Elements stay in the tree (code-behind
+                                                     still references them) so re-enabling is a one-line Visibility flip. -->
+                                                <StackPanel x:Name="PnlEvCustomLighting" Visibility="Collapsed">
                                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,0,0,8"/>
                                                 <TextBlock Text="{loc:Get custom_lighting}" FontWeight="SemiBold" Margin="0,0,0,6"/>
                                                 <TextBlock Text="{loc:Get custom_paint_hint}"
@@ -1021,11 +1098,15 @@
                                                     <Button x:Name="BtnCustomFillAll" Content="{loc:Get custom_fill_all}" Padding="8,2" Margin="0,0,4,0" Click="BtnCustomFillAll_Click" Style="{StaticResource K2IconButton}"       Tag="&#xE771;"/>
                                                     <Button x:Name="BtnCustomClear"   Content="{loc:Get custom_clear}"    Padding="8,2"                   Click="BtnCustomClear_Click"   Style="{StaticResource K2IconButton}"       Tag="&#xE74D;"/>
                                                 </WrapPanel>
+                                                </StackPanel>
                                             </StackPanel>
                                         </ScrollViewer>
 
-                                        <!-- ── DISPLAY DIAL ── -->
-                                        <StackPanel x:Name="PnlSecDial" Visibility="Collapsed">
+                                        <!-- ── DISPLAY DIAL ── (own ScrollViewer: no outer one anymore, see
+                                             the comment on BdrEvSettingsPanel above) -->
+                                        <ScrollViewer x:Name="PnlSecDial" Visibility="Collapsed"
+                                                      VerticalScrollBarVisibility="Auto">
+                                        <StackPanel>
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
@@ -1140,9 +1221,12 @@
                                                 </StackPanel>
                                             </Grid>
                                         </StackPanel>
+                                        </ScrollViewer>
 
-                                        <!-- ── SETTINGS ── -->
-                                        <StackPanel x:Name="PnlSecSettings" Visibility="Collapsed">
+                                        <!-- ── SETTINGS ── (own ScrollViewer, same reason as Display Dial above) -->
+                                        <ScrollViewer x:Name="PnlSecSettings" Visibility="Collapsed"
+                                                      VerticalScrollBarVisibility="Auto">
+                                        <StackPanel>
                                             <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
                                                 <CheckBox x:Name="CkSettingsSync" Content="{loc:Get settings_sync_profiles}"
                                                           Click="CkSettingsSync_Click"/>
@@ -1240,9 +1324,13 @@
                                                     Padding="8,2" Click="BtnSettingsFactoryReset_Click"
                                                     Style="{StaticResource K2IconButton}" Tag="&#xE777;"/>
                                         </StackPanel>
+                                        </ScrollViewer>
 
-                                        <!-- ── USB RECORDER (debug only) ── -->
-                                        <Grid x:Name="PnlSecUsb" Visibility="Collapsed">
+                                        <!-- ── USB RECORDER (debug only) ── (own ScrollViewer, same reason
+                                             as Display Dial/Settings above) -->
+                                        <ScrollViewer x:Name="PnlSecUsb" Visibility="Collapsed"
+                                                      VerticalScrollBarVisibility="Auto">
+                                        <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto"/>
                                                 <RowDefinition Height="Auto"/>
@@ -1282,6 +1370,7 @@
                                                 </Grid>
                                             </Expander>
                                         </Grid>
+                                        </ScrollViewer>
 
                                     </Grid><!-- end section panels grid -->
 
@@ -1296,7 +1385,6 @@
                                                  MaxHeight="100"/>
                                     </GroupBox>
                                 </Grid>
-                                </ScrollViewer>
                             </Border><!-- end settings panel -->
 
                         </Grid><!-- end right column -->
@@ -1336,6 +1424,9 @@
                                 <Button x:Name="BtnEvRename" Content="{loc:Get rename_device}"
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
                                         Click="BtnEvRename_Click"/>
+                                <Button x:Name="BtnEvRestoreDefaults" Content="{loc:Get restore_defaults}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE777;"
+                                        Click="BtnEvRestoreDefaults_Click"/>
 
                                 <StackPanel x:Name="PnlEvDebugGroup" Visibility="Collapsed">
                                     <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
@@ -1465,9 +1556,29 @@
                                     BorderBrush="#2A2A32" BorderThickness="1"
                                     CornerRadius="6" Padding="12,10" Margin="0,8,0,0"
                                     MinHeight="150">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <!-- 2026-07-14: no more shared ScrollViewer wrapping all three
+                                         sections — same reasoning as Everest Max's BdrEvSettingsPanel
+                                         (see its comment): a ScrollViewer gives its content infinite
+                                         available height, so Ev60KeyBindingPanel's Grid "*" row could
+                                         never actually stretch LvEv60Keys to fill this Border (user
+                                         request: "make the mapped-keys box exactly like Everest Max").
+                                         Each section now owns its own overflow instead: Ev60RgbPanel
+                                         already had its own internal ScrollViewer (MaxHeight=260);
+                                         PnlEv60Settings gets one here, on the section root itself, same
+                                         pattern as Everest Max's PnlSecRgb/PnlSecDial/PnlSecSettings
+                                         (ScrollViewer IS the named/toggled element). -->
                                     <Grid>
-                                        <local:Everest60RgbPanel x:Name="Ev60RgbPanel"/>
+                                        <!-- All three default Collapsed: InitEv60SectionNav (code-behind)
+                                             sets RbEv60SecKeyBinding.IsChecked=true at startup, which fires
+                                             Ev60Section_Changed -> ShowEv60Section(Ev60KeyBindingPanel) —
+                                             but ShowEv60Section only COLLAPSES the previously active panel
+                                             (none yet, on first run), it never assumes the others start
+                                             hidden. Ev60RgbPanel previously had no explicit Visibility here
+                                             (implicit default = Visible), so it stayed visible underneath
+                                             Ev60KeyBindingPanel until the user manually clicked into
+                                             Lighting once — visible as both sections' content overlapping
+                                             on first opening the Everest 60 tab. -->
+                                        <local:Everest60RgbPanel x:Name="Ev60RgbPanel" Visibility="Collapsed"/>
                                         <local:Everest60KeyBindingPanel x:Name="Ev60KeyBindingPanel" Visibility="Collapsed"/>
 
                                         <!-- ── SETTINGS ── Keycap Appearance: purely cosmetic, same
@@ -1475,10 +1586,13 @@
                                              for Everest Max (no live LED tick blend modes here, since
                                              this raw-HID board has no GetColorData-equivalent readback
                                              to blend with — just a static base/text color choice).
-                                             Layout: disabled placeholder pending investigation of the
-                                             Everest360_USB.dll SetFWLayout/locale-legend data (see
-                                             CHANGELOG) — not faked as functional. -->
-                                        <StackPanel x:Name="PnlEv60Settings" Visibility="Collapsed">
+                                             Layout: locale legend selector (Everest60KeyboardLayout.GetMainBoard),
+                                             same physical 64-key board for every locale (no ISO variant on this
+                                             hardware — confirmed no backtick/ISO-102 key) — only the printed
+                                             legends change, LED index/physical position stays fixed. -->
+                                        <ScrollViewer x:Name="PnlEv60Settings" Visibility="Collapsed"
+                                                      VerticalScrollBarVisibility="Auto">
+                                        <StackPanel>
                                             <TextBlock Text="{loc:Get settings_keycap_group}" FontWeight="SemiBold" Margin="0,0,0,6"/>
                                             <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
                                                 <TextBlock Text="{loc:Get settings_keycap_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -1540,12 +1654,11 @@
                                             <WrapPanel Orientation="Horizontal">
                                                 <TextBlock Text="{loc:Get ev_layout}" VerticalAlignment="Center"
                                                            FontWeight="SemiBold" Margin="0,0,6,0"/>
-                                                <ComboBox x:Name="CbEv60KeyboardLayout" Width="200" Margin="0,0,16,0"
-                                                          IsEnabled="False" ToolTip="{loc:Get ev60_layout_not_available_tip}"/>
+                                                <ComboBox x:Name="CbEv60KeyboardLayout" Width="200" Margin="0,0,16,0"/>
                                             </WrapPanel>
                                         </StackPanel>
+                                        </ScrollViewer>
                                     </Grid>
-                                </ScrollViewer>
                             </Border>
                         </Grid>
 
@@ -1585,6 +1698,9 @@
                                 <Button x:Name="BtnEv60Rename" Content="{loc:Get rename_device}"
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE8AC;"
                                         Click="BtnEv60Rename_Click"/>
+                                <Button x:Name="BtnEv60RestoreDefaults" Content="{loc:Get restore_defaults}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE777;"
+                                        Click="BtnEv60RestoreDefaults_Click"/>
 
                                 <!-- Debug group: same position/pattern as PnlEvDebugGroup/PnlMpDebugGroup/
                                      PnlDpDebugGroup (right after Device, toggled by ApplyEv60DebugMode).
@@ -1783,6 +1899,9 @@
                                 <Button x:Name="BtnMkRename" Content="{loc:Get rename_device}"
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE8AC;"
                                         Click="BtnMkRename_Click"/>
+                                <Button x:Name="BtnMkRestoreDefaults" Content="{loc:Get restore_defaults}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE777;"
+                                        Click="BtnMkRestoreDefaults_Click"/>
 
                                 <!-- Debug group: same position/pattern as PnlEvDebugGroup/PnlMpDebugGroup/
                                      PnlDpDebugGroup (right after Device, toggled by ApplyMkDebugMode).
@@ -1861,13 +1980,9 @@
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get ev_key_binding}" GroupName="MpSections"
                                              IsChecked="True" Checked="MpSection_Changed"/>
-                                <RadioButton x:Name="RbMpSecOrientation"
-                                             Style="{StaticResource SectionTabStyle}"
-                                             Content="{loc:Get positioning}" GroupName="MpSections"
-                                             Checked="MpSection_Changed"/>
                                 <RadioButton x:Name="RbMpSecLed"
                                              Style="{StaticResource SectionTabStyle}"
-                                             Content="{loc:Get led_lighting}" GroupName="MpSections"
+                                             Content="{loc:Get rgb_lighting}" GroupName="MpSections"
                                              Checked="MpSection_Changed"/>
                                 <RadioButton x:Name="RbMpSecSettings"
                                              Style="{StaticResource SectionTabStyle}"
@@ -1902,98 +2017,134 @@
 
                             <!-- Bottom settings panel: grows with the window (Row="*" above); MinHeight
                                  keeps its old fixed size as a floor so it doesn't collapse below the
-                                 tallest section (Key Binding / Orientation / LED Lighting). -->
-                            <Border Grid.Row="1" Background="#14141A"
+                                 tallest section (Key Binding / Orientation / LED Lighting). NOTE: no
+                                 outer ScrollViewer anymore — see the matching comment on
+                                 BdrEvSettingsPanel (Everest Max) for why; each section here now owns
+                                 its own overflow behavior instead (Key Binding's Grid+ListView stretch
+                                 for real; Orientation/LED Lighting/Settings each got their own
+                                 ScrollViewer). -->
+                            <Border x:Name="BdrMpSettingsPanel" Grid.Row="1" Background="#14141A"
                                     BorderBrush="#2A2A32" BorderThickness="1"
                                     CornerRadius="6" Padding="12,10" Margin="0,8,0,0"
                                     MinHeight="130">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <Grid>
 
-                                    <!-- ── KEY BINDING (keys are configured directly on the grid above) ── -->
-                                    <StackPanel x:Name="PnlMpSecKeyBinding" Orientation="Horizontal">
-                                        <TextBlock Text="{loc:Get key_binding_hint}" Foreground="#9A9AA2"
-                                                   TextWrapping="Wrap" VerticalAlignment="Center"/>
-                                    </StackPanel>
-
-                                    <!-- ── ORIENTATION ── -->
-                                    <StackPanel x:Name="PnlMpSecOrientation" Orientation="Horizontal" Visibility="Collapsed">
-                                        <TextBlock Text="{loc:Get positioning}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <ComboBox x:Name="CbMacroRotation" Width="190"
-                                                  SelectionChanged="CbMacroRotation_SelectionChanged"/>
-                                    </StackPanel>
-
-                                    <!-- ── LED LIGHTING ── -->
-                                    <Grid x:Name="PnlMpSecLed" Visibility="Collapsed">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
+                                    <!-- ── KEY BINDING (keys are configured directly on the grid above;
+                                         this list mirrors what's mapped, same list+column layout as
+                                         Everest Max's Key Binding section — LvMpKeys only lists keys
+                                         that HAVE an action, unlike the always-12 grid above). A Grid
+                                         (not StackPanel) with an explicit Auto/* row split: StackPanel
+                                         always sizes children to their natural height regardless of
+                                         available space, so it can never stretch LvMpKeys to fill. ── -->
+                                    <Grid x:Name="PnlMpSecKeyBinding">
                                         <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/> <!-- hint text -->
+                                            <RowDefinition Height="*"/>    <!-- list + buttons: fills remaining height -->
                                         </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Text="{loc:Get key_binding_hint}" Foreground="#9A9AA2"
+                                                   TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                        <Grid Grid.Row="1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="170"/>
+                                            </Grid.ColumnDefinitions>
+                                            <ListView Grid.Column="0" x:Name="LvMpKeys" Margin="0,0,8,0"
+                                                      SelectionChanged="LvMpKeys_SelectionChanged">
+                                                <ListView.ItemContainerStyle>
+                                                    <Style TargetType="ListViewItem">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                                                <Setter Property="Background" Value="#900000"/>
+                                                                <Setter Property="Foreground" Value="#10302F"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </ListView.ItemContainerStyle>
+                                                <ListView.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding Display}" FontFamily="Consolas" Padding="2"/>
+                                                    </DataTemplate>
+                                                </ListView.ItemTemplate>
+                                            </ListView>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                                <Button x:Name="BtnMpConfigure" Content="{loc:Get ev_configure}"
+                                                        Padding="8,4" Click="BtnMpConfigure_Click"
+                                                        HorizontalAlignment="Stretch" Margin="0,0,0,4"
+                                                        IsEnabled="False"/>
+                                                <Button x:Name="BtnMpRemoveAction" Content="{loc:Get ev_remove}"
+                                                        Padding="8,4" Click="BtnMpRemoveAction_Click"
+                                                        IsEnabled="False"
+                                                        HorizontalAlignment="Stretch"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Grid>
 
-                                        <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,0,16,6">
+                                    <!-- ── LED LIGHTING ── (own ScrollViewer) -->
+                                    <ScrollViewer x:Name="PnlMpSecLed" Visibility="Collapsed"
+                                                  VerticalScrollBarVisibility="Auto">
+                                    <StackPanel>
+                                        <!-- Preset effects row 1 (same grouping/order as Everest Max's
+                                             PnlSecRgb: effect, speed, direction, rainbow, sync — see
+                                             MainWindow.xaml PnlSecRgb) -->
+                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
                                             <TextBlock Text="{loc:Get rgb_effect}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                            <ComboBox x:Name="CbMacroEffect" Width="140"
+                                            <ComboBox x:Name="CbMacroEffect" Width="140" Margin="0,0,12,0"
                                                       SelectionChanged="CbMacroEffect_SelectionChanged"
                                                       DropDownOpened="CbMacroEffect_DropDownOpened"
                                                       DropDownClosed="CbMacroEffect_DropDownClosed"/>
-                                        </StackPanel>
-                                        <StackPanel x:Name="PnlMpSpeed" Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,0,16,6">
-                                            <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                            <Slider x:Name="SldMacroSpeed" Minimum="0" Maximum="100" Width="110"
-                                                    TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
-                                                    ValueChanged="SldMacroSpeed_ValueChanged" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="LblMacroSpeed" Text="50%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
-                                        </StackPanel>
-                                        <StackPanel x:Name="PnlMpDirection" Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Margin="0,0,16,6">
-                                            <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                            <Border Style="{StaticResource K2SegmentedGroupBorder}">
-                                                <UniformGrid x:Name="GridMacroDirection" Rows="1"/>
-                                            </Border>
-                                        </StackPanel>
-                                        <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal" Margin="0,0,16,6">
+                                            <StackPanel x:Name="PnlMpSpeed" Orientation="Horizontal" Margin="0,0,12,0">
+                                                <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <Slider x:Name="SldMacroSpeed" Minimum="0" Maximum="100" Width="110"
+                                                        TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                                                        ValueChanged="SldMacroSpeed_ValueChanged" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="LblMacroSpeed" Text="50%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
+                                            </StackPanel>
+                                            <StackPanel x:Name="PnlMpDirection" Orientation="Horizontal" Margin="0,0,12,0">
+                                                <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <Border Style="{StaticResource K2SegmentedGroupBorder}">
+                                                    <UniformGrid x:Name="GridMacroDirection" Rows="1"/>
+                                                </Border>
+                                            </StackPanel>
                                             <CheckBox x:Name="CkMacroRainbow" Content="{loc:Get rgb_rainbow}" Margin="0,0,10,0"
                                                       VerticalAlignment="Center" Click="CkMacroRainbow_Click" ToolTip="{loc:Get rgb_rainbow_tip}"/>
                                             <CheckBox x:Name="CkMacroSync" Content="{loc:Get led_sync_profiles}"
                                                       VerticalAlignment="Center" Click="CkMacroSync_Click"/>
-                                        </StackPanel>
-                                        <StackPanel Grid.Row="0" Grid.Column="4" Orientation="Horizontal"
-                                                    HorizontalAlignment="Right" Margin="0,0,0,6">
-                                            <Button x:Name="BtnMacroLightOff"   Content="{loc:Get led_backlight_off}"  Padding="8,3" Margin="0,0,6,0" Click="BtnMacroLightOff_Click"/>
-                                            <Button x:Name="BtnMacroLightOn"    Content="{loc:Get led_backlight_on}"   Padding="8,3" Margin="0,0,6,0" Click="BtnMacroLightOn_Click"/>
-                                            <Button x:Name="BtnMacroLightReset" Content="{loc:Get led_reset_effects}"  Padding="8,3" Margin="0,0,6,0" Click="BtnMacroLightReset_Click"/>
-                                            <Button x:Name="BtnMacroLightSave"  Content="{loc:Get led_save_flash}"     Padding="8,3" Click="BtnMacroLightSave_Click"
-                                                    ToolTip="Makes the applied effect permanent (survives unplug/restart)."/>
-                                        </StackPanel>
-
-                                        <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,4,16,0">
+                                        </WrapPanel>
+                                        <!-- Preset effects row 2: colors + on/off (no reset/save — removed
+                                             from Everest Max's PnlSecRgb on request, mirrored here) -->
+                                        <WrapPanel Orientation="Horizontal">
                                             <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                            <Button x:Name="BtnMacroColor1" Width="50" Height="26"
+                                            <Button x:Name="BtnMacroColor1" Width="50" Height="26" Margin="0,0,16,0"
                                                     Background="#900000" BorderThickness="2"
                                                     BorderBrush="#3A3A40" Click="BtnMacroColor_Click" Tag="1"/>
-                                        </StackPanel>
-                                        <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,4,16,0">
-                                            <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                            <Button x:Name="BtnMacroColor2" Width="50" Height="26"
-                                                    Background="#1A1A1E" BorderThickness="2"
-                                                    BorderBrush="#3A3A40" Click="BtnMacroColor_Click" Tag="2"/>
-                                        </StackPanel>
-                                        <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" Margin="0,4,16,0">
-                                            <TextBlock Text="{loc:Get rgb_tertiary}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                            <Button x:Name="BtnMacroColor3" Width="50" Height="26"
-                                                    Background="#1A1A1E" BorderThickness="2"
-                                                    BorderBrush="#3A3A40" Click="BtnMacroColor_Click" Tag="3"/>
-                                        </StackPanel>
-                                    </Grid>
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
+                                                <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <Button x:Name="BtnMacroColor2" Width="50" Height="26"
+                                                        Background="#1A1A1E" BorderThickness="2"
+                                                        BorderBrush="#3A3A40" Click="BtnMacroColor_Click" Tag="2"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
+                                                <TextBlock Text="{loc:Get rgb_tertiary}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <Button x:Name="BtnMacroColor3" Width="50" Height="26"
+                                                        Background="#1A1A1E" BorderThickness="2"
+                                                        BorderBrush="#3A3A40" Click="BtnMacroColor_Click" Tag="3"/>
+                                            </StackPanel>
+                                            <Button x:Name="BtnMacroLightOff" Content="{loc:Get led_backlight_off}" Padding="8,3" Margin="0,0,6,0" Click="BtnMacroLightOff_Click"/>
+                                            <Button x:Name="BtnMacroLightOn"  Content="{loc:Get led_backlight_on}"  Padding="8,3" Click="BtnMacroLightOn_Click"/>
+                                        </WrapPanel>
+                                    </StackPanel>
+                                    </ScrollViewer>
 
-                                    <!-- ── SETTINGS (keycap appearance, same as Everest) ── -->
-                                    <StackPanel x:Name="PnlMpSecSettings" Visibility="Collapsed">
+                                    <!-- ── SETTINGS (keycap appearance, same as Everest) ── (own ScrollViewer) -->
+                                    <ScrollViewer x:Name="PnlMpSecSettings" Visibility="Collapsed"
+                                                  VerticalScrollBarVisibility="Auto">
+                                    <StackPanel>
+                                        <TextBlock Text="{loc:Get positioning}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,14">
+                                            <ComboBox x:Name="CbMacroRotation" Width="190"
+                                                      SelectionChanged="CbMacroRotation_SelectionChanged"/>
+                                        </WrapPanel>
+
                                         <TextBlock Text="{loc:Get settings_keycap_group}" FontWeight="SemiBold" Margin="0,0,0,6"/>
                                         <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
                                             <TextBlock Text="{loc:Get settings_keycap_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -2044,8 +2195,8 @@
                                         <TextBlock Text="{loc:Get settings_keycap_edit_individual_hint}" Foreground="#9A9AA2"
                                                    TextWrapping="Wrap" Margin="0,0,0,4" FontSize="12"/>
                                     </StackPanel>
+                                    </ScrollViewer>
                                 </Grid>
-                                </ScrollViewer>
                             </Border>
                         </Grid>
 
@@ -2088,6 +2239,9 @@
                                 <Button x:Name="BtnMpRename" Content="{loc:Get rename_device}"
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
                                         Click="BtnMpRename_Click"/>
+                                <Button x:Name="BtnMpRestoreDefaults" Content="{loc:Get restore_defaults}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE777;"
+                                        Click="BtnMpRestoreDefaults_Click"/>
 
                                 <StackPanel x:Name="PnlMpDebugGroup" Visibility="Collapsed">
                                     <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
@@ -2183,13 +2337,13 @@
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get ev_key_binding}" GroupName="DpSections"
                                              IsChecked="True" Checked="DpSection_Changed"/>
-                                <RadioButton x:Name="RbDpSecRotation"
-                                             Style="{StaticResource SectionTabStyle}"
-                                             Content="{loc:Get positioning}" GroupName="DpSections"
-                                             Checked="DpSection_Changed"/>
                                 <RadioButton x:Name="RbDpSecPages"
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get dp_pages}" GroupName="DpSections"
+                                             Checked="DpSection_Changed"/>
+                                <RadioButton x:Name="RbDpSecSettings"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get ev_settings}" GroupName="DpSections"
                                              Checked="DpSection_Changed"/>
                             </StackPanel>
                         </Border>
@@ -2220,35 +2374,93 @@
 
                             <!-- Bottom settings panel: grows with the window (Row="*" above); MinHeight
                                  keeps its old fixed size as a floor so it doesn't collapse below the
-                                 tallest section (Key Binding / Rotation). -->
+                                 tallest section (Key Binding / Rotation / Pages). NOTE: no outer
+                                 ScrollViewer anymore — see the matching comment on BdrEvSettingsPanel
+                                 (Everest Max)/BdrMpSettingsPanel (MacroPad) for why; each section now
+                                 owns its own overflow behavior instead (Key Binding's Grid+ListView
+                                 stretches for real, same disposition as every other device's Key
+                                 Binding section except Makalu; Rotation/Pages each got their own
+                                 ScrollViewer). -->
                             <Border Grid.Row="1" Background="#14141A"
                                     BorderBrush="#2A2A32" BorderThickness="1"
                                     CornerRadius="6" Padding="12,10" Margin="0,8,0,0"
                                     MinHeight="90">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <Grid>
 
-                                    <!-- ── KEY BINDING (keys are configured directly on the grid above) ── -->
-                                    <StackPanel x:Name="PnlDpSecKeyBinding" Orientation="Horizontal">
-                                        <TextBlock Text="{loc:Get key_binding_hint}" Foreground="#9A9AA2"
-                                                   TextWrapping="Wrap" VerticalAlignment="Center"/>
-                                    </StackPanel>
+                                    <!-- ── KEY BINDING (keys are configured directly on the grid above;
+                                         this list mirrors what's mapped, same list+column layout as
+                                         Everest Max/MacroPad's Key Binding section — LvDpKeys only
+                                         lists keys that HAVE an action, unlike the always-12 grid
+                                         above). A Grid (not StackPanel) with an explicit Auto/* row
+                                         split: StackPanel always sizes children to their natural
+                                         height regardless of available space, so it can never stretch
+                                         LvDpKeys to fill. ── -->
+                                    <Grid x:Name="PnlDpSecKeyBinding">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/> <!-- hint text -->
+                                            <RowDefinition Height="*"/>    <!-- list + buttons: fills remaining height -->
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Text="{loc:Get key_binding_hint}" Foreground="#9A9AA2"
+                                                   TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                        <Grid Grid.Row="1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="170"/>
+                                            </Grid.ColumnDefinitions>
+                                            <ListView Grid.Column="0" x:Name="LvDpKeys" Margin="0,0,8,0"
+                                                      SelectionChanged="LvDpKeys_SelectionChanged">
+                                                <ListView.ItemContainerStyle>
+                                                    <Style TargetType="ListViewItem">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                                                <Setter Property="Background" Value="#900000"/>
+                                                                <Setter Property="Foreground" Value="#10302F"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </ListView.ItemContainerStyle>
+                                                <ListView.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding ListDisplay}" FontFamily="Consolas" Padding="2"/>
+                                                    </DataTemplate>
+                                                </ListView.ItemTemplate>
+                                            </ListView>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                                <Button x:Name="BtnDpConfigure" Content="{loc:Get ev_configure}"
+                                                        Padding="8,4" Click="BtnDpConfigure_Click"
+                                                        HorizontalAlignment="Stretch" Margin="0,0,0,4"
+                                                        IsEnabled="False"/>
+                                                <Button x:Name="BtnDpRemoveAction" Content="{loc:Get ev_remove}"
+                                                        Padding="8,4" Click="BtnDpRemoveAction_Click"
+                                                        HorizontalAlignment="Stretch"
+                                                        IsEnabled="False"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Grid>
 
-                                    <!-- ── ROTATION ── -->
-                                    <StackPanel x:Name="PnlDpSecRotation" Orientation="Horizontal" Visibility="Collapsed">
-                                        <TextBlock Text="{loc:Get positioning}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <ComboBox x:Name="CbDpRotation" Width="190" Margin="0,0,12,0"
-                                                  SelectionChanged="CbDpRotation_SelectionChanged"/>
-                                        <Button x:Name="BtnDpRotateCcw" Content="{loc:Get dp_rotate_icons_ccw}" Margin="0,0,6,0"
-                                                Style="{StaticResource K2IconButton}" Tag="&#xE14A;"
-                                                Click="BtnDpRotateCcw_Click"/>
-                                        <Button x:Name="BtnDpRotateCw"  Content="{loc:Get dp_rotate_icons_cw}"
-                                                Style="{StaticResource K2IconButton}" Tag="&#xE14A;"
-                                                Click="BtnDpRotateCw_Click"/>
+                                    <!-- ── SETTINGS (positioning/rotation — DisplayPad's only device
+                                         setting so far) ── (own ScrollViewer, same reasoning as
+                                         MacroPad's Settings) -->
+                                    <ScrollViewer x:Name="PnlDpSecSettings" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                                    <StackPanel>
+                                        <TextBlock Text="{loc:Get positioning}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <ComboBox x:Name="CbDpRotation" Width="190" Margin="0,0,12,0"
+                                                      SelectionChanged="CbDpRotation_SelectionChanged"/>
+                                            <Button x:Name="BtnDpRotateCcw" Content="{loc:Get dp_rotate_icons_ccw}" Margin="0,0,6,0"
+                                                    Style="{StaticResource K2IconButton}" Tag="&#xE14A;"
+                                                    Click="BtnDpRotateCcw_Click"/>
+                                            <Button x:Name="BtnDpRotateCw"  Content="{loc:Get dp_rotate_icons_cw}"
+                                                    Style="{StaticResource K2IconButton}" Tag="&#xE14A;"
+                                                    Click="BtnDpRotateCw_Click"/>
+                                        </StackPanel>
                                     </StackPanel>
+                                    </ScrollViewer>
 
-                                    <!-- ── PAGES (folder sub-pages created for this device+profile) ── -->
-                                    <StackPanel x:Name="PnlDpSecPages" Orientation="Vertical" Visibility="Collapsed">
+                                    <!-- ── PAGES (folder sub-pages created for this device+profile) ── (own ScrollViewer) -->
+                                    <ScrollViewer x:Name="PnlDpSecPages" Visibility="Collapsed"
+                                                  VerticalScrollBarVisibility="Auto">
+                                    <StackPanel Orientation="Vertical">
                                         <TextBlock x:Name="LblDpNoPages" Text="{loc:Get dp_no_pages}"
                                                    Foreground="#9A9AA2" TextWrapping="Wrap" Visibility="Collapsed"/>
                                         <ItemsControl x:Name="LstDpPages">
@@ -2287,8 +2499,8 @@
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
                                     </StackPanel>
+                                    </ScrollViewer>
                                 </Grid>
-                                </ScrollViewer>
                             </Border>
                         </Grid>
 
@@ -2340,6 +2552,9 @@
                                 <Button x:Name="BtnDpRename" Content="{loc:Get rename_device}"
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
                                         Click="BtnDpRename_Click"/>
+                                <Button x:Name="BtnDpRestoreDefaults" Content="{loc:Get restore_defaults}"
+                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE777;"
+                                        Click="BtnDpRestoreDefaults_Click"/>
 
                                 <StackPanel x:Name="PnlDpDebugGroup" Visibility="Collapsed">
                                     <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
@@ -2642,8 +2857,20 @@
 
             <!-- ==================== General Settings ==================== -->
             <Grid x:Name="PnlSettings" Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="24" MaxWidth="480" HorizontalAlignment="Left">
                     <TextBlock Text="{loc:Get tab_settings}" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
+
+                    <GroupBox x:Name="GbAppBcImport" Header="{loc:Get settings_bc_import_group}" Margin="0,0,0,20">
+                        <StackPanel Margin="8">
+                            <Button x:Name="BtnAppImportFromBaseCamp" Content="{loc:Get settings_bc_import_btn}"
+                                    Padding="8,4" HorizontalAlignment="Left"
+                                    Click="BtnAppImportFromBaseCamp_Click"
+                                    Style="{StaticResource K2IconButton}" Tag="&#xE8B5;"/>
+                            <TextBlock Text="{loc:Get settings_bc_import_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
+                        </StackPanel>
+                    </GroupBox>
 
                     <GroupBox x:Name="GbAppGeneral" Header="{loc:Get settings_general}" Margin="0,0,0,20">
                         <StackPanel Margin="8">
@@ -2707,7 +2934,20 @@
                               Click="CkBcAutostart_Click" FontSize="14" Margin="0,16,0,0"/>
                     <TextBlock x:Name="TxtBcAutostartHint" Text="{loc:Get settings_bc_autostart_hint}"
                                Foreground="#9A9AA2" TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+
+                    <GroupBox x:Name="GbAppDanger" Header="{loc:Get settings_danger_zone}"
+                              Margin="0,24,0,0" BorderBrush="{StaticResource K2DangerBrush}">
+                        <StackPanel Margin="8">
+                            <Button x:Name="BtnAppRestoreDefaults" Content="{loc:Get restore_defaults_app}"
+                                    Padding="8,4" HorizontalAlignment="Left"
+                                    Click="BtnAppRestoreDefaults_Click"
+                                    Style="{StaticResource K2IconButton}" Tag="&#xE777;"/>
+                            <TextBlock Text="{loc:Get restore_defaults_app_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
+                        </StackPanel>
+                    </GroupBox>
                 </StackPanel>
+                </ScrollViewer>
             </Grid><!-- end PnlSettings -->
 
             </Grid><!-- end content panels -->

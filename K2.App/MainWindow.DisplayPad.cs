@@ -44,6 +44,13 @@ public partial class MainWindow
     internal readonly DisplayPadKey[] _dpKeys = Enumerable.Range(0, 12)
         .Select(i => new DisplayPadKey(i)).ToArray();
     private readonly Button[] _dpButtons = new Button[12];
+    /// <summary>Mapped-keys list for the Key Binding section (LvDpKeys) — mirrors
+    /// _mpMappedKeys (MacroPad): only holds keys of the foreground page that HAVE
+    /// an action, rebuilt via <see cref="RefreshDpMappedKeys"/> whenever any
+    /// _dpKeys entry's HasAction changes (subscribed once in InitDisplayPadModule,
+    /// since _dpKeys is mutated in place across every reload/page-navigation path
+    /// instead of being recreated — see the _dpKeys field doc).</summary>
+    private readonly ObservableCollection<DisplayPadKey> _dpMappedKeys = new();
     private readonly ObservableCollection<DpDeviceRow> _dpDevices = new();
     private readonly ObservableCollection<int> _dpDeviceIds = new();
     /// <summary>Backing list for the "Pages" sidebar section — see <see cref="RefreshDpPagesList"/>.</summary>
@@ -156,6 +163,13 @@ public partial class MainWindow
 
         DpRebuildKeyGrid();
         DpApplyDefaultKeyMap();
+
+        LvDpKeys.ItemsSource = _dpMappedKeys;
+        foreach (var k in _dpKeys)
+            k.PropertyChanged += (_, ev) =>
+            {
+                if (ev.PropertyName == nameof(DisplayPadKey.HasAction)) RefreshDpMappedKeys();
+            };
 
         LvDpDevices.ItemsSource = _dpDevices;
         // DP device tabs are added to TcDevices by DpRefreshDevices; CbDpProfile by DpRefreshProfiles
@@ -421,6 +435,25 @@ public partial class MainWindow
         DpLog($"[UI] Profile {slot} deleted.");
         DpRefreshProfiles(id);
         // CbDpProfile_SelectionChanged will reload the key grid automatically
+    }
+
+    /// <summary>Resets the currently selected profile's button icons/actions/pages back
+    /// to K2's defaults (empty) and repaints the device.</summary>
+    private void BtnDpRestoreDefaults_Click(object sender, RoutedEventArgs e)
+    {
+        if (DpSelectedDeviceId() is not int id) return;
+        int slot = DpCurrentProfile();
+        string profileName = _dpStore.GetProfileName(id, slot) ?? Loc.Get("profile_n", slot);
+        var res = MessageBox.Show(
+            Loc.Get("restore_defaults_profile_confirm", profileName),
+            Loc.Get("restore_defaults"),
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+        if (res != MessageBoxResult.OK) return;
+        _dpStore.ClearProfile(id, slot);
+        DpLog($"[UI] Profile {slot} restored to defaults.");
+        ResetDpNavigation();
+        DpRequestRepaint(id);
     }
 
     // ================================================================
@@ -1251,7 +1284,14 @@ public partial class MainWindow
             return;
         }
 
-        // Unified dialog: image + action
+        DpOpenKeyConfigDialog(key, id);
+    }
+
+    /// <summary>Unified image+action dialog for a key — shared by the canvas
+    /// key click (<see cref="DpKeyButton_Click"/>) and the "Configure" button
+    /// next to LvDpKeys (<see cref="BtnDpConfigure_Click"/>).</summary>
+    private void DpOpenKeyConfigDialog(DisplayPadKey key, int id)
+    {
         var dlg = new DpKeyConfigDialog(key.Index, key.ImagePath, key.ActionType, key.ActionValue) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
@@ -1282,6 +1322,47 @@ public partial class MainWindow
             _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, key.ImagePath, key.ActionType, key.ActionValue);
             DpLog($"[ACT] key #{key.Index} <- {key.ActionType ?? "none"}");
         }
+    }
+
+    /// <summary>Rebuilds the Key Binding section's mapped-keys list (LvDpKeys) —
+    /// mirrors RefreshMpMappedKeys (MacroPad).</summary>
+    private void RefreshDpMappedKeys()
+    {
+        _dpMappedKeys.Clear();
+        foreach (var k in _dpKeys)
+            if (k.HasAction) _dpMappedKeys.Add(k);
+    }
+
+    /// <summary>Configure/Remove only make sense with a row selected — mirrors
+    /// LvEvKeys_SelectionChanged/LvMpKeys_SelectionChanged.</summary>
+    private void LvDpKeys_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        bool hasSelection = LvDpKeys.SelectedItem is not null;
+        BtnDpConfigure.IsEnabled = hasSelection;
+        BtnDpRemoveAction.IsEnabled = hasSelection;
+    }
+
+    /// <summary>"Configure" button next to LvDpKeys — same unified image+action
+    /// dialog as clicking the key on the canvas, for the selected list row.</summary>
+    private void BtnDpConfigure_Click(object sender, RoutedEventArgs e)
+    {
+        if (LvDpKeys.SelectedItem is not DisplayPadKey key)
+        {
+            DpLog("[WARN] select a key first");
+            return;
+        }
+        if (DpSelectedDeviceId() is not int id) { DpLog("[WARN] Select a device first."); return; }
+        DpOpenKeyConfigDialog(key, id);
+    }
+
+    /// <summary>"Remove" button next to LvDpKeys, for the currently selected list row.</summary>
+    private void BtnDpRemoveAction_Click(object sender, RoutedEventArgs e)
+    {
+        if (!IsDpKeyBindingSectionActive) return;
+        if (LvDpKeys.SelectedItem is not DisplayPadKey key) return;
+        if (DpSelectedDeviceId() is not int id) return;
+        DpRemoveKeyAction(key, id);
+        DpLog($"[ACT] key #{key.Index} action removed");
     }
 
     private void DpUploadAndPersist(int id, int profile, DisplayPadKey key, string path)
@@ -1369,6 +1450,13 @@ public partial class MainWindow
         if (!IsDpKeyBindingSectionActive) return;
         if (DpKeyFromMenu(sender) is not DisplayPadKey key) return;
         if (DpSelectedDeviceId() is not int id) return;
+        DpRemoveKeyAction(key, id);
+    }
+
+    /// <summary>Shared by the context menu's "Remove action" and the "Remove"
+    /// button next to LvDpKeys (<see cref="BtnDpRemoveAction_Click"/>).</summary>
+    private void DpRemoveKeyAction(DisplayPadKey key, int id)
+    {
         key.ActionType = null; key.ActionValue = null;
         DpGifAnimator.Stop(id, key.Index);
         key.ImagePath = null;

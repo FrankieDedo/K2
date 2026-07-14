@@ -173,6 +173,27 @@ ON CONFLICT(Profile, KeyMatrix) DO UPDATE SET
         SetSetting($"profile.{profile}.name", "");
     }
 
+    /// <summary>Deletes only this profile's key bindings — unlike <see cref="ClearProfile"/>,
+    /// keeps the profile's name. Used by "Restore defaults" (resets content, not identity).
+    /// RGB lighting/keycap appearance are device-wide (not per-profile) for the Everest Max,
+    /// so they are untouched here — see the architectural note in _PROJECT_MAP.md.</summary>
+    public void ResetProfileToDefaults(int profile)
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM Keys WHERE Profile=$p";
+        cmd.Parameters.AddWithValue("$p", profile);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Wipes every profile, key binding, setting and keycap override — used by the
+    /// app-wide "Restore all defaults" (Settings tab), not by the per-device reset above.</summary>
+    public void ResetAllData()
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM Keys; DELETE FROM Settings; DELETE FROM KeycapOverrides;";
+        cmd.ExecuteNonQuery();
+    }
+
     // ---------- settings ----------
 
     public string? GetSetting(string key)

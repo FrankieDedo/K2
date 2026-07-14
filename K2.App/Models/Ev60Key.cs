@@ -4,23 +4,21 @@ using System.Runtime.CompilerServices;
 namespace K2.App.Models;
 
 /// <summary>
-/// Bindable state of an Everest Max key in the configuration view.
-///
-/// A key's identity is its hardware MATRIX code: the keyboard has 100+ keys,
-/// so no fixed grid is pre-allocated — keys are discovered on demand by pressing
-/// them. The model applies equally to ISO keyboard keys, the numpad, the 4
-/// programmable keys, the 5 media dock keys, and the encoder (which, having no
-/// click, generates two matrix codes: clockwise and counter-clockwise rotation).
+/// Bindable state of an Everest 60 key in the configuration view — mirrors
+/// <see cref="EverestKey"/> (Everest Max), but identity is the board's LED
+/// index (0-63, same as <see cref="Everest60KeyboardLayout"/>'s MatrixId)
+/// instead of a raw SDK hardware matrix code: the 64-key overlay is a fixed
+/// grid (no dynamic discovery needed like Everest Max's 100+ keys).
 /// </summary>
-public sealed class EverestKey : INotifyPropertyChanged
+public sealed class Ev60Key : INotifyPropertyChanged
 {
-    public EverestKey(int keyMatrix) => KeyMatrix = keyMatrix;
+    public Ev60Key(int ledIndex) => LedIndex = ledIndex;
 
-    /// <summary>Hardware matrix code: stable key identity.</summary>
-    public int KeyMatrix { get; }
+    /// <summary>Board LED index: stable key identity (0-63).</summary>
+    public int LedIndex { get; }
 
     private string _label = "";
-    /// <summary>User-assigned name (e.g. "F5", "Macro 1", "Encoder CW").</summary>
+    /// <summary>Key legend (e.g. "A", "Esc", "Space").</summary>
     public string Label
     {
         get => _label;
@@ -68,10 +66,7 @@ public sealed class EverestKey : INotifyPropertyChanged
 
     public bool HasAction => !string.IsNullOrEmpty(_actionType);
 
-    /// <summary>Key label: the user-chosen/resolved name, or a plain fallback
-    /// (no hex — matrixIds outside the known layout, e.g. dock/crown, still
-    /// need something displayable).</summary>
-    public string Name => string.IsNullOrWhiteSpace(_label) ? $"Key {KeyMatrix}" : _label;
+    public string Name => string.IsNullOrWhiteSpace(_label) ? $"Key {LedIndex}" : _label;
 
     /// <summary>Text shown in the key list.</summary>
     public string Display

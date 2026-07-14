@@ -55,6 +55,11 @@ public partial class MainWindow
     private Everest60Store _ev60Store = null!;
     private bool _ev60SuppressProfile;
 
+    /// <summary>Locale legend selection for the 64-key overlay (Settings' "Layout"
+    /// combo) — see <see cref="Everest60KeyboardLayout.GetMainBoard"/>'s doc comment:
+    /// same fixed physical board for every value, only printed legends change.</summary>
+    private KeyboardLayoutType _ev60LayoutType = KeyboardLayoutType.AnsiUs;
+
     /// <summary>Live LED-color readback poller (raw HID, Everest60Service.TryGetColorData
     /// — see Everest60Protocol.ReadColorData's doc comment for why not the
     /// vendor SDK) — started/stopped by <see cref="UpdateEv60LedPreviewActive"/>
@@ -76,6 +81,26 @@ public partial class MainWindow
     private readonly Dictionary<int, FrameworkElement> _ev60OriginalKeyContent = new();
     private readonly List<KeyVisual> _ev60NumpadVisuals = new();
 
+    /// <summary>Number of K2-side profile slots for Everest 60 — see the
+    /// "Profile management" doc comment below (no firmware profile concept).</summary>
+    private const int Ev60ProfileCount = 5;
+
+    private Ev60ActionHost? _ev60ActionHost;
+    private ButtonActionEngine? _ev60Engine;
+
+    /// <summary>Reverse of <see cref="Everest60RemapData.LedIndexToDllKeyIdArray"/>
+    /// (DllKeyId -> ledIndex), built once in <see cref="InitEverest60Module"/> —
+    /// used to translate <see cref="Everest60SdkService.KeyEvent"/>'s wMatrix into
+    /// the board's LED index. <b>Unverified on real hardware</b>: assumes the
+    /// SDK's key-press callback reports the physical key by the same DllKeyId
+    /// space used by the (now-retired) ChangeKey/ChangeFnKey remap exports —
+    /// reasonable given both speak "DLLKeyId" consistently in Base Camp's own
+    /// decompiled code, but never confirmed against a live callback. If this
+    /// turns out false on real hardware, Everest Max's guided-remap capture
+    /// flow (BtnEvMapKeys/_evWMatrixToLayout in MainWindow.Everest.cs) is the
+    /// fallback pattern to port.</summary>
+    private readonly Dictionary<int, int> _ev60DllKeyIdToLedIndex = new();
+
     /// <summary>Called once from the MainWindow constructor.</summary>
     private void InitEverest60Module()
     {
@@ -84,12 +109,41 @@ public partial class MainWindow
 
         Ev60RgbPanel.Init(_ev60, LogEverest60, _ev60Store, Ev60CurrentProfile);
         Ev60RgbPanel.CustomKeysCleared += ApplyEv60KeycapAppearanceToAllKeys;
-        Ev60KeyBindingPanel.Init(_ev60Sdk, LogEverest60, _ev60Store, Ev60CurrentProfile);
+        Ev60KeyBindingPanel.Init(_ev60Store, Ev60CurrentProfile, LogEverest60, () => _ev60LayoutType);
         InitEv60SectionNav();
 
+        _ev60LayoutType = EverestKeyboardLayout.DetectLayout();
         BuildEverest60KeyboardOverlay();
         ApplyEv60NumpadPosition(Ev60NumpadPosition.None); // until the first poll completes
         InitEv60SettingsPanel();
+        InitEv60KeyboardLayoutSelector();
+
+        // DllKeyId -> ledIndex reverse map, for translating the SDK key
+        // callback (see _ev60DllKeyIdToLedIndex's doc comment).
+        var table = Everest60RemapData.LedIndexToDllKeyIdArray;
+        for (int led = 0; led < table.Length; led++)
+            _ev60DllKeyIdToLedIndex[table[led]] = led;
+
+        _ev60Sdk.KeyEvent += OnEv60Key;
+
+        _ev60ActionHost = new Ev60ActionHost(
+            dispatcher:            Dispatcher,
+            log:                   LogEverest60,
+            currentProfile:        Ev60CurrentProfile,
+            profileCount:          () => Ev60ProfileCount,
+            sdkVersion:            () => { try { return Everest60SdkNative.GetDLLVersion(); } catch { return 0; } },
+            getButtons:            Ev60GetButtons,
+            pressButton:           Ev60PressButton,
+            switchProfile:         Ev60SwitchProfile,
+            configuredPythonPath:  () => _ev60Store.GetSetting("python.exePath"),
+            listAllProfileTargets: ListAllProfileTargets,
+            switchProfileByKey:    SwitchProfileByKey,
+            listMacroNames:        ListAllMacroNames,
+            playMacro:             PlayMacroByName);
+        Ev60KeyBindingPanel.SetActionHost(_ev60ActionHost);
+
+        _ev60Engine = new ButtonActionEngine(_ev60ActionHost);
+        _ev60Engine.Start();
 
         Ev60RefreshProfiles();
         Ev60ReloadProfile(Ev60CurrentProfile());
@@ -100,6 +154,7 @@ public partial class MainWindow
         Closed += (_, _) =>
         {
             try { _ev60LedPoller?.Dispose(); } catch { /* ignore */ }
+            try { _ev60Engine?.Dispose(); } catch { /* ignore */ }
             try { _ev60Sdk.Dispose(); } catch { /* ignore */ }
         };
 
@@ -138,7 +193,7 @@ public partial class MainWindow
         _ev60SuppressProfile = true;
         try
         {
-            var items = Enumerable.Range(1, 5)
+            var items = Enumerable.Range(1, Ev60ProfileCount)
                 .Select(s => new Ev60ProfileItem(s, _ev60Store.GetProfileName(s) ?? Loc.Get("profile_n", s)))
                 .ToList();
             CbEv60Profile.DisplayMemberPath = nameof(Ev60ProfileItem.Label);
@@ -167,6 +222,40 @@ public partial class MainWindow
     {
         Ev60RgbPanel.Ev60ReloadProfile(slot);
         Ev60KeyBindingPanel.Ev60ReloadKeyBindings(slot);
+    }
+
+    /// <summary>
+    /// Resolves "Next"/"Previous"/"1..N" and switches the Everest 60's K2-side
+    /// profile slot — mirrors MainWindow.Everest.cs's EvSwitchProfile, but
+    /// there is no firmware call to make (see the "Profile management" doc
+    /// comment above): switching just reloads the slot's stored keys/lighting,
+    /// same as picking it from CbEv60Profile.
+    /// </summary>
+    private void Ev60SwitchProfile(string target)
+    {
+        int cur = Ev60CurrentProfile();
+        int next = cur;
+        var t = (target ?? "").Trim();
+        if (t.Equals("Next", StringComparison.OrdinalIgnoreCase) ||
+            t.Equals("Next Profile", StringComparison.OrdinalIgnoreCase))
+            next = cur == Ev60ProfileCount ? 1 : cur + 1;
+        else if (t.Equals("Previous", StringComparison.OrdinalIgnoreCase) ||
+                 t.Equals("Previous Profile", StringComparison.OrdinalIgnoreCase) ||
+                 t.Equals("prev", StringComparison.OrdinalIgnoreCase))
+            next = cur == 1 ? Ev60ProfileCount : cur - 1;
+        else if (int.TryParse(t, out var n) && n >= 1 && n <= Ev60ProfileCount)
+            next = n;
+        else
+        {
+            LogEverest60($"[EXEC] profile: target \"{t}\" not resolved");
+            return;
+        }
+        if (next == cur) { LogEverest60($"[EXEC] profile: already on {cur}"); return; }
+
+        _ev60Store.SetCurrentProfile(next);
+        Ev60SelectProfileSlot(next);
+        Ev60ReloadProfile(next);
+        LogEverest60($"[EXEC] profile -> {next}");
     }
 
     private void CbEv60Profile_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -207,6 +296,24 @@ public partial class MainWindow
         Ev60RefreshProfiles();
         Ev60SelectProfileSlot(slot);
         Ev60ReloadProfile(slot);
+    }
+
+    /// <summary>Resets the currently selected profile's lighting and key bindings back to
+    /// K2's defaults (see Everest60RgbPanel.RestoreDefaults / Everest60KeyBindingPanel.
+    /// RestoreDefaults) and re-applies them to the keyboard if connected.</summary>
+    private void BtnEv60RestoreDefaults_Click(object sender, RoutedEventArgs e)
+    {
+        int slot = Ev60CurrentProfile();
+        string profileName = _ev60Store.GetProfileName(slot) ?? Loc.Get("profile_n", slot);
+        var res = MessageBox.Show(
+            Loc.Get("restore_defaults_profile_confirm", profileName),
+            Loc.Get("restore_defaults"),
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+        if (res != MessageBoxResult.OK) return;
+        Ev60RgbPanel.RestoreDefaults();
+        Ev60KeyBindingPanel.RestoreDefaults();
+        LogEverest60($"[UI ] Everest 60 profile {slot} restored to defaults.");
     }
 
     // ------------------------------------------------------------
@@ -299,26 +406,18 @@ public partial class MainWindow
             foreach (var b in root.Descendants("Everest60KeyBidings"))
             {
                 if (!int.TryParse(b.Element("DLLMatrixIndex")?.Value, out int ledIndex)) continue;
-                string? functionType = b.Element("FunctionType")?.Value;
-                string mode;
-                int value;
-                int mask = int.TryParse(b.Element("FunctionEnteredValue")?.Value, out var m) ? m : 0;
 
-                if (functionType == "K2Remap")
-                {
-                    mode = b.Element("SubFunctionType")?.Value ?? "key";
-                    if (!int.TryParse(b.Element("FunctionValue")?.Value, out value)) continue;
-                }
-                else
-                {
-                    string? label = b.Element("FunctionValue")?.Value;
-                    int target = label != null ? Everest60RemapData.KeyCatalog.GetValueOrDefault(label, -1) : -1;
-                    if (target < 0) continue;
-                    mode = functionType == "Keyboard Shortcuts" ? "shortcut" : "key";
-                    value = target;
-                }
+                // K2-only export (see the method doc comment): Ev60ProfileExporter.ExportK2
+                // always writes FunctionType="K2Action", SubFunctionType=ActionType,
+                // FunctionValue=ActionValue verbatim (same lossless round-trip as
+                // EvProfileExporter's own K2Action branch, see MainWindow.Everest.cs's
+                // BtnEvImportXml_Click) — no native Base Camp vocabulary to translate here.
+                if (b.Element("FunctionType")?.Value != "K2Action") continue;
+                string? actionType = b.Element("SubFunctionType")?.Value;
+                if (string.IsNullOrEmpty(actionType)) continue;
+                string? actionValue = b.Element("FunctionValue")?.Value;
 
-                _ev60Store.SaveKeyBinding(slot, ledIndex, mode, value, mask);
+                _ev60Store.SaveKey(new Ev60KeyRecord(slot, ledIndex, null, actionType, actionValue));
                 imported++;
             }
 
@@ -423,11 +522,14 @@ public partial class MainWindow
 
     private void BuildEverest60KeyboardOverlay()
     {
+        CvsEv60Keyboard.Children.Clear();
+        CvsEv60Numpad.Children.Clear();
         _ev60KeyVisuals.Clear();
         _ev60NumpadVisuals.Clear();
+        _ev60OriginalKeyContent.Clear();
         var keyStyle = (Style)FindResource("EverestKeyStyle");
 
-        foreach (var kd in Everest60KeyboardLayout.MainBoard)
+        foreach (var kd in Everest60KeyboardLayout.GetMainBoard(_ev60LayoutType))
         {
             var btn = new Button
             {
@@ -484,11 +586,50 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>Key click on the 64-key overlay: paints the key if the Key
-    /// Lighting section's paint mode is active (bridged via
-    /// Ev60RgbPanel.TryPaintKey), no-op otherwise — the Everest 60 has no
-    /// known remap/action protocol, so there is nothing else a key click
-    /// could do yet.</summary>
+    // ---- Layout selector (Settings' "Layout" combo) ------------------------
+
+    private sealed record Ev60LayoutChoice(KeyboardLayoutType Layout, string Label)
+    {
+        // See EverestKeyboardLayout's LayoutChoice (MainWindow.Everest.cs) for
+        // why ToString() mirrors Label: closed-ComboBox rendering fallback
+        // when the ancestor is still Collapsed at ItemsSource-assignment time.
+        public override string ToString() => Label;
+    }
+
+    private void InitEv60KeyboardLayoutSelector()
+    {
+        var choices = new[]
+        {
+            new Ev60LayoutChoice(KeyboardLayoutType.AnsiUs,    "English (US) — ANSI"),
+            new Ev60LayoutChoice(KeyboardLayoutType.IsoUk,     "English (UK)"),
+            new Ev60LayoutChoice(KeyboardLayoutType.IsoIt,     "Italian"),
+            new Ev60LayoutChoice(KeyboardLayoutType.IsoDe,     "German (QWERTZ)"),
+            new Ev60LayoutChoice(KeyboardLayoutType.IsoFr,     "French (AZERTY)"),
+            new Ev60LayoutChoice(KeyboardLayoutType.IsoEs,     "Spanish"),
+            new Ev60LayoutChoice(KeyboardLayoutType.IsoNordic, "Norwegian / Nordic"),
+            new Ev60LayoutChoice(KeyboardLayoutType.IsoPt,     "Portuguese"),
+        };
+        CbEv60KeyboardLayout.ItemsSource       = choices;
+        CbEv60KeyboardLayout.DisplayMemberPath = nameof(Ev60LayoutChoice.Label);
+        CbEv60KeyboardLayout.SelectedItem      =
+            System.Array.Find(choices, c => c.Layout == _ev60LayoutType) ?? choices[0];
+
+        CbEv60KeyboardLayout.SelectionChanged += OnEv60KeyboardLayoutChanged;
+    }
+
+    private void OnEv60KeyboardLayoutChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (CbEv60KeyboardLayout.SelectedItem is not Ev60LayoutChoice c) return;
+        if (c.Layout == _ev60LayoutType) return;
+        _ev60LayoutType = c.Layout;
+        BuildEverest60KeyboardOverlay();
+        ApplyEv60KeycapAppearanceToAllKeys();
+    }
+
+    /// <summary>Key click on the 64-key overlay: opens the Key Binding
+    /// configure popup if that section is active (see below), paints the key
+    /// if the Key Lighting section's paint mode is active (bridged via
+    /// Ev60RgbPanel.TryPaintKey), no-op otherwise.</summary>
     private void Ev60KeyboardButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: int ledIndex } btn) return;
@@ -516,6 +657,71 @@ public partial class MainWindow
         // tick plays, just discrete (on click) instead of continuous.
         if (Ev60RgbPanel.TryPaintKey(ledIndex, out var color) && _ev60KeyVisuals.TryGetValue(ledIndex, out var v))
             ApplyEv60KeyOverlay(v, color);
+    }
+
+    // ============================================================
+    // IActionHost adapter (delegates passed to Ev60ActionHost) +
+    // physical key-press execution
+    // ============================================================
+
+    private IReadOnlyList<HostButton> Ev60GetButtons()
+    {
+        var keys = Ev60KeyBindingPanel.Keys;
+        var list = new List<HostButton>(keys.Count);
+        for (int i = 0; i < keys.Count; i++)
+        {
+            var k = keys[i];
+            list.Add(new HostButton(
+                Index: i, KeyMatrix: k.LedIndex, HasImage: false, ImagePath: null,
+                ActionType: k.ActionType, ActionValue: k.ActionValue));
+        }
+        return list;
+    }
+
+    private void Ev60PressButton(int index)
+    {
+        var keys = Ev60KeyBindingPanel.Keys;
+        if (index >= 0 && index < keys.Count) ExecuteEv60Key(keys[index]);
+    }
+
+    private void ExecuteEv60Key(Ev60Key k) =>
+        _ev60Engine?.Execute(k.ActionType, k.ActionValue, Ev60KeyBindingPanel.IndexOf(k));
+
+    /// <summary>Physical key press/release, reported by the vendor SDK's
+    /// callback (Everest60SdkService.KeyEvent) — mirrors MainWindow.Everest.cs's
+    /// OnEverestKey/HandleEverestKey. <b>Unverified on real hardware</b>: see
+    /// _ev60DllKeyIdToLedIndex's doc comment for the wMatrix->ledIndex
+    /// assumption this depends on.</summary>
+    private void OnEv60Key(object? sender, (ushort WMatrix, bool Pressed, uint Id) e) =>
+        Dispatcher.BeginInvoke(() => HandleEv60Key(e.WMatrix, e.Pressed));
+
+    private void HandleEv60Key(ushort wMatrix, bool pressed)
+    {
+        if (AppSettings.LogLevel == K2LogLevel.Verbose)
+            LogEverest60($"[KEY ] wMatrix=0x{wMatrix:X2} {(pressed ? "down" : "up")}");
+
+        if (!_ev60DllKeyIdToLedIndex.TryGetValue(wMatrix, out int ledIndex)) return;
+
+        Ev60HighlightKeyboardButton(ledIndex, pressed);
+
+        var key = Ev60KeyBindingPanel.ByLed(ledIndex);
+        if (key is null) return;
+
+        key.IsHighlighted = pressed;
+        if (pressed) ExecuteEv60Key(key);
+    }
+
+    /// <summary>Same "Tint" overlay approach as Everest Max's
+    /// EvHighlightKeyboardButton (MainWindow.Everest.cs) — SetKeyTint/
+    /// SetLegendForeground live in MainWindow.KeycapAppearance.cs and own
+    /// Background/BorderBrush for the keycap-appearance system, so a plain
+    /// assignment here would fight with custom color/live LED tint.</summary>
+    private void Ev60HighlightKeyboardButton(int ledIndex, bool pressed)
+    {
+        if (!_ev60KeyVisuals.TryGetValue(ledIndex, out var v)) return;
+
+        SetKeyTint(v.Button, pressed ? new SolidColorBrush(Color.FromRgb(0x5B, 0xBE, 0xC3)) : Brushes.Transparent);
+        SetLegendForeground(v.Button, pressed ? Brushes.Black : new SolidColorBrush(ResolveEv60KeycapTextColor()));
     }
 
     /// <summary>Current numpad position, updated by Ev60RefreshStatus's poll

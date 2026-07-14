@@ -16,10 +16,23 @@
             <StackPanel>
                 <!-- Preset RGB effect -->
                 <TextBlock Text="{loc:Get rgb_lighting}" FontWeight="Bold" Margin="0,0,0,8"/>
+                <!-- Same grouping/order as Everest Max's PnlSecRgb (effect, speed,
+                     direction, rainbow — no sync, unsupported by this device):
+                     merged into one WrapPanel 2026-07-14, was speed on its own row.
+                     Brightness lives in MainWindow's shared top-right bar (BrEverest60),
+                     not here — same convention as Everest Max/MacroPad/DisplayPad, see
+                     MainWindow.SectionNav.cs. MainWindow calls SetBrightness() on change. -->
                 <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
                     <TextBlock Text="{loc:Get rgb_effect}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <ComboBox x:Name="CbEv60Effect" Width="120" Margin="0,0,12,0"
                               SelectionChanged="CbEv60Effect_SelectionChanged"/>
+                    <StackPanel x:Name="PnlEv60Speed" Orientation="Horizontal" Margin="0,0,12,0">
+                        <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <Slider x:Name="SldEv60Speed" Minimum="0" Maximum="100" Width="120"
+                                TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                                ValueChanged="SldEv60Speed_ValueChanged" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LblEv60Speed" Text="50%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
+                    </StackPanel>
                     <StackPanel x:Name="PnlEv60Direction" Orientation="Horizontal" Margin="0,0,12,0">
                         <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <Border Style="{StaticResource K2SegmentedGroupBorder}">
@@ -28,16 +41,6 @@
                     </StackPanel>
                     <CheckBox x:Name="CkEv60Rainbow" Content="{loc:Get rgb_rainbow}"
                               ToolTip="{loc:Get rgb_rainbow_tip}" Click="CkEv60Rainbow_Click"/>
-                </WrapPanel>
-                <!-- Brightness lives in MainWindow's shared top-right bar (BrEverest60), not
-                     here — same convention as Everest Max/MacroPad/DisplayPad, see
-                     MainWindow.SectionNav.cs. MainWindow calls SetBrightness() on change. -->
-                <WrapPanel x:Name="PnlEv60Speed" Orientation="Horizontal" Margin="0,0,0,6">
-                    <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <Slider x:Name="SldEv60Speed" Minimum="0" Maximum="100" Width="120"
-                            TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
-                            ValueChanged="SldEv60Speed_ValueChanged" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="LblEv60Speed" Text="50%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
                 </WrapPanel>
                 <WrapPanel Orientation="Horizontal">
                     <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
@@ -51,7 +54,11 @@
                     </StackPanel>
                 </WrapPanel>
 
-                <!-- Side ring -->
+                <!-- Side ring + Key Lighting (paint) — hidden for now (2026-07-14,
+                     user request: hide LED painting/ring sections on every device
+                     with a Lighting section). Elements stay in the tree (code-behind
+                     still references them) so re-enabling is a one-line Visibility flip. -->
+                <StackPanel x:Name="PnlEv60SideRingSection" Visibility="Collapsed">
                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,10,0,8"/>
                 <TextBlock Text="{loc:Get ev60_side_ring}" FontWeight="Bold" Margin="0,0,0,8"/>
                 <WrapPanel Orientation="Horizontal">
@@ -64,6 +71,7 @@
                 <TextBlock Text="{loc:Get ev60_side_hint}" TextWrapping="Wrap"
                            Foreground="{StaticResource K2TextMutedBrush}" FontStyle="Italic" FontSize="11"
                            Margin="0,8,0,0" MaxWidth="640"/>
+                </StackPanel>
 
                 <!-- Per-key custom lighting ("Key Lighting"): paint mode over the
                      64-key overlay above (CvsEv60Keyboard in MainWindow.xaml). No
@@ -72,6 +80,7 @@
                      shows its picked color as soon as it's painted/applied. Mirrors
                      Everest Max's "Custom Lighting (per-key)" block
                      (MainWindow.CustomLighting.cs). -->
+                <StackPanel x:Name="PnlEv60KeyLightingSection" Visibility="Collapsed">
                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,10,0,8"/>
                 <TextBlock Text="{loc:Get ev60_key_lighting}" FontWeight="Bold" Margin="0,0,0,6"/>
                 <TextBlock Text="{loc:Get ev60_key_lighting_hint}"
@@ -98,6 +107,7 @@
                     <Button x:Name="BtnEv60CustomClear" Content="{loc:Get custom_clear}" Padding="8,2"
                             Click="BtnEv60CustomClear_Click" Style="{StaticResource K2IconButton}" Tag="&#xE74D;"/>
                 </WrapPanel>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
     </Grid>

@@ -119,13 +119,6 @@ public partial class MakaluRgbSettingsPanel : UserControl
         Brightness,
         _mkCustomActive, _mkCustomColors);
 
-    private static readonly (byte r, byte g, byte b)[] MkPresetColors =
-    {
-        (255,   0,   0), (204,   0,  67), (235,  64,  52), (220,  41, 188),
-        (179,  53, 127), ( 71,   0, 204), (  0,  60, 204), (  0, 118, 204),
-        (  0, 204, 181), ( 41, 255, 204), ( 91, 222,  98), (152, 235,  53),
-    };
-
     private static readonly int[] DebounceSteps = MakaluProtocol.DebounceValuesMs; // {2,4,6,8,10,12}
     private static readonly int[] PollingSteps = { 125, 250, 500, 1000 };
 
@@ -155,7 +148,6 @@ public partial class MakaluRgbSettingsPanel : UserControl
             LblMkSpeedVal.Text = "Medium";
             RbMkDirRight.IsChecked = true;
 
-            BuildMkPresets();
             UpdateMkCapabilities();
             ApplyColorButton(BtnMkColor1, _mkColor1);
             ApplyColorButton(BtnMkColor2, _mkColor2);
@@ -221,28 +213,6 @@ public partial class MakaluRgbSettingsPanel : UserControl
     // ------------------------------------------------------------
     // RGB effect panel
     // ------------------------------------------------------------
-
-    private void BuildMkPresets()
-    {
-        PnlMkPresets.Children.Clear();
-        foreach (var (r, g, b) in MkPresetColors)
-        {
-            var btn = new Button
-            {
-                Width = 22, Height = 22, Margin = new Thickness(0, 0, 2, 2),
-                Background = new SolidColorBrush(Color.FromRgb(r, g, b)),
-                BorderThickness = new Thickness(1),
-                BorderBrush = (Brush)FindResource("K2BorderBrush"),
-            };
-            btn.Click += (_, _) =>
-            {
-                _mkColor1 = (r << 16) | (g << 8) | b;
-                ApplyColorButton(BtnMkColor1, _mkColor1);
-                ApplyCurrentMkEffect();
-            };
-            PnlMkPresets.Children.Add(btn);
-        }
-    }
 
     private void CbMkEffect_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -459,6 +429,23 @@ public partial class MakaluRgbSettingsPanel : UserControl
     private int[] _mkDpiValues = { 400, 800, 1600, 3200, 6400 };
     private int _mkDpiActive;
 
+    /// <summary>How many of the 5 fixed wire-format slots are actually active —
+    /// mirrors <c>dpi_level_num</c> (MakaluProtocol.GetDpi/SetAllDpi resp[21]/
+    /// buf[6]), the firmware field controlling how many levels the physical
+    /// DPI-cycle button on the mouse steps through. Default 5 matches the
+    /// behavior this panel always had before levels became addable/removable
+    /// (no regression for existing saved profiles, which are always
+    /// length-5). <see cref="MakaluDpiRecord.Levels"/>'s array LENGTH doubles
+    /// as this count when persisted — no separate stored field needed.</summary>
+    private int _mkDpiCount = 5;
+
+    private const int MaxDpiLevels = 5;
+    private static readonly int[] DefaultDpiLevels = { 400, 800, 1600, 3200, 6400 };
+
+    /// <summary>Pixel width of one DPI level button + its right margin —
+    /// how far BtnMkDpiPrev/Next scroll per click (see SvMkDpiLevels in XAML).</summary>
+    private const double DpiLevelScrollStep = 114;
+
     /// <summary>Builds a DPI level button's two-line Content — "Level N" (muted,
     /// small) over "19000 DPI" (the value in bold, a small fixed "DPI" unit
     /// label beside it) — matching Base Camp's own DPI level entries. Widened
@@ -484,24 +471,60 @@ public partial class MakaluRgbSettingsPanel : UserControl
         return panel;
     }
 
+    /// <summary>Builds the trailing "+" tab that appends a new DPI level (up to
+    /// MaxDpiLevels) — hidden once the wire-format's 5 slots are all in use.</summary>
+    private Button BuildMkDpiAddButton()
+    {
+        var btn = new Button
+        {
+            Width = 39, Height = 64, Margin = new Thickness(0, 0, 4, 0),
+            FontSize = 20, FontWeight = FontWeights.Bold,
+            Content = "+",
+            ToolTip = Loc.Get("makalu_dpi_add"),
+        };
+        btn.Click += BtnMkDpiAddLevel_Click;
+        return btn;
+    }
+
+    /// <summary>Right-click "Remove level" on a DPI level tab — disabled when
+    /// only one level is left (the firmware needs at least one active slot).</summary>
+    private ContextMenu BuildMkDpiLevelContextMenu(int idx)
+    {
+        var menu = new ContextMenu();
+        var mi = new MenuItem { Header = Loc.Get("makalu_dpi_remove_level"), IsEnabled = _mkDpiCount > 1 };
+        mi.Click += (_, _) => MkDpiRemoveLevel(idx);
+        menu.Items.Add(mi);
+        return menu;
+    }
+
+    /// <summary>Fixed-width tabs in a horizontally scrollable strip (not a
+    /// UniformGrid — that used to shrink every button to fit exactly 5 in the
+    /// available width; per user request, level tabs now keep a comfortable
+    /// fixed size and the strip scrolls instead when they don't all fit — see
+    /// SvMkDpiLevels_ScrollChanged for the prev/next arrows' visibility).</summary>
     private void BuildMkDpiLevelButtons()
     {
         PnlMkDpiLevels.Children.Clear();
         _mkDpiLevelButtons.Clear();
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < _mkDpiCount; i++)
         {
             int idx = i;
             var btn = new Button
             {
-                Height = 52, Margin = new Thickness(0, 0, 4, 0),
+                Width = 110, Height = 64, Margin = new Thickness(0, 0, 4, 0),
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 Content = BuildMkDpiButtonContent(i + 1, _mkDpiValues[i]),
+                ContextMenu = BuildMkDpiLevelContextMenu(idx),
             };
             btn.Click += (_, _) => MkDpiSelectLevel(idx);
             PnlMkDpiLevels.Children.Add(btn);
             _mkDpiLevelButtons.Add(btn);
         }
+        if (_mkDpiCount < MaxDpiLevels)
+            PnlMkDpiLevels.Children.Add(BuildMkDpiAddButton());
+
         SldMkDpi.Minimum = _mkInfo.DpiMin;
+        if (_mkDpiActive >= _mkDpiCount) _mkDpiActive = _mkDpiCount - 1;
         MkUpdateDpiButtonLabels();
         SldMkDpi.Value = _mkDpiValues[_mkDpiActive];
         TxtMkDpi.Text = _mkDpiValues[_mkDpiActive].ToString();
@@ -528,6 +551,53 @@ public partial class MakaluRgbSettingsPanel : UserControl
         SldMkDpi.Value = _mkDpiValues[idx];
         TxtMkDpi.Text = _mkDpiValues[idx].ToString();
         MkUpdateDpiButtonLabels();
+        _mkDpiLevelButtons[idx].BringIntoView();
+    }
+
+    /// <summary>Appends a new DPI level (local UI state only — like every other
+    /// DPI edit here, it's only sent to the device/persisted on "Apply", see
+    /// MkApplyDpi). Default value comes from the same 5-value progression the
+    /// panel always defaulted to, so growing back to 5 reproduces the old
+    /// fixed behavior exactly.</summary>
+    private void BtnMkDpiAddLevel_Click(object sender, RoutedEventArgs e)
+    {
+        if (_mkDpiCount >= MaxDpiLevels) return;
+        _mkDpiValues[_mkDpiCount] = DefaultDpiLevels[_mkDpiCount];
+        _mkDpiCount++;
+        BuildMkDpiLevelButtons();
+        MkDpiSelectLevel(_mkDpiCount - 1);
+        _log($"[DPI ] level {_mkDpiCount} added locally (Apply to send to device)");
+    }
+
+    /// <summary>Removes a DPI level (local UI state only, see BtnMkDpiAddLevel_Click).
+    /// Shifts every later level down one slot so level numbering stays contiguous.</summary>
+    private void MkDpiRemoveLevel(int idx)
+    {
+        if (_mkDpiCount <= 1 || idx < 0 || idx >= _mkDpiCount) return;
+        for (int i = idx; i < _mkDpiCount - 1; i++) _mkDpiValues[i] = _mkDpiValues[i + 1];
+        _mkDpiValues[_mkDpiCount - 1] = DefaultDpiLevels[_mkDpiCount - 1];
+        _mkDpiCount--;
+        BuildMkDpiLevelButtons();
+        _log($"[DPI ] level {idx + 1} removed locally (Apply to send to device)");
+    }
+
+    /// <summary>Scrolls the level strip by one tab — only visible/relevant when
+    /// SvMkDpiLevels_ScrollChanged has determined the tabs don't all fit.</summary>
+    private void BtnMkDpiPrev_Click(object sender, RoutedEventArgs e) =>
+        SvMkDpiLevels.ScrollToHorizontalOffset(Math.Max(0, SvMkDpiLevels.HorizontalOffset - DpiLevelScrollStep));
+
+    private void BtnMkDpiNext_Click(object sender, RoutedEventArgs e) =>
+        SvMkDpiLevels.ScrollToHorizontalOffset(SvMkDpiLevels.HorizontalOffset + DpiLevelScrollStep);
+
+    /// <summary>Shows the prev/next arrows only when the level strip's content is
+    /// actually wider than what's visible — fires on resize AND whenever a level
+    /// is added/removed (both change ExtentWidth), not just on manual scrolling.</summary>
+    private void SvMkDpiLevels_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        bool overflow = SvMkDpiLevels.ExtentWidth > SvMkDpiLevels.ViewportWidth + 0.5;
+        var vis = overflow ? Visibility.Visible : Visibility.Collapsed;
+        BtnMkDpiPrev.Visibility = vis;
+        BtnMkDpiNext.Visibility = vis;
     }
 
     private void SldMkDpi_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -563,11 +633,11 @@ public partial class MakaluRgbSettingsPanel : UserControl
     {
         MkCommitDpiEntry();
         LblMkDpiStatus.Text = "...";
-        bool ok = _makalu.SetAllDpi(_mkDpiValues, _mkDpiActive + 1, _mkInfo.DpiMin);
-        _log($"[DPI ] SetAllDpi([{string.Join(",", _mkDpiValues)}], active={_mkDpiActive + 1}) -> {ok}");
+        bool ok = _makalu.SetAllDpi(_mkDpiValues, _mkDpiActive + 1, _mkInfo.DpiMin, _mkDpiCount);
+        _log($"[DPI ] SetAllDpi([{string.Join(",", _mkDpiValues)}], active={_mkDpiActive + 1}, count={_mkDpiCount}) -> {ok}");
         LblMkDpiStatus.Text = ok ? Loc.Get("makalu_applied") : Loc.Get("makalu_failed");
         LblMkDpiStatus.Foreground = ok ? (Brush)FindResource("K2AccentBrush") : (Brush)FindResource("K2DangerBrush");
-        _mkStore?.SaveDpi(CurrentSlot, new MakaluDpiRecord(_mkDpiValues, _mkDpiActive));
+        _mkStore?.SaveDpi(CurrentSlot, new MakaluDpiRecord(_mkDpiValues[.._mkDpiCount], _mkDpiActive));
     }
 
     private void BtnMkDpiRefresh_Click(object sender, RoutedEventArgs e) => MkDpiRefreshFromDevice();
@@ -577,12 +647,13 @@ public partial class MakaluRgbSettingsPanel : UserControl
         var result = _makalu.GetDpi(_mkInfo.DpiMin);
         if (result is null) { _log("[DPI ] GetDpi -> not connected/failed"); return; }
         _mkDpiValues = result.Value.Levels;
-        _mkDpiActive = result.Value.Active;
-        MkUpdateDpiButtonLabels();
+        _mkDpiCount  = Math.Clamp(result.Value.Count, 1, MaxDpiLevels);
+        _mkDpiActive = Math.Clamp(result.Value.Active, 0, _mkDpiCount - 1);
+        BuildMkDpiLevelButtons();
         _mkSuppress = true;
         try { SldMkDpi.Value = _mkDpiValues[_mkDpiActive]; } finally { _mkSuppress = false; }
         TxtMkDpi.Text = _mkDpiValues[_mkDpiActive].ToString();
-        _log($"[DPI ] GetDpi -> levels=[{string.Join(",", _mkDpiValues)}] active={_mkDpiActive}");
+        _log($"[DPI ] GetDpi -> levels=[{string.Join(",", _mkDpiValues)}] active={_mkDpiActive} count={_mkDpiCount}");
     }
 
     // ------------------------------------------------------------
@@ -591,6 +662,26 @@ public partial class MakaluRgbSettingsPanel : UserControl
     // Called by MainWindow.Makalu.cs on combo switch, module init, and the
     // disconnected->connected poll transition.
     // ------------------------------------------------------------
+
+    /// <summary>Resets this profile's lighting/DPI/device-settings to K2's factory
+    /// defaults — the same values Init() sets up for a brand-new profile — and
+    /// re-applies them to the mouse if connected. Seeds the store with explicit default
+    /// records rather than clearing it, since <see cref="MkReloadProfile"/> only
+    /// overwrites a control when its record is non-null. Called by
+    /// MainWindow.Makalu.cs's "Restore defaults" button (button remap is reset
+    /// separately, by MakaluStore.ResetKeyRemap + MakaluDpiRemapPanel.MkReloadRemap).</summary>
+    internal void RestoreDefaults()
+    {
+        if (_mkStore is not null)
+        {
+            _mkStore.SaveLighting(CurrentSlot, new MakaluLightingRecord(
+                (int)MakaluProtocol.Effect.Static, 0x900000, 0x000000, 1, 1,
+                100, false, new int[8]));
+            _mkStore.SaveDpi(CurrentSlot, new MakaluDpiRecord(new[] { 400, 800, 1600, 3200, 6400 }, 0));
+            _mkStore.SaveSettings(CurrentSlot, new MakaluDeviceSettingsRecord(1000, 2, false, false));
+        }
+        MkReloadProfile(CurrentSlot);
+    }
 
     internal void MkReloadProfile(int slot)
     {
@@ -627,10 +718,15 @@ public partial class MakaluRgbSettingsPanel : UserControl
                 UpdateMkCapabilities();
             }
 
-            if (dpi is not null && dpi.Levels.Length == 5)
+            if (dpi is not null && dpi.Levels.Length is >= 1 and <= MaxDpiLevels)
             {
-                _mkDpiValues = dpi.Levels;
-                _mkDpiActive = Math.Clamp(dpi.Active, 0, 4);
+                // Levels.Length IS the active count (see _mkDpiCount's doc comment) —
+                // pad the remaining wire-format slots with the usual defaults so a
+                // later "+" click has something sane to start from.
+                _mkDpiCount = dpi.Levels.Length;
+                Array.Copy(dpi.Levels, _mkDpiValues, dpi.Levels.Length);
+                for (int i = dpi.Levels.Length; i < MaxDpiLevels; i++) _mkDpiValues[i] = DefaultDpiLevels[i];
+                _mkDpiActive = Math.Clamp(dpi.Active, 0, _mkDpiCount - 1);
             }
             BuildMkDpiLevelButtons();
 

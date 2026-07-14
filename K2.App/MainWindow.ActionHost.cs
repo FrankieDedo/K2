@@ -90,8 +90,11 @@ public partial class MainWindow : IActionHost
     /// <summary>
     /// All devices this K2.App instance can address for a "switch profile" action:
     /// the active MacroPad, every currently-known DisplayPad (per <see cref="_dpDeviceLabels"/>),
-    /// and the Everest (single device). Only devices visible/known right now are listed —
-    /// matches the rest of the UI (tabs/labels also only exist for known devices).
+    /// the Everest Max and the Everest 60 (both single-device). Only devices visible/known
+    /// right now are listed — matches the rest of the UI (tabs/labels also only exist for
+    /// known devices). Unconditionally listing Everest 60 here (unlike the others' presence
+    /// checks) mirrors how Everest Max is listed unconditionally too — both tabs are always
+    /// present once the app is running, just hidden via Visibility when not connected.
     /// </summary>
     internal IReadOnlyList<ProfileTargetOption> ListAllProfileTargets()
     {
@@ -110,6 +113,10 @@ public partial class MainWindow : IActionHost
         list.Add(new ProfileTargetOption("everest:1", evLabel,
             Enumerable.Range(1, EverestService.ProfileCount).ToList()));
 
+        string ev60Label = TabEverest60.Header as string ?? Loc.Get("tab_everest60");
+        list.Add(new ProfileTargetOption("everest60:1", ev60Label,
+            Enumerable.Range(1, Ev60ProfileCount).ToList()));
+
         return list;
     }
 
@@ -126,7 +133,8 @@ public partial class MainWindow : IActionHost
         {
             case "macropad":   MpSwitchProfile(id, target); break;
             case "displaypad": DpSwitchProfile(id, target); break;
-            case "everest":    EvSwitchProfile(target); break; // single device: id is always 1
+            case "everest":    EvSwitchProfile(target); break;   // single device: id is always 1
+            case "everest60":  Ev60SwitchProfile(target); break; // single device: id is always 1
             default:
                 Log($"[EXEC] profile: unknown device kind \"{parts[0]}\"");
                 break;

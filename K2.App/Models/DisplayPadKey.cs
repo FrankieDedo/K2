@@ -39,6 +39,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
             OnChanged(nameof(HasImage));
             OnChanged(nameof(HasImageNoAction));
             OnChanged(nameof(Display));
+            OnChanged(nameof(ListDisplay));
         }
     }
 
@@ -132,6 +133,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
             OnChanged(nameof(HasAction));
             OnChanged(nameof(HasImageNoAction));
             OnChanged(nameof(Display));
+            OnChanged(nameof(ListDisplay));
         }
     }
 
@@ -139,7 +141,14 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
     public string? ActionValue
     {
         get => _actionValue;
-        set { if (_actionValue == value) return; _actionValue = value; OnChanged(); OnChanged(nameof(Display)); }
+        set
+        {
+            if (_actionValue == value) return;
+            _actionValue = value;
+            OnChanged();
+            OnChanged(nameof(Display));
+            OnChanged(nameof(ListDisplay));
+        }
     }
 
     public bool HasAction => !string.IsNullOrEmpty(_actionType);
@@ -164,6 +173,31 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
             return _debugMode ? $"#{Index}" : "";
         }
     }
+
+    /// <summary>Text shown in the Key Binding section's mapped-keys list —
+    /// mirrors EverestKey.Display/MacroPadKey.Display (identity + a short
+    /// action summary). Unlike <see cref="Display"/> (the on-key label, blank
+    /// when an image fills the button) this always shows the action, since
+    /// the list's job is precisely to surface what a key does regardless of
+    /// its picture.</summary>
+    public string ListDisplay
+    {
+        get
+        {
+            string body = HasAction ? ActionSummary : "(empty)";
+            return $"{Label}  —  {body}";
+        }
+    }
+
+    private string ActionSummary => _actionType switch
+    {
+        "keys"      => _actionValue ?? "",
+        "url"       => "URL",
+        "exec"      => Path.GetFileName(_actionValue ?? ""),
+        "dp_folder" => "Folder",
+        "dp_back"   => "Back",
+        _           => _actionType ?? "",
+    };
 
     /// <summary>Refreshes display-related bindings after a DebugMode change.</summary>
     public void NotifyDebugModeChanged() => OnChanged(nameof(Display));

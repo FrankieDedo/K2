@@ -284,18 +284,6 @@ public partial class MainWindow
         Log($"[LED ] SetBacklight(false) -> {_macroPad.SetBacklight((uint)id, false)}");
     }
 
-    private void BtnMacroLightReset_Click(object sender, RoutedEventArgs e)
-    {
-        if (CurrentDeviceId() is not int id) { Log("[LED ] reset: no device selected"); return; }
-        Log($"[LED ] ResetEffects -> {_macroPad.ResetEffects((uint)id)}");
-    }
-
-    private void BtnMacroLightSave_Click(object sender, RoutedEventArgs e)
-    {
-        if (CurrentDeviceId() is not int id) { Log("[LED ] save: no device selected"); return; }
-        Log($"[LED ] SaveFlash(ALL) -> {_macroPad.SaveFlash((uint)id)}");
-    }
-
     /// <summary>
     /// Reads all current panel parameters and sends them to the firmware.
     /// State is also persisted to Settings. No-op while the driver is not open

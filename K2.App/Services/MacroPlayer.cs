@@ -43,10 +43,21 @@ public sealed class MacroPlayer
             _ => 1
         };
 
+        // Keys whose keydown has been sent but whose matching keyup hasn't
+        // played yet — i.e. keys the macro is "holding" (typically a
+        // modifier like Alt held across several other keys, e.g. an
+        // Alt+Numpad Unicode code). A single keydown sent once isn't
+        // enough: some input consumers (Windows' own Alt+Numpad composer
+        // among them) expect the key to keep being reasserted the way a
+        // real held key auto-repeats, not just go down once and stay
+        // silent until the up. See <see cref="HoldRepeat"/>.
+        var heldKeys = new HashSet<ushort>();
+
         try
         {
             for (int i = 0; i < iterations && !ct.IsCancellationRequested; i++)
             {
+                heldKeys.Clear();
                 foreach (var input in macro.Inputs)
                 {
                     if (ct.IsCancellationRequested) break;
@@ -59,10 +70,14 @@ public sealed class MacroPlayer
                         _                   => input.DelayMs
                     };
                     if (delay > 0)
-                        Thread.Sleep(delay);
+                        HoldRepeat(delay, heldKeys, ct);
 
-                    ExecuteInput(input);
+                    ExecuteInput(input, heldKeys);
                 }
+                // A macro missing a keyup (truncated recording, edited by
+                // hand) must not leave a modifier stuck down system-wide.
+                foreach (var vk in heldKeys)
+                    SendKeyInput(vk, true);
             }
         }
         finally
@@ -71,14 +86,35 @@ public sealed class MacroPlayer
         }
     }
 
-    private static void ExecuteInput(MacroInput input)
+    private const int HoldRepeatIntervalMs = 30;
+
+    /// <summary>Sleeps <paramref name="totalMs"/> in small slices, resending
+    /// a keydown for every currently-held key on each slice — mirrors the
+    /// OS's own key auto-repeat for a physically held key instead of a
+    /// single fire-and-forget keydown.</summary>
+    private static void HoldRepeat(int totalMs, HashSet<ushort> heldKeys, CancellationToken ct)
+    {
+        int elapsed = 0;
+        while (elapsed < totalMs && !ct.IsCancellationRequested)
+        {
+            int chunk = Math.Min(HoldRepeatIntervalMs, totalMs - elapsed);
+            Thread.Sleep(chunk);
+            elapsed += chunk;
+            foreach (var vk in heldKeys)
+                SendKeyInput(vk, false);
+        }
+    }
+
+    private static void ExecuteInput(MacroInput input, HashSet<ushort> heldKeys)
     {
         switch (input.Type)
         {
             case "keydown":
+                heldKeys.Add((ushort)input.Key);
                 SendKeyInput((ushort)input.Key, false);
                 break;
             case "keyup":
+                heldKeys.Remove((ushort)input.Key);
                 SendKeyInput((ushort)input.Key, true);
                 break;
             case "mousedown":
@@ -104,9 +140,30 @@ public sealed class MacroPlayer
     {
         var input = new INPUT { type = INPUT_KEYBOARD };
         input.U.ki.wVk = vk;
-        input.U.ki.dwFlags = keyUp ? KEYEVENTF_KEYUP : 0;
+        uint flags = keyUp ? KEYEVENTF_KEYUP : 0;
+        if (IsExtendedKey(vk)) flags |= KEYEVENTF_EXTENDEDKEY;
+        input.U.ki.dwFlags = flags;
         SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
     }
+
+    /// <summary>
+    /// Keys Windows requires KEYEVENTF_EXTENDEDKEY for (per SendInput docs):
+    /// right Ctrl/Alt, the arrow/nav cluster, and Num Lock. Without this flag
+    /// SendInput derives the scan code from the VK alone, which collapses
+    /// Right Alt (AltGr) to the same non-extended scan code as Left Alt —
+    /// so a recorded AltGr macro silently plays back as plain Alt.
+    /// </summary>
+    private static bool IsExtendedKey(ushort vk) => vk switch
+    {
+        0xA5 or 0xA3        // VK_RMENU (AltGr), VK_RCONTROL
+            or 0x2D or 0x2E // Insert, Delete
+            or 0x24 or 0x23 // Home, End
+            or 0x21 or 0x22 // Page Up, Page Down
+            or 0x25 or 0x26 or 0x27 or 0x28 // arrows
+            or 0x90         // Num Lock
+            => true,
+        _ => false
+    };
 
     private static void SendCharInput(char c)
     {
@@ -155,6 +212,7 @@ public sealed class MacroPlayer
 
     private const uint INPUT_MOUSE    = 0;
     private const uint INPUT_KEYBOARD = 1;
+    private const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
     private const uint KEYEVENTF_KEYUP   = 0x0002;
     private const uint KEYEVENTF_UNICODE = 0x0004;
     private const uint MOUSEEVENTF_MOVE      = 0x0001;

@@ -294,26 +294,14 @@ public partial class MainWindow
     }
 
     // ─────────────────────── Capture matrixId ───────────────────────
-
-    private void BtnCaptureHwKey_Click(object sender, RoutedEventArgs e)
-    {
-        if (_hwCapturing)
-        {
-            StopHwCapture();
-            return;
-        }
-        // No specific target: generic capture (shows the matrixId in the label)
-        _hwCapturing = true;
-        _hwCaptureTarget = null;
-        BtnCaptureHwKey.Content = Loc.Get("dock_cancel_capture");
-        LblCapturedKey.Text = Loc.Get("dock_press_hw");
-    }
+    // Entry point is only the per-slot "Capture matrixId…" context-menu item
+    // now (HwMnuCapture_Click) — the old standalone "Capture HW Key" button
+    // (untargeted capture) was removed; LblCapturedKey is feedback-only.
 
     private void StartHwCapture(HwActionSlot target)
     {
         _hwCapturing = true;
         _hwCaptureTarget = target;
-        BtnCaptureHwKey.Content = Loc.Get("dock_cancel_capture");
         LblCapturedKey.Text = Loc.Get("dock_press_for", target.Name);
     }
 
@@ -321,7 +309,6 @@ public partial class MainWindow
     {
         _hwCapturing = false;
         _hwCaptureTarget = null;
-        BtnCaptureHwKey.Content = Loc.Get("dock_capture_hw");
     }
 
     /// <summary>
@@ -330,22 +317,13 @@ public partial class MainWindow
     /// </summary>
     internal bool TryHwCapture(int wMatrix)
     {
-        if (!_hwCapturing) return false;
+        if (!_hwCapturing || _hwCaptureTarget is not HwActionSlot slot) return false;
 
-        if (_hwCaptureTarget is HwActionSlot slot)
-        {
-            slot.MatrixId = wMatrix;
-            SaveHwSlot(slot);
-            RefreshSlotButton(slot);
-            LogEverest($"[DOCK-ACT] {slot.Name} <- matrixId=0x{wMatrix:X4}");
-            LblCapturedKey.Text = $"{slot.Name} → 0x{wMatrix:X4}";
-        }
-        else
-        {
-            // Generic capture: show value only
-            LblCapturedKey.Text = $"matrixId=0x{wMatrix:X4} (wMatrix={wMatrix})";
-            LogEverest($"[DOCK-ACT] captured matrixId=0x{wMatrix:X4}");
-        }
+        slot.MatrixId = wMatrix;
+        SaveHwSlot(slot);
+        RefreshSlotButton(slot);
+        LogEverest($"[DOCK-ACT] {slot.Name} <- matrixId=0x{wMatrix:X4}");
+        LblCapturedKey.Text = $"{slot.Name} → 0x{wMatrix:X4}";
 
         StopHwCapture();
         return true;

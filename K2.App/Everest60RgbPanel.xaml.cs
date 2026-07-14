@@ -415,6 +415,22 @@ public partial class Everest60RgbPanel : UserControl
     // disconnected->connected poll transition.
     // ------------------------------------------------------------
 
+    /// <summary>Resets this profile's lighting (preset effect + side ring + any painted
+    /// per-key colors) to K2's factory defaults — the same values Init() sets up for a
+    /// brand-new profile — and re-applies them to the keyboard if connected. Seeds the
+    /// store with an explicit default record rather than clearing it, since
+    /// <see cref="Ev60ReloadProfile"/> no-ops on a missing (null) record. Called by
+    /// MainWindow.Everest60.cs's "Restore defaults" button.</summary>
+    internal void RestoreDefaults()
+    {
+        if (_ev60Store is null) return;
+        _ev60Store.SaveLighting(CurrentSlot, new Ev60LightingRecord(
+            (int)Everest60Protocol.Effect.Wave, 0x900000, 0x000000, 50, 0, false,
+            100, 0x900000, 100, "preset", new Dictionary<int, int>()));
+        Ev60ReloadProfile(CurrentSlot);
+        CustomKeysCleared?.Invoke();
+    }
+
     internal void Ev60ReloadProfile(int slot)
     {
         if (_ev60Store is null) return;

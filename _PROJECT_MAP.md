@@ -42,7 +42,7 @@ produced files; dependencies from other folders are copied inside `K2`.
   bar/clock/MMDock/numpad), class `Everest60` → `Everest360_USB.dll`
   (**Everest 60** keyboard, 60%, Fn-heavy, ~60 exports). K2 targets **SDKDLL.dll**
   for the Max (the user has one). Verify bindings via `outputs/dotnet_pinvoke_dump.py`.
-- **Everest 60 (hybrid: raw HID for lighting, vendor SDK for key remap):**
+- **Everest 60 (hybrid: raw HID for lighting, vendor SDK for key-press capture):**
   unlike Everest Max/MacroPad, K2's **lighting** path does NOT P/Invoke
   `Everest360_USB.dll` — those exports (`ChangeEffect`, `ChangeCustomizeEffect`,
   ...) pass structs as opaque `IntPtr` (layout never reverse-engineered by
@@ -50,16 +50,31 @@ produced files; dependencies from other folders are copied inside `K2`.
   PID `0x0005` ANSI/`0x0006` ISO, interface `mi_02`), porting the protocol
   already reverse-engineered by the community project `BaseCampLinux`
   (`devices/everest60/controller.py`). See `K2.App/Services/Everest60HidNative.cs`
-  for the rationale in full. **Key remap is different**: decompiling
-  `BaseCamp.UI.dll`/`BaseCamp.Service.exe` (2026-07-11, see CHANGELOG) found
-  that `Everest60`'s remap exports (`ChangeKey`/`ChangeFnKey`/
-  `ChangeShortcutKey`/`SetSingleMacroContent`/`SetKeyCallBack`) are plain
-  `int`/`bool` parameters, not opaque structs — so K2 DOES P/Invoke
-  `Everest360_USB.dll` for Key Binding only (`Everest60SdkNative.cs`/
-  `Everest60SdkService.cs`), writing directly to firmware, same shape as
-  Everest Max's SDK usage but without `IActionHost` involvement (Base Camp's
-  own Everest 60 function taxonomy has no K2Action-style passthrough — see
-  `Everest60KeyBindingPanel.xaml.cs`). **Not yet verified on real hardware.**
+  for the rationale in full. **Key remap exports decompiled 2026-07-11**
+  (`BaseCamp.UI.dll`/`BaseCamp.Service.exe`, see CHANGELOG): `Everest60`'s
+  `ChangeKey`/`ChangeFnKey`/`ChangeShortcutKey`/`SetSingleMacroContent`/
+  `SetKeyCallBack` are plain `int`/`bool` parameters, not opaque structs —
+  P/Invoked in `Everest60SdkNative.cs`/`Everest60SdkService.cs`. **Key Binding
+  itself no longer uses them (2026-07-14, second/third pass, explicit user
+  request — "same popup, same options and mappings as Everest Max"): it now
+  goes through the full K2Action/`IActionHost`/`ButtonActionEngine` pipeline,
+  same `ButtonActionDialog` and action catalog as Everest Max/MacroPad/
+  DisplayPad**, via `Ev60ActionHost` (mirrors `EverestActionHost`) — see
+  `Everest60KeyBindingPanel.xaml.cs`'s architecture note. Physical key presses
+  still come from the SDK's `KeyEvent` callback (now the pipeline's ONLY
+  consumer of it), translated wMatrix→ledIndex via
+  `MainWindow.Everest60.cs`'s `_ev60DllKeyIdToLedIndex` (built from
+  `Everest60RemapData.LedIndexToDllKeyIdArray`) and executed through
+  `ButtonActionEngine` — **unverified assumption**: this translation assumes
+  the callback's wMatrix IS the DllKeyId (reasonable, since both speak
+  "DLLKeyId" consistently in Base Camp's own decompiled code, but never
+  confirmed against a live callback; if wrong, Everest Max's guided-remap
+  capture flow, `BtnEvMapKeys`/`_evWMatrixToLayout` in `MainWindow.Everest.cs`,
+  is the fallback pattern to port). The raw firmware remap exports
+  (`ChangeKey` etc.) are KEPT in the SDK service layer (real, verified device
+  capability) but are now unused by any UI — nothing writes a key remap to
+  Everest 60 firmware any more. **Not yet verified on real hardware** (no
+  Everest 60 available in any session that built this).
 - **Makalu 67/Max (mouse, raw HID, no SDK at all):** no vendor SDK/DLL exists
   for this device (unlike MacroPad/Everest Max/DisplayPad). K2 talks HID
   **Feature Reports** directly (VID `0x3282`, PID `0x0003` Makalu 67/`0x0002`
@@ -176,9 +191,14 @@ produced files; dependencies from other folders are copied inside `K2`.
   `DisplayPadOperations.SetDeviceId()` of `MountainDisplayPadWorker.exe`. Fix =
   C# patch via dnSpy, source in `K2/_reference/BaseCamp_Patch/`. External fixes
   (`DisplayPad_Stabilizer/`) alone do NOT hold: Base Camp overrides them at runtime.
-- **DisplayPad/MacroPad rotation:** 90°/180°/270° all implemented ("Positioning"
-  section in the UI, shows Horizontal/Vertical + degrees). Square 102×102 px
-  icons → lossless rotation.
+- **DisplayPad/MacroPad rotation:** 90°/180°/270° all implemented, shows
+  Horizontal/Vertical + degrees. **2026-07-14**: lives inside each device's
+  **Settings** sidebar section now, not a standalone "Positioning" section —
+  MacroPad's rotation combo moved into its existing `PnlMpSecSettings`
+  (above the keycap-appearance controls); DisplayPad's old "Rotation"
+  section was itself renamed to Settings (`RbDpSecSettings`/
+  `PnlDpSecSettings`), same content (rotation combo + icon-rotate buttons).
+  Square 102×102 px icons → lossless rotation.
 - **UI theme:** shared dark modern look in `K2.Core/Themes/K2Theme.xaml`
   (ResourceDictionary with `x:Class` + code-behind: the 3 window buttons).
   Custom title bar via `WindowChrome`. Palette: bg `#1A1A1E`, teal accent
@@ -435,19 +455,49 @@ platform (x86 or x64).
   dedicata "Gestione profili" più sotto. **Non incluso**: layout multi-lingua
   (un solo layout ANSI-like per ora).
 - `Everest60KeyBindingPanel.xaml(.cs)` — `UserControl` figlio diretto di
-  `MainWindow`, sezione **Key Binding** (2026-07-11): riusa la stessa
-  `Canvas CvsEv60Keyboard` già disegnata per il lighting come selettore
-  tasto sorgente (`SelectKey(ledIndex, label)` chiamato da
-  `MainWindow.Everest60.cs`), poi un `ComboBox` "Tipo" sceglie fra Remap
-  Key/Fn Layer/Shortcut/Media e scrive **direttamente nel firmware** via
-  `Everest60SdkService` (`ChangeKey`/`ChangeFnKey`/`ChangeShortcutKey`/
-  `SetMediaKey`) — **nessun coinvolgimento di `IActionHost`/
-  `ButtonActionEngine`**, stesso pattern del remap tasti Makalu (Base Camp
-  stesso non ha un passthrough "K2Action" per l'Everest 60: solo le sue
-  categorie built-in). Pulsanti Reset (ChangeKey→255) e Save (flash
-  permanente). **Non verificato su hardware fisico** (nessun device
-  disponibile nella sessione che l'ha scritto) — vedi CHANGELOG 2026-07-11
-  per la traccia completa del reverse engineering.
+  `MainWindow`, sezione **Key Binding** (2026-07-11, poi due redesign lo
+  stesso giorno 2026-07-14 su richiesta esplicita utente — vedi CHANGELOG
+  per la sequenza completa). Riusa la stessa `Canvas CvsEv60Keyboard` già
+  disegnata per il lighting come selettore tasto sorgente
+  (`SelectKey(ledIndex, label)` chiamato da `MainWindow.Everest60.cs`).
+  **Architettura finale**: non è più un remap firmware — Key Binding usa lo
+  STESSO `K2.Core.ButtonActionDialog` e lo stesso catalogo di azioni K2Action
+  di Everest Max/MacroPad/DisplayPad (richiesta utente: "devi usare proprio
+  lo stesso popup, con le stesse opzioni e mappature"), instradato tramite
+  `Ev60ActionHost` (mirror di `EverestActionHost`) + `ButtonActionEngine`
+  (entrambi posseduti da `MainWindow.Everest60.cs`, non dal pannello — stesso
+  split di `MainWindow.Everest.cs`'s `_evActionHost`/`_evEngine`). Il pannello
+  possiede `_keys`/`_byLed` (`ObservableCollection<Ev60Key>`/`Dictionary`,
+  mirror di `_evKeys`/`_evByMatrix`), esposti internamente (`Keys`/`ByLed`/
+  `IndexOf`) per i delegate `GetButtons`/`PressButton` dell'host e per
+  l'esecuzione su pressione fisica. `SelectKey`/`BtnEv60Configure_Click`
+  aprono `ButtonActionDialog` direttamente (stesso trigger di
+  `EvKeyboardButton_Click`/`BtnEvConfig_Click`); l'host viene iniettato dopo
+  la costruzione (`SetActionHost`, per rompere la dipendenza circolare
+  pannello↔host). Stesso hint+`ListView`(`LvEv60Keys`, con
+  `ItemContainerStyle`/`DataTrigger` su `IsHighlighted` identico a
+  `LvEvKeys`)+bottoni Configure/Remove di Everest Max — root è un `Grid`
+  (non più `StackPanel`) con riga `*` sulla lista, e l'host in
+  `MainWindow.xaml` non avvolge più le tre sezioni Ev60 in uno
+  `ScrollViewer` condiviso (stessa ragione già documentata per
+  `BdrEvSettingsPanel` di Everest Max: uno ScrollViewer dà altezza infinita
+  al contenuto, quindi niente può davvero riempire lo spazio disponibile) —
+  così `LvEv60Keys` si riempie per davvero fino al bordo del pannello, esattamente
+  come `LvEvKeys`. Le pressioni fisiche arrivano dal callback SDK
+  (`Everest60SdkService.KeyEvent`, ora unico consumatore), tradotte
+  wMatrix→ledIndex da `MainWindow.Everest60.cs`'s `_ev60DllKeyIdToLedIndex`
+  (**ipotesi non verificata**: wMatrix == DllKeyId — vedi nota nel codice) ed
+  eseguite via `ButtonActionEngine`. Gli export firmware di remap
+  (`ChangeKey` ecc.) restano in `Everest60SdkNative`/`Everest60SdkService`
+  (capacità reale del device, non rimossa) ma non sono più chiamati da
+  nessuna UI. Persistenza: `Everest60Store`'s tabella `Keys` (Profile,
+  LedIndex, Label, ActionType, ActionValue — stesso schema di
+  `EverestStore`), non più `KeyBindings` (Mode/Value/ModifierMask, rimossa).
+  Export/import XML (`Ev60ProfileExporter`/`BaseCampDbImporter.
+  ImportEverest60Profile`) aggiornati di conseguenza, riusando
+  `BaseCampDbImporter.TranslateAction` per il vocabolario BC-compatibile
+  (stesso approccio di `EvProfileExporter`). **Non verificato su hardware
+  fisico** (nessun device disponibile nelle sessioni che l'hanno scritto).
 - `Models/Everest60KeyboardLayout.cs` — `MainBoard` (64 `KeyDef`, geometria
   portata 1:1 da `BaseCampLinux/shared/ui_helpers.py` `_build_kb60_layout()`,
   riscalata da 0.82 a scala nativa K2 30px/2px; `MatrixId` riusato per
@@ -585,8 +635,15 @@ platform (x86 or x64).
   risultati, salva report `.txt`. UI: combo interfaccia USBPcap, etichetta
   file, Start/Stop, risultati con hex dump.
 - `EverestActionHost.cs` — adattatore `IActionHost` per l'Everest (delegati)
+- `Ev60ActionHost.cs` (2026-07-14) — adattatore `IActionHost` per l'Everest 60,
+  mirror di `EverestActionHost.cs` (device singolo, nessun concetto pagine).
+  Costruito in `MainWindow.Everest60.cs`, iniettato in `Everest60KeyBindingPanel`
+  via `SetActionHost` (rompe la dipendenza circolare pannello↔host — vedi
+  voce `Everest60KeyBindingPanel.xaml(.cs)`).
 - `Models/MacroPadKey.cs` — tasto della griglia MacroPad (bindabile)
 - `Models/EverestKey.cs` — tasto Everest (identità = codice matrice)
+- `Models/Ev60Key.cs` (2026-07-14) — tasto Everest 60 (identità = LED index
+  0-63), mirror di `EverestKey.cs`
 - `Models/KeyLabelMap.cs` — VK → alt-label (shifted char) per layout AnsiUs/IsoIt;
   usato da `BuildEverestKeyboardOverlay` per la label a due righe sui tasti Everest
 - `Services/MacroPadSdkNative.cs` — P/Invoke raw su `MacroPadSDK.dll` (apertura,

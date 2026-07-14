@@ -978,13 +978,14 @@ public sealed class BaseCampDbImporter
     // profile, 232 key-binding rows + 9 lighting rows, one per effect slot,
     // see _PROJECT_MAP.md). Lighting import is high-confidence (verified
     // field shapes/color formats against that real data). Key Binding import
-    // is NOT: every IsKeyAssigned=1 row in the one real profile available is
-    // a LayerType=3 factory Fn-legend ("FN + 10") with a human-readable
-    // FunctionValue label, not a raw DLLKeyId target — there is no real
-    // sample of a user-created LayerType=1 remap to learn the label->target
-    // encoding from, so only exact matches against Everest60RemapData's own
-    // KeyCatalog are imported; everything else is skipped (counted, not
-    // guessed).
+    // (2026-07-14, second pass) now goes through the same
+    // <see cref="TranslateAction"/> FunctionType/SubFunctionType/FunctionValue
+    // vocabulary as Everest Max/DisplayPad/MacroPad, since Everest 60 Key
+    // Binding is no longer a raw firmware remap in K2 — it's a K2Action like
+    // every other device (see Everest60Store/Everest60KeyBindingPanel).
+    // Every IsKeyAssigned=1 row in the one real profile available so far is
+    // a LayerType=3 factory Fn-legend ("FN + 10"), not a real user remap —
+    // LayerType!=1 rows are skipped for that reason, same as before.
     // =========================================================
 
     /// <summary>Reads Everest 60 profiles (DeviceType="EverestMini") grouped by DeviceId.</summary>
@@ -1092,8 +1093,9 @@ public sealed class BaseCampDbImporter
     }
 
     /// <summary>Imports an Everest 60 profile: lighting (high confidence) +
-    /// key bindings (best-effort, see class-level doc comment) into
-    /// Everest60Store. Returns the number of key bindings imported.</summary>
+    /// key bindings (via the shared <see cref="TranslateAction"/> vocabulary,
+    /// see class-level doc comment) into Everest60Store. Returns the number
+    /// of key bindings imported.</summary>
     public static int ImportEverest60Profile(string dbPath, BcProfile profile, Everest60Store store)
     {
         int slot = profile.Slot;
@@ -1113,12 +1115,10 @@ public sealed class BaseCampDbImporter
             int ledIndex = Array.IndexOf(Everest60RemapData.LedIndexToDllKeyIdArray, b.DllKeyId);
             if (ledIndex < 0) continue;
 
-            string? label = b.FunctionValue;
-            int target = label != null ? Everest60RemapData.KeyCatalog.GetValueOrDefault(label, -1) : -1;
-            if (target < 0) continue; // FunctionValue isn't one of our exact key labels — skip rather than guess
+            var (at, av) = TranslateAction(b.FunctionType, b.SubFunctionType, b.FunctionValue);
+            if (at is null) continue;
 
-            string mode = (b.FunctionType ?? "").Equals("Keyboard Shortcuts", StringComparison.OrdinalIgnoreCase) ? "shortcut" : "key";
-            store.SaveKeyBinding(slot, ledIndex, mode, target, 0);
+            store.SaveKey(new Ev60KeyRecord(slot, ledIndex, null, at, av));
             imported++;
         }
 

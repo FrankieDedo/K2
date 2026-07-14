@@ -213,6 +213,16 @@ ON CONFLICT(DeviceId, Profile, PageId, ButtonIndex) DO UPDATE SET
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>Wipes every device's buttons/settings (profiles, pages, fullscreen images,
+    /// folder names, rotation) — used by the app-wide "Restore all defaults" (Settings tab).
+    /// Per-device "Restore defaults" instead reuses <see cref="ClearProfile"/> directly.</summary>
+    public void ResetAllData()
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM Buttons; DELETE FROM Settings;";
+        cmd.ExecuteNonQuery();
+    }
+
     // ---- Settings ----
 
     public string? GetSetting(string key)

@@ -74,6 +74,11 @@ CREATE TABLE IF NOT EXISTS Macros (
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>Deletes every saved macro — used by the app-wide "Restore all defaults"
+    /// (Settings tab). Macros aren't scoped to a single device, so no per-device
+    /// "Restore defaults" button touches this table.</summary>
+    public void ResetAllData() => Exec("DELETE FROM Macros");
+
     // ─────────────────────── CRUD ───────────────────────
 
     public List<MacroDefinition> GetAll()

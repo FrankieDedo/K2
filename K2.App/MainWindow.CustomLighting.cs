@@ -66,11 +66,22 @@ public partial class MainWindow
         ClearOverlaysInCanvas(CvsEvNumpad);
     }
 
-    private static void ClearOverlaysInCanvas(Canvas? canvas)
+    /// <summary>
+    /// The 4 numpad display keys (<see cref="_ndkButtons"/>) share the
+    /// CvsEvNumpad canvas with the real keyboard keys but are not part of
+    /// custom-lighting paint mode — they have their own image/action UI, not
+    /// an LED matrix color. Skip them here so paint mode neither clears their
+    /// distinct background nor risks a Tag collision (both use small int Tags:
+    /// NDK keyIndex 0-3 vs. LED matrixId) in <see cref="FindKeyInCanvas"/>.
+    /// </summary>
+    private void ClearOverlaysInCanvas(Canvas? canvas)
     {
         if (canvas == null) return;
         foreach (var btn in canvas.Children.OfType<Button>())
+        {
+            if (_ndkButtons.Contains(btn)) continue;
             btn.ClearValue(Button.BackgroundProperty);
+        }
     }
 
     /// <summary>Reapplies overlays from the colors saved in the map.</summary>
@@ -93,11 +104,11 @@ public partial class MainWindow
         return found ?? FindKeyInCanvas(CvsEvNumpad, matrixId);
     }
 
-    private static Button? FindKeyInCanvas(Canvas? canvas, int matrixId)
+    private Button? FindKeyInCanvas(Canvas? canvas, int matrixId)
     {
         if (canvas == null) return null;
         return canvas.Children.OfType<Button>()
-            .FirstOrDefault(b => b.Tag is int id && id == matrixId);
+            .FirstOrDefault(b => !_ndkButtons.Contains(b) && b.Tag is int id && id == matrixId);
     }
 
     // ─────────────────────── Event handlers ───────────────────────

@@ -22,11 +22,15 @@
 // icon button next to Settings — see BtnMacroTab_Click in MainWindow.xaml.cs.
 //
 // MacroPad section panels: PnlMpSecKeyBinding (keys configured on the grid above),
-//   PnlMpSecOrientation (rotation), PnlMpSecLed (RGB lighting), PnlMpSecSettings
-//   (keycap appearance — same color/style controls as Everest's PnlSecSettings,
-//   see MainWindow.MacroKeycapAppearance.cs)
+//   PnlMpSecLed (RGB lighting), PnlMpSecSettings (positioning/rotation + keycap
+//   appearance — same color/style controls as Everest's PnlSecSettings, see
+//   MainWindow.MacroKeycapAppearance.cs). Positioning used to be its own sidebar
+//   section (PnlMpSecOrientation) — folded into Settings 2026-07-14, same move
+//   already done for DisplayPad and for Makalu's old standalone DPI section.
 // DisplayPad section panels: PnlDpSecKeyBinding (keys configured on the grid above),
-//   PnlDpSecRotation (rotation + icon rotate)
+//   PnlDpSecPages, PnlDpSecSettings (positioning/rotation + icon rotate — DisplayPad's
+//   only device setting so far; was its own "Positioning" sidebar section until
+//   2026-07-14)
 //
 // Brightness sliders (SldEvBrightness/SldMacroBrightness/SldDpBrightness/
 // SldEv60Brightness/SldMkBrightness) live in the shared top-right brightness
@@ -111,7 +115,7 @@ public partial class MainWindow
     /// key opens KeycapCustomizeDialog (only when "Edit individual keycaps" is also checked).</summary>
     private bool IsEvSettingsSectionActive => _activeEvSection == PnlSecSettings;
 
-    // ── MacroPad sidebar (Key Binding / Orientation / LED Lighting) ───
+    // ── MacroPad sidebar (Key Binding / LED Lighting / Settings) ──────
     private FrameworkElement? _activeMpSection;
 
     private void InitMpSectionNav() => ShowMpSection(PnlMpSecKeyBinding);
@@ -123,7 +127,6 @@ public partial class MainWindow
         FrameworkElement? panel = rb.Name switch
         {
             nameof(RbMpSecKeyBinding)  => PnlMpSecKeyBinding,
-            nameof(RbMpSecOrientation) => PnlMpSecOrientation,
             nameof(RbMpSecLed)         => PnlMpSecLed,
             nameof(RbMpSecSettings)    => PnlMpSecSettings,
             _                          => null
@@ -154,7 +157,7 @@ public partial class MainWindow
     /// key opens KeycapCustomizeDialog (only when "Edit individual keycaps" is also checked).</summary>
     private bool IsMpSettingsSectionActive => _activeMpSection == PnlMpSecSettings;
 
-    // ── DisplayPad sidebar (Key Binding / Rotation) ───────────────────
+    // ── DisplayPad sidebar (Key Binding / Pages / Settings) ───────────
     private FrameworkElement? _activeDpSection;
 
     private void InitDpSectionNav() => ShowDpSection(PnlDpSecKeyBinding);
@@ -169,7 +172,7 @@ public partial class MainWindow
         FrameworkElement? panel = rb.Name switch
         {
             nameof(RbDpSecKeyBinding) => PnlDpSecKeyBinding,
-            nameof(RbDpSecRotation)   => PnlDpSecRotation,
+            nameof(RbDpSecSettings)   => PnlDpSecSettings,
             nameof(RbDpSecPages)      => PnlDpSecPages,
             _                         => null
         };

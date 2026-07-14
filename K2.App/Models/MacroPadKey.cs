@@ -50,7 +50,13 @@ public sealed class MacroPadKey : INotifyPropertyChanged
     public string? ActionValue
     {
         get => _actionValue;
-        set { if (_actionValue == value) return; _actionValue = value; OnChanged(); }
+        set
+        {
+            if (_actionValue == value) return;
+            _actionValue = value;
+            OnChanged();
+            OnChanged(nameof(Display));
+        }
     }
 
     private bool _isHighlighted;
@@ -63,22 +69,31 @@ public sealed class MacroPadKey : INotifyPropertyChanged
 
     public bool HasAction => !string.IsNullOrEmpty(_actionType);
 
-    /// <summary>Text shown on the grid button.</summary>
+    /// <summary>Static identity shown on the physical key button — unlike the
+    /// old Display, this never changes based on the assigned action (that's
+    /// what the Key Binding section's mapped-keys list is for, see
+    /// <see cref="Display"/>). Mirrors Everest Max/Everest 60, whose keycaps
+    /// likewise always show their own name, never the assigned action.</summary>
+    public string KeyLabel => $"M{Index + 1}";
+
+    /// <summary>Text shown in the Key Binding section's mapped-keys list —
+    /// mirrors EverestKey.Display (identity + a short action summary).</summary>
     public string Display
     {
         get
         {
-            string label = $"M{Index + 1}";
-            if (!HasAction) return label;
-            return _actionType switch
-            {
-                "keys"  => _actionValue ?? label,
-                "exec"  => System.IO.Path.GetFileName(_actionValue ?? label),
-                "media" => _actionValue ?? label,
-                _       => _actionType ?? label,
-            };
+            string body = HasAction ? ActionSummary : "(empty)";
+            return $"{KeyLabel}  —  {body}";
         }
     }
+
+    private string ActionSummary => _actionType switch
+    {
+        "keys"  => _actionValue ?? _actionType!,
+        "exec"  => System.IO.Path.GetFileName(_actionValue ?? _actionType!),
+        "media" => _actionValue ?? _actionType!,
+        _       => _actionType ?? "",
+    };
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnChanged([CallerMemberName] string? name = null) =>

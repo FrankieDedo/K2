@@ -8,14 +8,15 @@ namespace K2.App.Services;
 
 /// <summary>
 /// Persistence for the Everest 60 module. Like Makalu, this keyboard has no
-/// firmware profile concept — remap goes straight to firmware via the vendor
-/// SDK (Everest360_USB.dll) with no onboard profile slots, and lighting is
-/// raw HID (see architectural note in _PROJECT_MAP.md). A "profile" here is
-/// purely a K2-side slot (1..5): switching means re-sending the stored
-/// lighting state and re-writing the stored 64-key binding table live to
-/// firmware — it does NOT call SaveFlash automatically (that stays behind
-/// the existing manual "Save" button, to avoid wearing the keyboard's flash
-/// on every switch).
+/// firmware profile concept for lighting — that stays raw HID (see
+/// architectural note in _PROJECT_MAP.md). A "profile" here is purely a
+/// K2-side slot (1..5): switching re-sends the stored lighting state and
+/// reloads the stored key bindings into memory. Key Binding itself
+/// (2026-07-14, second pass) is no longer a firmware remap — it went through
+/// the same K2Action/IActionHost/ButtonActionEngine pipeline as Everest Max/
+/// MacroPad/DisplayPad (same ButtonActionDialog, same action catalog), so
+/// switching profile needs no firmware write at all for keys: only lighting
+/// still round-trips to the device.
 /// </summary>
 public sealed class Everest60Store : IDisposable
 {
@@ -42,12 +43,12 @@ public sealed class Everest60Store : IDisposable
     {
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = @"
-CREATE TABLE IF NOT EXISTS KeyBindings (
-    Profile      INTEGER NOT NULL,
-    LedIndex     INTEGER NOT NULL,
-    Mode         TEXT NOT NULL,
-    Value        INTEGER NOT NULL,
-    ModifierMask INTEGER NOT NULL DEFAULT 0,
+CREATE TABLE IF NOT EXISTS Keys (
+    Profile     INTEGER NOT NULL,
+    LedIndex    INTEGER NOT NULL,
+    Label       TEXT,
+    ActionType  TEXT,
+    ActionValue TEXT,
     PRIMARY KEY (Profile, LedIndex)
 );
 
@@ -157,61 +158,96 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
     public void SaveLighting(int slot, Ev60LightingRecord r) =>
         SetSetting($"profile.{slot}.lighting", JsonSerializer.Serialize(r));
 
-    // ---------- key bindings ----------
+    // ---------- keys (K2Action — same shape as EverestStore's Keys table) ----------
 
-    public List<Ev60KeyBindingRecord> LoadKeyBindings(int slot)
+    public IReadOnlyList<Ev60KeyRecord> LoadProfile(int profile)
     {
-        var result = new List<Ev60KeyBindingRecord>();
+        var result = new List<Ev60KeyRecord>();
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = @"SELECT LedIndex, Mode, Value, ModifierMask
-                            FROM KeyBindings WHERE Profile=$p ORDER BY LedIndex";
-        cmd.Parameters.AddWithValue("$p", slot);
+        cmd.CommandText = @"SELECT LedIndex, Label, ActionType, ActionValue
+                            FROM Keys WHERE Profile=$p
+                            ORDER BY LedIndex";
+        cmd.Parameters.AddWithValue("$p", profile);
         using var r = cmd.ExecuteReader();
         while (r.Read())
-            result.Add(new Ev60KeyBindingRecord(
-                r.GetInt32(0), r.GetString(1), r.GetInt32(2), r.GetInt32(3)));
+            result.Add(new Ev60KeyRecord(
+                profile, r.GetInt32(0),
+                r.IsDBNull(1) ? null : r.GetString(1),
+                r.IsDBNull(2) ? null : r.GetString(2),
+                r.IsDBNull(3) ? null : r.GetString(3)));
         return result;
     }
 
-    public void SaveKeyBinding(int slot, int ledIndex, string mode, int value, int modifierMask)
+    public void SaveKey(Ev60KeyRecord k)
     {
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = @"
-INSERT INTO KeyBindings(Profile, LedIndex, Mode, Value, ModifierMask)
-VALUES ($p, $l, $m, $v, $mm)
+INSERT INTO Keys(Profile, LedIndex, Label, ActionType, ActionValue)
+VALUES ($p, $l, $lb, $at, $av)
 ON CONFLICT(Profile, LedIndex) DO UPDATE SET
-  Mode=excluded.Mode, Value=excluded.Value, ModifierMask=excluded.ModifierMask";
-        cmd.Parameters.AddWithValue("$p",  slot);
-        cmd.Parameters.AddWithValue("$l",  ledIndex);
-        cmd.Parameters.AddWithValue("$m",  mode);
-        cmd.Parameters.AddWithValue("$v",  value);
-        cmd.Parameters.AddWithValue("$mm", modifierMask);
+  Label       = excluded.Label,
+  ActionType  = excluded.ActionType,
+  ActionValue = excluded.ActionValue";
+        cmd.Parameters.AddWithValue("$p",  k.Profile);
+        cmd.Parameters.AddWithValue("$l",  k.LedIndex);
+        cmd.Parameters.AddWithValue("$lb", (object?)k.Label       ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$at", (object?)k.ActionType  ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$av", (object?)k.ActionValue ?? DBNull.Value);
         cmd.ExecuteNonQuery();
     }
 
-    public void RemoveKeyBinding(int slot, int ledIndex)
+    /// <summary>Every key currently configured with the given action (e.g. macro assignment lookup).</summary>
+    public List<(int Profile, int LedIndex, string? Label)> GetKeysByAction(string actionType, string actionValue)
+    {
+        var result = new List<(int, int, string?)>();
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = @"SELECT Profile, LedIndex, Label FROM Keys
+                            WHERE ActionType=$t AND ActionValue=$v
+                            ORDER BY Profile, LedIndex";
+        cmd.Parameters.AddWithValue("$t", actionType);
+        cmd.Parameters.AddWithValue("$v", actionValue);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            result.Add((r.GetInt32(0), r.GetInt32(1), r.IsDBNull(2) ? null : r.GetString(2)));
+        return result;
+    }
+
+    public void RemoveKey(int profile, int ledIndex)
     {
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM KeyBindings WHERE Profile=$p AND LedIndex=$l";
-        cmd.Parameters.AddWithValue("$p", slot);
+        cmd.CommandText = "DELETE FROM Keys WHERE Profile=$p AND LedIndex=$l";
+        cmd.Parameters.AddWithValue("$p", profile);
         cmd.Parameters.AddWithValue("$l", ledIndex);
         cmd.ExecuteNonQuery();
     }
 
-    private void ClearKeyBindings(int slot)
+    private void ClearKeys(int profile)
     {
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM KeyBindings WHERE Profile=$p";
-        cmd.Parameters.AddWithValue("$p", slot);
+        cmd.CommandText = "DELETE FROM Keys WHERE Profile=$p";
+        cmd.Parameters.AddWithValue("$p", profile);
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>Deletes every saved setting of a profile (lighting/key bindings/name).</summary>
+    /// <summary>Deletes every saved setting of a profile (lighting/keys/name).</summary>
     public void ClearProfile(int slot)
     {
-        ClearKeyBindings(slot);
+        ClearKeys(slot);
         SetSetting($"profile.{slot}.lighting", "");
         SetSetting($"profile.{slot}.name", "");
+    }
+
+    /// <summary>Deletes only this profile's keys — unlike <see cref="ClearProfile"/>,
+    /// keeps the profile's name. Used by "Restore defaults" (see Everest60KeyBindingPanel).</summary>
+    public void ResetProfileToDefaults(int slot) => ClearKeys(slot);
+
+    /// <summary>Wipes every profile, key, lighting state and keycap override — used
+    /// by the app-wide "Restore all defaults" (Settings tab), not by the per-device reset.</summary>
+    public void ResetAllData()
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM Keys; DELETE FROM Settings; DELETE FROM KeycapOverrides;";
+        cmd.ExecuteNonQuery();
     }
 
     public void Dispose() => _conn.Dispose();
@@ -222,6 +258,9 @@ public sealed record Ev60LightingRecord(
     double Brightness, int SideColor, double CustomBrightness,
     string ActiveMode, Dictionary<int, int> CustomKeyColors);
 
-/// <summary>Mode: "key"|"fn"|"shortcut"|"media" (same vocabulary as Everest60KeyBindingPanel.Modes).
-/// Value = target DllKeyId (key/fn/shortcut) or media code; ModifierMask only used by "shortcut".</summary>
-public sealed record Ev60KeyBindingRecord(int LedIndex, string Mode, int Value, int ModifierMask);
+public sealed record Ev60KeyRecord(
+    int     Profile,
+    int     LedIndex,
+    string? Label,
+    string? ActionType,
+    string? ActionValue);

@@ -5,9 +5,17 @@ namespace K2.App.Services;
 
 /// <summary>
 /// Application facade over <see cref="Everest60SdkNative"/> — the vendor SDK
-/// path used for key remap (ChangeKey/ChangeFnKey/ChangeShortcutKey/
-/// SetSingleMacroContent), key-press capture, AND live LED-color readback
+/// path used for key-press capture (<see cref="KeyEvent"/>, now the ONLY
+/// consumer of the key callback since Key Binding switched to K2Action —
+/// see 2026-07-14 in _PROJECT_MAP.md) AND live LED-color readback
 /// (<see cref="TryGetColorData"/>, powering <see cref="Everest60LedColorPoller"/>).
+/// <see cref="ChangeKey"/>/<see cref="ChangeFnKey"/>/<see cref="ChangeShortcutKey"/>/
+/// <see cref="SetMediaKey"/>/<see cref="ResetKeys"/>/<see cref="SaveFlash"/> still
+/// wrap real, verified firmware exports (kept — this is capability the device
+/// genuinely has, not dead code) but are currently unused by any K2.App UI:
+/// Key Binding writes no keys to firmware any more, actions execute in K2
+/// software when <see cref="KeyEvent"/> fires (see
+/// Everest60KeyBindingPanel.xaml's architecture note).
 /// Lighting WRITES stay on the raw-HID path (<see cref="Everest60Service"/>/
 /// <see cref="Everest60Protocol"/>) — see <see cref="Everest60SdkNative"/>'s
 /// remarks for why the two paths split; color READBACK has no raw-HID

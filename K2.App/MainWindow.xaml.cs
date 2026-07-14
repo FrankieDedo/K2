@@ -55,6 +55,11 @@ public partial class MainWindow : Window
         Closed += OnWindowClosed;
 
         CheckNativeDependency();
+
+        // Deferred to Loaded (not run inline here) so the "Import from Base Camp?"
+        // prompt (see MainWindow.Settings.cs) pops up over an already-visible main
+        // window instead of blocking construction before the app is even shown.
+        Loaded += (_, _) => CheckFirstRunBcImport();
     }
 
     /// <summary>

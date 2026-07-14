@@ -160,6 +160,27 @@ public partial class MainWindow
         MkReloadProfile(slot);
     }
 
+    /// <summary>Resets the currently selected profile's button remap, lighting, DPI and
+    /// device settings back to K2's defaults and re-applies them to the mouse if
+    /// connected (see MakaluRgbSettingsPanel.RestoreDefaults / MakaluDpiRemapPanel.
+    /// MkReloadRemap, which falls back to MakaluRemapData.RemapDefaults once the stored
+    /// remap rows are gone).</summary>
+    private void BtnMkRestoreDefaults_Click(object sender, RoutedEventArgs e)
+    {
+        int slot = MkCurrentProfile();
+        string profileName = _mkStore.GetProfileName(slot) ?? Loc.Get("profile_n", slot);
+        var res = MessageBox.Show(
+            Loc.Get("restore_defaults_profile_confirm", profileName),
+            Loc.Get("restore_defaults"),
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+        if (res != MessageBoxResult.OK) return;
+        _mkStore.ResetKeyRemap(slot);
+        MkRgbSettings.RestoreDefaults();
+        MkDpiRemap.MkReloadRemap(slot);
+        LogMakalu($"[UI ] Makalu profile {slot} restored to defaults.");
+    }
+
     // ------------------------------------------------------------
     // Import from Base Camp DB — mirrors BtnEvImportBc_Click in
     // MainWindow.Everest.cs. See BaseCampDbImporter's Makalu section for the
@@ -393,7 +414,10 @@ public partial class MainWindow
         // extension resolves for you — has no base to resolve against and silently
         // fails to load. The explicit "pack://application:,,,/" authority is the
         // reliable form for a Resource-build-action file inside this same assembly.
-        string file = isLighting ? "makalu_mouse.png" : "makalu_mouse_rainbow.png";
+        // Ring section hidden for now (2026-07-14, user request) — always use the
+        // opaque rainbow image so the transparent ring cutout is never exposed;
+        // the ring still renders behind it (BuildMkLedRing), just not visible.
+        string file = "makalu_mouse_rainbow.png";
         ImgMkMouse.Source = new BitmapImage(new Uri($"pack://application:,,,/Assets/{file}"));
     }
 

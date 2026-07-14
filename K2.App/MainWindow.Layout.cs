@@ -90,6 +90,7 @@ public partial class MainWindow
         if (dockPos != 0)
         {
             GrdEvDock.Visibility = Visibility.Visible;
+            PnlHwCaptureBar.Visibility = Visibility.Visible;
             // Align to the side where it is physically connected: 1=right, 2=left
             GrdEvDock.HorizontalAlignment = dockPos == 2
                 ? HorizontalAlignment.Left
@@ -98,6 +99,7 @@ public partial class MainWindow
         else
         {
             GrdEvDock.Visibility = Visibility.Collapsed;
+            PnlHwCaptureBar.Visibility = Visibility.Collapsed;
         }
 
         // ---- Numpad (left or right of the keyboard column) ----

@@ -181,6 +181,20 @@ ON CONFLICT(Profile, ButtonIndex) DO UPDATE SET FunctionName=excluded.FunctionNa
         SetSetting($"profile.{slot}.name", "");
     }
 
+    /// <summary>Deletes only this profile's button remap — unlike <see cref="ClearProfile"/>,
+    /// keeps the profile's name (lighting/DPI/settings are reset separately, with explicit
+    /// default records, by MakaluRgbSettingsPanel.RestoreDefaults). Used by "Restore defaults".</summary>
+    public void ResetKeyRemap(int slot) => ClearRemap(slot);
+
+    /// <summary>Wipes every profile's remap/lighting/DPI/settings — used by the app-wide
+    /// "Restore all defaults" (Settings tab), not by the per-device reset above.</summary>
+    public void ResetAllData()
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM Remap; DELETE FROM Settings;";
+        cmd.ExecuteNonQuery();
+    }
+
     public void Dispose() => _conn.Dispose();
 }
 

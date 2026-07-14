@@ -68,11 +68,12 @@ internal sealed class MakaluService
     // DPI
     // ---------------------------------------------------------------
 
-    /// <summary>Reads the 5 DPI levels + active index (0-based) from the device.
-    /// Returns null if not connected/read failed.</summary>
-    public (int[] Levels, int Active)? GetDpi(int dpiMin)
+    /// <summary>Reads the 5 DPI level slots + active index (0-based) + how many
+    /// of those slots are active (1-5) from the device. Returns null if not
+    /// connected/read failed.</summary>
+    public (int[] Levels, int Active, int Count)? GetDpi(int dpiMin)
     {
-        (int[], int)? result = null;
+        (int[], int, int)? result = null;
         WithDevice(h =>
         {
             var r = MakaluProtocol.GetDpi(h, dpiMin);
@@ -83,8 +84,8 @@ internal sealed class MakaluService
         return result;
     }
 
-    public bool SetAllDpi(int[] dpiList, int activeLevel1Based, int dpiMin) =>
-        WithDevice(h => MakaluProtocol.SetAllDpi(h, dpiList, activeLevel1Based, dpiMin));
+    public bool SetAllDpi(int[] dpiList, int activeLevel1Based, int dpiMin, int levelCount = 5) =>
+        WithDevice(h => MakaluProtocol.SetAllDpi(h, dpiList, activeLevel1Based, dpiMin, levelCount));
 
     // ---------------------------------------------------------------
     // Button remap + sniper

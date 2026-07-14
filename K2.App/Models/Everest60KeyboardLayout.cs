@@ -37,9 +37,37 @@ public static class Everest60KeyboardLayout
     private const double PL = 14;  // padding left
     private const double PT = 14;  // padding top
 
-    /// <summary>The 64 main-board keys, row-major, LED index 0-63 (matches
-    /// <c>Everest60Protocol.LedIndex</c> order).</summary>
+    /// <summary>The 64 main-board keys (US ANSI legends), row-major, LED index
+    /// 0-63 (matches <c>Everest60Protocol.LedIndex</c> order).</summary>
     public static readonly KeyDef[] MainBoard = BuildMainBoard();
+
+    // ---- Locale legend cache (lazy) ----
+    private static readonly Dictionary<KeyboardLayoutType, KeyDef[]> _mainBoardCache = new();
+
+    /// <summary>
+    /// Returns the 64 main-board keys with locale-specific legends. Geometry
+    /// and <see cref="KeyDef.MatrixId"/> (LED index) never change — this is a
+    /// single fixed physical board (no ISO variant: confirmed no backtick key,
+    /// no split-shift/ISO-102 key), so a "layout" here only swaps the printed
+    /// character on each key, same physical position/LED index as ANSI US.
+    /// </summary>
+    public static KeyDef[] GetMainBoard(KeyboardLayoutType layout)
+    {
+        if (layout == KeyboardLayoutType.AnsiUs) return MainBoard;
+        if (_mainBoardCache.TryGetValue(layout, out var cached)) return cached;
+
+        var overrides = LocaleLegends.For(layout);
+        var built = new KeyDef[MainBoard.Length];
+        for (int i = 0; i < MainBoard.Length; i++)
+        {
+            var kd = MainBoard[i];
+            built[i] = overrides.TryGetValue(kd.MatrixId, out var label)
+                ? kd with { Label = label }
+                : kd;
+        }
+        _mainBoardCache[layout] = built;
+        return built;
+    }
 
     /// <summary>Decorative-only numpad accessory keys (MatrixId = -1: not
     /// paintable, not clickable — no known protocol for this block).</summary>
@@ -109,6 +137,73 @@ public static class Everest60KeyboardLayout
             list.Add(new KeyDef(idx++, label, x, y, w, U));
             x += w + G;
         }
+    }
+
+    // ======================================================================
+    // Locale legend overrides, keyed by LED index (see BuildMainBoard above
+    // for the idx <-> physical key mapping). Values ported from Base Camp's
+    // locale legend set, same content as EverestKeyboardLayout.IsoLegends
+    // (VK-keyed there) but re-keyed to this board's LED indices and with the
+    // two entries this board has no physical key for dropped: VK 192 (` —
+    // this board has no backtick key) and VK 226 (ISO-102 <> — this board
+    // has no ISO variant).
+    // ======================================================================
+    private static class LocaleLegends
+    {
+        public static IReadOnlyDictionary<int, string> For(KeyboardLayoutType layout) => layout switch
+        {
+            KeyboardLayoutType.IsoIt     => It,
+            KeyboardLayoutType.IsoUk     => Uk,
+            KeyboardLayoutType.IsoDe     => De,
+            KeyboardLayoutType.IsoFr     => Fr,
+            KeyboardLayoutType.IsoEs     => Es,
+            KeyboardLayoutType.IsoNordic => Nordic,
+            KeyboardLayoutType.IsoPt     => Pt,
+            _ => Empty,
+        };
+
+        private static readonly Dictionary<int, string> Empty = new();
+
+        // idx11="-" idx12="=" idx25="[" idx26="]" idx27="\" idx38=";" idx39="'" idx51="/"
+        private static readonly Dictionary<int, string> It = new()
+        {
+            {11,"'"},{12,"ì"},{25,"è"},{26,"+"},{38,"ò"},{39,"à"},{27,"ù"},{51,"-"},
+        };
+
+        private static readonly Dictionary<int, string> Uk = new()
+        {
+            {27,"#"},
+        };
+
+        // German QWERTZ: idx20 (Y-position) -> "Z", idx42 (Z-position) -> "Y"
+        private static readonly Dictionary<int, string> De = new()
+        {
+            {11,"ß"},{12,"´"},{20,"Z"},{42,"Y"},{25,"ü"},{26,"+"},{38,"ö"},{39,"ä"},{27,"#"},{51,"-"},
+        };
+
+        // French AZERTY: number row + Q/W<->A/Z swap + M relocation.
+        private static readonly Dictionary<int, string> Fr = new()
+        {
+            {1,"&"},{2,"é"},{3,"\""},{4,"'"},{5,"("},{6,"-"},{7,"è"},{8,"_"},{9,"ç"},{10,"à"},{11,")"},
+            {15,"A"},{16,"Z"},{25,"^"},{26,"$"},
+            {29,"Q"},{38,"M"},{39,"ù"},{27,"*"},
+            {42,"W"},{48,","},{49,";"},{50,":"},{51,"!"},
+        };
+
+        private static readonly Dictionary<int, string> Es = new()
+        {
+            {11,"'"},{12,"¡"},{25,"`"},{26,"+"},{38,"ñ"},{39,"´"},{27,"ç"},{51,"-"},
+        };
+
+        private static readonly Dictionary<int, string> Nordic = new()
+        {
+            {11,"+"},{12,"\\"},{25,"å"},{26,"¨"},{38,"ø"},{39,"æ"},{27,"'"},{51,"-"},
+        };
+
+        private static readonly Dictionary<int, string> Pt = new()
+        {
+            {11,"'"},{12,"«"},{25,"+"},{26,"´"},{38,"ç"},{39,"º"},{27,"~"},{51,"-"},
+        };
     }
 
     // ======================================================================

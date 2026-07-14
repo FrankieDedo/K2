@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -25,6 +26,12 @@ public partial class MainWindow
 
     private MacroPadKey[] _keys = Array.Empty<MacroPadKey>();
     private Button[] _keyButtons = Array.Empty<Button>();
+
+    /// <summary>Mapped-keys list for the Key Binding section (LvMpKeys) —
+    /// unlike <see cref="_keys"/> (always all 12, needed for the grid), this
+    /// only holds keys that HAVE an action, mirroring Everest Max's _evKeys
+    /// list. Rebuilt (not diffed) on every mutation — 12 keys max, cheap.</summary>
+    private readonly ObservableCollection<MacroPadKey> _mpMappedKeys = new();
 
     /// <summary>Maps <c>hardware matrix → key index</c> for the active device.</summary>
     private readonly Dictionary<int, int> _matrixToIndex = new();
@@ -80,7 +87,7 @@ public partial class MainWindow
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Width         = KeySize - 16,
             };
-            label.SetBinding(TextBlock.TextProperty, new Binding(nameof(MacroPadKey.Display)));
+            label.SetBinding(TextBlock.TextProperty, new Binding(nameof(MacroPadKey.KeyLabel)));
 
             var btn = new Button
             {
@@ -116,6 +123,8 @@ public partial class MainWindow
         _suppressRotationUpdate = false;
 
         RebuildKeyGrid();
+
+        LvMpKeys.ItemsSource = _mpMappedKeys;
 
         // CbProfile is populated by MpRefreshProfiles on device change
 
@@ -177,6 +186,25 @@ public partial class MainWindow
         Log($"[UI ] MacroPad profile {slot} deleted.");
         MpRefreshProfiles(id);
         // CbProfile_SelectionChanged will reload the key grid automatically
+    }
+
+    /// <summary>Resets the currently selected profile's key actions back to K2's defaults
+    /// (empty grid). LED lighting is device-wide (not per-profile) for the MacroPad, so
+    /// it is untouched — same reasoning as the Everest Max's restore defaults.</summary>
+    private void BtnMpRestoreDefaults_Click(object sender, RoutedEventArgs e)
+    {
+        if (CurrentDeviceId() is not int id) return;
+        int slot = CurrentProfile();
+        string profileName = _store.GetProfileName(id, slot) ?? Loc.Get("profile_n", slot);
+        var res = MessageBox.Show(
+            Loc.Get("restore_defaults_profile_confirm", profileName),
+            Loc.Get("restore_defaults"),
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+        if (res != MessageBoxResult.OK) return;
+        _store.ClearProfile(id, slot);
+        Log($"[UI ] MacroPad profile {slot} restored to defaults.");
+        ReloadCurrentProfile();
     }
 
     /// <summary>Rotation combo item.</summary>
@@ -309,7 +337,7 @@ public partial class MainWindow
         // customizer instead of the action-configuration dialog.
         if (_mpKeycapEditMode && IsMpSettingsSectionActive)
         {
-            OpenMpKeycapCustomizeDialog(key.Index, key.Display);
+            OpenMpKeycapCustomizeDialog(key.Index, key.KeyLabel);
             return;
         }
 
@@ -335,6 +363,7 @@ public partial class MainWindow
                           ? null : dlg.ActionType;
         key.ActionValue = key.ActionType is null ? null : dlg.ActionValue;
         _store.SaveKey(new MacroKeyRecord(id, CurrentProfile(), key.Index, key.ActionType, key.ActionValue));
+        RefreshMpMappedKeys();
         Log($"[ACT ] key #{key.Index} <- type={key.ActionType ?? "none"} value=\"{key.ActionValue}\"");
     }
 
@@ -346,6 +375,50 @@ public partial class MainWindow
         key.ActionType = null;
         key.ActionValue = null;
         _store.SaveKey(new MacroKeyRecord(id, CurrentProfile(), key.Index, null, null));
+        RefreshMpMappedKeys();
+        Log($"[ACT ] key #{key.Index} action removed");
+    }
+
+    /// <summary>Rebuilds the Key Binding section's mapped-keys list (LvMpKeys)
+    /// from <see cref="_keys"/> — called after every action mutation.</summary>
+    private void RefreshMpMappedKeys()
+    {
+        _mpMappedKeys.Clear();
+        foreach (var k in _keys)
+            if (k.HasAction) _mpMappedKeys.Add(k);
+    }
+
+    /// <summary>Configure/Remove only make sense with a row selected — mirrors
+    /// LvEvKeys_SelectionChanged (MainWindow.Everest.cs).</summary>
+    private void LvMpKeys_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        bool hasSelection = LvMpKeys.SelectedItem is not null;
+        BtnMpConfigure.IsEnabled = hasSelection;
+        BtnMpRemoveAction.IsEnabled = hasSelection;
+    }
+
+    /// <summary>"Configure" button next to LvMpKeys — same action dialog as
+    /// clicking the key on the grid, for the currently selected list row.</summary>
+    private void BtnMpConfigure_Click(object sender, RoutedEventArgs e)
+    {
+        if (LvMpKeys.SelectedItem is not MacroPadKey key)
+        {
+            Log("[WARN] select a key first");
+            return;
+        }
+        ConfigureAction(key);
+    }
+
+    /// <summary>"Remove" button next to LvMpKeys, for the currently selected list row.</summary>
+    private void BtnMpRemoveAction_Click(object sender, RoutedEventArgs e)
+    {
+        if (!IsMpKeyBindingSectionActive) return;
+        if (LvMpKeys.SelectedItem is not MacroPadKey key) return;
+        if (CurrentDeviceId() is not int id) return;
+        key.ActionType = null;
+        key.ActionValue = null;
+        _store.SaveKey(new MacroKeyRecord(id, CurrentProfile(), key.Index, null, null));
+        RefreshMpMappedKeys();
         Log($"[ACT ] key #{key.Index} action removed");
     }
 
@@ -404,6 +477,7 @@ public partial class MainWindow
 
         _store.SaveKey(new MacroKeyRecord(id, CurrentProfile(), sourceKey.Index, sourceKey.ActionType, sourceKey.ActionValue));
         _store.SaveKey(new MacroKeyRecord(id, CurrentProfile(), targetKey.Index, targetKey.ActionType, targetKey.ActionValue));
+        RefreshMpMappedKeys();
         Log($"[ACT ] swapped key #{sourceKey.Index} <-> #{targetKey.Index}");
     }
 
@@ -497,7 +571,7 @@ public partial class MainWindow
     private void ReloadCurrentProfile()
     {
         foreach (var k in _keys) { k.ActionType = null; k.ActionValue = null; }
-        if (CurrentDeviceId() is not int id) return;
+        if (CurrentDeviceId() is not int id) { RefreshMpMappedKeys(); return; }
         int profile = CurrentProfile();
         var rows = _store.LoadProfile(id, profile);
         foreach (var r in rows)
@@ -506,6 +580,7 @@ public partial class MainWindow
             _keys[r.KeyIndex].ActionType  = r.ActionType;
             _keys[r.KeyIndex].ActionValue = r.ActionValue;
         }
+        RefreshMpMappedKeys();
         Log($"[DB  ] loaded {rows.Count} actions for device={id} profile={profile}");
     }
 

@@ -165,14 +165,22 @@ internal static class MakaluProtocol
     // DPI
     // ---------------------------------------------------------------
 
-    /// <summary>Reads all 5 DPI level values + the currently active level (0-based).</summary>
-    public static (int[] Levels, int Active)? GetDpi(SafeFileHandle h, int dpiMin)
+    public const int DpiLevelCountMin = 1;
+    public const int DpiLevelCountMax = 5;
+
+    /// <summary>Reads all 5 DPI level slots + the currently active level (0-based)
+    /// + how many of those 5 slots are actually active (<c>dpi_level_num</c>,
+    /// resp[21] — the count the physical DPI-cycle button on the mouse steps
+    /// through; documented in controller.py's <c>get_dpi</c> byte-offset
+    /// comment but never read here until now, always assumed to be 5).</summary>
+    public static (int[] Levels, int Active, int Count)? GetDpi(SafeFileHandle h, int dpiMin)
     {
         var buf = NewBuf();
         buf[1] = CmdDpi; buf[2] = 0x07; buf[5] = 0x01;
         var resp = MakaluHidNative.SendFeature(h, buf);
         if (resp is null || resp.Length < 43) return null;
 
+        int count  = Math.Clamp((int)resp[21], DpiLevelCountMin, DpiLevelCountMax);
         int active = Math.Clamp(resp[22] - 1, 0, 4); // resp[22] is 1-based
         var levels = new int[5];
         for (int i = 0; i < 5; i++)
@@ -181,16 +189,23 @@ internal static class MakaluProtocol
             int dpi = lo | (hi << 8);
             levels[i] = Math.Clamp(dpi, dpiMin, DpiMax);
         }
-        return (levels, active);
+        return (levels, active, count);
     }
 
-    /// <summary>Writes all 5 DPI levels + active level (1-based) to every profile
-    /// (ALL_PROFILE=6, same as controller.py's <c>set_all_dpi</c>).</summary>
-    public static bool SetAllDpi(SafeFileHandle h, int[] dpiList, int activeLevel1Based, int dpiMin)
+    /// <summary>Writes all 5 DPI level slots + active level (1-based) + how many
+    /// of those slots are active (<paramref name="levelCount"/>, 1-5 —
+    /// <c>dpi_level_num</c>, the DPI_T struct field controlling how many
+    /// levels the physical DPI-cycle button steps through) to every profile
+    /// (ALL_PROFILE=6, same as controller.py's <c>set_all_dpi</c>). The wire
+    /// format always carries exactly 5 slots regardless of
+    /// <paramref name="levelCount"/> — unused trailing slots just keep
+    /// whatever value <paramref name="dpiList"/> gives them.</summary>
+    public static bool SetAllDpi(SafeFileHandle h, int[] dpiList, int activeLevel1Based, int dpiMin, int levelCount = 5)
     {
         if (dpiList.Length != 5) throw new ArgumentException("dpiList must have exactly 5 values", nameof(dpiList));
         var buf = NewBuf();
-        buf[1] = CmdPollingRate; buf[2] = 0x0A; buf[5] = 6; buf[6] = 5;
+        buf[1] = CmdPollingRate; buf[2] = 0x0A; buf[5] = 6;
+        buf[6] = (byte)Math.Clamp(levelCount, DpiLevelCountMin, DpiLevelCountMax);
         buf[7] = (byte)Math.Clamp(activeLevel1Based, 1, 5);
         for (int i = 0; i < 5; i++)
         {

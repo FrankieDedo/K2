@@ -10,6 +10,7 @@
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using K2.App.Services;
 using K2.Core;
 using K2.Core.Services;
 
@@ -17,6 +18,51 @@ namespace K2.App;
 
 public partial class MainWindow
 {
+    /// <summary>Called once from the constructor (via Window.Loaded) — offers to import
+    /// existing Base Camp profiles/settings the very first time K2 runs. Silently does
+    /// nothing (no popup) if Base Camp isn't installed, so a user who never had it
+    /// installed is never bothered. The flag is reset by "Restore all defaults" (see
+    /// BtnAppRestoreDefaults_Click), so the prompt fires again after the following
+    /// restart; it can also be forced again any time from the Settings tab.</summary>
+    private void CheckFirstRunBcImport()
+    {
+        if (AppSettings.BcImportPromptShown) return;
+        AppSettings.SetBcImportPromptShown(true);
+        RunBaseCampImportPrompt(silentIfNotFound: true);
+    }
+
+    /// <summary>"Import from Base Camp" button in the Settings tab — forces the same
+    /// prompt shown automatically on first run, regardless of whether it already ran.</summary>
+    private void BtnAppImportFromBaseCamp_Click(object sender, RoutedEventArgs e) =>
+        RunBaseCampImportPrompt(silentIfNotFound: false);
+
+    /// <summary>Single entry-point gate: detects Base Camp's database and, if present,
+    /// asks once whether to import existing profiles/settings — then hands off to each
+    /// device's own (already-built) Base Camp import flow, which shows its own per-device
+    /// summary/confirmation. Devices with no matching profiles in the DB, or not
+    /// connected, simply no-op (see each BtnXxImportBc_Click).</summary>
+    private void RunBaseCampImportPrompt(bool silentIfNotFound)
+    {
+        string? dbPath = BaseCampDbImporter.FindBaseCampDb();
+        if (dbPath is null)
+        {
+            if (!silentIfNotFound)
+                MessageBox.Show(this, Loc.Get("dp_bc_db_not_found"), Loc.Get("bc_import_prompt_title"),
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var res = MessageBox.Show(this, Loc.Get("bc_import_prompt_text"), Loc.Get("bc_import_prompt_title"),
+            MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (res != MessageBoxResult.Yes) return;
+
+        BtnEvImportBc_Click(this, new RoutedEventArgs());
+        BtnEv60ImportBc_Click(this, new RoutedEventArgs());
+        BtnMkImportBc_Click(this, new RoutedEventArgs());
+        BtnMpImportBc_Click(this, new RoutedEventArgs());
+        BtnDpImportBc_Click(this, new RoutedEventArgs());
+    }
+
     /// <summary>Loads persisted AppSettings into the Settings tab UI and applies
     /// the debug flag to every device module. Called once from the constructor,
     /// after all Init*Module() calls so their controls/fields already exist.</summary>
@@ -161,6 +207,34 @@ public partial class MainWindow
         if (sender == RbLogOff)          AppSettings.SetLogLevel(K2LogLevel.Off);
         else if (sender == RbLogVerbose) AppSettings.SetLogLevel(K2LogLevel.Verbose);
         else                              AppSettings.SetLogLevel(K2LogLevel.Normal);
+    }
+
+    /// <summary>Wipes every app preference AND every saved profile/key binding/lighting/
+    /// macro for every device, then restarts K2 — the "Restore all defaults" button in
+    /// the Settings tab's Danger Zone. Distinct from the per-device "Restore defaults"
+    /// buttons (which only reset the currently selected profile of one device and don't
+    /// restart). Restarting (rather than trying to refresh a dozen open panels in place)
+    /// guarantees every tab comes back up reading the freshly-blank stores from scratch —
+    /// and resetting <see cref="AppSettings.BcImportPromptShown"/> means the "Import from
+    /// Base Camp?" prompt (see CheckFirstRunBcImport) fires again right after.</summary>
+    private void BtnAppRestoreDefaults_Click(object sender, RoutedEventArgs e)
+    {
+        var res = MessageBox.Show(
+            Loc.Get("restore_defaults_app_confirm"),
+            Loc.Get("restore_defaults_app"),
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+        if (res != MessageBoxResult.OK) return;
+
+        AppSettings.ResetToDefaults();
+        _evStore.ResetAllData();
+        _ev60Store.ResetAllData();
+        _mkStore.ResetAllData();
+        _store.ResetAllData();
+        _macroStore?.ResetAllData();
+        _dpStore.ResetAllData();
+
+        RestartApp();
     }
 
     /// <summary>Applies the centralized debug flag to every device module at once.</summary>

@@ -41,6 +41,7 @@ public static class AppSettings
         public string? MakaluDeviceName { get; set; }
         public string? Everest60DeviceName { get; set; }
         public string AppFontFamily { get; set; } = Services.FontCatalog.DefaultKey;
+        public bool BcImportPromptShown { get; set; }
     }
 
     private static Data _data = new();
@@ -265,6 +266,44 @@ public static class AppSettings
         {
             if (_data.AppFontFamily == key) return;
             _data.AppFontFamily = key;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>Whether the one-time "Import from Base Camp?" prompt has already been
+    /// shown (see MainWindow.Settings.cs's CheckFirstRunBcImport). Reset to false by
+    /// <see cref="ResetToDefaults"/>, so the prompt fires again after the app-wide
+    /// "Restore all defaults" and the following restart. Can also be forced again at
+    /// any time from the Settings tab regardless of this flag.</summary>
+    public static bool BcImportPromptShown
+    {
+        get { EnsureLoaded(); return _data.BcImportPromptShown; }
+    }
+
+    public static void SetBcImportPromptShown(bool value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.BcImportPromptShown == value) return;
+            _data.BcImportPromptShown = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>Resets every app-wide preference (tray/autostart/font/log level/native
+    /// engine toggles/auto-stop/kill-worker/recent paths/device nicknames) back to its
+    /// built-in default and persists it. Used by the app-wide "Restore all defaults"
+    /// button in the Settings tab. Some flags (native engine toggles) are only read
+    /// once at startup, so the caller should advise the user to restart K2.</summary>
+    public static void ResetToDefaults()
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            _data = new Data();
             Save();
         }
         Changed?.Invoke();

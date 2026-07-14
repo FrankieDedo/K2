@@ -36,7 +36,6 @@ public partial class MainWindow
     private readonly ObservableCollection<EverestKey> _evKeys = new();
     private readonly Dictionary<int, EverestKey> _evByMatrix = new();
 
-    private bool _evCapturing;
     private bool _evSuppressProfile;
 
     /// <summary>Connection poll — mirrors Ev60/Makalu's own timers
@@ -788,13 +787,6 @@ public partial class MainWindow
         // TryCustomPaint above already ran, so lighting is unaffected by this guard.
         if (matrixId == 261) return;
 
-        if (_evCapturing)
-        {
-            // Simulate capture as if the physical key was pressed
-            HandleEverestKey(new EverestKeyEventArgs(0, (ushort)matrixId, true));
-            return;
-        }
-
         // Key editing is only enabled while the "Key Binding" section is active
         // (elsewhere the keyboard overlay is just a visual reference for other panels).
         if (!IsEvKeyBindingSectionActive) return;
@@ -804,7 +796,7 @@ public partial class MainWindow
         bool isNewKey = !_evByMatrix.ContainsKey(matrixId);
         if (!_evByMatrix.TryGetValue(matrixId, out var key))
         {
-            key = new EverestKey(matrixId);
+            key = new EverestKey(matrixId) { Label = EvKeyLabelForMatrix(matrixId) ?? "" };
             _evKeys.Add(key);
             _evByMatrix[matrixId] = key;
             LogEverest($"[CAP ] new key 0x{matrixId:X2} added via overlay click");
@@ -845,7 +837,7 @@ public partial class MainWindow
     private void EvKeyboardButton_PreviewMouseMove(object sender, MouseEventArgs e)
     {
         if (e.LeftButton != MouseButtonState.Pressed || _evDragCandidateMatrix is not int matrixId) return;
-        if (!IsEvKeyBindingSectionActive || _evCapturing || matrixId == 261 ||
+        if (!IsEvKeyBindingSectionActive || matrixId == 261 ||
             !_evByMatrix.TryGetValue(matrixId, out var key) || !key.HasAction)
         {
             _evDragCandidateMatrix = null;
@@ -1034,6 +1026,21 @@ public partial class MainWindow
         if (_evWMatrixToLayout.TryGetValue(wMatrix, out int layoutId)) return layoutId;
         if (s_defaultWMatrixMap.TryGetValue(wMatrix, out layoutId))    return layoutId;
         return wMatrix;
+    }
+
+    /// <summary>
+    /// Looks up the printed legend for a layout matrixId (board + numpad),
+    /// so the Key Binding list can show a real key name instead of a hex code.
+    /// Returns null for matrixIds outside the current layout (e.g. dock/crown,
+    /// handled separately via MainWindow.DockActions.cs).
+    /// </summary>
+    private string? EvKeyLabelForMatrix(int matrixId)
+    {
+        foreach (var kd in EverestKeyboardLayout.GetBoardLeft(_evLayoutType))
+            if (kd.MatrixId == matrixId) return string.IsNullOrEmpty(kd.Label) ? null : kd.Label;
+        foreach (var kd in EverestKeyboardLayout.BoardRight)
+            if (kd.MatrixId == matrixId) return string.IsNullOrEmpty(kd.Label) ? null : kd.Label;
+        return null;
     }
 
     // ============================================================
@@ -1372,21 +1379,6 @@ public partial class MainWindow
         }
     }
 
-    private void BtnEvCapture_Click(object sender, RoutedEventArgs e)
-    {
-        if (_evCapturing)
-        {
-            _evCapturing = false;
-            BtnEvCapture.Content = Loc.Get("ev_capture_key");
-            LblStatus.Text = Loc.Get("ev_capture_cancelled");
-            return;
-        }
-        _evCapturing = true;
-        BtnEvCapture.Content = Loc.Get("ev_cancel_capture");
-        LblStatus.Text = Loc.Get("ev_capture_prompt");
-        LogEverest("[CAP ] waiting for a key…");
-    }
-
     private void CbEvProfile_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_evSuppressProfile) return;
@@ -1399,6 +1391,15 @@ public partial class MainWindow
     // ============================================================
     // Key list: configure / remove
     // ============================================================
+
+    /// <summary>Configure/Remove only make sense with a row selected — mirrors
+    /// LvMpKeys_SelectionChanged (MainWindow.Keys.cs).</summary>
+    private void LvEvKeys_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        bool hasSelection = LvEvKeys.SelectedItem is not null;
+        BtnEvConfig.IsEnabled = hasSelection;
+        BtnEvRemove.IsEnabled = hasSelection;
+    }
 
     private void BtnEvConfig_Click(object sender, RoutedEventArgs e)
     {
@@ -1495,30 +1496,6 @@ public partial class MainWindow
         // Translate SDK wMatrix to visual layout matrixId
         int matrix = EvTranslateMatrix(rawMatrix);
 
-        // Capture mode: next pressed key is added to the list.
-        if (_evCapturing && e.Pressed)
-        {
-            _evCapturing = false;
-            BtnEvCapture.Content = Loc.Get("ev_capture_key");
-            if (_evByMatrix.TryGetValue(matrix, out var existing))
-            {
-                LblStatus.Text = $"Key 0x{matrix:X2} already in list.";
-                LvEvKeys.SelectedItem = existing;
-            }
-            else
-            {
-                // Only added in-memory (not persisted) until it's actually
-                // given an action via BtnEvConfig_Click.
-                var k = new EverestKey(matrix);
-                _evKeys.Add(k);
-                _evByMatrix[matrix] = k;
-                LvEvKeys.SelectedItem = k;
-                LogEverest($"[CAP ] new key 0x{matrix:X2} added");
-                LblStatus.Text = $"Key 0x{matrix:X2} captured. Configure its action.";
-            }
-            return;
-        }
-
         // Highlight in the visual keyboard overlay
         EvHighlightKeyboardButton(matrix, e.Pressed);
 
@@ -1541,7 +1518,7 @@ public partial class MainWindow
         {
             var k = new EverestKey(r.KeyMatrix)
             {
-                Label       = r.Label ?? "",
+                Label       = string.IsNullOrEmpty(r.Label) ? (EvKeyLabelForMatrix(r.KeyMatrix) ?? "") : r.Label,
                 ActionType  = r.ActionType,
                 ActionValue = r.ActionValue,
             };
@@ -1617,6 +1594,25 @@ public partial class MainWindow
         LogEverest($"[UI ] Everest profile {slot} deleted.");
         EvRefreshProfiles();
         EvSelectProfileSlot(slot);
+        ReloadEverestProfile();
+    }
+
+    /// <summary>Resets the currently selected profile's key bindings back to K2's
+    /// defaults (empty) and re-applies. RGB lighting/keycap appearance are device-wide
+    /// (not per-profile) for the Everest Max, so they are untouched — see the
+    /// architectural note in _PROJECT_MAP.md.</summary>
+    private void BtnEvRestoreDefaults_Click(object sender, RoutedEventArgs e)
+    {
+        int slot = EvCurrentProfile();
+        string profileName = _evStore.GetProfileName(slot) ?? Loc.Get("profile_n", slot);
+        var res = MessageBox.Show(
+            Loc.Get("restore_defaults_profile_confirm", profileName),
+            Loc.Get("restore_defaults"),
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+        if (res != MessageBoxResult.OK) return;
+        _evStore.ResetProfileToDefaults(slot);
+        LogEverest($"[UI ] Everest profile {slot} restored to defaults.");
         ReloadEverestProfile();
     }
 
@@ -1964,19 +1960,6 @@ public partial class MainWindow
     {
         if (!_everest.IsOpen) { LogEverest("[WARN] Everest driver not open"); return; }
         LogEverest($"[RGB ] SetBacklight(false) -> {_everest.SetBacklight(false)}");
-    }
-
-    private void BtnEvLightReset_Click(object sender, RoutedEventArgs e)
-    {
-        if (!_everest.IsOpen) { LogEverest("[WARN] Everest driver not open"); return; }
-        LogEverest($"[RGB ] ResetEffects -> {_everest.ResetEffects()}");
-    }
-
-    private void BtnEvLightSave_Click(object sender, RoutedEventArgs e)
-    {
-        if (!_everest.IsOpen) { LogEverest("[WARN] Everest driver not open"); return; }
-        // 6 = ALL_PROFILE (see enum PROFILE_ID_T).
-        LogEverest($"[RGB ] SaveFlash(ALL_PROFILE) -> {_everest.SaveFlash(6)}");
     }
 
     /// <summary>

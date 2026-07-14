@@ -18,8 +18,12 @@
         <Grid x:Name="SecRgb" Visibility="Collapsed">
             <StackPanel>
                 <DockPanel Margin="0,0,0,8">
+                    <!-- Hidden for now (2026-07-14, user request: hide LED painting/ring
+                         sections on every device with a Lighting section). Opens the
+                         per-LED "ring" painting window (MakaluCustomRgbWindow). -->
                     <Button DockPanel.Dock="Right" x:Name="BtnMkCustomOpen" Content="{loc:Get makalu_custom_open}"
-                            Click="BtnMkCustomOpen_Click" Padding="8,3" HorizontalAlignment="Right"/>
+                            Click="BtnMkCustomOpen_Click" Padding="8,3" HorizontalAlignment="Right"
+                            Visibility="Collapsed"/>
                     <TextBlock Text="{loc:Get rgb_lighting}" FontWeight="Bold" VerticalAlignment="Center"/>
                 </DockPanel>
                 <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
@@ -58,7 +62,6 @@
                                 BorderThickness="2" BorderBrush="#3A3A40" Click="BtnMkColor_Click" Tag="2"/>
                     </StackPanel>
                 </WrapPanel>
-                <WrapPanel x:Name="PnlMkPresets" Orientation="Horizontal" Margin="0,0,0,4"/>
                 <TextBlock x:Name="LblMkRgbStatus" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
             </StackPanel>
         </Grid>
@@ -123,12 +126,28 @@
 
             <StackPanel Grid.Column="2">
                 <TextBlock Text="{loc:Get makalu_dpi_title}" FontWeight="Bold" Margin="0,0,0,14"/>
-                <!-- Always one row, however many levels there are: a UniformGrid
-                     (not a WrapPanel) so entries stretch to share the full column
-                     width evenly instead of wrapping to a 2nd line. -->
-                <UniformGrid x:Name="PnlMkDpiLevels" Rows="1" Margin="0,0,0,12"/>
+                <!-- Fixed-width tabs (not a UniformGrid — that used to shrink every
+                     button to fit exactly 5 in the available width) in a horizontal
+                     ScrollViewer, plus a trailing "+" tab to add levels up to the
+                     firmware's 5-slot max (right-click a tab to remove it). The
+                     native scrollbar is hidden — BtnMkDpiPrev/Next scroll the strip
+                     instead, and are only shown when the tabs don't all fit (see
+                     SvMkDpiLevels_ScrollChanged in the code-behind). -->
                 <DockPanel Margin="0,0,0,12">
-                    <TextBox x:Name="TxtMkDpi" DockPanel.Dock="Right" Width="60" Margin="8,0,0,0" TextAlignment="Center"
+                    <Button x:Name="BtnMkDpiPrev" DockPanel.Dock="Left" Width="26" Padding="0" Margin="0,0,4,0"
+                            Style="{StaticResource K2IconButton}" Tag="&#xE76B;" Click="BtnMkDpiPrev_Click"
+                            ToolTip="{loc:Get makalu_dpi_prev}" Visibility="Collapsed"/>
+                    <Button x:Name="BtnMkDpiNext" DockPanel.Dock="Right" Width="26" Padding="0" Margin="4,0,0,0"
+                            Style="{StaticResource K2IconButton}" Tag="&#xE76C;" Click="BtnMkDpiNext_Click"
+                            ToolTip="{loc:Get makalu_dpi_next}" Visibility="Collapsed"/>
+                    <ScrollViewer x:Name="SvMkDpiLevels" HorizontalScrollBarVisibility="Hidden"
+                                  VerticalScrollBarVisibility="Disabled"
+                                  ScrollChanged="SvMkDpiLevels_ScrollChanged">
+                        <StackPanel x:Name="PnlMkDpiLevels" Orientation="Horizontal"/>
+                    </ScrollViewer>
+                </DockPanel>
+                <DockPanel Margin="0,0,0,12">
+                    <TextBox x:Name="TxtMkDpi" DockPanel.Dock="Right" Width="70" Margin="8,0,0,0" TextAlignment="Center"
                              KeyDown="TxtMkDpi_KeyDown" LostFocus="TxtMkDpi_LostFocus"/>
                     <Slider x:Name="SldMkDpi" Minimum="50" Maximum="19000"
                             TickFrequency="50" ValueChanged="SldMkDpi_ValueChanged" VerticalAlignment="Center"/>

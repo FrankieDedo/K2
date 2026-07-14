@@ -8,66 +8,70 @@
          (which draws its own hotspot dots on the device image), this reuses the
          64-key overlay already built for lighting (CvsEv60Keyboard in
          MainWindow.xaml/MainWindow.Everest60.cs) as the key picker: clicking a
-         key while this section is active calls SelectKey() below. Writes go
-         straight to the keyboard's firmware via Everest60SdkNative
-         (ChangeKey/ChangeFnKey/ChangeShortcutKey/SetSingleMacroContent) — no
-         IActionHost/ButtonActionEngine involvement, same as Makalu's button
-         remap (K2's own action engine has no passthrough in Base Camp's own
-         Everest 60 function taxonomy — see MainWindow.Everest60KeyBinding.cs). -->
-    <StackPanel>
-        <TextBlock Text="{loc:Get ev60_key_binding}" FontWeight="Bold" Margin="0,0,0,6"/>
-        <TextBlock Text="{loc:Get ev60_key_binding_hint}"
+         key while this section is active calls SelectKey() below.
+         2026-07-14 (second pass, explicit user request — "same popup, same
+         options and mappings as Everest Max"): this is no longer a raw
+         firmware remap. Key Binding now goes through the SAME
+         K2.Core.ButtonActionDialog and the same K2Action catalog as Everest
+         Max/MacroPad/DisplayPad, via Ev60ActionHost/ButtonActionEngine (owned
+         by MainWindow.Everest60.cs) — same hint+list+Configure/Remove layout
+         as Everest Max's Key Binding section (MainWindow.xaml
+         PnlSecKeyMapping/LvEvKeys). Physical key presses are reported by the
+         vendor SDK's key callback (Everest60SdkService.KeyEvent) and executed
+         through the same engine — see MainWindow.Everest60.cs's OnEv60Key.
+         2026-07-14 (third pass, explicit user request — "make the mapped-keys
+         box exactly like Everest Max"): root is now a Grid (not a StackPanel)
+         with an Auto/Auto/*/Auto row split, same reasoning as Everest Max's
+         PnlSecKeyMapping (MainWindow.xaml) — a StackPanel always sizes a child
+         to its natural height, so LvEv60Keys previously needed a fixed
+         MaxHeight (260) and left dead space below it; a Grid's "*" row
+         actually stretches the ListView to fill the Border, exactly like
+         Everest Max's LvEvKeys. This only takes effect because the panel's
+         host (MainWindow.xaml) no longer wraps it in a shared ScrollViewer
+         either — see the matching 2026-07-14 note there. -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- title -->
+            <RowDefinition Height="Auto"/> <!-- hint -->
+            <RowDefinition Height="*"/>    <!-- list + buttons: fills remaining height -->
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="{loc:Get ev60_key_binding}" FontWeight="Bold" Margin="0,0,0,6"/>
+        <TextBlock Grid.Row="1" Text="{loc:Get ev60_key_binding_hint}"
                    Foreground="#9A9AA2" FontStyle="Italic"
                    TextWrapping="Wrap" Margin="0,0,0,8"/>
 
-        <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-            <TextBlock Text="{loc:Get ev60_selected_key}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <TextBlock x:Name="LblEv60SelectedKey" Text="—" FontWeight="Bold"
-                       VerticalAlignment="Center" Foreground="{StaticResource K2AccentBrush}"/>
-        </WrapPanel>
-
-        <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-            <TextBlock Text="{loc:Get ev60_remap_mode}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <ComboBox x:Name="CbEv60RemapMode" Width="150"
-                      SelectionChanged="CbEv60RemapMode_SelectionChanged"/>
-        </WrapPanel>
-
-        <!-- Remap Key / Fn Layer: pick a target key -->
-        <WrapPanel x:Name="PnlEv60RemapTargetKey" Orientation="Horizontal" Margin="0,0,0,6">
-            <TextBlock Text="{loc:Get ev60_target_key}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <ComboBox x:Name="CbEv60TargetKey" Width="180"/>
-        </WrapPanel>
-
-        <!-- Shortcut: modifiers + a key -->
-        <WrapPanel x:Name="PnlEv60RemapShortcut" Orientation="Horizontal" Margin="0,0,0,6" Visibility="Collapsed">
-            <CheckBox x:Name="CkEv60ModCtrl"  Content="Ctrl"  Margin="0,0,8,0" VerticalAlignment="Center"/>
-            <CheckBox x:Name="CkEv60ModShift" Content="Shift" Margin="0,0,8,0" VerticalAlignment="Center"/>
-            <CheckBox x:Name="CkEv60ModAlt"   Content="Alt"   Margin="0,0,8,0" VerticalAlignment="Center"/>
-            <CheckBox x:Name="CkEv60ModWin"   Content="Win"   Margin="0,0,10,0" VerticalAlignment="Center"/>
-            <ComboBox x:Name="CbEv60ShortcutKey" Width="150"/>
-        </WrapPanel>
-
-        <!-- Media / OS action -->
-        <WrapPanel x:Name="PnlEv60RemapMedia" Orientation="Horizontal" Margin="0,0,0,6" Visibility="Collapsed">
-            <TextBlock Text="{loc:Get ev60_media_action}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <ComboBox x:Name="CbEv60MediaAction" Width="180"/>
-        </WrapPanel>
-
-        <WrapPanel Orientation="Horizontal">
-            <Button x:Name="BtnEv60RemapApply" Content="{loc:Get apply_to_device}" Padding="8,2" Margin="0,0,6,0"
-                    Click="BtnEv60RemapApply_Click" Style="{StaticResource K2IconAccentButton}" Tag="&#xE73E;"/>
-            <Button x:Name="BtnEv60RemapReset" Content="{loc:Get ev60_remap_reset}" Padding="8,2" Margin="0,0,6,0"
-                    Click="BtnEv60RemapReset_Click" Style="{StaticResource K2IconButton}" Tag="&#xE74D;"/>
-            <Button x:Name="BtnEv60RemapSave" Content="{loc:Get save}" Padding="8,2"
-                    Click="BtnEv60RemapSave_Click" Style="{StaticResource K2IconButton}" Tag="&#xE105;"
-                    ToolTip="{loc:Get ev60_remap_save_tip}"/>
-        </WrapPanel>
-        <TextBlock x:Name="LblEv60RemapStatus" Margin="0,6,0,0" FontSize="11"
-                   Foreground="{StaticResource K2TextMutedBrush}"/>
-
-        <Separator Style="{StaticResource K2SideSeparator}" Margin="0,10,0,8"/>
-        <TextBlock Text="{loc:Get ev60_key_binding_unverified}" TextWrapping="Wrap"
-                   Foreground="{StaticResource K2TextMutedBrush}" FontStyle="Italic" FontSize="11"
-                   MaxWidth="640"/>
-    </StackPanel>
+        <Grid Grid.Row="2" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="170"/>
+            </Grid.ColumnDefinitions>
+            <ListView Grid.Column="0" x:Name="LvEv60Keys" Margin="0,0,8,0"
+                      SelectionChanged="LvEv60Keys_SelectionChanged">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                <Setter Property="Background" Value="#900000"/>
+                                <Setter Property="Foreground" Value="#10302F"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Display}" FontFamily="Consolas" Padding="2"/>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+            <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                <Button x:Name="BtnEv60Configure" Content="{loc:Get ev_configure}" Padding="8,4"
+                        Click="BtnEv60Configure_Click" HorizontalAlignment="Stretch" Margin="0,0,0,4"
+                        IsEnabled="False"/>
+                <Button x:Name="BtnEv60Remove" Content="{loc:Get ev_remove}" Padding="8,4"
+                        Click="BtnEv60Remove_Click" HorizontalAlignment="Stretch"
+                        IsEnabled="False"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
 </UserControl>

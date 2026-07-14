@@ -143,6 +143,20 @@
   <string name="settings_bc_autostart_hint">Attiva/disattiva le voci di esecuzione automatica di Base Camp (stesso meccanismo della scheda Avvio di Gestione Attività — reversibile). Le voci in HKLM possono richiedere K2 come amministratore.</string>
   <string name="settings_bc_autostart_none">Nessuna voce di avvio automatico di Base Camp trovata nel registro.</string>
   <string name="settings_bc_autostart_done">Avvio automatico Base Camp: {0} voci aggiornate.</string>
+  <!-- Prompt importazione da Base Camp -->
+  <string name="settings_bc_import_group">Importazione da Base Camp</string>
+  <string name="settings_bc_import_btn">Importa da Base Camp…</string>
+  <string name="settings_bc_import_hint">Cerca un'installazione di Base Camp esistente e propone di importarne profili e impostazioni per ogni dispositivo K2 (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). Viene mostrato automaticamente al primo avvio di K2 — usa questo pulsante per rilanciarlo in qualsiasi momento.</string>
+  <string name="bc_import_prompt_title">Importa da Base Camp</string>
+  <string name="bc_import_prompt_text">È stata rilevata un'installazione di Base Camp su questo PC. Vuoi importare i suoi profili e impostazioni esistenti in K2? Per ogni dispositivo collegato potrai controllare cosa è stato trovato prima che venga importato qualcosa.</string>
+  <!-- Ripristina impostazioni predefinite -->
+  <string name="settings_danger_zone">Zona pericolosa</string>
+  <string name="restore_defaults">Ripristina predefiniti</string>
+  <string name="restore_defaults_profile_confirm">Ripristinare il profilo '{0}' ai valori predefiniti di K2 su questo dispositivo (tasti assegnati, illuminazione e impostazioni, dove applicabile)? L'operazione non può essere annullata.</string>
+  <string name="restore_defaults_app">Ripristina tutti i predefiniti</string>
+  <string name="restore_defaults_app_hint">Ripristina tutte le preferenze dell'app sopra elencate E cancella ogni profilo, tasto assegnato, impostazione di illuminazione e macro salvati per ogni dispositivo (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). L'operazione non può essere annullata.</string>
+  <string name="restore_defaults_app_confirm">Questo ripristina TUTTE le preferenze dell'app e CANCELLA ogni profilo, tasto assegnato, impostazione di illuminazione e macro salvati per ogni dispositivo (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). L'operazione non può essere annullata. Continuare?</string>
+  <string name="restore_defaults_app_done">Tutte le impostazioni dell'app e i profili dei dispositivi sono stati ripristinati ai valori predefiniti.</string>
   <string name="settings_general">Opzioni generali</string>
   <string name="settings_close_to_tray">Chiudi nella system tray invece di uscire</string>
   <string name="settings_k2_autostart">Avvia K2 all'avvio di Windows</string>
@@ -168,15 +182,11 @@
   <string name="ev_crash_recovering">Driver in crash — tentativo di recovery tra 3 s…</string>
   <string name="ev_crash_recovered">Driver recuperato — LED preview riavviata.</string>
   <string name="ev_crash_recovery_failed">Recovery fallita — riavviare K2.App.</string>
-  <string name="ev_capture_key">Cattura tasto</string>
-  <string name="ev_cancel_capture">Annulla cattura</string>
-  <string name="ev_capture_prompt">Cattura: premi il tasto fisico da aggiungere…</string>
-  <string name="ev_capture_cancelled">Cattura annullata.</string>
   <string name="ev_cancel_mapping">Annulla rimappatura</string>
   <string name="ev_mapping_step">Rimappatura [{0}/{1}]: premi il tasto fisico «{2}»…</string>
   <string name="ev_mapping_done">Rimappatura completata: {0} tasti salvati.</string>
   <string name="ev_mapped_keys">Tasti rimappati</string>
-  <string name="ev_configure">Configura…</string>
+  <string name="ev_configure">Configura</string>
   <string name="ev_remove">Rimuovi</string>
   <string name="ev_sdk_log">Log SDK</string>
 
@@ -218,20 +228,6 @@
   <string name="ev60_numpad_decorative_tip">Solo decorativo — nessun protocollo di illuminazione/remap noto per questo accessorio.</string>
   <string name="ev60_key_binding">Key Binding</string>
   <string name="ev60_key_binding_hint">Clicca su un tasto della tastiera qui sopra per selezionarlo, poi scegli cosa deve fare.</string>
-  <string name="ev60_selected_key">Tasto selezionato:</string>
-  <string name="ev60_remap_mode">Tipo:</string>
-  <string name="ev60_target_key">Tasto destinazione:</string>
-  <string name="ev60_media_action">Azione:</string>
-  <string name="ev60_remap_reset">Ripristina tasto</string>
-  <string name="ev60_remap_save_tip">Rende permanenti i binding attuali (sopravvivono a scollegamento/riavvio).</string>
-  <string name="ev60_key_binding_unverified">Scrive direttamente nel firmware della tastiera tramite l'SDK vendor (Everest360_USB.dll) — non ancora verificato su hardware reale. I codici azione media/OS non sono confermati (ordine segnaposto); i tasti destinazione di Remap Key/Fn Layer/Shortcut sono stati estratti dal catalogo decompilato di Base Camp.</string>
-  <string name="ev60_key_binding_unmapped">nessun DLLKeyId — non rimappabile</string>
-  <string name="ev60_key_binding_select_first">Seleziona prima un tasto sulla tastiera.</string>
-  <string name="ev60_key_binding_not_open">Driver SDK Everest 60 non aperto — la tastiera è collegata?</string>
-  <string name="ev60_key_binding_select_target">Seleziona prima una destinazione.</string>
-  <string name="ev60_remap_applied">Applicato.</string>
-  <string name="ev60_remap_failed">Fallito.</string>
-  <string name="ev60_remap_reset_done">Tasto ripristinato.</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
        TAB MAKALU (mouse — raw-HID, nessun SDK vendor — vedi MakaluHidNative)
@@ -252,6 +248,10 @@
   <string name="makalu_custom_hint">Clicca un LED per scegliere il colore, poi Applica. Layout fisico: 4 LED a sinistra, 4 a destra.</string>
 
   <string name="makalu_dpi_title">DPI</string>
+  <string name="makalu_dpi_prev">Livello precedente</string>
+  <string name="makalu_dpi_next">Livello successivo</string>
+  <string name="makalu_dpi_add">Aggiungi livello DPI</string>
+  <string name="makalu_dpi_remove_level">Rimuovi livello</string>
 
   <string name="makalu_remap_title">Rimappatura tasti</string>
   <string name="makalu_remap_category">Categoria:</string>
@@ -440,12 +440,9 @@
   <string name="mp_cancel_mapping">Annulla rimappatura</string>
 
   <!-- Illuminazione LED MacroPad -->
-  <string name="led_lighting">Illuminazione LED</string>
   <string name="led_sync_profiles">Sincronizza tra profili</string>
   <string name="led_backlight_off">Retroilluminazione OFF</string>
   <string name="led_backlight_on">Retroilluminazione ON</string>
-  <string name="led_reset_effects">Ripristina effetti</string>
-  <string name="led_save_flash">Salva su flash</string>
   <string name="led_save_flash_tip">Rende l'effetto applicato permanente (sopravvive a unplug/riavvio).</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
