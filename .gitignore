@@ -1,22 +1,15 @@
-# --- Materiale NON distribuibile / non versionabile -----------------------
-# Tutto cio' che deriva dai binari di Base Camp (decompilato, patch, DLL
-# interne come MacroPadSDK.dll). Vedi _reference/README.md e DISTRIBUTION.md.
-_reference/
-
 # --- Output di build .NET -------------------------------------------------
 bin/
 obj/
 *.user
 
-# --- Output di build Python (PyInstaller dello Stabilizer) ----------------
-build/
-dist/
-__pycache__/
-*.pyc
-
 # --- Runtime Python embeddable (scaricato da setup-python-embed) ----------
 # Grande (~25 MB estratto) e ricreabile: NON versionarlo.
 lib/python-embed/
+
+# --- Cache Python (bytecode compilato da lib/pybridge) ---------------------
+__pycache__/
+*.pyc
 
 # --- Log a runtime --------------------------------------------------------
 *.log
