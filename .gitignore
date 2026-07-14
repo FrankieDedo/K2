@@ -17,3 +17,7 @@ __pycache__/
 # --- Junk locale (scorciatoie Windows, file temporanei) --------------------
 *.lnk
 *.tmp
+
+# --- Artefatti di build dell'installer (ricreati da build-installer.bat) --
+Installer/publish/
+Installer/output/

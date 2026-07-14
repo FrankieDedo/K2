@@ -260,7 +260,18 @@ public sealed class DisplayPadSatelliteClient : IDisplayPadClient
             if (File.Exists(p)) return p;
         }
 
-        // 2) Relative x64 build (for debugging)
+        // 2) "Satellite\" subfolder next to K2.App.exe (installed self-contained
+        //    layout): x86 and x64 self-contained publishes both ship a native
+        //    host (hostfxr.dll/coreclr.dll/...) under the SAME filenames, so
+        //    they cannot share a folder without one bitness clobbering the
+        //    other. The installer keeps the x64 satellite isolated here.
+        if (dir is not null)
+        {
+            string p = Path.Combine(dir, "Satellite", SatelliteExeName);
+            if (File.Exists(p)) return p;
+        }
+
+        // 3) Relative x64 build (for debugging)
         //    K2.App/bin/x86/Debug/net8.0-windows → 5 levels up = K2/ (solution root)
         if (dir is not null)
         {
