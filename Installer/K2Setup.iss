@@ -36,23 +36,17 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
-[Components]
-Name: "main"; Description: "K2 (MacroPad + Everest + Makalu + DisplayPad, unified app)"; Types: full compact custom; Flags: fixed
-Name: "displaypad"; Description: "K2 DisplayPad standalone (separate x64 app - only needed if you don't want the unified K2 app)"; Types: full
-
-; Staged by build-installer.bat: publish\K2.App\ is the full install tree for
-; the "main" component (K2.App.exe + its Satellite\ helper), with the
-; standalone DisplayPad publish nested under DisplayPad\ for the optional
-; component.
+; Staged by build-installer.bat: publish\K2.App\ is the full install tree,
+; K2.App.exe + its Satellite\ helper + the standalone DisplayPad publish
+; nested under DisplayPad\ - all installed unconditionally.
 [Files]
-Source: "publish\K2.App\*"; DestDir: "{app}"; Excludes: "DisplayPad\*"; Flags: recursesubdirs ignoreversion; Components: main
-Source: "publish\K2.App\DisplayPad\*"; DestDir: "{app}\DisplayPad"; Flags: recursesubdirs ignoreversion; Components: displaypad
+Source: "publish\K2.App\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
 [Icons]
-Name: "{group}\K2"; Filename: "{app}\{#MyAppExeName}"; Components: main
-Name: "{group}\K2 DisplayPad (standalone)"; Filename: "{app}\DisplayPad\K2.DisplayPad.exe"; Components: displaypad
+Name: "{group}\K2"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\K2 DisplayPad (standalone)"; Filename: "{app}\DisplayPad\K2.DisplayPad.exe"
 Name: "{group}\Uninstall K2"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\K2"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; Components: main
+Name: "{autodesktop}\K2"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,K2}"; Flags: nowait postinstall skipifsilent; Components: main
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,K2}"; Flags: nowait postinstall skipifsilent
