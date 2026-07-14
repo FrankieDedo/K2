@@ -87,6 +87,10 @@ public partial class MainWindow
     private int _currentDpPageId = 0;
     private string? _currentDpFolderName = null;
     private readonly Stack<(int PageId, string? Name)> _dpPageHistory = new();
+    /// <summary>Which device the foreground navigation state above currently belongs to —
+    /// see the handoff in <see cref="DpActivateDevice"/>. Distinct from _activeDpDeviceId,
+    /// which TcDevices_SelectionChanged reassigns BEFORE DpActivateDevice runs.</summary>
+    private int? _dpNavStateDeviceId;
 
     // ---- Default key map (same as K2.DisplayPad) ----
     private static readonly (int Index, int Matrix)[] DpDefaultKeyMap =
@@ -692,6 +696,31 @@ public partial class MainWindow
     private void DpActivateDevice(int id)
     {
         DpLog($"[UI] Active device: {id} ({_dpDeviceLabels.GetValueOrDefault(id, "?")})");
+
+        // The folder-navigation state (_currentDpPageId/_dpPageHistory) is per-device but
+        // lives in shared foreground fields: on a device change, stash it into the OLD
+        // device's background maps (its hardware still shows that page, and its physical
+        // keys must keep resolving against it — see DpHandleBackgroundKey) and adopt the
+        // NEW device's own background state. Without this, opening a folder on pad A and
+        // then clicking pad B's tab showed B "inside" A's page.
+        if (_dpNavStateDeviceId != id)
+        {
+            if (_dpNavStateDeviceId is int prev && _dpDeviceIds.Contains(prev))
+            {
+                _dpBgPageId[prev] = _currentDpPageId;
+                // Stack<T> enumerates top→bottom and its IEnumerable ctor pushes in order,
+                // so feed it bottom→top to preserve orientation.
+                _dpBgPageHistory[prev] = new Stack<int>(_dpPageHistory.Reverse().Select(h => h.PageId));
+            }
+            _dpPageHistory.Clear();
+            if (_dpBgPageHistory.TryGetValue(id, out var hist))
+                foreach (int pid in hist.Reverse())
+                    _dpPageHistory.Push((pid, pid == 0 ? null : _dpStore.GetFolderName(pid)));
+            _currentDpPageId = _dpBgPageId.GetValueOrDefault(id, 0);
+            _currentDpFolderName = _currentDpPageId == 0 ? null : _dpStore.GetFolderName(_currentDpPageId);
+            UpdateDpBreadcrumb();
+            _dpNavStateDeviceId = id;
+        }
 
         _dpSuppressBrightness = true;
         try

@@ -89,9 +89,13 @@ public sealed class MacroPlayer
     private const int HoldRepeatIntervalMs = 30;
 
     /// <summary>Sleeps <paramref name="totalMs"/> in small slices, resending
-    /// a keydown for every currently-held key on each slice — mirrors the
-    /// OS's own key auto-repeat for a physically held key instead of a
-    /// single fire-and-forget keydown.</summary>
+    /// a keydown for every currently-held MODIFIER key on each slice —
+    /// mirrors the OS's own key auto-repeat for a physically held modifier
+    /// instead of a single fire-and-forget keydown.
+    /// Only modifiers: resending a non-modifier key (e.g. a numpad digit
+    /// between its recorded down and up) types it again on every slice,
+    /// which corrupts Alt+Numpad codes (Alt+0233 became Alt+02223333…)
+    /// and duplicates any character held across a recorded delay.</summary>
     private static void HoldRepeat(int totalMs, HashSet<ushort> heldKeys, CancellationToken ct)
     {
         int elapsed = 0;
@@ -101,9 +105,21 @@ public sealed class MacroPlayer
             Thread.Sleep(chunk);
             elapsed += chunk;
             foreach (var vk in heldKeys)
-                SendKeyInput(vk, false);
+                if (IsModifierKey(vk))
+                    SendKeyInput(vk, false);
         }
     }
+
+    private static bool IsModifierKey(ushort vk) => vk switch
+    {
+        0x10 or 0x11 or 0x12          // VK_SHIFT, VK_CONTROL, VK_MENU
+            or 0xA0 or 0xA1           // VK_LSHIFT, VK_RSHIFT
+            or 0xA2 or 0xA3           // VK_LCONTROL, VK_RCONTROL
+            or 0xA4 or 0xA5           // VK_LMENU, VK_RMENU (AltGr)
+            or 0x5B or 0x5C           // VK_LWIN, VK_RWIN
+            => true,
+        _ => false
+    };
 
     private static void ExecuteInput(MacroInput input, HashSet<ushort> heldKeys)
     {
@@ -140,6 +156,10 @@ public sealed class MacroPlayer
     {
         var input = new INPUT { type = INPUT_KEYBOARD };
         input.U.ki.wVk = vk;
+        // Real keystrokes always carry a scan code; leaving wScan at 0 makes
+        // some consumers (games reading scan codes, parts of the Alt+Numpad
+        // composer pipeline) drop the injected event.
+        input.U.ki.wScan = (ushort)MapVirtualKey(vk, MAPVK_VK_TO_VSC);
         uint flags = keyUp ? KEYEVENTF_KEYUP : 0;
         if (IsExtendedKey(vk)) flags |= KEYEVENTF_EXTENDEDKEY;
         input.U.ki.dwFlags = flags;
@@ -259,4 +279,9 @@ public sealed class MacroPlayer
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);
+
+    private const uint MAPVK_VK_TO_VSC = 0;
+
+    [DllImport("user32.dll")]
+    private static extern uint MapVirtualKey(uint uCode, uint uMapType);
 }

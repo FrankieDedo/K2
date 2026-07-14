@@ -9,7 +9,55 @@
 > mappa stabile in `_PROJECT_MAP.md`. Consultare qui solo per il contesto
 > di una modifica specifica passata (grep per parola chiave/data).
 
-> Last updated: 2026-07-14 (due voci TODO chiuse su richiesta utente,
+> Last updated: 2026-07-14 (sessione multi-DisplayPad, pagina "trascinata"
+> tra tab): **fix leak dello stato di navigazione pagine tra tab DisplayPad
+> diversi** — entrando in una pagina/cartella sul pad A e poi cliccando il
+> tab del pad B, B si apriva "dentro" la pagina di A (breadcrumb + bottone
+> Back inclusi). Causa: `_currentDpPageId`/`_dpPageHistory`/
+> `_currentDpFolderName` sono campi foreground condivisi e
+> `DpActivateDevice` non li resettava mai al cambio device. Fix in
+> `MainWindow.DisplayPad.cs`: nuovo campo `_dpNavStateDeviceId` (a chi
+> appartiene lo stato di navigazione foreground — distinto da
+> `_activeDpDeviceId`, che viene riassegnato PRIMA che `DpActivateDevice`
+> giri) + handoff bidirezionale in `DpActivateDevice`: lo stato del device
+> uscente viene stivato nelle mappe background (`_dpBgPageId`/
+> `_dpBgPageHistory` — il suo hardware continua a mostrare quella pagina e
+> i suoi tasti fisici devono risolvere contro di essa, vedi
+> `DpHandleBackgroundKey`; prima restava a 0=root, mismatch preesistente),
+> e lo stato background del device entrante viene adottato come foreground
+> (così un pad navigato in una cartella via pressioni fisiche mentre era in
+> background mostra la cartella giusta all'apertura del suo tab, non root).
+> Attenzione all'orientamento degli Stack nella copia (enumerano
+> top→bottom, il ctor IEnumerable pusha in ordine → serve `.Reverse()`).
+> Build x86 pulita. **Da verificare dall'utente con 2+ DisplayPad fisici**:
+> (1) pad A dentro una cartella → tab pad B → B a root, niente breadcrumb;
+> (2) tornando al tab di A si è ancora nella cartella e i tasti fisici di A
+> eseguono le azioni della cartella anche mentre B è in foreground.
+>
+> Previous: 2026-07-14 (sessione macro Alt+Numpad): **fix riproduzione
+> macro con codici Alt+Numpad** (tieni Alt, digiti cifre sul tastierino,
+> rilasci Alt → carattere speciale — "al momento non funziona"). Due difetti
+> in `MacroPlayer.cs`: (1) **`HoldRepeat` corrompeva le cifre** — durante i
+> ritardi registrati (default `MacroDelay.Recorded`) ri-inviava ogni 30ms il
+> keydown di TUTTI i tasti in `heldKeys`, quindi anche la cifra del numpad
+> tra il suo down e il suo up: Alt+0233 diventava Alt+02223333… e il
+> compositore di Windows produceva il carattere sbagliato o niente. Ora
+> ri-invia solo i MODIFICATORI (nuovo `IsModifierKey`: Shift/Ctrl/Alt/Win,
+> varianti L/R incluse) — l'intento originale del re-assert (tenere "vivo"
+> l'Alt tenuto premuto) resta, la duplicazione dei tasti normali sparisce.
+> Nota: questo bug duplicava anche qualunque carattere normale tenuto
+> premuto attraverso un delay registrato, non solo i codici Alt. (2)
+> **`SendKeyInput` iniettava eventi con scan code 0** — `wScan` non era mai
+> popolato; ora `wScan = MapVirtualKey(vk, MAPVK_VK_TO_VSC)` (alcuni
+> consumer, giochi e parti della pipeline del compositore Alt+Numpad,
+> scartano eventi senza scan code; il flag `KEYEVENTF_EXTENDEDKEY` già
+> gestito resta invariato). Build x86 pulita. **Da verificare dall'utente**:
+> registrare una macro Alt+numpad (NumLock ON durante la registrazione,
+> altrimenti l'hook registra frecce/nav invece delle cifre) e riprodurla in
+> un editor di testo con tutte e tre le opzioni delay (Recorded/NoDelay/
+> Custom).
+>
+> Previous: 2026-07-14 (due voci TODO chiuse su richiesta utente,
 > stessa giornata, sessione separata dalle due sotto): (1) **NDK esclusi dal
 > paint mode Everest Max** — `ClearAllOverlays`/`FindKeyInCanvas`
 > (`MainWindow.CustomLighting.cs`) iteravano tutti i Button di `CvsEvNumpad`

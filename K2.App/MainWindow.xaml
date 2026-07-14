@@ -345,7 +345,7 @@
             <Setter Property="ContentTemplate">
                 <Setter.Value>
                     <DataTemplate>
-                        <TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Left"/>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Left" FontWeight="Bold"/>
                     </DataTemplate>
                 </Setter.Value>
             </Setter>
@@ -356,10 +356,19 @@
                                 Background="{TemplateBinding Background}"
                                 BorderThickness="1"
                                 BorderBrush="{StaticResource K2BorderBrush}"
-                                CornerRadius="8"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Left"
-                                              VerticalAlignment="Top"/>
+                                CornerRadius="8">
+                            <Grid>
+                                <!-- Decorative corner triangle: small/gray while inactive, bigger/white
+                                     when this section is the active one (IsChecked trigger below). -->
+                                <Polygon x:Name="CornerTriangle"
+                                         Points="18,0 18,18 0,18"
+                                         Fill="#54545E"
+                                         HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                         Margin="0,0,4,4"/>
+                                <ContentPresenter Margin="{TemplateBinding Padding}"
+                                                  HorizontalAlignment="Left"
+                                                  VerticalAlignment="Top"/>
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -370,6 +379,8 @@
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource K2AccentBrush}"/>
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource K2AccentBrush}"/>
                                 <Setter Property="Foreground" Value="{StaticResource K2AccentTextBrush}"/>
+                                <Setter TargetName="CornerTriangle" Property="Points" Value="36,0 36,36 0,36"/>
+                                <Setter TargetName="CornerTriangle" Property="Fill" Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
