@@ -135,4 +135,4 @@ The project is still in a beta stage, but most of the stuff should work alright.
 </ul>
 
 
-Powered by <a href="https://nerdando.com" target="_blank"><img src=".github/images/nerdando-logo.png" height="36" align="absmiddle" alt="Nerdando" /></a>
+Powered by <a href="https://nerdando.com" target="_blank"><img src=".github/images/nerdando-logo.png" height="36" align="absmiddle" alt="Nerdando" /></a>  
