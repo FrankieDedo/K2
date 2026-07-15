@@ -131,7 +131,23 @@ internal sealed class SdkHandler : IDisposable
         bool ok;
         lock (_sdkLock)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             ok = _helper.DisplayPadResetPicture(id);
+            sw.Stop();
+            // Was missing both logging AND a settle delay — unlike every icon transfer
+            // above (IconSettleDelayMs), which always got both. DpReloadCurrentProfile's
+            // "blankFirst" path (K2.App's MainWindow.DisplayPad.cs) relies on this single
+            // call to blank EVERY button before immediately queuing the new profile's
+            // per-key uploads right behind it on the same background chain — with no
+            // settle here, those uploads could reach the firmware while it's still
+            // processing "reset all pictures", so a key that has NO new image (and so
+            // gets no upload of its own to overwrite it) could be left showing the
+            // PREVIOUS profile's icon instead of blank. A full-panel reset plausibly
+            // needs at least as much settle time as a single icon transfer, so this
+            // reuses IconSettleDelayMs as a baseline — not independently verified on
+            // hardware for this specific operation.
+            Program.Log($"[ResetPictures/native] dev={id} nativeCallMs={sw.ElapsedMilliseconds} ok={ok}");
+            Thread.Sleep(IconSettleDelayMs);
         }
         return new { ok = true, result = ok };
     }
