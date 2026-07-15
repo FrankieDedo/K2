@@ -30,12 +30,13 @@ public static class AppSettings
     {
         public bool DebugMode { get; set; }
         public K2LogLevel LogLevel { get; set; } = K2LogLevel.Normal;
-        public bool DisplayPadNativeEngine { get; set; }
-        public bool EverestNativeEngine { get; set; }
+        public bool DisplayPadNativeEngine { get; set; } = true;
+        public bool EverestNativeEngine { get; set; } = true;
         public bool KillBaseCampWorker { get; set; } = true;
         public bool AutoStopBaseCamp { get; set; } = true;
         public bool CloseToTray { get; set; }
         public bool StartMinimizedToTray { get; set; }
+        public bool RestartBaseCampOnClose { get; set; }
         public List<string> RecentExecPaths { get; set; } = new();
         public List<string> RecentFolderPaths { get; set; } = new();
         public string? MakaluDeviceName { get; set; }
@@ -80,10 +81,12 @@ public static class AppSettings
     }
 
     /// <summary>
-    /// Experimental: drive the DisplayPad through the raw USB-HID engine
-    /// (DisplayPadNativeClient) instead of DisplayPadSDK.dll + satellite process.
-    /// Read once at startup (backend is chosen when MainWindow is constructed),
-    /// so changing it requires an app restart.
+    /// Drive the DisplayPad through the raw USB-HID engine (DisplayPadNativeClient)
+    /// instead of DisplayPadSDK.dll + satellite process. Default ON — the native engine
+    /// is now the standard path; the checkbox only surfaces under Settings &gt; Debug Mode
+    /// as a diagnostic opt-out (fall back to the SDK) if it ever needs ruling out.
+    /// Read once at startup (backend is chosen when MainWindow is constructed), so
+    /// changing it requires an app restart.
     /// </summary>
     public static bool DisplayPadNativeEngine
     {
@@ -103,12 +106,13 @@ public static class AppSettings
     }
 
     /// <summary>
-    /// Experimental: drive the Everest Max's connectivity (open/close/init) and RGB
-    /// effects through the raw USB-HID engine (<c>EverestHidNative</c>) instead of
-    /// SDKDLL.dll. The full 171-key remap event stream, numpad display icons, and
-    /// Media Dock still go through SDKDLL.dll regardless of this flag — those are not
-    /// natively implemented yet (unconfirmed wire protocol, see task/memory "Everest
-    /// nativo — Fase 3/4"). Read once at startup, so changing it requires a restart.
+    /// Drive the Everest Max's connectivity (open/close/init) and RGB effects through the
+    /// raw USB-HID engine (<c>EverestHidNative</c>) instead of SDKDLL.dll. The full
+    /// 171-key remap event stream, numpad display icons, and Media Dock still go through
+    /// SDKDLL.dll regardless of this flag — those are not natively implemented yet
+    /// (unconfirmed wire protocol, see task/memory "Everest nativo — Fase 3/4"). Default
+    /// ON for what it covers; the checkbox only surfaces under Settings &gt; Debug Mode as
+    /// a diagnostic opt-out. Read once at startup, so changing it requires a restart.
     /// </summary>
     public static bool EverestNativeEngine
     {
@@ -206,6 +210,32 @@ public static class AppSettings
         {
             if (_data.StartMinimizedToTray == value) return;
             _data.StartMinimizedToTray = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// When true, K2 puts Base Camp back the way it normally starts (see
+    /// <see cref="Services.BaseCampProcessGuard.RestartKilledProcesses"/>: Windows
+    /// service + autostart entries + MountainDisplayPadWorker) when the user closes K2
+    /// (real exit, not close-to-tray). MountainDisplayPadWorker is always relaunched
+    /// silently (no window); other Base Camp executables (e.g. the GUI) are relaunched
+    /// the normal way. Default OFF — most users who enabled auto-stop want Base Camp to
+    /// stay stopped after closing K2.
+    /// </summary>
+    public static bool RestartBaseCampOnClose
+    {
+        get { EnsureLoaded(); return _data.RestartBaseCampOnClose; }
+    }
+
+    public static void SetRestartBaseCampOnClose(bool value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.RestartBaseCampOnClose == value) return;
+            _data.RestartBaseCampOnClose = value;
             Save();
         }
         Changed?.Invoke();

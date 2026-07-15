@@ -16,8 +16,28 @@ public sealed class EverestKey : INotifyPropertyChanged
 {
     public EverestKey(int keyMatrix) => KeyMatrix = keyMatrix;
 
-    /// <summary>Hardware matrix code: stable key identity.</summary>
+    /// <summary>Hardware matrix code: stable key identity. For an NDK entry (see
+    /// <see cref="NdkIndex"/>) this is a negative placeholder — display keys have no
+    /// real matrix code and never go through <c>_evByMatrix</c>.</summary>
     public int KeyMatrix { get; }
+
+    /// <summary>Set (0-3) for one of the 4 numpad LCD "display keys" (NDK), surfaced in
+    /// this same mapped-keys list when it carries a non-default action or image — null
+    /// for a regular keyboard key. NDK state lives in EverestStore's global
+    /// <c>ndk.{i}.*</c> settings, not the per-profile Keys table (see
+    /// MainWindow.NumpadDisplayKeys.cs) — callers must branch on this before touching
+    /// <see cref="KeyMatrix"/>-keyed persistence.</summary>
+    public int? NdkIndex { get; init; }
+
+    private bool _hasImage;
+    /// <summary>True if an NDK entry has a custom icon (independent of <see cref="HasAction"/> —
+    /// a display key can carry only an icon, only an action, or both). Always false for a
+    /// regular key.</summary>
+    public bool HasImage
+    {
+        get => _hasImage;
+        set { if (_hasImage == value) return; _hasImage = value; OnChanged(); OnChanged(nameof(Display)); }
+    }
 
     private string _label = "";
     /// <summary>User-assigned name (e.g. "F5", "Macro 1", "Encoder CW").</summary>
@@ -78,7 +98,9 @@ public sealed class EverestKey : INotifyPropertyChanged
     {
         get
         {
-            string body = string.IsNullOrEmpty(_actionType) ? "(empty)" : _actionType;
+            string body = !string.IsNullOrEmpty(_actionType) ? _actionType
+                         : _hasImage ? K2.Core.Loc.Get("ev_display_key_icon_only")
+                         : "(empty)";
             return $"{Name}  —  {body}";
         }
     }

@@ -553,6 +553,12 @@ public partial class MainWindow : Window
         _usbRec.Dispose();
         CleanupDisplayPad();
         _trayIcon?.Dispose();
+
+        // Put Base Camp back the way K2 found it, if the user asked for that (see
+        // Settings > General > "Restart Base Camp on close").
+        if (AppSettings.RestartBaseCampOnClose)
+            Services.BaseCampProcessGuard.RestartKilledProcesses(App.WriteLog);
+
         // ShutdownMode is OnExplicitShutdown (see App.OnStartup) so that hiding the
         // window to the tray never ends the process — the real close must ask for it.
         Application.Current.Shutdown();
@@ -581,6 +587,7 @@ public sealed class EvProfileItem(int slot, string label)
 {
     public int Slot { get; } = slot;
     public string Label { get; } = label;
+    public bool IsNew => Label.StartsWith("+");
     public override string ToString() => Label;
 }
 

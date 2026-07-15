@@ -70,6 +70,7 @@ public partial class MainWindow
     {
         bool debug = AppSettings.DebugMode;
         CkAppDebugMode.IsChecked = debug;
+        PnlDebugNativeEngines.Visibility = debug ? Visibility.Visible : Visibility.Collapsed;
 
         switch (AppSettings.LogLevel)
         {
@@ -82,6 +83,7 @@ public partial class MainWindow
         CkEvNativeEngine.IsChecked = AppSettings.EverestNativeEngine;
         CkAutoStopBaseCamp.IsChecked = AppSettings.AutoStopBaseCamp;
         CkKillBcWorker.IsChecked = AppSettings.KillBaseCampWorker;
+        CkRestartBcOnClose.IsChecked = AppSettings.RestartBaseCampOnClose;
         InitBcAutostartCheckbox();
 
         CkCloseToTray.IsChecked = AppSettings.CloseToTray;
@@ -171,6 +173,40 @@ public partial class MainWindow
         if (on) Services.BaseCampProcessGuard.KillDisplayPadWorkers(msg => DpLog(msg));
     }
 
+    /// <summary>Persists the "restart Base Camp on close" flag. Read at the moment K2's
+    /// window actually closes (see MainWindow.xaml.cs's OnWindowClosed).</summary>
+    private void CkRestartBcOnClose_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.SetRestartBaseCampOnClose(CkRestartBcOnClose.IsChecked == true);
+    }
+
+    /// <summary>Copies the current app log (and crash log, if any) to a user-chosen
+    /// folder — "Export log" button in the General group.</summary>
+    private void BtnAppExportLog_Click(object sender, RoutedEventArgs e)
+    {
+        var folder = new Microsoft.Win32.OpenFolderDialog { Title = Loc.Get("export_pick_folder") };
+        if (folder.ShowDialog(this) != true) return;
+
+        try
+        {
+            string dest = System.IO.Path.Combine(folder.FolderName, System.IO.Path.GetFileName(App.LogPath));
+            System.IO.File.Copy(App.LogPath, dest, overwrite: true);
+
+            if (System.IO.File.Exists(App.CrashLogPath))
+            {
+                string destCrash = System.IO.Path.Combine(folder.FolderName, System.IO.Path.GetFileName(App.CrashLogPath));
+                System.IO.File.Copy(App.CrashLogPath, destCrash, overwrite: true);
+            }
+
+            LblStatus.Text = Loc.Get("settings_export_log_done", folder.FolderName);
+        }
+        catch (System.Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, Loc.Get("settings_export_log_btn"),
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private void CkBcAutostart_Click(object sender, RoutedEventArgs e)
     {
         bool enable = CkBcAutostart.IsChecked == true;
@@ -200,6 +236,7 @@ public partial class MainWindow
         bool debug = CkAppDebugMode.IsChecked == true;
         AppSettings.SetDebugMode(debug);
         ApplyDebugModeToAllDevices(debug);
+        PnlDebugNativeEngines.Visibility = debug ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void RbLogLevel_Checked(object sender, RoutedEventArgs e)

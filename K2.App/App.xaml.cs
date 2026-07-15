@@ -20,13 +20,27 @@ namespace K2.App;
 /// </summary>
 public partial class App : Application
 {
-    /// <summary>Log file next to the executable, shared by all modules.</summary>
-    public static readonly string LogPath = Path.Combine(
-        AppContext.BaseDirectory, "K2.App.log");
+    /// <summary>
+    /// Per-user, always-writable data folder (%LocalAppData%\K2.App\), shared by all
+    /// modules. NOT next to the executable: K2 installs to Program Files by default,
+    /// which is admin-write-protected — writing there without elevation used to fail
+    /// silently and drop all logging.
+    /// </summary>
+    private static readonly string DataDir = EnsureDataDir();
+
+    private static string EnsureDataDir()
+    {
+        var dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "K2.App");
+        try { Directory.CreateDirectory(dir); } catch { /* best-effort, same as the writers below */ }
+        return dir;
+    }
+
+    /// <summary>Log file.</summary>
+    public static readonly string LogPath = Path.Combine(DataDir, "K2.App.log");
 
     /// <summary>Separate crash log file for native/fatal crashes.</summary>
-    public static readonly string CrashLogPath = Path.Combine(
-        AppContext.BaseDirectory, "K2.App.crash.log");
+    public static readonly string CrashLogPath = Path.Combine(DataDir, "K2.App.crash.log");
 
     // Held for the process lifetime; released automatically by the OS on exit.
     private static Mutex? _singleInstanceMutex;
@@ -972,7 +986,7 @@ public partial class App : Application
         try
         {
             var suffix = string.IsNullOrEmpty(tag) ? "" : $"_{tag}";
-            var dumpPath = Path.Combine(AppContext.BaseDirectory,
+            var dumpPath = Path.Combine(DataDir,
                 $"K2.App_{DateTime.Now:yyyyMMdd_HHmmss}{suffix}.dmp");
             using var fs = new FileStream(dumpPath, FileMode.Create, FileAccess.Write);
             // MiniDumpWithDataSegs | MiniDumpWithHandleData = 0x01 | 0x04
