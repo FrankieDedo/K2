@@ -1153,17 +1153,8 @@
                                                 <StackPanel Grid.Column="2">
                                                     <TextBlock Text="{loc:Get dial_clock_section}" FontWeight="SemiBold" Margin="0,0,0,8"/>
                                                     <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                        <TextBlock Text="{loc:Get dial_clock_label}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                        <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="90" Margin="0,0,16,0">
-                                                            <UniformGrid Rows="1">
-                                                                <RadioButton x:Name="RbDialClock24h" Content="24h" GroupName="DialClockType"
-                                                                             Style="{StaticResource K2SegmentedButton}" Checked="RbDialClockType_Checked"/>
-                                                                <RadioButton x:Name="RbDialClock12h" Content="12h" GroupName="DialClockType"
-                                                                             Style="{StaticResource K2SegmentedButton}" Checked="RbDialClockType_Checked"/>
-                                                            </UniformGrid>
-                                                        </Border>
                                                         <TextBlock Text="{loc:Get dial_clock_style_label}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                        <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="140">
+                                                        <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="140" Margin="0,0,16,0">
                                                             <UniformGrid Rows="1">
                                                                 <RadioButton x:Name="RbDialClockDigital" Content="{loc:Get dial_clock_digital}" GroupName="DialClockStyle"
                                                                              Style="{StaticResource K2SegmentedButton}" Checked="RbDialClockStyle_Checked"/>
@@ -1171,6 +1162,17 @@
                                                                              Style="{StaticResource K2SegmentedButton}" Checked="RbDialClockStyle_Checked"/>
                                                             </UniformGrid>
                                                         </Border>
+                                                        <StackPanel x:Name="PnlDialClockFormat" Orientation="Horizontal">
+                                                            <TextBlock Text="{loc:Get dial_clock_label}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                            <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="90">
+                                                                <UniformGrid Rows="1">
+                                                                    <RadioButton x:Name="RbDialClock24h" Content="24h" GroupName="DialClockType"
+                                                                                 Style="{StaticResource K2SegmentedButton}" Checked="RbDialClockType_Checked"/>
+                                                                    <RadioButton x:Name="RbDialClock12h" Content="12h" GroupName="DialClockType"
+                                                                                 Style="{StaticResource K2SegmentedButton}" Checked="RbDialClockType_Checked"/>
+                                                                </UniformGrid>
+                                                            </Border>
+                                                        </StackPanel>
                                                     </WrapPanel>
 
                                                     <TextBlock Text="{loc:Get dial_screensaver_section}" FontWeight="SemiBold" Margin="0,0,0,8"/>
@@ -2889,10 +2891,18 @@
                                       Click="CkCloseToTray_Click" FontSize="14"/>
                             <CheckBox x:Name="CkK2Autostart" Content="{loc:Get settings_k2_autostart}"
                                       Click="CkK2Autostart_Click" FontSize="14" Margin="0,12,0,0"/>
+                            <TextBlock Text="{loc:Get settings_k2_autostart_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
                             <CheckBox x:Name="CkStartMinToTray" Content="{loc:Get settings_start_min_tray}"
                                       Click="CkStartMinToTray_Click" FontSize="14" Margin="0,12,0,0"/>
                             <TextBlock Text="{loc:Get settings_start_min_tray_hint}" Foreground="#9A9AA2"
                                        TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                            <Button x:Name="BtnAppExportLog" Content="{loc:Get settings_export_log_btn}"
+                                    Padding="8,4" HorizontalAlignment="Left" Margin="0,16,0,0"
+                                    Click="BtnAppExportLog_Click"
+                                    Style="{StaticResource K2IconButton}" Tag="&#xE898;"/>
+                            <TextBlock Text="{loc:Get settings_export_log_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
                         </StackPanel>
                     </GroupBox>
 
@@ -2910,6 +2920,20 @@
                     <TextBlock Text="{loc:Get settings_debug_mode_hint}" Foreground="#9A9AA2"
                                TextWrapping="Wrap" Margin="20,4,0,20" FontSize="12"/>
 
+                    <!-- Native USB engines are always on by default now — surfaced only under
+                         Debug Mode, as a diagnostic opt-out rather than a base setting. -->
+                    <StackPanel x:Name="PnlDebugNativeEngines" Margin="20,0,0,20" Visibility="Collapsed">
+                        <CheckBox x:Name="CkDpNativeEngine" Content="{loc:Get settings_dp_native}"
+                                  Click="CkDpNativeEngine_Click" FontSize="14"/>
+                        <TextBlock Text="{loc:Get settings_dp_native_hint}" Foreground="#9A9AA2"
+                                   TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+
+                        <CheckBox x:Name="CkEvNativeEngine" Content="{loc:Get settings_ev_native}"
+                                  Click="CkEvNativeEngine_Click" FontSize="14" Margin="0,16,0,0"/>
+                        <TextBlock Text="{loc:Get settings_ev_native_hint}" Foreground="#9A9AA2"
+                                   TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                    </StackPanel>
+
                     <GroupBox x:Name="GbAppLogLevel" Header="{loc:Get settings_log_level}" Margin="0,4,0,0">
                         <StackPanel Margin="8">
                             <RadioButton x:Name="RbLogOff"     Content="{loc:Get log_off}"
@@ -2921,16 +2945,6 @@
                         </StackPanel>
                     </GroupBox>
 
-                    <CheckBox x:Name="CkDpNativeEngine" Content="{loc:Get settings_dp_native}"
-                              Click="CkDpNativeEngine_Click" FontSize="14" Margin="0,20,0,0"/>
-                    <TextBlock Text="{loc:Get settings_dp_native_hint}" Foreground="#9A9AA2"
-                               TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
-
-                    <CheckBox x:Name="CkEvNativeEngine" Content="{loc:Get settings_ev_native}"
-                              Click="CkEvNativeEngine_Click" FontSize="14" Margin="0,16,0,0"/>
-                    <TextBlock Text="{loc:Get settings_ev_native_hint}" Foreground="#9A9AA2"
-                               TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
-
                     <CheckBox x:Name="CkAutoStopBaseCamp" Content="{loc:Get settings_auto_stop_bc}"
                               Click="CkAutoStopBaseCamp_Click" FontSize="14" Margin="0,20,0,0"/>
                     <TextBlock Text="{loc:Get settings_auto_stop_bc_hint}" Foreground="#9A9AA2"
@@ -2939,6 +2953,11 @@
                     <CheckBox x:Name="CkKillBcWorker" Content="{loc:Get settings_kill_bc_worker}"
                               Click="CkKillBcWorker_Click" FontSize="14" Margin="0,16,0,0"/>
                     <TextBlock Text="{loc:Get settings_kill_bc_worker_hint}" Foreground="#9A9AA2"
+                               TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+
+                    <CheckBox x:Name="CkRestartBcOnClose" Content="{loc:Get settings_restart_bc_on_close}"
+                              Click="CkRestartBcOnClose_Click" FontSize="14" Margin="0,16,0,0"/>
+                    <TextBlock Text="{loc:Get settings_restart_bc_on_close_hint}" Foreground="#9A9AA2"
                                TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
 
                     <CheckBox x:Name="CkBcAutostart" Content="{loc:Get settings_bc_autostart}"

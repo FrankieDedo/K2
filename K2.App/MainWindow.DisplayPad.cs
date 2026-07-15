@@ -456,6 +456,7 @@ public partial class MainWindow
         if (res != MessageBoxResult.OK) return;
         _dpStore.ClearProfile(id, slot);
         DpLog($"[UI] Profile {slot} restored to defaults.");
+        DpRefreshProfiles(id);
         ResetDpNavigation();
         DpRequestRepaint(id);
     }

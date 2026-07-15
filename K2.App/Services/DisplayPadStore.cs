@@ -127,11 +127,7 @@ ON CONFLICT(DeviceId, Profile, PageId, ButtonIndex) DO UPDATE SET
         cmd.Parameters.AddWithValue("$pg", pageId);
         using var r = cmd.ExecuteReader();
         while (r.Read())
-            result.Add(new DpButtonRecord(deviceId, profile,
-                r.GetInt32(0), r.GetInt32(1),
-                r.IsDBNull(2) ? null : r.GetString(2),
-                r.IsDBNull(3) ? null : r.GetString(3),
-                r.IsDBNull(4) ? null : r.GetString(4)));
+            AddButtonRow(result, deviceId, profile, r);
         return result;
     }
 
@@ -147,12 +143,28 @@ ON CONFLICT(DeviceId, Profile, PageId, ButtonIndex) DO UPDATE SET
         cmd.Parameters.AddWithValue("$p", profile);
         using var r = cmd.ExecuteReader();
         while (r.Read())
-            result.Add(new DpButtonRecord(deviceId, profile,
-                r.GetInt32(0), r.GetInt32(1),
-                r.IsDBNull(2) ? null : r.GetString(2),
-                r.IsDBNull(3) ? null : r.GetString(3),
-                r.IsDBNull(4) ? null : r.GetString(4)));
+            AddButtonRow(result, deviceId, profile, r);
         return result;
+    }
+
+    /// <summary>
+    /// Materializes one Buttons row (PageId, ButtonIndex, ImagePath, ActionType, ActionValue
+    /// in that SELECT order). A leftover <c>bc:Default</c> action from an old BC import is
+    /// no mapping at all: the row is dropped outright, unless it carries an icon — then the
+    /// icon is kept and only the action is discarded.
+    /// </summary>
+    private static void AddButtonRow(List<DpButtonRecord> result, int deviceId, int profile,
+        SqliteDataReader r)
+    {
+        string? img = r.IsDBNull(2) ? null : r.GetString(2);
+        string? at  = r.IsDBNull(3) ? null : r.GetString(3);
+        string? av  = r.IsDBNull(4) ? null : r.GetString(4);
+        if (BaseCampDbImporter.IsBcDefaultAction(at))
+        {
+            if (img is null) return;
+            at = null; av = null;
+        }
+        result.Add(new DpButtonRecord(deviceId, profile, r.GetInt32(0), r.GetInt32(1), img, at, av));
     }
 
     /// <summary>Legacy alias — loads root page (pageId=0) only.</summary>

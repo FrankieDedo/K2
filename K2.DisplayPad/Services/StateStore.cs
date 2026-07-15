@@ -65,11 +65,23 @@ CREATE TABLE IF NOT EXISTS Settings (
         cmd.Parameters.AddWithValue("$b", btn);
         using var r = cmd.ExecuteReader();
         if (!r.Read()) return null;
-        return new ButtonRecord(
+        return FilterBcDefault(new ButtonRecord(
             deviceId, profile, btn,
             ImagePath:   r.IsDBNull(0) ? null : r.GetString(0),
             ActionType:  r.IsDBNull(1) ? null : r.GetString(1),
-            ActionValue: r.IsDBNull(2) ? null : r.GetString(2));
+            ActionValue: r.IsDBNull(2) ? null : r.GetString(2)));
+    }
+
+    /// <summary>
+    /// A leftover <c>bc:Default</c> action from an old Base Camp import means "no custom
+    /// binding": the button is treated as empty (record dropped), keeping only its icon
+    /// if one was imported alongside.
+    /// </summary>
+    private static ButtonRecord? FilterBcDefault(ButtonRecord b)
+    {
+        if (!string.Equals(b.ActionType, "bc:Default", StringComparison.OrdinalIgnoreCase))
+            return b;
+        return b.ImagePath is null ? null : b with { ActionType = null, ActionValue = null };
     }
 
     public IReadOnlyList<ButtonRecord> LoadProfile(int deviceId, int profile)
@@ -85,11 +97,12 @@ CREATE TABLE IF NOT EXISTS Settings (
         using var r = cmd.ExecuteReader();
         while (r.Read())
         {
-            result.Add(new ButtonRecord(
+            var rec = FilterBcDefault(new ButtonRecord(
                 deviceId, profile, r.GetInt32(0),
                 ImagePath:   r.IsDBNull(1) ? null : r.GetString(1),
                 ActionType:  r.IsDBNull(2) ? null : r.GetString(2),
                 ActionValue: r.IsDBNull(3) ? null : r.GetString(3)));
+            if (rec is not null) result.Add(rec);
         }
         return result;
     }

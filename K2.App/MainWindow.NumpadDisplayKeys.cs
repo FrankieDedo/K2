@@ -181,7 +181,18 @@ public partial class MainWindow
     private void NdkButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: int keyIndex }) return;
+        ConfigureNdkKey(keyIndex);
+    }
 
+    /// <summary>
+    /// Opens the unified image+action dialog for display key <paramref name="keyIndex"/>
+    /// and applies the result. Shared by the canvas display-key button (above) and by
+    /// LvEvKeys's "Configure" button once an NDK entry appears in that same mapped-keys
+    /// list (see MainWindow.Everest.cs's EvAddNdkEntriesToKeyList/BtnEvConfig_Click) —
+    /// both surfaces edit the same underlying state, so both must refresh the list.
+    /// </summary>
+    private void ConfigureNdkKey(int keyIndex)
+    {
         var dlg = new NdkKeyConfigDialog(
             keyIndex, _ndkImagePaths[keyIndex], _ndkActions[keyIndex].Type, _ndkActions[keyIndex].Value, _evActionHost)
         { Owner = this };
@@ -203,6 +214,7 @@ public partial class MainWindow
         }
 
         SaveNdkKey(keyIndex);
+        EvRefreshNdkInKeyList();
         LogEverest($"[NDK] key={keyIndex} <- action={dlg.ActionType ?? "none"}, image {(dlg.ImageChanged ? "changed" : "unchanged")}");
     }
 
@@ -255,6 +267,7 @@ public partial class MainWindow
 
         NdkRefreshAfterSwap(sourceIndex);
         NdkRefreshAfterSwap(targetIndex);
+        EvRefreshNdkInKeyList();
 
         LogEverest($"[NDK] swapped key={sourceIndex} <-> key={targetIndex}");
     }
@@ -289,6 +302,11 @@ public partial class MainWindow
     /// Uploads <paramref name="imagePath"/> (already 72×72 — either user-cropped or
     /// auto-generated, both via <see cref="NdkKeyConfigDialog"/>) to display key
     /// <paramref name="keyIndex"/>, persists it, and refreshes the thumbnail.
+    /// While the upload + device-side refresh (<see cref="NdkRefreshDevicePicSlots"/>) run,
+    /// all 4 NDK buttons are disabled and the wait cursor is shown — same "block until the
+    /// hardware reload settles" contract Base Camp uses, and the same intent as DisplayPad's
+    /// <c>_dpRepaintBusy</c> guard (see MainWindow.DisplayPad.cs), just synchronous here since
+    /// the SDK calls themselves are blocking.
     /// </summary>
     private void NdkApplyImage(int keyIndex, string imagePath)
     {
@@ -298,46 +316,81 @@ public partial class MainWindow
             return;
         }
 
-        // Upload to device — try parameter combinations for debugging.
-        // SDK: targetDev=1, targetPic=picSlot, targetSubItem=keyIndex.
-        // Try different (picSlot, keyIndex) combinations to find which
-        // mapping works for all 4 display keys.
-        bool ok = false;
-
-        // Attempt 1: picSlot=0, subItem=keyIndex (all on the same slot)
-        ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: 0);
-        LogEverest($"[NDK] Upload key={keyIndex} try1(pic=0,sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
-
-        if (!ok)
+        NdkSetButtonsEnabled(false);
+        _ndkUploadBusy = true;
+        var oldCursor = Mouse.OverrideCursor;
+        Mouse.OverrideCursor = Cursors.Wait;
+        try
         {
-            // Attempt 2: picSlot=keyIndex, subItem=keyIndex
-            ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: (byte)keyIndex);
-            LogEverest($"[NDK] Upload key={keyIndex} try2(pic={keyIndex},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
-        }
+            // Upload to device — try parameter combinations for debugging.
+            // SDK: targetDev=1, targetPic=picSlot, targetSubItem=keyIndex.
+            // Try different (picSlot, keyIndex) combinations to find which
+            // mapping works for all 4 display keys.
+            bool ok = false;
 
-        if (!ok)
+            // Attempt 1: picSlot=0, subItem=keyIndex (all on the same slot)
+            ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: 0);
+            LogEverest($"[NDK] Upload key={keyIndex} try1(pic=0,sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
+
+            if (!ok)
+            {
+                // Attempt 2: picSlot=keyIndex, subItem=keyIndex
+                ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: (byte)keyIndex);
+                LogEverest($"[NDK] Upload key={keyIndex} try2(pic={keyIndex},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
+            }
+
+            if (!ok)
+            {
+                // Attempt 3: picSlot=keyIndex+1, subItem=keyIndex
+                ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: (byte)(keyIndex + 1));
+                LogEverest($"[NDK] Upload key={keyIndex} try3(pic={keyIndex + 1},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
+            }
+
+            if (!ok)
+            {
+                // Attempt 4: strip mode (targetDev=0, targetPic=2+keyIndex)
+                ok = _everest.UploadNumpadImageStrip(imagePath, keyIndex, picSlot: (byte)keyIndex);
+                LogEverest($"[NDK] Upload key={keyIndex} try4-strip(pic={keyIndex},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
+            }
+
+            if (ok)
+            {
+                _ndkImagePaths[keyIndex] = imagePath;
+                NdkSetThumbnail(keyIndex, imagePath);
+                SaveNdkKey(keyIndex);
+
+                // Update SetDisplayKeyPic to show the new image
+                NdkRefreshDevicePicSlots();
+            }
+        }
+        finally
         {
-            // Attempt 3: picSlot=keyIndex+1, subItem=keyIndex
-            ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: (byte)(keyIndex + 1));
-            LogEverest($"[NDK] Upload key={keyIndex} try3(pic={keyIndex + 1},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
+            Mouse.OverrideCursor = oldCursor;
+            NdkSetButtonsEnabled(true);
+            // The firmware reports the numpad/dock as unplugged (byNumpadPlug/byMMDockPlug
+            // == 0) while it's busy writing the new NDK picture to flash — UpdateKeyboardLayout
+            // (MainWindow.Layout.cs) was suppressed for the duration (_ndkUploadBusy), so it
+            // never acted on that transient reading. Run it once now that the write settled to
+            // pick up the real state (also catches an actual unplug that happened meanwhile).
+            _ndkUploadBusy = false;
+            UpdateKeyboardLayout();
         }
+    }
 
-        if (!ok)
-        {
-            // Attempt 4: strip mode (targetDev=0, targetPic=2+keyIndex)
-            ok = _everest.UploadNumpadImageStrip(imagePath, keyIndex, picSlot: (byte)keyIndex);
-            LogEverest($"[NDK] Upload key={keyIndex} try4-strip(pic={keyIndex},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
-        }
+    /// <summary>Set while <see cref="NdkApplyImage"/> is writing a picture to the device —
+    /// <see cref="UpdateKeyboardLayout"/> (MainWindow.Layout.cs) skips its poll-driven
+    /// numpad/dock visibility update during this window, since the firmware transiently
+    /// reports both as unplugged while busy with the flash write, which would otherwise
+    /// flicker them out of the UI until the next successful poll.</summary>
+    private bool _ndkUploadBusy;
 
-        if (ok)
-        {
-            _ndkImagePaths[keyIndex] = imagePath;
-            NdkSetThumbnail(keyIndex, imagePath);
-            SaveNdkKey(keyIndex);
-
-            // Update SetDisplayKeyPic to show the new image
-            NdkRefreshDevicePicSlots();
-        }
+    /// <summary>Enables/disables all 4 NDK buttons while a hardware reload is in flight,
+    /// so the user can't queue up another upload before the previous one (and its
+    /// device-side pic-slot refresh) has actually settled.</summary>
+    private void NdkSetButtonsEnabled(bool enabled)
+    {
+        foreach (var btn in _ndkButtons)
+            if (btn is not null) btn.IsEnabled = enabled;
     }
 
     /// <summary>Sends SetDisplayKeyPic with the current slots.</summary>
@@ -371,10 +424,19 @@ public partial class MainWindow
     {
         int idx = NdkIndexFromMenu(sender);
         if (idx < 0) return;
+        ClearNdkKey(idx);
+    }
+
+    /// <summary>Clears display key <paramref name="idx"/>'s action and icon. Shared by
+    /// the canvas context menu (above) and LvEvKeys's "Remove" button for an NDK entry
+    /// (see BtnEvRemove_Click in MainWindow.Everest.cs).</summary>
+    private void ClearNdkKey(int idx)
+    {
         _ndkActions[idx] = (null, null);
         _ndkImagePaths[idx] = null;
         NdkClearThumbnail(idx);
         SaveNdkKey(idx);
+        EvRefreshNdkInKeyList();
         LogEverest($"[NDK] key={idx} action removed");
     }
 

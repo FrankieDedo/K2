@@ -27,6 +27,9 @@
     <AssemblyName>K2.App</AssemblyName>
     <RootNamespace>K2.App</RootNamespace>
     <ApplicationIcon>Assets\K2_icon.ico</ApplicationIcon>
+    <!-- requireAdministrator — see app.manifest: needed to control BaseCampService
+         (LocalSystem), otherwise it can silently respawn Base Camp's DisplayPad worker. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <!-- Libreria condivisa: motore azioni dei tasti + ponte Python.

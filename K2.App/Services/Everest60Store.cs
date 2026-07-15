@@ -170,11 +170,16 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
         cmd.Parameters.AddWithValue("$p", profile);
         using var r = cmd.ExecuteReader();
         while (r.Read())
+        {
+            string? at = r.IsDBNull(2) ? null : r.GetString(2);
+            // Leftover bc:Default from an old BC import = "no custom binding": empty key.
+            if (BaseCampDbImporter.IsBcDefaultAction(at)) continue;
             result.Add(new Ev60KeyRecord(
                 profile, r.GetInt32(0),
                 r.IsDBNull(1) ? null : r.GetString(1),
-                r.IsDBNull(2) ? null : r.GetString(2),
+                at,
                 r.IsDBNull(3) ? null : r.GetString(3)));
+        }
         return result;
     }
 

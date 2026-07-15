@@ -66,6 +66,11 @@ public partial class MainWindow
     private void UpdateKeyboardLayout()
     {
         if (_everest is null) return;
+        // Skip while an NDK picture upload is in flight — the firmware transiently reports
+        // both accessories unplugged while it's busy writing to flash (see _ndkUploadBusy in
+        // MainWindow.NumpadDisplayKeys.cs), which would otherwise flicker them out of the UI
+        // until the next successful poll. NdkApplyImage re-runs this once the write settles.
+        if (_ndkUploadBusy) return;
 
         byte dockPos   = _everest.MMDockPlugPosition();
         byte numpadPos = _everest.NumpadPlugPosition();

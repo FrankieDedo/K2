@@ -101,6 +101,50 @@ ON CONFLICT(KeyId) DO UPDATE SET ColorHex=excluded.ColorHex, ImagePath=excluded.
 
     // ---------- keys ----------
 
+    /// <summary>Profile slots that are actually configured — mirrors MacroPadStore/
+    /// DpStore's GetExistingProfiles, used to hide empty slots from the profile
+    /// combo (the device firmware always has 5 fixed slots, but K2's UI only lists
+    /// the ones actually in use, same as every other module). A slot counts as
+    /// existing if it has a bound key, a custom name, or the "exists" marker set
+    /// by <see cref="MarkProfileExists"/> for brand-new empty profiles — unlike
+    /// MacroPad/DisplayPad, Everest's key list is a sparse ListView (not a
+    /// fixed-size grid), so a dummy placeholder Keys row would show up as a
+    /// visible blank row instead of being invisible filler.</summary>
+    public List<int> GetExistingProfiles()
+    {
+        var result = new SortedSet<int>();
+
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT DISTINCT Profile FROM Keys WHERE ActionType IS NOT NULL";
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) result.Add(r.GetInt32(0));
+        }
+
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = @"SELECT Key, Value FROM Settings
+                                WHERE Key LIKE 'profile.%.name' OR Key LIKE 'profile.%.exists'";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                string key = r.GetString(0);
+                string value = r.IsDBNull(1) ? "" : r.GetString(1);
+                if (string.IsNullOrEmpty(value)) continue;
+                var parts = key.Split('.');
+                if (parts.Length == 3 && int.TryParse(parts[1], out int slot))
+                    result.Add(slot);
+            }
+        }
+
+        return new List<int>(result);
+    }
+
+    /// <summary>Marks an otherwise-empty profile as "existing" so it shows up in the
+    /// profile combo — see <see cref="GetExistingProfiles"/> for why this uses a
+    /// Settings flag instead of a placeholder Keys row.</summary>
+    public void MarkProfileExists(int profile) => SetSetting($"profile.{profile}.exists", "1");
+
     public IReadOnlyList<EverestKeyRecord> LoadProfile(int profile)
     {
         var result = new List<EverestKeyRecord>();
@@ -111,11 +155,16 @@ ON CONFLICT(KeyId) DO UPDATE SET ColorHex=excluded.ColorHex, ImagePath=excluded.
         cmd.Parameters.AddWithValue("$p", profile);
         using var r = cmd.ExecuteReader();
         while (r.Read())
+        {
+            string? at = r.IsDBNull(2) ? null : r.GetString(2);
+            // Leftover bc:Default from an old BC import = "no custom binding": empty key.
+            if (BaseCampDbImporter.IsBcDefaultAction(at)) continue;
             result.Add(new EverestKeyRecord(
                 profile, r.GetInt32(0),
                 r.IsDBNull(1) ? null : r.GetString(1),
-                r.IsDBNull(2) ? null : r.GetString(2),
+                at,
                 r.IsDBNull(3) ? null : r.GetString(3)));
+        }
         return result;
     }
 
@@ -169,8 +218,10 @@ ON CONFLICT(Profile, KeyMatrix) DO UPDATE SET
         cmd.CommandText = "DELETE FROM Keys WHERE Profile=$p";
         cmd.Parameters.AddWithValue("$p", profile);
         cmd.ExecuteNonQuery();
-        // Clear the saved name too
+        // Clear the saved name and "exists" marker too, so the slot disappears
+        // from the profile combo (see GetExistingProfiles) until reused.
         SetSetting($"profile.{profile}.name", "");
+        SetSetting($"profile.{profile}.exists", "");
     }
 
     /// <summary>Deletes only this profile's key bindings — unlike <see cref="ClearProfile"/>,
@@ -183,6 +234,9 @@ ON CONFLICT(Profile, KeyMatrix) DO UPDATE SET
         cmd.CommandText = "DELETE FROM Keys WHERE Profile=$p";
         cmd.Parameters.AddWithValue("$p", profile);
         cmd.ExecuteNonQuery();
+        // Keep the slot visible in the profile combo — this clears content, not
+        // identity/existence (unlike ClearProfile/delete).
+        MarkProfileExists(profile);
     }
 
     /// <summary>Wipes every profile, key binding, setting and keycap override — used by the

@@ -114,10 +114,15 @@ ON CONFLICT(KeyId) DO UPDATE SET ColorHex=excluded.ColorHex, ImagePath=excluded.
         cmd.Parameters.AddWithValue("$p", profile);
         using var r = cmd.ExecuteReader();
         while (r.Read())
+        {
+            string? at = r.IsDBNull(1) ? null : r.GetString(1);
+            // Leftover bc:Default from an old BC import = "no custom binding": empty key.
+            if (BaseCampDbImporter.IsBcDefaultAction(at)) continue;
             result.Add(new MacroKeyRecord(
                 deviceId, profile, r.GetInt32(0),
-                r.IsDBNull(1) ? null : r.GetString(1),
+                at,
                 r.IsDBNull(2) ? null : r.GetString(2)));
+        }
         return result;
     }
 
