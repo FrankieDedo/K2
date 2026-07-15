@@ -10,6 +10,8 @@ The project is still in a beta stage, but most of the stuff should work alright.
 <h1>How to use</h1>
   Install or use the portable version, it should work just like Base Camp. If you don't want to start from scratch, when you start, you should be able to import every profile from Base Camp and if something goes wrong, you can still reimport later, manually or automatically. I still need to test if every setting is imported, but mappings and similar stuff should work.
 
+Start as admin and keep in mind that it should close all Base Camp process automatically (you can avoid this behaviour disabling it in the settings). If it does, you can restart them manually or just reboot the pc and you're back as before.
+
 <h1>K2 — Feature Overview</h1>
 
 <details open>
