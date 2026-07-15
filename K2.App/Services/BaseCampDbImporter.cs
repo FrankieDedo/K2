@@ -259,6 +259,15 @@ public sealed class BaseCampDbImporter
         return imported;
     }
 
+    /// <summary>
+    /// True if the action is Base Camp's "Default" placeholder preserved verbatim by an
+    /// older import (<c>bc:Default</c>) — it means "no custom binding", so every store
+    /// load treats it as an empty button instead of a mapping. New imports no longer
+    /// produce it (<see cref="TranslateAction"/> maps "Default" to no action).
+    /// </summary>
+    internal static bool IsBcDefaultAction(string? actionType) =>
+        string.Equals(actionType, "bc:Default", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Parses {"Id":2407,...} from OptionalText to extract the folder page ID.</summary>
     internal static int ParseFolderPageId(string? optionalText)
     {
@@ -341,7 +350,7 @@ public sealed class BaseCampDbImporter
             "Mouse Button" =>
                 ("mouse", subType?.ToLowerInvariant()),
 
-            "Disable" or "Disabled" =>
+            "Disable" or "Disabled" or "Default" =>
                 (null, null),
 
             _ =>
@@ -1135,9 +1144,19 @@ public sealed class BaseCampDbImporter
     /// </summary>
     internal static byte[]? DecodeBase64Image(string raw)
     {
-        // BC sometimes stores an internal asset path instead of base64 data.
-        // These paths can't be resolved outside Base Camp — skip them.
-        var trimmed = raw.TrimStart();
+        // BC sometimes stores a filesystem path instead of embedded base64 data
+        // (e.g. a custom icon that was picked but never re-encoded into the
+        // export). Load it straight from disk if it still exists there.
+        var trimmed = raw.Trim();
+        try
+        {
+            if (File.Exists(trimmed))
+                return File.ReadAllBytes(trimmed);
+        }
+        catch { /* not a usable path — fall through and try base64 */ }
+
+        // BC's internal asset paths (e.g. "/Icons/foo.png") and remote URLs
+        // aren't resolvable outside Base Camp and won't exist on disk — skip them.
         if (trimmed.StartsWith('/') || trimmed.StartsWith("http", StringComparison.OrdinalIgnoreCase))
             return null;
 

@@ -10,8 +10,19 @@ namespace K2.DisplayPad;
 
 public partial class App : Application
 {
-    public static readonly string LogPath = Path.Combine(
-        AppContext.BaseDirectory, "K2.DisplayPad.log");
+    // %LocalAppData%\K2.DisplayPad\, not next to the exe: K2 installs to Program
+    // Files by default (admin-write-protected), so writing there without elevation
+    // used to fail silently and drop all logging. Matches the convention already
+    // used by StateStore/CellConfigDialog/etc. in this project.
+    public static readonly string LogPath = EnsureLogPath();
+
+    private static string EnsureLogPath()
+    {
+        var dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "K2.DisplayPad");
+        try { Directory.CreateDirectory(dir); } catch { /* best-effort, same as the writers below */ }
+        return Path.Combine(dir, "K2.DisplayPad.log");
+    }
 
     // Held for the process lifetime; released automatically by the OS on exit.
     private static Mutex? _singleInstanceMutex;

@@ -1062,23 +1062,30 @@ public sealed class EverestService : IDisposable
     }
 
     /// <summary>
-    /// Updates the clock on the Media Dock's display with the current time.
-    /// Call periodically (every second, as Base Camp does).
+    /// Updates the clock on the Media Dock's display with the current time and
+    /// format. Call periodically (every second, as Base Camp does).
     /// </summary>
-    public bool UpdateClock()
+    /// <remarks>
+    /// <b>2026-07-15, real Base Camp USB capture (_reference/usb_dumps/evclock.pcapng):</b>
+    /// toggling the clock format (12h/24h) in Base Camp's own UI produces ZERO
+    /// change to FW_EXTEND_INFO (byMMDockScreenSetup stays constant throughout)
+    /// — the format is instead carried on every periodic <c>SetClockInfo</c> call
+    /// itself (this method), not through SetExtendInfo. Previously this method
+    /// only ever re-sent whatever <c>GetClockInfo</c> reported, so K2's Display
+    /// Dial 12h/24h buttons had no way to actually reach the device (nothing
+    /// called this method either — see MainWindow.DisplayDial.cs). Now takes the
+    /// desired format explicitly and forces the clock on, since nothing else in
+    /// K2 ever sets it true.
+    /// </remarks>
+    public bool UpdateClock(bool format24h)
     {
         lock (_sdkLock)
         try
         {
-            // First read whether the clock is enabled and the format
-            bool clockEnabled = false, format24h = false;
-            bool gotClock = EverestSdkNative.GetClockInfo(ref clockEnabled, ref format24h);
-            if (!gotClock || !clockEnabled) return false;
-
             var now = DateTime.Now;
             bool ok = EverestSdkNative.SetClockInfo(
                 now.Month, now.Day, now.Hour, now.Minute, now.Second,
-                clockEnabled, format24h);
+                clockEnabled: true, format24h);
             return ok;
         }
         catch (Exception ex)

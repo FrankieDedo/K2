@@ -314,6 +314,7 @@ public partial class MainWindow
         Ev60RgbPanel.RestoreDefaults();
         Ev60KeyBindingPanel.RestoreDefaults();
         LogEverest60($"[UI ] Everest 60 profile {slot} restored to defaults.");
+        Ev60RefreshProfiles();
     }
 
     // ------------------------------------------------------------
