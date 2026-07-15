@@ -44,6 +44,7 @@ The project is still in a beta stage, but most of the stuff should work alright.
 <summary><strong>Everest Core/Max</strong></summary>
 <ul>
   <li>Key assignment</li>
+  <li>Keycap and keyboard customization: You can put in the UI the actual style of your keyboard, with Normal/Pudding/ReversePudding keycaps, including translucent legends and you can choose between silver and black frames. Also, you can put any image on there, to emulate custom keycaps.</li>
   <li>RGB lighting: 8 presets (Static/Breath/Wave/Reactive A-B-C/Yeti/Tornado/Matrix/Off), speed, direction CW/CCW, brightness, 3 color pickers, cross-profile sync, backlight on/off, reset</li>
   <li>Custom per-key lighting (paint mode)</li>
   <li>Numpad display keys: upload a custom image to each of the 4 keys + assignable action</li>
@@ -60,7 +61,7 @@ The project is still in a beta stage, but most of the stuff should work alright.
   <li>Key assignment</li>
   <li>Connection detection + accessory numpad with auto-detected side (left/right)</li>
   <li>RGB lighting (same presets as Everest Max) + 44-LED side ring + per-key Key Lighting with live preview</li>
-  <li>Keycap customization: style (Normal/Pudding/ReversePudding), translucent legends, per-key color/image override</li>
+  <li>Keycap and keyboard customization: You can put in the UI the actual style of your keyboard, with Normal/Pudding/ReversePudding keycaps, including translucent legends. Also, you can put any image on there, to emulate custom keycaps.</li>
 </ul>
 <p><em>Not yet verified on physical hardware — functionally complete but untested on a real device.</em></p>
 </details>
@@ -79,18 +80,20 @@ The project is still in a beta stage, but most of the stuff should work alright.
 <details open>
 <summary><strong>DisplayPad</strong></summary>
 <ul>
-    <li>Key capture and action assignment</li>
+  <li>Key capture and action assignment</li>
   <li>Set a device rotation 90°/270° (if you keep them vertical, the software will behave accordingly)</li>
   <li>More than two DisplayPads at once are supported</li>
+  <li>Fullscreen images are supported (only as still picture for now) and GIFs as well, but performance is abysmal and only works good with low framerate GIFs, because of Displaypad's hardware specifications, probably unfixable</li>
 </ul>
 </details>
 
 <details open>
 <summary><strong>MacroPad</strong></summary>
 <ul>
-    <li>Key capture and action assignment</li>
+  <li>Key capture and action assignment</li>
   <li>LED lighting panel: effect preset, speed, direction, 3 color pickers, brightness, cross-profile sync, backlight on/off, reset, save to flash</li>
   <li>Set a device rotation 90°/270° (if you keep them vertical, the software will behave accordingly)</li>
+  <li>Keycap and keyboard customization: You can put in the UI the actual style of your keyboard, with Normal/Pudding/ReversePudding keycaps, including translucent legends. Also, you can put any image on there, to emulate custom keycaps.</li>
 </ul>
 </details>
 
