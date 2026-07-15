@@ -4,6 +4,8 @@ First of all, i have to thank ramisotti, because their own project (https://gith
 
 This was more of a learning project for me and... it's working! I wanted to learn more about Claude Code, C# and USB protocols, and in the meantime, i tried to build something useful for me and everybody else that use these pieces of hardware!
 
+<a href='https://ko-fi.com/Q6J7237TZX' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi6.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
+
 The project is still in a beta stage, but most of the stuff should work alright. I think that there is still some streamlining and optimization to do, but i should iron out everything soon. Anyway, here are the features implemented as of now:
 
 <h1>K2 — Feature Overview</h1>
@@ -43,7 +45,7 @@ The project is still in a beta stage, but most of the stuff should work alright.
 <details open>
 <summary><strong>Everest Core/Max</strong></summary>
 <ul>
-  <li>Key assignment</li>
+  <li>Key action assignment</li>
   <li>Keycap and keyboard customization: You can put in the UI the actual style of your keyboard, with Normal/Pudding/ReversePudding keycaps, including translucent legends and you can choose between silver and black frames. Also, you can put any image on there, to emulate custom keycaps.</li>
   <li>RGB lighting: 8 presets (Static/Breath/Wave/Reactive A-B-C/Yeti/Tornado/Matrix/Off), speed, direction CW/CCW, brightness, 3 color pickers, cross-profile sync, backlight on/off, reset</li>
   <li>Custom per-key lighting (paint mode)</li>
@@ -58,7 +60,7 @@ The project is still in a beta stage, but most of the stuff should work alright.
 <details open>
 <summary><strong>Everest 60</strong></summary>
 <ul>
-  <li>Key assignment</li>
+  <li>Key action assignment</li>
   <li>Connection detection + accessory numpad with auto-detected side (left/right)</li>
   <li>RGB lighting (same presets as Everest Max) + 44-LED side ring + per-key Key Lighting with live preview</li>
   <li>Keycap and keyboard customization: You can put in the UI the actual style of your keyboard, with Normal/Pudding/ReversePudding keycaps, including translucent legends. Also, you can put any image on there, to emulate custom keycaps.</li>
@@ -69,7 +71,7 @@ The project is still in a beta stage, but most of the stuff should work alright.
 <details open>
 <summary><strong>Makalu 67/Max</strong></summary>
 <ul>
-  <li>RGB lighting (presets + custom 8-LED editor) with ring preview</li>
+  <li>RGB lighting</li>
   <li>DPI management</li>
   <li>Button remap including sniper button</li>
   <li>Device settings: polling rate, debounce, lift-off, angle snapping</li>
@@ -80,22 +82,34 @@ The project is still in a beta stage, but most of the stuff should work alright.
 <details open>
 <summary><strong>DisplayPad</strong></summary>
 <ul>
-  <li>Key capture and action assignment</li>
+  <li>Key action assignment</li>
   <li>Set a device rotation 90°/270° (if you keep them vertical, the software will behave accordingly)</li>
-  <li>More than two DisplayPads at once are supported</li>
-  <li>Fullscreen images are supported (only as still picture for now) and GIFs as well, but performance is abysmal and only works good with low framerate GIFs, because of Displaypad's hardware specifications, probably unfixable</li>
+  <li>More than two DisplayPads at once are supported (Base Camp goes crazy with three or more)</li>
+  <li>Fullscreen images are supported (only as a still background picture for now) and GIFs as well, but performance is abysmal and only works good with low framerate GIFs, because of Displaypad's hardware specifications, probably unfixable</li>
 </ul>
 </details>
 
 <details open>
 <summary><strong>MacroPad</strong></summary>
 <ul>
-  <li>Key capture and action assignment</li>
+  <li>Key action assignment</li>
   <li>LED lighting panel: effect preset, speed, direction, 3 color pickers, brightness, cross-profile sync, backlight on/off, reset, save to flash</li>
   <li>Set a device rotation 90°/270° (if you keep them vertical, the software will behave accordingly)</li>
   <li>Keycap and keyboard customization: You can put in the UI the actual style of your keyboard, with Normal/Pudding/ReversePudding keycaps, including translucent legends. Also, you can put any image on there, to emulate custom keycaps.</li>
 </ul>
 </details>
+
+<h1>What's missing</h1>
+
+<summary><strong>I still got something to port from Base Camp</strong></summary>
+<ul>
+  <li>LED preview for Makalu 67 (not an actual preview from the device, same as Base Camp)</li>
+  <li>Custom single-LED settings for all devices</li>
+  <li>More in-detail macro steps editing</li>
+  <li>Tested Makalu Max support (i don't have one, if you want to sell yours, tell me lol)</li>
+  <li>Please, tell me if you find that something else wasn't ported from Base Camp!</li>
+</ul>
+
 
 <h1>What's coming</h1>
 <ul>
@@ -105,6 +119,14 @@ The project is still in a beta stage, but most of the stuff should work alright.
   <li>Accurate LED sync between devices</li>
   <li>Desk layout feature — for users with multiple Mountain accessories, track where each device sits on your desk and drive multi-device LED effects across them (similar to Razer-style software)</li>
   <li>More DisplayPad shenanigans</li>
+  <li>Integrated STLs for 3D printing of accessories</li>
 </ul>
 
-<a href='https://ko-fi.com/Q6J7237TZX' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi6.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
+
+<h1>Building the app</h1>
+<ul>
+  <li>If you want to build yourself the app, just download all of the source code and then run "build-check.bat", same for the installer, just launch "build-installer.bat" inside the Installer folder.</li>
+  <li>I used Visual Studio Code for coding.</li>
+</ul>
+
+
