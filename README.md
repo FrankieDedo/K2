@@ -1,6 +1,6 @@
 K2 is an unofficial, full recreation of Base Camp, the management software for every device made by the now defunct company, Mountain. 
 
-First of all, i have to thank ramisotti, because their own project (https://github.com/ramisotti13-eng/BaseCamp-Linux) helped me in building some of the communication protocol for K2. This was very important and it would have been a mess to build it from scratch.
+First of all, i have to send a massive "thank you" to ramisotti, because their own project (https://github.com/ramisotti13-eng/BaseCamp-Linux) helped me in building some of the communication protocol for K2. This was very important and it would have been a mess to build it from scratch. Also, a really big "thank you" to the guys over at the Mountain Discord Server, that helped us and have done what was in their possibilities and even more in order to support the community and this project as well.
 
 This was more of a learning project for me and... it's working! I wanted to learn more about Claude Code, C# and USB protocols, and in the meantime, i tried to build something useful for me and everybody else that use these pieces of hardware!
 
@@ -101,8 +101,10 @@ The project is still in a beta stage, but most of the stuff should work alright.
 
 <h1>What's missing</h1>
 
-<summary><strong>I still got something to port from Base Camp</strong></summary>
+<strong>I still got something to port from Base Camp</strong>
+
 <ul>
+  <li>Executable linked to a profile</li>
   <li>LED preview for Makalu 67 (not an actual preview from the device, same as Base Camp)</li>
   <li>Custom single-LED settings for all devices</li>
   <li>More in-detail macro steps editing</li>
@@ -115,6 +117,7 @@ The project is still in a beta stage, but most of the stuff should work alright.
 <ul>
   <li>More accessibility options (and functions, maybe)</li>
   <li>Driving wheel mode for DisplayPad — turning it into an interactive display for racing sims, and possibly other sims down the line (flight sims?)</li>
+  <li>Tray icon quick UI<li>
   <li>SignalRGB support</li>
   <li>Accurate LED sync between devices</li>
   <li>Desk layout feature — for users with multiple Mountain accessories, track where each device sits on your desk and drive multi-device LED effects across them (similar to Razer-style software)</li>
