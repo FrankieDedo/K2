@@ -7,6 +7,8 @@ This was more of a learning project for me and... it's working! I wanted to lear
 <a href='https://ko-fi.com/Q6J7237TZX' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi6.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
 
 The project is still in a beta stage, but most of the stuff should work alright. I think that there is still some streamlining and optimization to do, but i should iron out everything soon. Anyway, here are the features implemented as of now:
+<h1>How to use</h1>
+  Install or use the portable version, it should work just like Base Camp. If you don't want to start from scratch, when you start, you should be able to import every profile from Base Camp and if something goes wrong, you can still reimport later, manually or automatically. I still need to test if every setting is imported, but mappings and similar stuff should work.
 
 <h1>K2 — Feature Overview</h1>
 
