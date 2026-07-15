@@ -16,6 +16,20 @@ namespace K2.App.Services;
 /// confirmed for the DisplayPad (<see cref="DpProfileExporter"/>), shared in the
 /// real Base Camp code via <c>BaseCampDbImporter.TranslateAction</c>.
 ///
+/// **XML element names (confirmed 2026-07-15 against a real Base Camp XML export
+/// and the decompiled <c>Profile</c>/<c>KeyboardBinding</c> classes)**: the DB
+/// TABLE name (<c>EverestKeyBidings</c>, with Base Camp's own typo) is NOT what
+/// appears in exported XML — that's a distinct navigation PROPERTY on
+/// <c>Profile</c>, correctly spelled <c>EverestKeyBindings</c>, rendered by
+/// XmlSerializer as a wrapper element containing one child per item named after
+/// the item's CLASS, <c>KeyboardBinding</c> (same convention verified for
+/// DisplayPad: wrapper <c>DisplayPadKeyBindings</c> / item
+/// <c>DisplayPadLayerBidings</c>, its class name). This exporter previously wrote
+/// flat <c>EverestKeyBidings</c> elements (typo, no wrapper) — self-consistent
+/// with K2's own importer but never actually readable by real Base Camp, and real
+/// Base Camp XML was never readable by K2 either (see
+/// <c>MainWindow.Everest.cs</c>'s <c>BtnEvImportXml_Click</c>).
+///
 /// Includes both the regular keys (KeyMatrix stored in <see cref="EverestStore"/>)
 /// and the 4 numpad LCD keys (NDK). Note: in K2, NDK images/actions are
 /// GLOBAL device settings (not per-profile — see
@@ -51,6 +65,12 @@ public static class EvProfileExporter
             new XElement("ProfileName", profileName),
             new XElement("OrderNo", slot));
 
+        // Wrapper element matching Base Camp's real Profile.EverestKeyBindings
+        // navigation property (see class doc comment) — each binding below is a
+        // <KeyboardBinding> child of this wrapper, not a flat sibling of Profile.
+        var bindingsEl = new XElement("EverestKeyBindings");
+        root.Add(bindingsEl);
+
         // ---- Regular keys ----
         foreach (var k in store.LoadProfile(slot))
         {
@@ -84,7 +104,7 @@ public static class EvProfileExporter
                 exported++;
             }
 
-            root.Add(BuildBinding(k.KeyMatrix, k.KeyMatrix, k.Label ?? $"K{k.KeyMatrix}",
+            bindingsEl.Add(BuildBinding(k.KeyMatrix, k.KeyMatrix, k.Label ?? $"K{k.KeyMatrix}",
                 isAssigned, isTouchKey: false, functionType, subType, funcValue, imageB64: null));
         }
 
@@ -131,7 +151,7 @@ public static class EvProfileExporter
 
             if (!bcCompatible || hasImage)
             {
-                root.Add(BuildBinding(keyId, keyId, $"NDK{i}",
+                bindingsEl.Add(BuildBinding(keyId, keyId, $"NDK{i}",
                     isAssigned, isTouchKey: true, functionType, subType, funcValue, imageB64));
             }
         }
@@ -146,10 +166,10 @@ public static class EvProfileExporter
         int keyId, int dllMatrixIndex, string keyName, bool isAssigned, bool isTouchKey,
         string? functionType, string? subType, string? funcValue, string? imageB64)
     {
-        // Tag "EverestKeyBidings" = real Base Camp table name (same assumption
-        // already made for the DisplayPad — NEVER verified against a real
-        // export of an Everest profile, see _PROJECT_MAP.md).
-        return new XElement("EverestKeyBidings",
+        // Tag "KeyboardBinding" = real Base Camp per-item class name (confirmed
+        // 2026-07-15 against a real Base Camp XML export + decompiled classes —
+        // see this file's doc comment; NOT the DB table name "EverestKeyBidings").
+        return new XElement("KeyboardBinding",
             new XElement("ProfileId", 0),
             new XElement("KeyId", keyId),
             new XElement("KeyName", keyName),

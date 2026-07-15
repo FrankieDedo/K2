@@ -2,35 +2,68 @@
 // Controls the visible pages on the Everest Max rotary display
 // and clock, screensaver, auto-off, menu color settings.
 //
-// FW_EXTEND_INFO ↔ Display Dial mapping (to verify with USB capture):
+// FW_EXTEND_INFO ↔ Display Dial mapping:
 //   byMMDockShowMenu  = page bitmask (bit0=Clock … bit7=Custom)
-//   byMMDockScreenSetup = clock format, 12h/24h (assumed — see DialClockTypeIndex)
-//   wMMDockScreenSaver  = screensaver timeout in seconds (0=disabled)
-//   wMMDockTurnOff      = auto-off timeout in seconds (0=disabled)
+//   byMMDockScreenSetup = NOT clock format, NOT written by K2 anymore. A real
+//                         Base Camp USB capture (_reference/usb_dumps/
+//                         evclock.pcapng, 2026-07-15) proved it stays constant
+//                         while toggling 12h/24h in Base Camp's own UI — clock
+//                         format is instead carried on every periodic
+//                         SetClockInfo call (see EverestService.UpdateClock,
+//                         _dialClockTimer below). What byMMDockScreenSetup
+//                         actually does remains unknown; left untouched.
+//   byMMDockMenuIndex = NOT WRITTEN by K2 (2026-07-15, real hardware test via
+//                       K2 itself, not just packet captures): SetExtendInfo
+//                       returned True after writing menuIndex=67 (0x43,
+//                       clock content + both enable bits packed in, per the
+//                       real Base Camp USB captures' byte layout), but the
+//                       immediately following GetExtendInfo read back
+//                       menuIndex=0 — the SDK/firmware silently discards this
+//                       field via this call even though the API reports
+//                       success. wMMDockScreenSaver/wMMDockTurnOff round-
+//                       tripped correctly in the same test (ss=2, off=30
+//                       both came back as written), so this is specific to
+//                       byMMDockMenuIndex, not a general SetExtendInfo
+//                       failure. Base Camp's own USB traffic DOES show this
+//                       byte changing and sticking within its session, so it
+//                       must be set through some other command (plausibly the
+//                       same mechanism as EverestSdkNative.SetPCInfo, whose
+//                       doc comment says it drives byMMDockMenuIndex into the
+//                       97-101/113 range as a side effect) — not yet
+//                       identified. Read-only for now: K2 shows whatever the
+//                       device reports but the "what the screensaver shows"
+//                       combo has NO device effect until that command is
+//                       found (would need a fresh raw-HID capture, not just
+//                       SetExtendInfo's blob).
+//   wMMDockScreenSaver  = screensaver timeout in seconds — CONFIRMED, including
+//                         0=disabled: real hardware test round-tripped ss=2
+//                         correctly through SetExtendInfo/GetExtendInfo.
+//   wMMDockTurnOff      = auto-off timeout in seconds — CONFIRMED, same as above
+//                         (off=30 round-tripped in the same real hardware test).
 //   MMDockColor         = menu color
 //
 // Enable/disable checkboxes for screensaver and turn-off mirror Base Camp's
 // own DB model (BaseCamp.Data.DisplayDial: EnableSecreenSaver/EnableTurnOff
-// are separate bool columns from ScreenSaverTime/TurnOffTime) — when
-// unchecked, K2 sends 0 (disabled) to the firmware but keeps the configured
-// seconds value so it's not lost if re-enabled.
+// are separate bool columns from ScreenSaverTime/TurnOffTime) — K2 has no
+// confirmed separate device-side enable flag (see byMMDockMenuIndex above:
+// the bits that looked like enable flags in the packet captures live in a
+// field K2 can't actually write), so it falls back to zeroing
+// wMMDockScreenSaver/wMMDockTurnOff for "disabled" — confirmed round-tripping
+// correctly (see above), unlike the byMMDockMenuIndex approach it replaces.
 //
-// Clock style (analog/digital) and "screensaver shows" (which page acts as
-// the screensaver) are real Base Camp concepts — BaseCamp.Data.DisplayDial
-// has ClockType/ScreenSaverType columns, and BaseCampLinux's raw protocol
-// has a confirmed STYLE_ANALOG/STYLE_DIGITAL byte and a MAIN_DISPLAY_MODES
-// menu-byte table — but neither has a confirmed byte mapping in SDKDLL's
-// FW_EXTEND_INFO for THIS SDK (the existing byMMDockMenuIndex comment in
-// EverestSdkNative.cs quotes different values than BaseCampLinux's table,
-// so they are not directly interchangeable). Both combos are therefore
-// UI + persisted-only for now; wiring them to a device field needs a USB
-// capture first (see _reference/USB_SNIFF_GUIDE.md), consistent with the
-// project's "don't guess the bit-layout" rule.
+// Clock STYLE (analog/digital) is still NOT confirmed against a device field:
+// both real USB captures show ambiguous/inconclusive byte changes around the
+// clock-type UI actions (multiple candidate bytes moving together, and most
+// clicks producing byte-identical packets — possibly Base Camp itself doesn't
+// wire analog/digital to firmware, only 12h/24h). Left UI + persisted-only,
+// per the project's "don't guess the bit-layout" rule, until a cleaner
+// isolated capture (one click at a time) resolves it.
 
 using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using K2.App.Services;
 using K2.Core;
 
@@ -40,6 +73,23 @@ public partial class MainWindow
 {
     // ── Flag to prevent re-entry during value loading ──
     private bool _dialLoading;
+
+    /// <summary>
+    /// Ticks the Media Dock clock every second (<c>EverestService.UpdateClock</c>) —
+    /// see that method's remarks (real Base Camp sends the format on every
+    /// periodic clock call, not via SetExtendInfo). Runs for the app's lifetime;
+    /// the Tick handler no-ops if the driver isn't open, same tolerance as other
+    /// pollers in this codebase. Unlike the RbDialClockType radio buttons
+    /// themselves, this always carries <see cref="_dialAppliedFormat24h"/> — the
+    /// clock must keep ticking continuously (it's not a one-shot setting write),
+    /// but which format it uses only changes on "Apply to device", same as
+    /// every other Display Dial field.
+    /// </summary>
+    private DispatcherTimer? _dialClockTimer;
+
+    /// <summary>Clock format last pushed via "Apply to device" (or loaded at
+    /// startup) — see <see cref="_dialClockTimer"/>.</summary>
+    private bool _dialAppliedFormat24h = true;
 
     // ── Bit mapping for byMMDockShowMenu (to be confirmed with USB capture) ──
     [Flags]
@@ -56,19 +106,27 @@ public partial class MainWindow
         All        = 0xFF
     }
 
-    // Screensaver-function combo entries, in the same order as the page
-    // toggles above. Values are internal page names (persisted), not a
-    // confirmed device byte — see file header.
-    private static readonly (string Key, string Value)[] DialFunctions =
+    // Screensaver-function combo entries: what the screensaver shows.
+    // Code layout confirmed against two independent real Base Camp USB
+    // captures (_reference/usb_dumps/evsettings.pcapng + evsettings2.pcapng,
+    // 2026-07-15). NOT the same list as the 8 page-visibility checkboxes
+    // above (byMMDockShowMenu, a bitmask, unrelated field): Base Camp's real
+    // combo here is image/clock/timer/stopwatch/volume/brightness/pcinfo/apm,
+    // not clock/profile/lighting/volume/brightness/pcinfo/apm/custom as
+    // previously guessed. NOT WRITTEN to the device — see file header
+    // (byMMDockMenuIndex): kept only so "Read from device" can show what the
+    // device currently reports, and so the combo/persisted choice survive a
+    // future fix once the real write command is found.
+    private static readonly (string Key, string Value, byte Code, bool IsSpecialRaw)[] DialFunctions =
     {
-        ("dial_clock",     "clock"),
-        ("dial_profile",   "profile"),
-        ("dial_lighting",  "lighting"),
-        ("dial_volume",    "volume"),
-        ("dial_brightness","brightness"),
-        ("dial_pcinfo",    "pcinfo"),
-        ("dial_apm",       "apm"),
-        ("dial_custom",    "custom"),
+        ("dial_image",     "image",      2,   false),
+        ("dial_timer",     "timer",      3,   false),
+        ("dial_clock",     "clock",      4,   false),
+        ("dial_stopwatch", "stopwatch",  7,   false),
+        ("dial_volume",    "volume",     8,   false),
+        ("dial_brightness","brightness", 9,   false),
+        ("dial_pcinfo",    "pcinfo",     14,  false),
+        ("dial_apm",       "apm",        113, true),
     };
 
     // ─────────────────────── Init ───────────────────────
@@ -83,7 +141,7 @@ public partial class MainWindow
     {
         // Populate screensaver-function combo (which page shows as screensaver)
         CbDialScreenSaverFunction.Items.Clear();
-        foreach (var (key, _) in DialFunctions)
+        foreach (var (key, _, _, _) in DialFunctions)
             CbDialScreenSaverFunction.Items.Add(Loc.Get(key));
 
         // Load saved settings (or defaults)
@@ -95,6 +153,18 @@ public partial class MainWindow
         finally
         {
             _dialLoading = false;
+        }
+        _dialAppliedFormat24h = DialClockTypeIndex == 0;
+
+        if (_dialClockTimer is null)
+        {
+            _dialClockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _dialClockTimer.Tick += (_, _) =>
+            {
+                if (_everest is { IsOpen: true })
+                    _everest.UpdateClock(format24h: _dialAppliedFormat24h);
+            };
+            _dialClockTimer.Start();
         }
     }
 
@@ -117,6 +187,7 @@ public partial class MainWindow
 
         int clockStyle = ParseInt(_evStore?.GetSetting("dial.clockStyle"), 0);
         (clockStyle == 1 ? RbDialClockAnalog : RbDialClockDigital).IsChecked = true;
+        UpdateDialClockFormatVisibility();
 
         string ssFunction = _evStore?.GetSetting("dial.screenSaverFunction") ?? DialFunctions[0].Value;
         int ssIndex = Array.FindIndex(DialFunctions, f => f.Value == ssFunction);
@@ -134,6 +205,14 @@ public partial class MainWindow
                 (Color)ColorConverter.ConvertFromString(menuColor));
         }
         catch { /* fallback: keep XAML default */ }
+    }
+
+    /// <summary>Analog clocks have no 12h/24h digit format — hide the format
+    /// segmented control while "Analog" is selected.</summary>
+    private void UpdateDialClockFormatVisibility()
+    {
+        PnlDialClockFormat.Visibility = RbDialClockAnalog.IsChecked == true
+            ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void SaveDialSettings()
@@ -182,9 +261,14 @@ public partial class MainWindow
             return;
         }
 
-        // Update only the fields controlled by the Display Dial panel
+        // Update only the fields controlled by the Display Dial panel.
+        // byMMDockScreenSetup and byMMDockMenuIndex are NOT written here — see
+        // file header for why (clock format goes through SetClockInfo instead;
+        // menuIndex writes are silently discarded by the device, confirmed on
+        // real hardware). Writing a value that's confirmed not to stick would
+        // just violate the project's "don't guess the bit-layout" rule for no
+        // benefit.
         info.byMMDockShowMenu = BuildPageByte();
-        info.byMMDockScreenSetup = (byte)DialClockTypeIndex;  // 0=24h, 1=12h (to be confirmed)
         info.wMMDockScreenSaver = CkDialScreenSaverEnable.IsChecked == true
             ? ParseUshort(TxtDialScreenSaver.Text, 30) : (ushort)0;
         info.wMMDockTurnOff = CkDialTurnOffEnable.IsChecked == true
@@ -200,8 +284,14 @@ public partial class MainWindow
 
         bool ok = _everest.SetExtendInfo(info);
         LogEverest($"[DIAL] SetExtendInfo -> {ok}  pages=0x{info.byMMDockShowMenu:X2} " +
-                   $"clock={info.byMMDockScreenSetup} ss={info.wMMDockScreenSaver} " +
-                   $"off={info.wMMDockTurnOff}");
+                   $"menuIndex={info.byMMDockMenuIndex} " +
+                   $"ss={info.wMMDockScreenSaver} off={info.wMMDockTurnOff}");
+
+        // Clock format doesn't live in FW_EXTEND_INFO (see file header) — push
+        // it separately, on the same "Apply to device" trigger as everything else.
+        _dialAppliedFormat24h = DialClockTypeIndex == 0;
+        LogEverest($"[DIAL] UpdateClock(format24h={_dialAppliedFormat24h}) -> " +
+                   $"{_everest.UpdateClock(_dialAppliedFormat24h)}");
 
         SaveDialSettings();
     }
@@ -229,10 +319,30 @@ public partial class MainWindow
             CkDialAPM.IsChecked      = (pages & (byte)DialPage.APM) != 0;
             CkDialCustom.IsChecked   = (pages & (byte)DialPage.Custom) != 0;
 
-            (info.byMMDockScreenSetup == 1 ? RbDialClock12h : RbDialClock24h).IsChecked = true;
+            // Clock format (12h/24h) is intentionally left untouched here:
+            // byMMDockScreenSetup doesn't carry it (see ApplyDialToDevice's
+            // comment) — K2's own persisted choice (_dialClockTimer/
+            // RbDialClockType_Checked) is the source of truth, not the device.
+
+            // byMMDockMenuIndex is a PACKED byte (contentNibble<<4 | enableBits)
+            // for every content type except the special-raw "apm" — see file
+            // header. Check special-raw entries first (exact match) before
+            // falling back to nibble matching, so apm's 113 (0x71) can't be
+            // mistaken for a nibble-7 ("stopwatch") + enableBits=1 combination.
+            // Display-only: K2 never writes this field (see file header), so
+            // it just reflects whatever Base Camp or the firmware itself last
+            // set it to — selecting a different option in the combo has no
+            // effect on the device.
+            byte menuIndex = info.byMMDockMenuIndex;
+            int fnIndex = Array.FindIndex(DialFunctions, f => f.IsSpecialRaw && f.Code == menuIndex);
+            if (fnIndex < 0)
+                fnIndex = Array.FindIndex(DialFunctions, f => !f.IsSpecialRaw && f.Code == (menuIndex >> 4));
+            CbDialScreenSaverFunction.SelectedIndex = fnIndex >= 0 ? fnIndex : 0;
 
             // The firmware only reports a timeout, not a separate enable flag
-            // (Base Camp keeps that flag DB-side). 0 => disabled, keep the last
+            // (Base Camp keeps that flag DB-side, and K2's own attempt at a
+            // device-side flag via byMMDockMenuIndex was confirmed not to
+            // stick — see file header). 0 => disabled, keep the last
             // configured seconds value in the textbox instead of overwriting it.
             CkDialScreenSaverEnable.IsChecked = info.wMMDockScreenSaver != 0;
             if (info.wMMDockScreenSaver != 0) TxtDialScreenSaver.Text = info.wMMDockScreenSaver.ToString();
@@ -245,7 +355,7 @@ public partial class MainWindow
                 Color.FromRgb(c.r, c.g, c.b));
 
             LogEverest($"[DIAL] Read from device: pages=0x{pages:X2} " +
-                       $"clock={info.byMMDockScreenSetup} ss={info.wMMDockScreenSaver} " +
+                       $"menuIndex={info.byMMDockMenuIndex} ss={info.wMMDockScreenSaver} " +
                        $"off={info.wMMDockTurnOff} color=({c.r},{c.g},{c.b})");
 
             SaveDialSettings();
@@ -272,6 +382,7 @@ public partial class MainWindow
 
     private void RbDialClockStyle_Checked(object sender, RoutedEventArgs e)
     {
+        UpdateDialClockFormatVisibility();
         if (_dialLoading) return;
         SaveDialSettings();
     }
@@ -282,6 +393,11 @@ public partial class MainWindow
         SaveDialSettings();
     }
 
+    // Every Display Dial field — including screensaver/turn-off enable+timeout
+    // and clock format — only reaches the device on an explicit "Apply to
+    // device" click (BtnDialApply_Click). Edits here only update the local
+    // UI/persisted settings; see ApplyDialToDevice for the one place that
+    // actually talks to the firmware.
     private void CkDialScreenSaverEnable_Click(object sender, RoutedEventArgs e)
     {
         if (_dialLoading) return;

@@ -179,6 +179,7 @@ public partial class MainWindow
         MkRgbSettings.RestoreDefaults();
         MkDpiRemap.MkReloadRemap(slot);
         LogMakalu($"[UI ] Makalu profile {slot} restored to defaults.");
+        MkRefreshProfiles();
     }
 
     // ------------------------------------------------------------

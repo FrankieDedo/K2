@@ -17,10 +17,16 @@ namespace K2.Core;
 ///   2. Embedded default <c>Strings.xml</c> shipped inside K2.Core
 ///
 /// The language code comes from (in order):
-///   - <c>K2.lang</c> file next to the running executable  (written by <see cref="SetLanguage"/>)
+///   - <c>K2.lang</c> file in <c>%LocalAppData%\K2\</c> (written by <see cref="SetLanguage"/>)
+///   - <c>K2.lang</c> next to the running executable (legacy location, read-only —
+///     kept so installs that saved it there while running elevated still pick it up)
 ///   - <c>K2_LANG</c> environment variable
 ///   - Current UI culture's two-letter ISO code (e.g. "it", "de")
 /// Set <c>K2_LANG=en</c> (or write "en" in K2.lang) to force English (built-in default).
+///
+/// <c>%LocalAppData%</c> (not the exe folder) is used deliberately: K2 installs to
+/// Program Files by default, which is admin-write-protected. Writing there without
+/// elevation used to fail silently, so the language choice never persisted.
 ///
 /// To switch language at runtime call <see cref="SetLanguage"/> — it saves the choice
 /// and raises <see cref="RestartRequested"/> so the host app can restart.
@@ -58,9 +64,9 @@ public static class Loc
     }
 
     /// <summary>
-    /// Saves <paramref name="lang"/> to the <c>K2.lang</c> file next to the
-    /// executable, then raises <see cref="RestartRequested"/> so the host app
-    /// can restart and pick up the new language.
+    /// Saves <paramref name="lang"/> to the <c>K2.lang</c> file under
+    /// <c>%LocalAppData%\K2\</c>, then raises <see cref="RestartRequested"/> so the
+    /// host app can restart and pick up the new language.
     /// Always writes and restarts — never skips silently.
     /// </summary>
     public static void SetLanguage(string lang)
@@ -68,13 +74,19 @@ public static class Loc
         lang = lang.Trim().ToLowerInvariant();
         try
         {
-            var langFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "K2.lang");
-            File.WriteAllText(langFile, lang);
+            Directory.CreateDirectory(DataDir);
+            File.WriteAllText(LangFilePath, lang);
         }
         catch { /* non-fatal */ }
 
         RestartRequested?.Invoke(lang);
     }
+
+    /// <summary>Per-user, always-writable data folder — never needs admin rights.</summary>
+    private static readonly string DataDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "K2");
+
+    private static readonly string LangFilePath = Path.Combine(DataDir, "K2.lang");
 
     /// <summary>
     /// Explicitly initialize the localization system.
@@ -90,12 +102,20 @@ public static class Loc
 
         // 2. Determine language (K2.lang file > env var > UI culture)
         var exeDir = AppDomain.CurrentDomain.BaseDirectory;
-        var langFile = Path.Combine(exeDir, "K2.lang");
 
         string? lang = null;
-        if (File.Exists(langFile))
+        if (File.Exists(LangFilePath))
         {
-            try { lang = File.ReadAllText(langFile).Trim(); } catch { }
+            try { lang = File.ReadAllText(LangFilePath).Trim(); } catch { }
+        }
+        if (lang == null)
+        {
+            // Legacy location (pre-fix installs that saved it while running elevated).
+            var legacyLangFile = Path.Combine(exeDir, "K2.lang");
+            if (File.Exists(legacyLangFile))
+            {
+                try { lang = File.ReadAllText(legacyLangFile).Trim(); } catch { }
+            }
         }
         lang ??= Environment.GetEnvironmentVariable("K2_LANG");
         lang ??= "en"; // default: English (user can switch via the language menu; choice is saved to K2.lang)

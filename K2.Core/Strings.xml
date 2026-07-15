@@ -144,6 +144,11 @@
   <string name="settings_bc_autostart_hint">Enables/disables the Windows autostart entries of Base Camp (same mechanism as Task Manager's Startup tab — reversible). Entries in HKLM may require running K2 as administrator.</string>
   <string name="settings_bc_autostart_none">No Base Camp autostart entry found in the registry.</string>
   <string name="settings_bc_autostart_done">Base Camp autostart: {0} entries updated.</string>
+  <string name="settings_restart_bc_on_close">Restart Base Camp when K2 closes</string>
+  <string name="settings_restart_bc_on_close_hint">When K2 closes, relaunches whatever Base Camp processes it auto-stopped (GUI, workers, Makalu monitor, the Windows service) — so Base Camp is back the way it was before K2 started. MountainDisplayPadWorker is always relaunched silently, with no window. Disabled by default: most people who enable auto-stop want Base Camp to stay stopped after closing K2.</string>
+  <string name="settings_export_log_btn">Export log…</string>
+  <string name="settings_export_log_hint">Copies the current K2.App log (and crash log, if any) to a folder you choose — handy for sharing when reporting a problem.</string>
+  <string name="settings_export_log_done">Log exported to {0}</string>
   <!-- Base Camp import prompt -->
   <string name="settings_bc_import_group">Base Camp import</string>
   <string name="settings_bc_import_btn">Import from Base Camp…</string>
@@ -161,6 +166,7 @@
   <string name="settings_general">General options</string>
   <string name="settings_close_to_tray">Close to tray instead of exiting</string>
   <string name="settings_k2_autostart">Start K2 with Windows</string>
+  <string name="settings_k2_autostart_hint">K2 now requires administrator rights (to control BaseCampService). Windows does not auto-elevate apps launched from the Run registry key at logon, so this entry alone may fail to start K2 silently — if that happens, use Task Scheduler instead (a task set to "Run with highest privileges" at logon).</string>
   <string name="settings_start_min_tray">Start directly minimized to tray</string>
   <string name="settings_start_min_tray_hint">K2 starts with its drivers active but the window hidden in the tray — open it anytime from the tray icon.</string>
   <string name="settings_font_family">Font</string>
@@ -308,6 +314,9 @@
   <string name="dial_pcinfo">PC Info</string>
   <string name="dial_apm">APM counter</string>
   <string name="dial_custom">Custom mode</string>
+  <string name="dial_image">Image</string>
+  <string name="dial_timer">Timer</string>
+  <string name="dial_stopwatch">Stopwatch</string>
   <string name="dial_clock_section">Clock type</string>
   <string name="dial_clock_label">Format:</string>
   <string name="dial_clock_style_label">Style:</string>
@@ -333,6 +342,8 @@
   <string name="dock_press_for">Press the key for "{0}"…</string>
   <string name="dock_action_none">none</string>
   <string name="dock_capture_matrix">Capture matrixId…</string>
+  <string name="ev_display_key_label">Display Key {0}</string>
+  <string name="ev_display_key_icon_only">(icon)</string>
   <string name="dock_configure_action">Configure action…</string>
   <string name="dock_remove_action">Remove action</string>
 
@@ -515,8 +526,8 @@
   <string name="export_profiles_title">Export profiles</string>
   <string name="export_profiles_pick">Select the profiles to export:</string>
   <string name="export_format_section">Format:</string>
-  <string name="export_format_bc">Base Camp compatible</string>
-  <string name="export_format_k2">K2 (lossless)</string>
+  <string name="export_format_bc">Base Camp</string>
+  <string name="export_format_k2">K2</string>
   <string name="export_select_at_least_one">Select at least one profile.</string>
   <string name="export_pick_folder">Choose a folder for the exported profiles</string>
   <!-- Fullscreen -->

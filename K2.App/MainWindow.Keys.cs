@@ -204,6 +204,7 @@ public partial class MainWindow
         if (res != MessageBoxResult.OK) return;
         _store.ClearProfile(id, slot);
         Log($"[UI ] MacroPad profile {slot} restored to defaults.");
+        MpRefreshProfiles(id);
         ReloadCurrentProfile();
     }
 
