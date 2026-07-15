@@ -1392,14 +1392,13 @@ public partial class MainWindow
             if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) continue;
             try
             {
-                // Matches NdkApplyImage's first (and usually successful) attempt:
-                // 0-based keyIndex, picSlot=0 — the combo already confirmed to work on
-                // real hardware there. (The old i+1/1-based call here was a separate,
-                // never-hit bug: it only ever ran right after an import, and would have
-                // targeted the wrong physical key — or, for i=3, an out-of-range one.)
-                bool ok = _everest.UploadNumpadImage(path, i, picSlot: 0);
+                // Same (picSlot, subItem) fallback chain as the single-key dialog flow
+                // (UploadNdkImageWithFallback, MainWindow.NumpadDisplayKeys.cs) — this
+                // used to call UploadNumpadImage directly with a single fixed combo,
+                // which silently failed on any hardware where a later attempt is the one
+                // that actually works (the wire mapping was never confirmed via capture).
+                bool ok = UploadNdkImageWithFallback(i, path);
                 any |= ok;
-                LogEverest($"[NDK] ndk.{i} uploaded: {System.IO.Path.GetFileName(path)} -> {ok}");
             }
             catch (Exception ex)
             {

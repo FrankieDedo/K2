@@ -144,9 +144,20 @@ public partial class MainWindow
     {
         try
         {
+            // Load from bytes into a MemoryStream, NOT BitmapImage.UriSource: every NDK
+            // slot always reuses the same fixed filename (ndk_{index}.png, whether written
+            // by XML import, BC-DB import, or NdkApplyImage), and WPF's imaging pipeline
+            // caches a UriSource-loaded BitmapImage by that URI — re-importing/overwriting
+            // the same file left the canvas thumbnail showing the stale (or, after a prior
+            // failed load, blank) cached bitmap instead of the new content, even though
+            // NdkKeyConfigDialog's own preview (RefreshImagePreview, same byte-stream
+            // approach) showed the correct new icon from the very same path. Mirrors that
+            // dialog's loading code exactly so both stay in sync.
+            byte[] bytes = File.ReadAllBytes(imagePath);
+            using var ms = new MemoryStream(bytes);
             var bi = new BitmapImage();
             bi.BeginInit();
-            bi.UriSource = new Uri(imagePath, UriKind.Absolute);
+            bi.StreamSource = ms;
             bi.DecodePixelWidth = 72;
             bi.CacheOption = BitmapCacheOption.OnLoad;
             bi.EndInit();
@@ -322,37 +333,7 @@ public partial class MainWindow
         Mouse.OverrideCursor = Cursors.Wait;
         try
         {
-            // Upload to device — try parameter combinations for debugging.
-            // SDK: targetDev=1, targetPic=picSlot, targetSubItem=keyIndex.
-            // Try different (picSlot, keyIndex) combinations to find which
-            // mapping works for all 4 display keys.
-            bool ok = false;
-
-            // Attempt 1: picSlot=0, subItem=keyIndex (all on the same slot)
-            ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: 0);
-            LogEverest($"[NDK] Upload key={keyIndex} try1(pic=0,sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
-
-            if (!ok)
-            {
-                // Attempt 2: picSlot=keyIndex, subItem=keyIndex
-                ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: (byte)keyIndex);
-                LogEverest($"[NDK] Upload key={keyIndex} try2(pic={keyIndex},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
-            }
-
-            if (!ok)
-            {
-                // Attempt 3: picSlot=keyIndex+1, subItem=keyIndex
-                ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: (byte)(keyIndex + 1));
-                LogEverest($"[NDK] Upload key={keyIndex} try3(pic={keyIndex + 1},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
-            }
-
-            if (!ok)
-            {
-                // Attempt 4: strip mode (targetDev=0, targetPic=2+keyIndex)
-                ok = _everest.UploadNumpadImageStrip(imagePath, keyIndex, picSlot: (byte)keyIndex);
-                LogEverest($"[NDK] Upload key={keyIndex} try4-strip(pic={keyIndex},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
-            }
-
+            bool ok = UploadNdkImageWithFallback(keyIndex, imagePath);
             if (ok)
             {
                 _ndkImagePaths[keyIndex] = imagePath;
@@ -375,6 +356,48 @@ public partial class MainWindow
             _ndkUploadBusy = false;
             UpdateKeyboardLayout();
         }
+    }
+
+    /// <summary>
+    /// Uploads <paramref name="imagePath"/> to display key <paramref name="keyIndex"/>,
+    /// trying the same (picSlot, subItem) parameter combinations in the same order as the
+    /// original single-key dialog flow — the exact wire mapping was never confirmed via
+    /// USB capture, so which attempt actually succeeds can vary by firmware/hardware.
+    /// Shared by <see cref="NdkApplyImage"/> (single-key edit) and
+    /// <see cref="EvUploadNdkImages"/> (bulk re-upload on profile load/reconnect, see
+    /// MainWindow.Everest.cs) — the bulk path used to call only "Attempt 1" directly,
+    /// which silently failed on any hardware where a later attempt is the one that
+    /// actually works. Does not touch <see cref="_ndkImagePaths"/>/UI state; the caller
+    /// decides what to do with the result.
+    /// </summary>
+    private bool UploadNdkImageWithFallback(int keyIndex, string imagePath)
+    {
+        // Attempt 1: picSlot=0, subItem=keyIndex (all on the same slot)
+        bool ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: 0);
+        LogEverest($"[NDK] Upload key={keyIndex} try1(pic=0,sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
+
+        if (!ok)
+        {
+            // Attempt 2: picSlot=keyIndex, subItem=keyIndex
+            ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: (byte)keyIndex);
+            LogEverest($"[NDK] Upload key={keyIndex} try2(pic={keyIndex},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
+        }
+
+        if (!ok)
+        {
+            // Attempt 3: picSlot=keyIndex+1, subItem=keyIndex
+            ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: (byte)(keyIndex + 1));
+            LogEverest($"[NDK] Upload key={keyIndex} try3(pic={keyIndex + 1},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
+        }
+
+        if (!ok)
+        {
+            // Attempt 4: strip mode (targetDev=0, targetPic=2+keyIndex)
+            ok = _everest.UploadNumpadImageStrip(imagePath, keyIndex, picSlot: (byte)keyIndex);
+            LogEverest($"[NDK] Upload key={keyIndex} try4-strip(pic={keyIndex},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
+        }
+
+        return ok;
     }
 
     /// <summary>Set while <see cref="NdkApplyImage"/> is writing a picture to the device —
