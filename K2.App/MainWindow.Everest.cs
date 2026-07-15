@@ -1790,7 +1790,14 @@ public partial class MainWindow
 
         _everest.SwitchProfile(next);
         _evStore.SetCurrentProfile(next);
+        // EvSelectProfileSlot suppresses CbEvProfile_SelectionChanged (avoids re-entrant
+        // handling while this method is already mid-switch) — which means it does NOT
+        // call ReloadEverestProfile on its own. Call it explicitly so the key list AND
+        // the NDK hardware re-upload (see ReloadEverestProfile's doc comment) actually
+        // run on a profile switch triggered from the keyboard itself, not just from the
+        // UI combo.
         EvSelectProfileSlot(next);
+        ReloadEverestProfile();
         LogEverest($"[EXEC] profile -> {next}");
     }
 
