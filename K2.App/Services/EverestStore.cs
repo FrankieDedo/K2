@@ -222,6 +222,7 @@ ON CONFLICT(Profile, KeyMatrix) DO UPDATE SET
         // from the profile combo (see GetExistingProfiles) until reused.
         SetSetting($"profile.{profile}.name", "");
         SetSetting($"profile.{profile}.exists", "");
+        ClearNdkSettings(profile);
     }
 
     /// <summary>Deletes only this profile's key bindings — unlike <see cref="ClearProfile"/>,
@@ -237,6 +238,24 @@ ON CONFLICT(Profile, KeyMatrix) DO UPDATE SET
         // Keep the slot visible in the profile combo — this clears content, not
         // identity/existence (unlike ClearProfile/delete).
         MarkProfileExists(profile);
+        ClearNdkSettings(profile);
+    }
+
+    /// <summary>Clears this profile's 4 NDK (numpad display key) settings — image path and
+    /// action — from local storage. Each firmware profile keeps its own 4 pictures in flash
+    /// (see MainWindow.NumpadDisplayKeys.cs's UploadNdkImage doc comment), but there's no SDK
+    /// call to blank an individual picture slot on the device, so the stale image stays
+    /// resident on hardware until the user assigns a new one — matching the same limitation
+    /// as regular keys, which are also only cleared locally here (no per-profile hardware
+    /// reset call exists either).</summary>
+    private void ClearNdkSettings(int profile)
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            SetSetting($"ndk.{profile}.{i}.imagePath", "");
+            SetSetting($"ndk.{profile}.{i}.actionType", "");
+            SetSetting($"ndk.{profile}.{i}.actionValue", "");
+        }
     }
 
     /// <summary>Wipes every profile, key binding, setting and keycap override — used by the

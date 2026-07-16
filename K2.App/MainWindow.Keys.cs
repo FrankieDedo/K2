@@ -674,9 +674,6 @@ public partial class MainWindow
             var root = doc.Root;
             if (root is null) return;
 
-            int slot = 1;
-            if (int.TryParse(root.Element("Id")?.Value, out var n) && n >= 1 && n <= 5)
-                slot = n;
             string profileName = root.Element("ProfileName")?.Value
                                  ?? Path.GetFileNameWithoutExtension(dlg.FileName);
 
@@ -684,6 +681,15 @@ public partial class MainWindow
             if (bindings.Count == 0)
             {
                 Log("[IMP-XML] No MakaluKeyBindings found in XML.");
+                return;
+            }
+
+            // Always land in a FRESH slot — see BaseCampDbImporter.FindFreeSlot's doc comment.
+            int slot = BaseCampDbImporter.FindFreeSlot(_store.GetExistingProfiles(id));
+            if (slot == 0)
+            {
+                MessageBox.Show(this, Loc.Get("import_no_free_slot", profileName),
+                    Loc.Get("dp_open_bc_profile"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -815,21 +821,31 @@ public partial class MainWindow
 
         int totalKeys = 0;
         int activeSlot = -1;
+        int skippedNoSlot = 0;
+        var usedSlots = new HashSet<int>(_store.GetExistingProfiles(k2DeviceId));
 
         foreach (var profile in profiles)
         {
             try
             {
-                int n = BaseCampDbImporter.ImportMacroPadProfile(dbPath, profile, k2DeviceId, _store);
+                int targetSlot = BaseCampDbImporter.FindFreeSlot(usedSlots);
+                if (targetSlot == 0) { skippedNoSlot++; continue; }
+                usedSlots.Add(targetSlot);
+
+                int n = BaseCampDbImporter.ImportMacroPadProfile(dbPath, profile, k2DeviceId, _store, targetSlot);
                 totalKeys += n;
-                Log($"[IMP-BC] slot {profile.Slot} '{profile.Name}': {n} keys");
-                if (profile.IsSelected) activeSlot = profile.Slot;
+                Log($"[IMP-BC] slot {profile.Slot} '{profile.Name}' -> K2 slot {targetSlot}: {n} keys");
+                if (profile.IsSelected) activeSlot = targetSlot;
             }
             catch (Exception ex)
             {
                 Log($"[IMP-BC] Error slot {profile.Slot}: {ex.Message}");
             }
         }
+
+        if (skippedNoSlot > 0)
+            MessageBox.Show(this, Loc.Get("import_some_skipped_no_slot", skippedNoSlot),
+                "Import from Base Camp", MessageBoxButton.OK, MessageBoxImage.Warning);
 
         // Switch to active BC profile and reload UI
         int slotToShow = activeSlot > 0 ? activeSlot : CurrentProfile();

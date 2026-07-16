@@ -231,6 +231,12 @@ public partial class App : Application
         WriteLog($"=== App start {DateTime.Now:O} pid={Environment.ProcessId} " +
                  $"arch={(Environment.Is64BitProcess ? "x64" : "x86")} lang={Core.Loc.CurrentLang} ===");
 
+        // Read-only snapshot (OS build + a HID-level view of every Mountain device
+        // Windows currently sees, including whether something else already holds an
+        // exclusive handle) — logged once per session, before any SDK/engine touches
+        // the hardware, so a bug-report log always carries this context.
+        Services.SystemDiagnostics.LogStartupInfo(WriteLog);
+
         // Register the resolver for non-redistributable native DLLs (e.g.
         // MacroPadSDK.dll) BEFORE any P/Invoke: so the loader finds them
         // even if they are not bundled with K2. See DISTRIBUTION.md.

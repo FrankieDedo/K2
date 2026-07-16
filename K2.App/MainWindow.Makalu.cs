@@ -223,17 +223,27 @@ public partial class MainWindow
 
         int totalRemap = 0;
         int activeSlot = -1;
+        int skippedNoSlot = 0;
+        var usedSlots = new HashSet<int>(_mkStore.GetExistingProfiles());
         foreach (var profile in allProfiles)
         {
             try
             {
-                var (remap, lighting, settings) = BaseCampDbImporter.ImportMakaluProfile(dbPath, profile, _mkStore);
+                int targetSlot = BaseCampDbImporter.FindFreeSlot(usedSlots);
+                if (targetSlot == 0) { skippedNoSlot++; continue; }
+                usedSlots.Add(targetSlot);
+
+                var (remap, lighting, settings) = BaseCampDbImporter.ImportMakaluProfile(dbPath, profile, _mkStore, targetSlot);
                 totalRemap += remap;
-                if (profile.IsSelected) activeSlot = profile.Slot;
-                LogMakalu($"[IMP-BC] slot {profile.Slot} '{profile.Name}': remap={remap} lighting={lighting} settings={settings}");
+                if (profile.IsSelected) activeSlot = targetSlot;
+                LogMakalu($"[IMP-BC] slot {profile.Slot} '{profile.Name}' -> K2 slot {targetSlot}: remap={remap} lighting={lighting} settings={settings}");
             }
             catch (Exception ex) { LogMakalu($"[IMP-BC] slot {profile.Slot} error: {ex.Message}"); }
         }
+
+        if (skippedNoSlot > 0)
+            MessageBox.Show(this, Loc.Get("import_some_skipped_no_slot", skippedNoSlot),
+                "Import from Base Camp", MessageBoxButton.OK, MessageBoxImage.Warning);
 
         if (activeSlot > 0) _mkStore.SetCurrentProfile(activeSlot);
         MkRefreshProfiles();
@@ -264,10 +274,17 @@ public partial class MainWindow
             var root = doc.Root;
             if (root is null) return;
 
-            int slot = 1;
-            if (int.TryParse(root.Element("Id")?.Value, out var n) && n >= 1 && n <= 5) slot = n;
             string profileName = root.Element("ProfileName")?.Value
                                   ?? System.IO.Path.GetFileNameWithoutExtension(dlg.FileName);
+
+            // Always land in a FRESH slot — see BaseCampDbImporter.FindFreeSlot's doc comment.
+            int slot = BaseCampDbImporter.FindFreeSlot(_mkStore.GetExistingProfiles());
+            if (slot == 0)
+            {
+                MessageBox.Show(this, Loc.Get("import_no_free_slot", profileName),
+                    Loc.Get("dp_open_bc_profile"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
 
             int remapped = 0;
             foreach (var b in root.Descendants("MakaluKeyBindings"))

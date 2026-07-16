@@ -40,6 +40,7 @@ internal static class Program
         string pipeName  = args.Length > 0 ? args[0] : "K2_DisplayPad_Pipe";
         int    parentPid = args.Length > 1 && int.TryParse(args[1], out int p) ? p : -1;
         Log($"Satellite started, pipe={pipeName}, PID={Environment.ProcessId}, parentPID={parentPid}");
+        LogSdkDllInfo();
 
         // WPF Application needed for the message pump (the SDK posts WM_* to the
         // hidden window for plug/key/progress callbacks).
@@ -143,6 +144,32 @@ internal static class Program
     {
         byte[] bytes = Encoding.UTF8.GetBytes(json + "\n");
         lock (_writeLock) { pipe.Write(bytes); pipe.Flush(); }
+    }
+
+    /// <summary>
+    /// Logs file version/size/timestamp of both the native DisplayPadSDK.dll (x64) and
+    /// its managed wrapper DisplayPad.SDK.dll — rules out "wrong/corrupt/mismatched DLL
+    /// on this particular install" before blaming the Open() call itself.
+    /// </summary>
+    private static void LogSdkDllInfo()
+    {
+        string dir = AppContext.BaseDirectory;
+        foreach (string name in new[] { "DisplayPadSDK.dll", "DisplayPad.SDK.dll" })
+        {
+            string path = Path.Combine(dir, name);
+            try
+            {
+                if (!File.Exists(path)) { Log($"[SdkDll] {name}: NOT FOUND at {path}"); continue; }
+                var fi = new FileInfo(path);
+                var ver = FileVersionInfo.GetVersionInfo(path);
+                Log($"[SdkDll] {name}: size={fi.Length} modified={fi.LastWriteTime:yyyy-MM-dd HH:mm:ss} " +
+                    $"fileVersion={ver.FileVersion} productVersion={ver.ProductVersion}");
+            }
+            catch (Exception ex)
+            {
+                Log($"[SdkDll] {name}: version read failed: {ex.Message}");
+            }
+        }
     }
 
     internal static void Log(string msg)

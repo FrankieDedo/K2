@@ -23,6 +23,21 @@ namespace K2.App.Services;
 /// </summary>
 public sealed class BaseCampDbImporter
 {
+    /// <summary>Lowest profile slot (1..<paramref name="maxSlots"/>) not present in
+    /// <paramref name="existingSlots"/>, or 0 if all are taken. Used by every device's
+    /// import flow so an imported profile lands in a fresh slot instead of overwriting
+    /// whatever K2 profile already occupies the source's own slot number (BC DB's
+    /// <c>Profiles.Id</c> / XML's <c>&lt;Id&gt;</c>) — that source number has no meaning
+    /// on this K2 install, it's just whichever slot the profile happened to occupy on
+    /// the machine it was exported from.</summary>
+    public static int FindFreeSlot(IEnumerable<int> existingSlots, int maxSlots = 5)
+    {
+        var used = new HashSet<int>(existingSlots);
+        for (int s = 1; s <= maxSlots; s++)
+            if (!used.Contains(s)) return s;
+        return 0;
+    }
+
     // KeyId/DLLMatrixIndex → button index (0-11) for DisplayPad and MacroPad
     internal static readonly Dictionary<int, int> KeyIdToIndex = new()
     {
@@ -165,7 +180,10 @@ public sealed class BaseCampDbImporter
     }
 
     /// <summary>
-    /// Imports a Base Camp profile into the K2 store for a specific device.
+    /// Imports a Base Camp profile into the K2 store for a specific device, into
+    /// <paramref name="targetSlot"/> (a fresh slot picked by the caller via
+    /// <see cref="FindFreeSlot"/> — NOT necessarily <c>profile.Slot</c>, which is only
+    /// where it happened to live on the source Base Camp install).
     /// Saves the base64 images to disk and the translated actions.
     /// Returns the number of keys imported.
     /// </summary>
@@ -173,10 +191,11 @@ public sealed class BaseCampDbImporter
         string dbPath,
         BcProfile profile,
         int k2DeviceId,
-        DisplayPadStore store)
+        DisplayPadStore store,
+        int targetSlot)
     {
         var buttons = ReadButtons(dbPath, profile.ProfileId);
-        int slot = profile.Slot;
+        int slot = targetSlot;
         int imported = 0;
 
         // Directory for the imported images
@@ -450,14 +469,17 @@ public sealed class BaseCampDbImporter
     /// Imports an Everest profile into <see cref="EverestStore"/>.
     /// Regular keys (IsTouchKey=false) → Keys table by DLLMatrixIndex.
     /// Touch keys (IsTouchKey=true, LCD display keys) → image saved to disk, path+action
-    /// stored in Settings as <c>ndk.{i}.imagePath</c> / <c>ndk.{i}.actionType</c> etc.
-    /// Returns (regularKeys, touchKeys) counts.
+    /// stored in Settings as <c>ndk.{slot}.{i}.imagePath</c> / <c>ndk.{slot}.{i}.actionType</c>
+    /// etc. — PER PROFILE (each firmware profile stores its own 4 NDK pictures, confirmed via
+    /// USB capture — see MainWindow.NumpadDisplayKeys.cs's UploadNdkImage doc comment).
+    /// Returns (regularKeys, touchKeys) counts. <paramref name="targetSlot"/> is a fresh
+    /// slot picked by the caller via <see cref="FindFreeSlot"/>, not <c>profile.Slot</c>.
     /// </summary>
     public static (int Regular, int Touch) ImportEverestProfile(
-        string dbPath, BcProfile profile, EverestStore store)
+        string dbPath, BcProfile profile, EverestStore store, int targetSlot)
     {
         var bindings = ReadKeyBindings(dbPath, profile.ProfileId);
-        int slot = profile.Slot;
+        int slot = targetSlot;
         int regular = 0, touch = 0;
 
         // Split: regular keys (actions) vs touch keys (LCD images)
@@ -500,7 +522,7 @@ public sealed class BaseCampDbImporter
                 catch { /* corrupted image — skip */ }
             }
 
-            string prefix = $"ndk.{i}";
+            string prefix = $"ndk.{slot}.{i}";
             if (imagePath is not null)
                 store.SetSetting($"{prefix}.imagePath", imagePath);
 
@@ -591,12 +613,14 @@ public sealed class BaseCampDbImporter
     /// <summary>
     /// Imports a MacroPad profile into <see cref="MacroPadStore"/>, reading the
     /// real MakaluKeyBindings table. Returns the number of keys imported.
+    /// <paramref name="targetSlot"/> is a fresh slot picked by the caller via
+    /// <see cref="FindFreeSlot"/>, not <c>profile.Slot</c>.
     /// </summary>
     public static int ImportMacroPadProfile(
-        string dbPath, BcProfile profile, int k2DeviceId, MacroPadStore store)
+        string dbPath, BcProfile profile, int k2DeviceId, MacroPadStore store, int targetSlot)
     {
         var bindings = ReadMakaluBindings(dbPath, profile.ProfileId);
-        int slot = profile.Slot;
+        int slot = targetSlot;
         int imported = 0;
 
         foreach (var b in bindings)
@@ -952,11 +976,12 @@ public sealed class BaseCampDbImporter
 
     /// <summary>Imports a Makalu mouse profile: lighting + DPI + settings +
     /// button remap into MakaluStore. Returns (remapped button count, lighting
-    /// imported, settings imported).</summary>
+    /// imported, settings imported). <paramref name="targetSlot"/> is a fresh slot
+    /// picked by the caller via <see cref="FindFreeSlot"/>, not <c>profile.Slot</c>.</summary>
     public static (int Remap, bool Lighting, bool Settings) ImportMakaluProfile(
-        string dbPath, BcProfile profile, MakaluStore store)
+        string dbPath, BcProfile profile, MakaluStore store, int targetSlot)
     {
-        int slot = profile.Slot;
+        int slot = targetSlot;
         store.ClearProfile(slot);
         store.SetProfileName(slot, profile.Name);
 
@@ -1104,10 +1129,11 @@ public sealed class BaseCampDbImporter
     /// <summary>Imports an Everest 60 profile: lighting (high confidence) +
     /// key bindings (via the shared <see cref="TranslateAction"/> vocabulary,
     /// see class-level doc comment) into Everest60Store. Returns the number
-    /// of key bindings imported.</summary>
-    public static int ImportEverest60Profile(string dbPath, BcProfile profile, Everest60Store store)
+    /// of key bindings imported. <paramref name="targetSlot"/> is a fresh slot
+    /// picked by the caller via <see cref="FindFreeSlot"/>, not <c>profile.Slot</c>.</summary>
+    public static int ImportEverest60Profile(string dbPath, BcProfile profile, Everest60Store store, int targetSlot)
     {
-        int slot = profile.Slot;
+        int slot = targetSlot;
         store.ClearProfile(slot);
         store.SetProfileName(slot, profile.Name);
 

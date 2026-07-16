@@ -97,6 +97,48 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
     public void SetProfileName(int slot, string name) =>
         SetSetting($"profile.{slot}.name", name.Trim());
 
+    /// <summary>Profile slots that are actually configured — mirrors EverestStore's
+    /// GetExistingProfiles, used so imports can find a free slot instead of overwriting
+    /// whatever profile already occupies the source's slot number. A slot counts as
+    /// existing if it has a remapped button, a custom name, saved lighting/DPI/device
+    /// settings, or the "exists" marker set by <see cref="MarkProfileExists"/> for
+    /// brand-new empty profiles.</summary>
+    public List<int> GetExistingProfiles()
+    {
+        var result = new SortedSet<int>();
+
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT DISTINCT Profile FROM Remap";
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) result.Add(r.GetInt32(0));
+        }
+
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = @"SELECT Key, Value FROM Settings
+                                WHERE Key LIKE 'profile.%.name' OR Key LIKE 'profile.%.exists'
+                                   OR Key LIKE 'profile.%.lighting' OR Key LIKE 'profile.%.dpi'
+                                   OR Key LIKE 'profile.%.settings'";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                string key = r.GetString(0);
+                string value = r.IsDBNull(1) ? "" : r.GetString(1);
+                if (string.IsNullOrEmpty(value)) continue;
+                var parts = key.Split('.');
+                if (parts.Length == 3 && int.TryParse(parts[1], out int slot))
+                    result.Add(slot);
+            }
+        }
+
+        return new List<int>(result);
+    }
+
+    /// <summary>Marks an otherwise-empty profile as "existing" so it shows up in the
+    /// profile combo / counts as occupied for import slot-picking purposes.</summary>
+    public void MarkProfileExists(int profile) => SetSetting($"profile.{profile}.exists", "1");
+
     // ---------- lighting ----------
 
     public MakaluLightingRecord? LoadLighting(int slot)
