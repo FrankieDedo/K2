@@ -718,6 +718,21 @@
                 </StackPanel>
             </Grid>
 
+            <!-- Hardware-busy overlay — shown while a blocking device write (NDK/Display Dial
+                 picture upload, etc.) is in flight, so the app reads as "waiting", not frozen.
+                 Toggled via ShowHwBusy/HideHwBusy (MainWindow.HwBusy.cs). Semi-transparent
+                 (unlike PnlLoading) since it's a transient few-second wait, not a full page swap. -->
+            <Grid x:Name="PnlHwBusy" Grid.RowSpan="3" Panel.ZIndex="9" Background="#CC1A1A1E"
+                  Visibility="Collapsed">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock x:Name="TxtHwBusyMessage" FontSize="15" Foreground="White"
+                               HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="360"
+                               TextWrapping="Wrap"/>
+                    <ProgressBar IsIndeterminate="True" Width="280" Height="3"
+                                 Margin="0,14,0,0" Foreground="#900000" Background="#2A2A32"/>
+                </StackPanel>
+            </Grid>
+
             <!-- Content panels: one visible at a time -->
             <Grid Grid.Row="2">
 
@@ -1147,6 +1162,13 @@
                                                             <CheckBox x:Name="CkDialCustom"   Style="{StaticResource K2ToggleRow}" Tag="&#xE765;" Content="{loc:Get dial_custom}"     Click="CkDial_Click"/>
                                                         </StackPanel>
                                                     </Grid>
+
+                                                    <WrapPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                                        <TextBlock Text="{loc:Get dial_menu_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                        <Button x:Name="BtnDialMenuColor" Width="40" Height="22"
+                                                                Background="#F3CC23" BorderThickness="2"
+                                                                BorderBrush="#3A3A40" Click="BtnDialMenuColor_Click"/>
+                                                    </WrapPanel>
                                                 </StackPanel>
 
                                                 <!-- Right: clock type, screensaver, turn-off, menu color, actions -->
@@ -1199,9 +1221,23 @@
                                                         <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Get unit_seconds}" VerticalAlignment="Center"/>
                                                         <TextBlock Grid.Row="0" Grid.Column="3" Text="{loc:Get dial_screensaver_function_label}"
                                                                    VerticalAlignment="Center" Margin="6,0,6,0"/>
-                                                        <ComboBox Grid.Row="0" Grid.Column="4" x:Name="CbDialScreenSaverFunction"
-                                                                  HorizontalAlignment="Left" Width="150"
-                                                                  SelectionChanged="CbDialScreenSaverFunction_SelectionChanged"/>
+                                                        <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="4"
+                                                                    HorizontalAlignment="Left" VerticalAlignment="Top">
+                                                            <ComboBox x:Name="CbDialScreenSaverFunction" Width="150"
+                                                                      SelectionChanged="CbDialScreenSaverFunction_SelectionChanged"/>
+                                                            <Button x:Name="BtnDialLoadImage" Content="{loc:Get dial_load_image}"
+                                                                    Padding="8,2" Margin="0,4,0,0" Click="BtnDialLoadImage_Click"
+                                                                    Style="{StaticResource K2IconButton}" Tag="&#xE91B;"/>
+                                                            <Button x:Name="BtnDialApply" Content="{loc:Get apply_to_device}"
+                                                                    Padding="8,2" Margin="0,8,0,4" Click="BtnDialApply_Click"
+                                                                    Style="{StaticResource K2IconAccentButton}" Tag="&#xE73E;"/>
+                                                            <Button x:Name="BtnDialRead" Content="{loc:Get read_from_device}"
+                                                                    Padding="8,2" Margin="0,0,0,4" Click="BtnDialRead_Click"
+                                                                    Style="{StaticResource K2IconButton}" Tag="&#xE72C;"/>
+                                                            <Button x:Name="BtnDialReset" Content="{loc:Get reset_display_dial}"
+                                                                    Padding="8,2" Click="BtnDialReset_Click"
+                                                                    Style="{StaticResource K2IconButton}" Tag="&#xE777;"/>
+                                                        </StackPanel>
 
                                                         <CheckBox Grid.Row="1" Grid.Column="0" x:Name="CkDialTurnOffEnable"
                                                                   Content="{loc:Get dial_autooff}" VerticalAlignment="Center" Margin="0,8,0,0"
@@ -1212,25 +1248,6 @@
                                                         <TextBlock Grid.Row="1" Grid.Column="2" Text="{loc:Get unit_seconds}"
                                                                    VerticalAlignment="Center" Margin="0,8,0,0"/>
                                                     </Grid>
-
-                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                        <TextBlock Text="{loc:Get dial_menu_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                        <Button x:Name="BtnDialMenuColor" Width="40" Height="22"
-                                                                Background="#F3CC23" BorderThickness="2"
-                                                                BorderBrush="#3A3A40" Click="BtnDialMenuColor_Click"/>
-                                                    </WrapPanel>
-
-                                                    <WrapPanel Orientation="Horizontal">
-                                                        <Button x:Name="BtnDialApply" Content="{loc:Get apply_to_device}"
-                                                                Padding="8,2" Margin="0,0,4,0" Click="BtnDialApply_Click"
-                                                                Style="{StaticResource K2IconAccentButton}" Tag="&#xE73E;"/>
-                                                        <Button x:Name="BtnDialRead" Content="{loc:Get read_from_device}"
-                                                                Padding="8,2" Margin="0,0,4,0" Click="BtnDialRead_Click"
-                                                                Style="{StaticResource K2IconButton}" Tag="&#xE72C;"/>
-                                                        <Button x:Name="BtnDialReset" Content="{loc:Get reset_display_dial}"
-                                                                Padding="8,2" Click="BtnDialReset_Click"
-                                                                Style="{StaticResource K2IconButton}" Tag="&#xE777;"/>
-                                                    </WrapPanel>
                                                 </StackPanel>
                                             </Grid>
                                         </StackPanel>

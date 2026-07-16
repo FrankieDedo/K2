@@ -8,7 +8,9 @@
 ; leaves in place one level up (see project layout in _PROJECT_MAP.md).
 
 #define MyAppName "K2"
-#define MyAppVersion "1.0.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "1.0.0"
+#endif
 #define MyAppPublisher "K2 Project (community, non-commercial)"
 #define MyAppExeName "K2.App.exe"
 
@@ -44,9 +46,13 @@ Source: "publish\K2.App\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversio
 
 [Icons]
 Name: "{group}\K2"; Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\K2 DisplayPad (standalone)"; Filename: "{app}\DisplayPad\K2.DisplayPad.exe"
 Name: "{group}\Uninstall K2"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\K2"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,K2}"; Flags: nowait postinstall skipifsilent
+; shellexec (not the default CreateProcess) is required here: K2.App.exe's
+; manifest is requireAdministrator, and CreateProcess cannot elevate a child
+; process on its own — it fails with "CreateProcess failed; code 740" even
+; when the current user is an administrator. ShellExecute knows how to
+; trigger the UAC elevation dance for a manifested-elevated target.
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,K2}"; Flags: nowait postinstall skipifsilent shellexec

@@ -108,7 +108,11 @@ internal sealed class SdkHandler : IDisposable
         var hStr = hwnd.ToInt64().ToString();
         Program.Log($"[Open] DisplayPadOpenUSBDriver(\"{hStr}\")");
         bool ok = _helper.DisplayPadOpenUSBDriver(hStr);
-        Program.Log($"[Open] -> {ok}");
+        // Best-effort: only meaningful if DisplayPadHelper's last native call set the Win32
+        // last-error and nothing else ran a Win32/COM call in between — not guaranteed, but
+        // free to log and occasionally the only hint we get (5=ACCESS_DENIED, 32=SHARING_VIOLATION).
+        int win32Err = ok ? 0 : System.Runtime.InteropServices.Marshal.GetLastWin32Error();
+        Program.Log($"[Open] -> {ok}" + (ok ? "" : $" (lastWin32Error={win32Err}, best-effort)"));
         _opened = ok;
         return new { ok };
     }
@@ -293,13 +297,16 @@ internal sealed class SdkHandler : IDisposable
     private static readonly object _sdkLock = new();
 
     /// <summary>
-    /// Settle delay after each icon transfer. Kept at 400ms even after switching to the native
-    /// SetIconPacket path below — the wrapper turned out to be the real suspect (corruption
-    /// persisted through 100ms and 400ms alike while still going through UploadImage/
-    /// UploadImageBySetIconPic), but a small settle margin after a raw 31-packet USB transfer is
-    /// still cheap insurance and matches BC's own delays elsewhere.
+    /// Settle delay after each icon transfer. History: 400ms was chosen while the uploads still
+    /// went through the SDK wrapper (UploadImage/UploadImageBySetIconPic), where corruption
+    /// persisted through 100ms and 400ms alike — the wrapper itself was the real culprit. The
+    /// native SetIconPacket path below is handshake-confirmed by the device (READY/DONE), so a
+    /// long settle buys nothing beyond insurance while costing ~5s per 12-key profile load
+    /// (~430ms cadence per icon, dominated by this sleep, not the 17ms transfer). Reduced to
+    /// 120ms 2026-07-16 to make profile switches feel immediate — to be verified on hardware:
+    /// if icon corruption reappears on rapid profile switching, raise this first.
     /// </summary>
-    private const int IconSettleDelayMs = 400;
+    private const int IconSettleDelayMs = 120;
 
     private object CmdUploadImage(JsonElement root)
     {

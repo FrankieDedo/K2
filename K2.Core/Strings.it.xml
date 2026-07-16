@@ -185,6 +185,7 @@
   <string name="ev_driver_open_failed">Apertura driver Everest FALLITA.</string>
   <string name="ev_driver_closed">Driver Everest chiuso.</string>
   <string name="loading_drivers">Inizializzazione driver in corso…</string>
+  <string name="hw_busy_uploading_image">Caricamento immagine sul dispositivo, attendere…</string>
   <string name="ev_crash_recovering">Driver in crash — tentativo di recovery tra 3 s…</string>
   <string name="ev_crash_recovered">Driver recuperato — LED preview riavviata.</string>
   <string name="ev_crash_recovery_failed">Recovery fallita — riavviare K2.App.</string>
@@ -316,6 +317,13 @@
   <string name="dial_image">Immagine</string>
   <string name="dial_timer">Timer</string>
   <string name="dial_stopwatch">Cronometro</string>
+  <string name="dial_pcinfo_cpu">Info PC - CPU</string>
+  <string name="dial_pcinfo_gpu">Info PC - GPU</string>
+  <string name="dial_pcinfo_hdd">Info PC - HDD</string>
+  <string name="dial_pcinfo_internet">Info PC - Internet</string>
+  <string name="dial_pcinfo_ram">Info PC - RAM</string>
+  <string name="dial_load_image">Carica immagine</string>
+  <string name="dial_load_image_title">Scegli l'immagine per lo screensaver (240×204 px)</string>
   <string name="dial_clock_section">Tipo di orologio</string>
   <string name="dial_clock_label">Formato:</string>
   <string name="dial_clock_style_label">Stile:</string>
@@ -553,6 +561,8 @@
   <string name="delete_profile">Elimina profilo</string>
   <string name="delete_profile_confirm">Eliminare il profilo '{0}'? Tutte le associazioni tasti di questo profilo verranno rimosse.</string>
   <string name="delete_profile_last">Impossibile eliminare l'ultimo profilo.</string>
+  <string name="import_no_free_slot">Tutti e 5 gli slot profilo sono già occupati — elimina o libera uno slot prima di importare "{0}".</string>
+  <string name="import_some_skipped_no_slot">{0} profilo/i saltato/i: nessuno slot libero rimasto (tutti e 5 sono occupati).</string>
   <string name="ev_no_profiles_in_bc">Nessun profilo Everest trovato nel database Base Camp.</string>
   <string name="ev_imported_bc">Importati {0} profili Everest ({1} tasti) da Base Camp.</string>
   <string name="mp_no_profiles_in_bc">Nessun profilo MacroPad trovato nel database Base Camp.</string>

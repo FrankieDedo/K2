@@ -286,7 +286,19 @@ public partial class MainWindow
         bool ok = result?.GetBool("ok") ?? false;
         LblStatus.Text = ok ? Loc.Get("dp_driver_opened") : Loc.Get("dp_driver_open_failed");
         DpLog($"Open -> {ok}");
-        if (ok) DpRefreshDevices();
+        if (ok)
+        {
+            DpRefreshDevices();
+        }
+        else
+        {
+            // DpRefreshDevices (the only place that adds "dp_*" tabs to TcDevices) is never
+            // reached when Open fails — so without this line, "no DisplayPad tab" shows up in
+            // the log as nothing at all, indistinguishable from "DpRefreshDevices ran and found
+            // zero devices". Spelling it out here turns a silent no-op into a diagnosable fact.
+            DpLog("Open failed — DisplayPad tab will NOT be created this session " +
+                  "(DpRefreshDevices/device enumeration never runs without a successful Open)");
+        }
     }
 
     private void BtnDpRefresh_Click(object sender, RoutedEventArgs e) => DpRefreshDevices();
@@ -963,10 +975,7 @@ public partial class MainWindow
             var root = doc.Root;
             if (root is null) return;
 
-            // Slot (1-5) from <Id>; profile display name from <ProfileName>
-            int slot = 1;
-            if (int.TryParse(root.Element("Id")?.Value, out var n) && n >= 1 && n <= 5)
-                slot = n;
+            // Profile display name from <ProfileName>
             string profileName = root.Element("ProfileName")?.Value
                                  ?? Path.GetFileNameWithoutExtension(dlg.FileName);
 
@@ -975,6 +984,17 @@ public partial class MainWindow
             if (bindings.Count == 0)
             {
                 DpLog("[IMP-XML] No DisplayPadLayerBidings found in XML.");
+                return;
+            }
+
+            // Always land in a FRESH slot — the XML's own <Id> is just wherever the
+            // profile happened to live on the machine it was exported from (see
+            // BaseCampDbImporter.FindFreeSlot's doc comment).
+            int slot = BaseCampDbImporter.FindFreeSlot(_dpStore.GetExistingProfiles(id));
+            if (slot == 0)
+            {
+                MessageBox.Show(this, Loc.Get("import_no_free_slot", profileName),
+                    Loc.Get("dp_open_bc_profile"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -1220,6 +1240,7 @@ public partial class MainWindow
         int importedProfiles = 0;
         int selectedDevId = DpSelectedDeviceId() ?? -1;
         int selectedSlot = -1;
+        int skippedNoSlot = 0;
 
         foreach (var (bcDevId, profiles) in bcDevices)
         {
@@ -1230,33 +1251,41 @@ public partial class MainWindow
             // APEnable=false required before SetIconPic (UploadImageToProfile)
             _dpClient.APEnable(bcDevId, false);
 
+            // Always land in a FRESH slot per device — see BaseCampDbImporter.FindFreeSlot's
+            // doc comment; track slots claimed so far in this batch too.
+            var usedSlots = new HashSet<int>(_dpStore.GetExistingProfiles(bcDevId));
+
             foreach (var profile in profiles)
             {
                 try
                 {
+                    int targetSlot = BaseCampDbImporter.FindFreeSlot(usedSlots);
+                    if (targetSlot == 0) { skippedNoSlot++; continue; }
+                    usedSlots.Add(targetSlot);
+
                     int n = BaseCampDbImporter.ImportProfile(
-                        dbPath, profile, bcDevId, _dpStore);
+                        dbPath, profile, bcDevId, _dpStore, targetSlot);
 
                     // Upload root-page images only (folder pages are uploaded on navigation)
-                    var buttons = _dpStore.LoadPage(bcDevId, profile.Slot, 0);
+                    var buttons = _dpStore.LoadPage(bcDevId, targetSlot, 0);
                     foreach (var btn in buttons)
                     {
                         if (!string.IsNullOrEmpty(btn.ImagePath) && File.Exists(btn.ImagePath))
                         {
                             bool ok = _dpClient.UploadImageToProfile(bcDevId, btn.ImagePath,
-                                btn.ButtonIndex, profile.Slot, rotation);
+                                btn.ButtonIndex, targetSlot, rotation);
                             if (!ok)
                                 _dpClient.UploadImage(bcDevId, btn.ImagePath, btn.ButtonIndex, rotation);
                         }
                     }
 
-                    DpLog($"[IMP-BC] dev#{bcDevId} {profile.Name} (slot {profile.Slot}): {n} keys");
+                    DpLog($"[IMP-BC] dev#{bcDevId} {profile.Name} (BC slot {profile.Slot} -> K2 slot {targetSlot}): {n} keys");
                     totalButtons += n;
                     importedProfiles++;
 
                     // Track the active profile for the currently selected device
                     if (profile.IsSelected && bcDevId == selectedDevId)
-                        selectedSlot = profile.Slot;
+                        selectedSlot = targetSlot;
                 }
                 catch (Exception ex)
                 {
@@ -1264,6 +1293,10 @@ public partial class MainWindow
                 }
             }
         }
+
+        if (skippedNoSlot > 0)
+            MessageBox.Show(this, Loc.Get("import_some_skipped_no_slot", skippedNoSlot),
+                "Import from Base Camp", MessageBoxButton.OK, MessageBoxImage.Warning);
 
         // 5. Activate the profile that was selected in BC for the current device
         if (selectedSlot > 0 && selectedDevId > 0)
@@ -1737,7 +1770,14 @@ public partial class MainWindow
         foreach (var id in ids)
         {
             bool plugged = _dpClient.IsPlugged(id);
-            if (!plugged) continue;   // skip devices not physically connected
+            if (!plugged)
+            {
+                // Silently skipping used to leave no trace of *why* an SDK-reported id never
+                // became a tab — a phantom slot and a real-but-momentarily-unplugged device
+                // looked identical in the log (nothing at all).
+                DpLog($"Device {id}: reported by SDK but IsPlugged=false — skipped, no tab");
+                continue;
+            }
             string fw = _dpClient.FirmwareVersion(id);
             int br = _dpClient.GetBrightness(id);
             // Use custom name if set, otherwise default progressive label
@@ -1805,6 +1845,9 @@ public partial class MainWindow
         }
 
         RefreshHomeTiles(); // DisplayPad tabs are added/removed outright, not toggled via SetDeviceTabVisible
+        DpLog(items.Count > 0
+            ? $"{items.Count} DisplayPad tab(s) created: [{string.Join(", ", items.Select(x => x.SdkId))}]"
+            : "0 DisplayPad tabs created (SDK reported no plugged device)");
     }
 
     private int DpCurrentProfile() => CbDpProfile.SelectedItem is DpProfileItem pi ? pi.Slot : 1;
@@ -2285,6 +2328,13 @@ public partial class MainWindow
         if (string.IsNullOrEmpty(imgPath) || !File.Exists(imgPath)) return;
         if (DpGifAnimator.IsAnimatedGif(imgPath)) return;
         if (_dpFullscreenByDevice.TryGetValue(id, out bool fs) && fs) return;
+        // While a full repaint (profile/page switch: blank + batch upload) is queued or
+        // running, skip the bounce entirely: imgPath was captured from the PRE-switch key
+        // state, so chaining it here would land a stale old-profile icon in the middle of
+        // (or after) the new profile's batch — observed in real logs as "old icons overlap
+        // the new profile". The batch itself repaints this key with the correct icon anyway;
+        // all that's lost is the shrink effect on the very press that triggered the switch.
+        if (_dpRepaintBusy.GetValueOrDefault(id)) return;
 
         var previous = _dpUploadChain.TryGetValue(id, out var p) ? p : Task.CompletedTask;
         var next = previous.ContinueWith(_ => _dpClient.UploadImage(id, imgPath, btnIndex, rotation, pressed),

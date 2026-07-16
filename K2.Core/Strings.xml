@@ -186,6 +186,7 @@
   <string name="ev_driver_open_failed">Everest driver open FAILED.</string>
   <string name="ev_driver_closed">Everest driver closed.</string>
   <string name="loading_drivers">Initializing drivers…</string>
+  <string name="hw_busy_uploading_image">Uploading image to the device, please wait…</string>
   <string name="ev_crash_recovering">Driver crashed — attempting auto-recovery in 3 s…</string>
   <string name="ev_crash_recovered">Driver recovered — LED preview restarted.</string>
   <string name="ev_crash_recovery_failed">Driver recovery failed — please restart K2.App.</string>
@@ -317,6 +318,13 @@
   <string name="dial_image">Image</string>
   <string name="dial_timer">Timer</string>
   <string name="dial_stopwatch">Stopwatch</string>
+  <string name="dial_pcinfo_cpu">PC Info - CPU</string>
+  <string name="dial_pcinfo_gpu">PC Info - GPU</string>
+  <string name="dial_pcinfo_hdd">PC Info - HDD</string>
+  <string name="dial_pcinfo_internet">PC Info - Internet</string>
+  <string name="dial_pcinfo_ram">PC Info - RAM</string>
+  <string name="dial_load_image">Load image</string>
+  <string name="dial_load_image_title">Choose screensaver image (240×204 px)</string>
   <string name="dial_clock_section">Clock type</string>
   <string name="dial_clock_label">Format:</string>
   <string name="dial_clock_style_label">Style:</string>
@@ -554,6 +562,8 @@
   <string name="delete_profile">Delete profile</string>
   <string name="delete_profile_confirm">Delete profile '{0}'? All key bindings in this profile will be removed.</string>
   <string name="delete_profile_last">Cannot delete the last profile.</string>
+  <string name="import_no_free_slot">All 5 profile slots are already used — delete or free one before importing "{0}".</string>
+  <string name="import_some_skipped_no_slot">{0} profile(s) skipped: no free slot left (all 5 are used).</string>
   <!-- Everest import -->
   <string name="ev_no_profiles_in_bc">No Everest profiles found in the Base Camp database.</string>
   <string name="ev_imported_bc">Imported {0} Everest profiles ({1} keys) from Base Camp.</string>
