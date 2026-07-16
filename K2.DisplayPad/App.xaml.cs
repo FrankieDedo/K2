@@ -46,6 +46,33 @@ public partial class App : Application
         TaskScheduler.UnobservedTaskException += OnUnobservedTask;
 
         WriteLog($"=== App start {DateTime.Now:O} pid={Environment.ProcessId} lang={Core.Loc.CurrentLang} ===");
+        WriteLog($"[SysInfo] OS build {Environment.OSVersion.Version.Build}, " +
+                 $"{(Environment.Is64BitOperatingSystem ? "x64" : "x86")} OS");
+        LogSdkDllInfo();
+    }
+
+    /// <summary>Logs file version/size/timestamp of both the native DisplayPadSDK.dll (x64)
+    /// and its managed wrapper DisplayPad.SDK.dll — rules out "wrong/corrupt/mismatched DLL
+    /// on this particular install" before blaming the Open() call itself.</summary>
+    private static void LogSdkDllInfo()
+    {
+        string dir = AppContext.BaseDirectory;
+        foreach (string name in new[] { "DisplayPadSDK.dll", "DisplayPad.SDK.dll" })
+        {
+            string path = Path.Combine(dir, name);
+            try
+            {
+                if (!File.Exists(path)) { WriteLog($"[SdkDll] {name}: NOT FOUND at {path}"); continue; }
+                var fi = new FileInfo(path);
+                var ver = System.Diagnostics.FileVersionInfo.GetVersionInfo(path);
+                WriteLog($"[SdkDll] {name}: size={fi.Length} modified={fi.LastWriteTime:yyyy-MM-dd HH:mm:ss} " +
+                         $"fileVersion={ver.FileVersion} productVersion={ver.ProductVersion}");
+            }
+            catch (Exception ex)
+            {
+                WriteLog($"[SdkDll] {name}: version read failed: {ex.Message}");
+            }
+        }
     }
 
     protected override void OnStartup(StartupEventArgs e)

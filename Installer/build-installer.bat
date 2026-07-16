@@ -10,7 +10,9 @@ REM  Everything referenced lives inside K2\ except the top-level
 REM  LICENSE (one folder up - see _PROJECT_MAP.md layout).
 REM
 REM  Requires: dotnet SDK, Inno Setup 6 (ISCC.exe).
-REM  Usage: double-click, or run from anywhere.
+REM  Usage: double-click (uses K2Setup.iss's default version), or run
+REM  from anywhere with a version arg to stamp the installer/zip with it:
+REM      build-installer.bat 1.2.3
 REM ============================================================
 setlocal EnableDelayedExpansion
 cd /d "%~dp0.."
@@ -18,6 +20,7 @@ set "ROOT=%CD%"
 set "PUB=%ROOT%\Installer\publish"
 set "OUT=%ROOT%\Installer\output"
 set "ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
+set "VER=%~1"
 
 if not exist "%ISCC%" (
     echo ERROR: Inno Setup compiler not found at "%ISCC%"
@@ -67,12 +70,18 @@ if "!LEAK!"=="1" (
 echo.
 echo [5] Compiling Inno Setup installer ...
 if not exist "%OUT%" mkdir "%OUT%"
-"%ISCC%" "%ROOT%\Installer\K2Setup.iss"
+if "%VER%"=="" (
+    "%ISCC%" "%ROOT%\Installer\K2Setup.iss"
+) else (
+    echo   Stamping version %VER%
+    "%ISCC%" /DMyAppVersion=%VER% "%ROOT%\Installer\K2Setup.iss"
+)
 if errorlevel 1 goto :fail
 
 echo.
 echo [6] Building portable ZIP (same tree as the installer) ...
-powershell -NoProfile -Command "Compress-Archive -Path '%PUB%\K2.App\*' -DestinationPath '%OUT%\K2-portable.zip' -Force"
+if "%VER%"=="" (set "ZIPVER=portable") else (set "ZIPVER=%VER%")
+powershell -NoProfile -Command "Compress-Archive -Path '%PUB%\K2.App\*' -DestinationPath '%OUT%\K2-%ZIPVER%.zip' -Force"
 
 echo.
 echo ------------------------------------------------------------

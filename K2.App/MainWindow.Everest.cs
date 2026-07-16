@@ -1065,7 +1065,7 @@ public partial class MainWindow
         ApplyCurrentEffect();
         ApplyEverestSettingsToDevice();
         StartLedPreview();
-        EvUploadNdkImages(); // display keys are device-global: re-push on every fresh connect
+        EvUploadNdkImages(); // resync current profile's NDK pictures in case this is a different/reset device
 
         // Restore custom device name if previously set
         var savedName = _evStore.GetSetting("device.name");
@@ -1103,7 +1103,7 @@ public partial class MainWindow
             ApplyCurrentEffect();
             ApplyEverestSettingsToDevice();
             StartLedPreview();
-            EvUploadNdkImages(); // display keys are device-global: re-push on every fresh connect
+            EvUploadNdkImages(); // resync current profile's NDK pictures in case this is a different/reset device
         }
     }
 
@@ -1159,11 +1159,20 @@ public partial class MainWindow
             var root = doc.Root;
             if (root is null) return;
 
-            int slot = 1;
-            if (int.TryParse(root.Element("Id")?.Value, out var n) && n >= 1 && n <= 5)
-                slot = n;
             string profileName = root.Element("ProfileName")?.Value
                                  ?? System.IO.Path.GetFileNameWithoutExtension(dlg.FileName);
+
+            // Always land in a FRESH slot — the XML's own <Id> is just wherever the
+            // profile happened to live on the machine it was exported from, and reusing
+            // it here would silently overwrite whatever K2 profile already occupies that
+            // slot number (see BaseCampDbImporter.FindFreeSlot's doc comment).
+            int slot = BaseCampDbImporter.FindFreeSlot(_evStore.GetExistingProfiles());
+            if (slot == 0)
+            {
+                MessageBox.Show(this, Loc.Get("import_no_free_slot", profileName),
+                    Loc.Get("dp_open_bc_profile"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
 
             // Real Base Camp XML exports the EverestKeyBindings navigation property as
             // a wrapper containing <KeyboardBinding> items (item element = the real
@@ -1209,8 +1218,9 @@ public partial class MainWindow
                 regular++;
             }
 
-            // NDK 0-3 (numpad LCD display keys, device-global in K2): assigned by ORDER
-            // among the touch-key bindings, not by DLLMatrixIndex value. K2's own exports
+            // NDK 0-3 (numpad LCD display keys, per-profile — see UploadNdkImage's doc
+            // comment): assigned by ORDER among the touch-key bindings, not by
+            // DLLMatrixIndex value. K2's own exports
             // use synthetic KeyIds 9001-9004 in ascending order (see EvProfileExporter),
             // but a genuine Base Camp XML export uses BC's own real, arbitrary KeyId for
             // these — matching by "matrixId - 9001" silently dropped every touch key
@@ -1233,19 +1243,19 @@ public partial class MainWindow
                         {
                             string dir = System.IO.Path.Combine(
                                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                                "K2.App", "imported_xml_ev");
+                                "K2.App", "imported_xml_ev", $"slot{slot}");
                             System.IO.Directory.CreateDirectory(dir);
                             string file = System.IO.Path.Combine(dir, $"ndk_{ndkIndex}.png");
                             System.IO.File.WriteAllBytes(file, bytes);
-                            _evStore.SetSetting($"ndk.{ndkIndex}.imagePath", file);
+                            _evStore.SetSetting($"ndk.{slot}.{ndkIndex}.imagePath", file);
                         }
                     }
                     catch (Exception ex) { LogEverest($"[IMP-XML] ndk #{ndkIndex} image decode failed: {ex.Message}"); }
                 }
                 if (actionType is not null)
                 {
-                    _evStore.SetSetting($"ndk.{ndkIndex}.actionType", actionType);
-                    _evStore.SetSetting($"ndk.{ndkIndex}.actionValue", actionValue ?? "");
+                    _evStore.SetSetting($"ndk.{slot}.{ndkIndex}.actionType", actionType);
+                    _evStore.SetSetting($"ndk.{slot}.{ndkIndex}.actionValue", actionValue ?? "");
                 }
                 touch++;
                 ndkIndex++;
@@ -1254,8 +1264,10 @@ public partial class MainWindow
             _evStore.SetCurrentProfile(slot);
             EvRefreshProfiles();
             EvSelectProfileSlot(slot);
-            ReloadEverestProfile(); // also re-uploads NDK images to hardware when connected
-            if (touch > 0) LoadNdkState(); // refresh canvas thumbnails with the imported icons
+            ReloadEverestProfile(); // refreshes NDK canvas thumbnails for the imported slot
+            // A freshly imported profile's pictures have never reached THIS physical device —
+            // push them now (ReloadEverestProfile no longer does this on every plain switch).
+            if (touch > 0 && _everest.IsOpen) EvUploadNdkImages();
 
             LogEverest($"[IMP-XML] '{profileName}' -> slot {slot}: {regular} keys, {touch} display keys");
             LblStatus.Text = Loc.Get("dp_imported_xml", profileName, slot);
@@ -1334,26 +1346,44 @@ public partial class MainWindow
 
         int totalRegular = 0, totalTouch = 0;
         int activeSlot = -1;
+        int skippedNoSlot = 0;
+
+        // Each imported profile lands in a FRESH slot, never profile.Slot verbatim (see
+        // BaseCampDbImporter.FindFreeSlot's doc comment) — track slots claimed so far in
+        // THIS batch too, so importing 3 profiles in one go doesn't pick the same free
+        // slot for all of them.
+        var usedSlots = new HashSet<int>(_evStore.GetExistingProfiles());
 
         foreach (var profile in allProfiles)
         {
             try
             {
-                var (reg, touch) = BaseCampDbImporter.ImportEverestProfile(dbPath, profile, _evStore);
+                int targetSlot = BaseCampDbImporter.FindFreeSlot(usedSlots);
+                if (targetSlot == 0) { skippedNoSlot++; continue; }
+                usedSlots.Add(targetSlot);
+
+                var (reg, touch) = BaseCampDbImporter.ImportEverestProfile(dbPath, profile, _evStore, targetSlot);
                 totalRegular += reg;
                 totalTouch   += touch;
-                LogEverest($"[IMP-BC] slot {profile.Slot} '{profile.Name}': {reg} keys, {touch} display keys");
-                // NDK images are device-global (not per-profile): no need to re-upload
-                // inside this per-profile loop — ReloadEverestProfile() below does it
-                // once, after every profile has been imported.
+                LogEverest($"[IMP-BC] slot {profile.Slot} '{profile.Name}' -> K2 slot {targetSlot}: {reg} keys, {touch} display keys");
+                // Each profile's NDK pictures live in their own firmware slot (see
+                // UploadNdkImage's doc comment) and have never reached THIS physical
+                // device — push them now, per imported profile, while the "please wait"
+                // overlay is up. Same behavior real Base Camp shows during a DB/profile
+                // import (see K2/_reference/usb_dumps analysis, 2026-07-16).
+                if (touch > 0 && _everest.IsOpen) EvUploadNdkImages(targetSlot);
 
-                if (profile.IsSelected) activeSlot = profile.Slot;
+                if (profile.IsSelected) activeSlot = targetSlot;
             }
             catch (Exception ex)
             {
                 LogEverest($"[IMP-BC] Error slot {profile.Slot}: {ex.Message}");
             }
         }
+
+        if (skippedNoSlot > 0)
+            MessageBox.Show(this, Loc.Get("import_some_skipped_no_slot", skippedNoSlot),
+                "Import from Base Camp", MessageBoxButton.OK, MessageBoxImage.Warning);
 
         // Switch to the active BC profile and reload UI
         if (activeSlot > 0)
@@ -1374,38 +1404,40 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// Pushes the current NDK (numpad LCD display key) images to hardware and tells the
-    /// firmware which pic slot maps to which physical key (<see cref="NdkRefreshDevicePicSlots"/>).
-    /// NDK state is device-global (EverestStore's <c>ndk.{i}.*</c> settings), not
-    /// per-profile — but switching the Everest's active FIRMWARE profile (<c>_everest.
-    /// SwitchProfile</c>) resets the on-device LCD picture slots the same way it does
-    /// regular keys/RGB, so this must run any time a profile is (re)loaded or the device
-    /// is freshly opened — not just right after a BC/XML import, which is all that
-    /// called it before.
+    /// Re-pushes the CURRENT profile's NDK (numpad LCD display key) images to hardware and
+    /// tells the firmware which pic slot maps to which physical key
+    /// (<see cref="NdkRefreshDevicePicSlots"/>). Each firmware profile stores its own 4 NDK
+    /// pictures separately (confirmed via USB capture, see <see cref="UploadNdkImage"/>'s
+    /// doc comment), so switching between already-configured profiles needs no re-upload at
+    /// all — this only runs right after a BC/XML import (the images may never have reached
+    /// THIS physical device yet) and on a fresh device connect (EvAutoOpen/BtnEvOpen_Click),
+    /// as a resync safety net in case a different/factory-reset unit is plugged in.
+    /// Shows the blocking "please wait" overlay for the whole batch, same as a single-key
+    /// edit — each image is its own ~2s synchronous SDK call.
     /// </summary>
-    private void EvUploadNdkImages()
+    private void EvUploadNdkImages(int? forProfile = null)
     {
+        int profile = forProfile ?? EvCurrentProfile();
         bool any = false;
-        for (int i = 0; i < 4; i++)
+        ShowHwBusy(Loc.Get("hw_busy_uploading_image"));
+        try
         {
-            var path = _evStore.GetSetting($"ndk.{i}.imagePath");
-            if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) continue;
-            try
+            for (int i = 0; i < 4; i++)
             {
-                // Matches NdkApplyImage's first (and usually successful) attempt:
-                // 0-based keyIndex, picSlot=0 — the combo already confirmed to work on
-                // real hardware there. (The old i+1/1-based call here was a separate,
-                // never-hit bug: it only ever ran right after an import, and would have
-                // targeted the wrong physical key — or, for i=3, an out-of-range one.)
-                bool ok = _everest.UploadNumpadImage(path, i, picSlot: 0);
-                any |= ok;
-                LogEverest($"[NDK] ndk.{i} uploaded: {System.IO.Path.GetFileName(path)} -> {ok}");
-            }
-            catch (Exception ex)
-            {
-                LogEverest($"[NDK] ndk.{i} upload failed: {ex.Message}");
+                var path = _evStore.GetSetting($"ndk.{profile}.{i}.imagePath");
+                if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) continue;
+                try
+                {
+                    bool ok = UploadNdkImage(i, path, profile);
+                    any |= ok;
+                }
+                catch (Exception ex)
+                {
+                    LogEverest($"[NDK] ndk.{profile}.{i} upload failed: {ex.Message}");
+                }
             }
         }
+        finally { HideHwBusy(); }
         if (any) NdkRefreshDevicePicSlots();
     }
 
@@ -1579,31 +1611,31 @@ public partial class MainWindow
             _evKeys.Add(k);
             _evByMatrix[r.KeyMatrix] = k;
         }
+        // Refreshes the 4 NDK buttons' thumbnails/actions for this profile — no hardware
+        // I/O, since each profile's pictures already live in their own firmware slot once
+        // uploaded (see UploadNdkImage's doc comment). A switch only needs the on-screen
+        // state to catch up with what's actually resident on the device.
+        LoadNdkState();
         EvAddNdkEntriesToKeyList();
-        // Re-push the (device-global) NDK images/pic-slot mapping any time a profile is
-        // (re)loaded — see EvUploadNdkImages's doc comment for why this can't be limited
-        // to just the import flows that originally called it.
-        if (_everest.IsOpen) EvUploadNdkImages();
         LogEverest($"[DB  ] profile {profile}: loaded {_evKeys.Count} keys");
     }
 
     /// <summary>
-    /// Surfaces the 4 numpad LCD "display keys" (NDK) in the same mapped-keys list as
-    /// regular keys, but only when a key differs from its default (empty) state — i.e.
-    /// carries a custom action and/or a custom icon. NDK state is device-global (not
-    /// per-profile, see MainWindow.NumpadDisplayKeys.cs), so the same entries show up
-    /// regardless of which profile is selected. KeyMatrix is a negative placeholder
-    /// (display keys have no real matrix code) and these entries are deliberately kept
-    /// OUT of _evByMatrix — BtnEvConfig/BtnEvRemove branch on NdkIndex before touching
-    /// any KeyMatrix-keyed persistence.
+    /// Surfaces the current profile's 4 numpad LCD "display keys" (NDK) in the same
+    /// mapped-keys list as regular keys, but only when a key differs from its default
+    /// (empty) state — i.e. carries a custom action and/or a custom icon. KeyMatrix is a
+    /// negative placeholder (display keys have no real matrix code) and these entries are
+    /// deliberately kept OUT of _evByMatrix — BtnEvConfig/BtnEvRemove branch on NdkIndex
+    /// before touching any KeyMatrix-keyed persistence.
     /// </summary>
     private void EvAddNdkEntriesToKeyList()
     {
+        int profile = EvCurrentProfile();
         for (int i = 0; i < NdkCount; i++)
         {
-            string? at  = _evStore.GetSetting($"ndk.{i}.actionType");
-            string? av  = _evStore.GetSetting($"ndk.{i}.actionValue");
-            string? img = _evStore.GetSetting($"ndk.{i}.imagePath");
+            string? at  = _evStore.GetSetting($"ndk.{profile}.{i}.actionType");
+            string? av  = _evStore.GetSetting($"ndk.{profile}.{i}.actionValue");
+            string? img = _evStore.GetSetting($"ndk.{profile}.{i}.imagePath");
             bool hasImg = !string.IsNullOrEmpty(img) && System.IO.File.Exists(img);
             bool hasAct = !string.IsNullOrEmpty(at);
             if (!hasImg && !hasAct) continue; // default/empty display key — omit
@@ -1790,7 +1822,14 @@ public partial class MainWindow
 
         _everest.SwitchProfile(next);
         _evStore.SetCurrentProfile(next);
+        // EvSelectProfileSlot suppresses CbEvProfile_SelectionChanged (avoids re-entrant
+        // handling while this method is already mid-switch) — which means it does NOT
+        // call ReloadEverestProfile on its own. Call it explicitly so the key list AND
+        // the NDK hardware re-upload (see ReloadEverestProfile's doc comment) actually
+        // run on a profile switch triggered from the keyboard itself, not just from the
+        // UI combo.
         EvSelectProfileSlot(next);
+        ReloadEverestProfile();
         LogEverest($"[EXEC] profile -> {next}");
     }
 

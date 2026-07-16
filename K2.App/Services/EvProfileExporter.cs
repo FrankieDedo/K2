@@ -31,11 +31,11 @@ namespace K2.App.Services;
 /// <c>MainWindow.Everest.cs</c>'s <c>BtnEvImportXml_Click</c>).
 ///
 /// Includes both the regular keys (KeyMatrix stored in <see cref="EverestStore"/>)
-/// and the 4 numpad LCD keys (NDK). Note: in K2, NDK images/actions are
-/// GLOBAL device settings (not per-profile — see
-/// <c>EverestStore</c>/<c>ndk.{i}.*</c>), so every exported profile will show the
-/// same NDK content: this is a simplification of K2's current data model, not
-/// a Base Camp limitation. The 4 synthetic KeyIds used for the NDKs (9001-9004) are
+/// and the 4 numpad LCD keys (NDK), PER PROFILE (<c>EverestStore</c>'s
+/// <c>ndk.{slot}.{i}.*</c> settings — confirmed via USB capture against real Base Camp
+/// that each firmware profile stores its own 4 NDK pictures, see
+/// MainWindow.NumpadDisplayKeys.cs's UploadNdkImage doc comment). The 4 synthetic
+/// KeyIds used for the NDKs (9001-9004) are
 /// a K2 invention (no real DLLMatrixIndex known) — that's why the NDKs are
 /// exported ONLY in K2 mode (never in Base Camp compatible mode).
 /// </summary>
@@ -108,12 +108,12 @@ public static class EvProfileExporter
                 isAssigned, isTouchKey: false, functionType, subType, funcValue, imageB64: null));
         }
 
-        // ---- Numpad LCD keys (NDK), 0-3 — device-global in K2 ----
+        // ---- Numpad LCD keys (NDK), 0-3 — per-profile ----
         for (int i = 0; i < 4; i++)
         {
-            string? imagePath = store.GetSetting($"ndk.{i}.imagePath");
-            string? ndkType   = store.GetSetting($"ndk.{i}.actionType");
-            string? ndkValue  = store.GetSetting($"ndk.{i}.actionValue");
+            string? imagePath = store.GetSetting($"ndk.{slot}.{i}.imagePath");
+            string? ndkType   = store.GetSetting($"ndk.{slot}.{i}.actionType");
+            string? ndkValue  = store.GetSetting($"ndk.{slot}.{i}.actionValue");
             bool hasImage = !string.IsNullOrEmpty(imagePath) && File.Exists(imagePath);
             bool hasAction = !string.IsNullOrEmpty(ndkType);
             if (!hasImage && !hasAction) continue;

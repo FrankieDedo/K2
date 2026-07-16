@@ -60,7 +60,11 @@ public sealed class DisplayPadService : IDisposable
         var hStr = hWnd.ToInt64().ToString();
         App.WriteLog($"[Open] DisplayPadOpenUSBDriver(\"{hStr}\")");
         bool ok = _helper.DisplayPadOpenUSBDriver(hStr);
-        App.WriteLog($"[Open] -> {ok}");
+        // Best-effort: only meaningful if DisplayPadHelper's last native call set the Win32
+        // last-error and nothing else ran a Win32/COM call in between — not guaranteed, but
+        // free to log and occasionally the only hint we get (5=ACCESS_DENIED, 32=SHARING_VIOLATION).
+        int win32Err = ok ? 0 : System.Runtime.InteropServices.Marshal.GetLastWin32Error();
+        App.WriteLog($"[Open] -> {ok}" + (ok ? "" : $" (lastWin32Error={win32Err}, best-effort)"));
         _opened = ok;
         return ok;
     }

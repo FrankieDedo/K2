@@ -2,7 +2,11 @@
 // Unified interface (matches DisplayPad): a single click opens NdkKeyConfigDialog,
 // which combines image + action in one window. Right-click keeps quick "remove"
 // shortcuts only. Images are uploaded via EverestImageUploader (72×72 RGB565) and
-// actions are saved in EverestStore as "ndk.{keyIndex}.imagePath"/"actionType" etc.
+// actions are saved in EverestStore as "ndk.{profile}.{keyIndex}.imagePath"/"actionType"
+// etc. — PER PROFILE (see UploadNdkImage's doc comment: confirmed via USB capture
+// 2026-07-16 that the firmware itself stores each profile's 4 NDK pictures separately,
+// which is also why switching the active firmware profile is instant on real hardware —
+// no image re-transfer needed, just EverestService.SwitchProfile).
 
 using System;
 using System.IO;
@@ -115,27 +119,41 @@ public partial class MainWindow
 
     // ─────────────────────── Persistence ───────────────────────
 
+    /// <summary>(Re)loads the 4 NDK buttons' thumbnails/actions for the CURRENT Everest
+    /// profile (<see cref="EvCurrentProfile"/>) — called at startup and every time
+    /// <see cref="ReloadEverestProfile"/> switches profile. No hardware I/O: the pictures
+    /// were already pushed to that profile's firmware slot whenever they were assigned
+    /// (see <see cref="UploadNdkImage"/>), so a profile switch only needs to refresh what
+    /// the on-screen buttons display, matching what's actually resident on the device.
+    /// Guarded for the one call before <see cref="InitNumpadDisplayKeys"/> has built the
+    /// buttons yet (InitEverestModule's ReloadEverestProfile runs first).</summary>
     private void LoadNdkState()
     {
+        if (_ndkButtons[0] is null) return;
+        int profile = EvCurrentProfile();
         for (int i = 0; i < NdkCount; i++)
         {
-            _ndkImagePaths[i] = _evStore.GetSetting($"ndk.{i}.imagePath");
+            _ndkImagePaths[i] = _evStore.GetSetting($"ndk.{profile}.{i}.imagePath");
             _ndkActions[i] = (
-                _evStore.GetSetting($"ndk.{i}.actionType"),
-                _evStore.GetSetting($"ndk.{i}.actionValue")
+                _evStore.GetSetting($"ndk.{profile}.{i}.actionType"),
+                _evStore.GetSetting($"ndk.{profile}.{i}.actionValue")
             );
 
-            // Show thumbnail if the file exists
             if (!string.IsNullOrEmpty(_ndkImagePaths[i]) && File.Exists(_ndkImagePaths[i]))
                 NdkSetThumbnail(i, _ndkImagePaths[i]!);
+            else
+                NdkClearThumbnail(i);
         }
     }
 
+    /// <summary>Persists display key <paramref name="index"/>'s image/action for the
+    /// CURRENT Everest profile.</summary>
     private void SaveNdkKey(int index)
     {
-        _evStore.SetSetting($"ndk.{index}.imagePath", _ndkImagePaths[index] ?? "");
-        _evStore.SetSetting($"ndk.{index}.actionType", _ndkActions[index].Type ?? "");
-        _evStore.SetSetting($"ndk.{index}.actionValue", _ndkActions[index].Value ?? "");
+        int profile = EvCurrentProfile();
+        _evStore.SetSetting($"ndk.{profile}.{index}.imagePath", _ndkImagePaths[index] ?? "");
+        _evStore.SetSetting($"ndk.{profile}.{index}.actionType", _ndkActions[index].Type ?? "");
+        _evStore.SetSetting($"ndk.{profile}.{index}.actionValue", _ndkActions[index].Value ?? "");
     }
 
     // ─────────────────────── Thumbnail ───────────────────────
@@ -144,9 +162,20 @@ public partial class MainWindow
     {
         try
         {
+            // Load from bytes into a MemoryStream, NOT BitmapImage.UriSource: every NDK
+            // slot always reuses the same fixed filename (ndk_{index}.png, whether written
+            // by XML import, BC-DB import, or NdkApplyImage), and WPF's imaging pipeline
+            // caches a UriSource-loaded BitmapImage by that URI — re-importing/overwriting
+            // the same file left the canvas thumbnail showing the stale (or, after a prior
+            // failed load, blank) cached bitmap instead of the new content, even though
+            // NdkKeyConfigDialog's own preview (RefreshImagePreview, same byte-stream
+            // approach) showed the correct new icon from the very same path. Mirrors that
+            // dialog's loading code exactly so both stay in sync.
+            byte[] bytes = File.ReadAllBytes(imagePath);
+            using var ms = new MemoryStream(bytes);
             var bi = new BitmapImage();
             bi.BeginInit();
-            bi.UriSource = new Uri(imagePath, UriKind.Absolute);
+            bi.StreamSource = ms;
             bi.DecodePixelWidth = 72;
             bi.CacheOption = BitmapCacheOption.OnLoad;
             bi.EndInit();
@@ -301,12 +330,12 @@ public partial class MainWindow
     /// <summary>
     /// Uploads <paramref name="imagePath"/> (already 72×72 — either user-cropped or
     /// auto-generated, both via <see cref="NdkKeyConfigDialog"/>) to display key
-    /// <paramref name="keyIndex"/>, persists it, and refreshes the thumbnail.
-    /// While the upload + device-side refresh (<see cref="NdkRefreshDevicePicSlots"/>) run,
-    /// all 4 NDK buttons are disabled and the wait cursor is shown — same "block until the
-    /// hardware reload settles" contract Base Camp uses, and the same intent as DisplayPad's
-    /// <c>_dpRepaintBusy</c> guard (see MainWindow.DisplayPad.cs), just synchronous here since
-    /// the SDK calls themselves are blocking.
+    /// <paramref name="keyIndex"/> of the CURRENT Everest profile, persists it, and
+    /// refreshes the thumbnail. <see cref="EverestSdkNative.StartPicUpdate"/> is
+    /// synchronous and takes ~2s (confirmed via USB capture, K2/_reference/usb_dumps,
+    /// 2026-07-16), so a full-window "please wait" overlay (<see cref="ShowHwBusy"/>) is
+    /// shown for the duration — mirrors Base Camp, which blocks its own UI the same way
+    /// while pushing NDK/Display Dial pictures.
     /// </summary>
     private void NdkApplyImage(int keyIndex, string imagePath)
     {
@@ -318,41 +347,10 @@ public partial class MainWindow
 
         NdkSetButtonsEnabled(false);
         _ndkUploadBusy = true;
-        var oldCursor = Mouse.OverrideCursor;
-        Mouse.OverrideCursor = Cursors.Wait;
+        ShowHwBusy(Loc.Get("hw_busy_uploading_image"));
         try
         {
-            // Upload to device — try parameter combinations for debugging.
-            // SDK: targetDev=1, targetPic=picSlot, targetSubItem=keyIndex.
-            // Try different (picSlot, keyIndex) combinations to find which
-            // mapping works for all 4 display keys.
-            bool ok = false;
-
-            // Attempt 1: picSlot=0, subItem=keyIndex (all on the same slot)
-            ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: 0);
-            LogEverest($"[NDK] Upload key={keyIndex} try1(pic=0,sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
-
-            if (!ok)
-            {
-                // Attempt 2: picSlot=keyIndex, subItem=keyIndex
-                ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: (byte)keyIndex);
-                LogEverest($"[NDK] Upload key={keyIndex} try2(pic={keyIndex},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
-            }
-
-            if (!ok)
-            {
-                // Attempt 3: picSlot=keyIndex+1, subItem=keyIndex
-                ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: (byte)(keyIndex + 1));
-                LogEverest($"[NDK] Upload key={keyIndex} try3(pic={keyIndex + 1},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
-            }
-
-            if (!ok)
-            {
-                // Attempt 4: strip mode (targetDev=0, targetPic=2+keyIndex)
-                ok = _everest.UploadNumpadImageStrip(imagePath, keyIndex, picSlot: (byte)keyIndex);
-                LogEverest($"[NDK] Upload key={keyIndex} try4-strip(pic={keyIndex},sub={keyIndex}) -> {(ok ? "OK" : "FAIL")}");
-            }
-
+            bool ok = UploadNdkImage(keyIndex, imagePath, EvCurrentProfile());
             if (ok)
             {
                 _ndkImagePaths[keyIndex] = imagePath;
@@ -365,7 +363,7 @@ public partial class MainWindow
         }
         finally
         {
-            Mouse.OverrideCursor = oldCursor;
+            HideHwBusy();
             NdkSetButtonsEnabled(true);
             // The firmware reports the numpad/dock as unplugged (byNumpadPlug/byMMDockPlug
             // == 0) while it's busy writing the new NDK picture to flash — UpdateKeyboardLayout
@@ -375,6 +373,29 @@ public partial class MainWindow
             _ndkUploadBusy = false;
             UpdateKeyboardLayout();
         }
+    }
+
+    /// <summary>
+    /// Uploads <paramref name="imagePath"/> to display key <paramref name="keyIndex"/> of
+    /// firmware profile <paramref name="profile"/> (1..5). Wire mapping confirmed via USB
+    /// capture while sniffing real Base Camp (K2/_reference/usb_dumps/evicone.pcapng,
+    /// 2026-07-16): the SDK's <c>StartPicUpdate</c> header encodes
+    /// <c>byTargetPic = firmware profile number</c>, NOT the key index as originally
+    /// guessed — a single manual D1 upload used targetPic=01 (profile 1 was active), while
+    /// loading profile 2's 4 icons used targetPic=02 constant with byTargetSubItem=0..3 as
+    /// the key index. This is also why switching the active firmware profile is instant on
+    /// real hardware: each profile's 4 pictures live in its own flash slot, so nothing needs
+    /// re-transferring on switch — only on an actual edit, which is what this method is for.
+    /// Shared by <see cref="NdkApplyImage"/> (single-key edit, current profile) and
+    /// <see cref="EvUploadNdkImages"/> (re-sync on fresh device connect, see
+    /// MainWindow.Everest.cs). Does not touch <see cref="_ndkImagePaths"/>/UI state; the
+    /// caller decides what to do with the result.
+    /// </summary>
+    private bool UploadNdkImage(int keyIndex, string imagePath, int profile)
+    {
+        bool ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: (byte)profile);
+        LogEverest($"[NDK] Upload profile={profile} key={keyIndex} -> {(ok ? "OK" : "FAIL")}");
+        return ok;
     }
 
     /// <summary>Set while <see cref="NdkApplyImage"/> is writing a picture to the device —

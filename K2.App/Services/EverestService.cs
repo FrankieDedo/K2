@@ -957,8 +957,11 @@ public sealed class EverestService : IDisposable
     /// Uploads an image to a numpad display key (square format 72×72).
     /// </summary>
     /// <param name="imagePathOrBase64">Path or base64 string.</param>
-    /// <param name="keyIndex">Display key index (0-3).</param>
-    /// <param name="picSlot">Firmware image slot (used as byTargetPic).</param>
+    /// <param name="keyIndex">Display key index (0-3), sent as byTargetSubItem.</param>
+    /// <param name="picSlot">Firmware PROFILE number (1-5), sent as byTargetPic — confirmed
+    /// via USB capture against real Base Camp (K2/_reference/usb_dumps/evicone.pcapng,
+    /// 2026-07-16): each profile stores its own 4 NDK pictures in flash, which is also why
+    /// switching the active profile is instant on real hardware (no image re-transfer).</param>
     public bool UploadNumpadImage(string imagePathOrBase64, int keyIndex, byte picSlot = 0)
     {
         lock (_sdkLock)
