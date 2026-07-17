@@ -133,7 +133,6 @@ Start as admin and keep in mind that it should close all Base Camp process autom
 <h1>Building the app</h1>
 <ul>
   <li>If you want to build yourself the app, just download all of the source code and then run "build-check.bat", same for the installer, just launch "build-installer.bat" inside the Installer folder.</li>
-  <li>I used Visual Studio Code for coding.</li>
 </ul>
 
 
