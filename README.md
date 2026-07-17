@@ -23,9 +23,10 @@ Start as admin and keep in mind that it should close all Base Camp process autom
   <li><strong>Profile import</strong> from Base Camp's database/XML</li>
   <li><strong>Shared dark theme</strong>, <strong>selectable font</strong> (8 options including OpenDyslexic for accessibility) with adjustable size</li>
   <li><strong>Drag &amp; drop</strong> to swap action+icon between two keys (even across different devices)</li>
-  <li><strong>Windows installer</strong> (Inno Setup, self-contained) + portable ZIP package</li>
+  <li><strong>Windows installer</strong> Setup + portable ZIP package</li>
   <li><strong>Profiles</strong> Supports Base Camp XMLs and direct import from Base Camp database</li>
   <li><strong>Macros</strong> Full mapping interface and supports importing from Base Camp</li>
+  <li><strong>Macros</strong> Rename devices</li>
 </ul>
 </details>
 
