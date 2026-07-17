@@ -125,8 +125,10 @@ public partial class MainWindow
         RebuildKeyGrid();
 
         LvMpKeys.ItemsSource = _mpMappedKeys;
+        LstMpProfile.ContextMenu = MpBuildProfileContextMenu();
+        BtnMpProfileMenu.ContextMenu = MpBuildProfileMenuNoEdit();
 
-        // CbProfile is populated by MpRefreshProfiles on device change
+        // LstMpProfile is populated by MpRefreshProfiles on device change
 
         LoadRotationFromStore();
 
@@ -145,6 +147,60 @@ public partial class MainWindow
         if (name == null) return;
         TabMacroPad.Header = name;
         _store.SetSetting("device.name", name);
+    }
+
+    /// <summary>Right-click menu for LstMpProfile rows — see DpBuildProfileContextMenu
+    /// (MainWindow.DisplayPad.cs) for the shared pattern/rationale.</summary>
+    private ContextMenu MpBuildProfileContextMenu()
+    {
+        var menu = new ContextMenu();
+        var miRename = new MenuItem { Header = Loc.Get("rename_profile") };
+        miRename.Click += BtnMpRenameProfile_Click;
+        var miImportXml = new MenuItem { Header = Loc.Get("dp_import_xml") };
+        miImportXml.Click += BtnMpImportXml_Click;
+        var miImportBc = new MenuItem { Header = Loc.Get("import_bc") };
+        miImportBc.Click += BtnMpImportBc_Click;
+        var miExport = new MenuItem { Header = Loc.Get("export_profiles_btn") };
+        miExport.Click += BtnMpExportProfiles_Click;
+        var miDelete = new MenuItem { Header = Loc.Get("delete_profile") };
+        miDelete.Click += BtnMpDeleteProfile_Click;
+        menu.Items.Add(miRename);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miImportXml);
+        menu.Items.Add(miImportBc);
+        menu.Items.Add(miExport);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miDelete);
+        return menu;
+    }
+
+    /// <summary>Same items as <see cref="MpBuildProfileContextMenu"/> minus Rename/Delete —
+    /// opened from the small "…" button in the Profile header (BtnMpProfileMenu_Click),
+    /// which is not tied to a specific row so renaming/deleting a specific profile
+    /// wouldn't make sense there.</summary>
+    private ContextMenu MpBuildProfileMenuNoEdit()
+    {
+        var menu = new ContextMenu();
+        var miImportXml = new MenuItem { Header = Loc.Get("dp_import_xml") };
+        miImportXml.Click += BtnMpImportXml_Click;
+        var miImportBc = new MenuItem { Header = Loc.Get("import_bc") };
+        miImportBc.Click += BtnMpImportBc_Click;
+        var miExport = new MenuItem { Header = Loc.Get("export_profiles_btn") };
+        miExport.Click += BtnMpExportProfiles_Click;
+        menu.Items.Add(miImportXml);
+        menu.Items.Add(miImportBc);
+        menu.Items.Add(miExport);
+        return menu;
+    }
+
+    private void BtnMpProfileMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.ContextMenu is ContextMenu cm)
+        {
+            cm.PlacementTarget = btn;
+            cm.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            cm.IsOpen = true;
+        }
     }
 
     private void BtnMpRenameProfile_Click(object sender, RoutedEventArgs e)
@@ -185,7 +241,7 @@ public partial class MainWindow
         _store.SetSetting($"profile.{id}.{slot}.name", "");
         Log($"[UI ] MacroPad profile {slot} deleted.");
         MpRefreshProfiles(id);
-        // CbProfile_SelectionChanged will reload the key grid automatically
+        // LstMpProfile_SelectionChanged will reload the key grid automatically
     }
 
     /// <summary>Resets the currently selected profile's key actions back to K2's defaults
@@ -505,11 +561,11 @@ public partial class MainWindow
         ReloadCurrentProfile();
     }
 
-    private void CbProfile_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void LstMpProfile_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppressProfileUpdate) return;
         if (CurrentDeviceId() is not int id) return;
-        if (CbProfile.SelectedItem is not MpProfileItem pi) return;
+        if (LstMpProfile.SelectedItem is not MpProfileItem pi) return;
         int profile = pi.Slot;
 
         if (pi.IsNew)
@@ -546,12 +602,12 @@ public partial class MainWindow
             if (nextFree > 0)
                 items.Add(new MpProfileItem(nextFree, Loc.Get("new_profile")));
 
-            CbProfile.DisplayMemberPath = nameof(MpProfileItem.Label);
-            CbProfile.ItemsSource = items;
+            LstMpProfile.DisplayMemberPath = nameof(MpProfileItem.Label);
+            LstMpProfile.ItemsSource = items;
 
             int current = _store.GetCurrentProfile(deviceId);
             var match = items.Find(x => x.Slot == current && !x.IsNew);
-            CbProfile.SelectedItem = match ?? items[0];
+            LstMpProfile.SelectedItem = match ?? items[0];
         }
         finally { _suppressProfileUpdate = false; }
     }
@@ -562,8 +618,8 @@ public partial class MainWindow
         _suppressProfileUpdate = true;
         try
         {
-            if (CbProfile.ItemsSource is List<MpProfileItem> items)
-                CbProfile.SelectedItem = items.Find(x => x.Slot == slot && !x.IsNew) ?? items[0];
+            if (LstMpProfile.ItemsSource is List<MpProfileItem> items)
+                LstMpProfile.SelectedItem = items.Find(x => x.Slot == slot && !x.IsNew) ?? items[0];
         }
         finally { _suppressProfileUpdate = false; }
     }
@@ -696,6 +752,13 @@ public partial class MainWindow
             _store.ClearProfile(id, slot);
             int imported = 0;
 
+            // Existing K2 macro names, so "Run Macro" bindings resolve against the
+            // user's macro library — same pattern as the BC-db import below.
+            var macroNames = _macroStore?.GetAll()
+                .Select(m => m.Name)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .ToList();
+
             foreach (var b in bindings)
             {
                 if (!int.TryParse(b.Element("KeyId")?.Value, out int keyId) || keyId < 1 || keyId > 12) continue;
@@ -717,7 +780,7 @@ public partial class MainWindow
                 }
                 else
                 {
-                    (actionType, actionValue) = BaseCampDbImporter.TranslateMakaluAction(funcType, funcValue);
+                    (actionType, actionValue) = BaseCampDbImporter.TranslateMakaluAction(funcType, funcValue, macroNames);
                 }
 
                 if (actionType is null) continue;
@@ -750,7 +813,7 @@ public partial class MainWindow
         var profiles = _store.GetExistingProfiles(id)
             .Select(slot => (Slot: slot, Name: _store.GetProfileName(id, slot) ?? Loc.Get("profile_n", slot)))
             .ToList();
-        int? currentSlot = CbProfile.SelectedItem is MpProfileItem pi && !pi.IsNew ? pi.Slot : null;
+        int? currentSlot = LstMpProfile.SelectedItem is MpProfileItem pi && !pi.IsNew ? pi.Slot : null;
         string deviceLabel = _mpDeviceLabels.GetValueOrDefault((uint)id, $"MacroPad {id}");
 
         ExportProfileHelper.Run(
@@ -801,41 +864,66 @@ public partial class MainWindow
             return;
         }
 
-        // Auto-mapping: BC DeviceId == K2 SDK DeviceId
-        if (!bcDevices.TryGetValue(k2DeviceId, out var profiles) || profiles.Count == 0)
+        string deviceLabel = TabMacroPad.Header as string ?? Loc.Get("tab_macropad");
+
+        List<BaseCampDbImporter.BcProfile> profiles;
+        if (bcDevices.Count == 1)
         {
-            Log($"[IMP-BC] No BC profiles for device #{k2DeviceId}.");
-            LblStatus.Text = Loc.Get("dp_no_profiles_in_bc");
-            return;
+            profiles = bcDevices.Values.First();
+        }
+        else
+        {
+            // Ask which BC device to import from, instead of requiring an exact BC/K2
+            // DeviceId match (the old behavior silently skipped everything on a mismatch).
+            var options = bcDevices.Select(kv => (
+                BcDeviceId: kv.Key,
+                Label: Loc.Get("bc_pick_device_label", kv.Key, kv.Value.Count,
+                    string.Join(", ", kv.Value.Select(p => p.Name)))
+            )).ToList();
+            var picker = new BcDevicePickerDialog(deviceLabel, options) { Owner = this };
+            if (picker.ShowDialog() != true) return;
+            profiles = bcDevices[picker.SelectedBcDeviceId!.Value];
         }
 
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"Base Camp → K2 MacroPad import (device #{k2DeviceId}):\n");
+        sb.AppendLine($"Import {profiles.Count} profile(s) into \"{deviceLabel}\"?\n");
         foreach (var p in profiles)
-            sb.AppendLine($"  Slot {p.Slot}: {p.Name}{(p.IsSelected ? " [ACTIVE]" : "")}");
-        sb.AppendLine($"\nImport {profiles.Count} profile(s)?");
+            sb.AppendLine($"  {(p.IsSelected ? "[ACTIVE] " : "")}{p.Name}");
+        sb.AppendLine();
+        sb.AppendLine(Loc.Get("bc_import_will_wipe", deviceLabel));
 
         if (MessageBox.Show(this, sb.ToString(), "Import from Base Camp",
-                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
 
+        // Wipe: replace, don't append.
+        foreach (var slot in _store.GetExistingProfiles(k2DeviceId))
+        {
+            _store.ClearProfile(k2DeviceId, slot);
+            _store.SetSetting($"profile.{k2DeviceId}.{slot}.name", "");
+        }
+
         int totalKeys = 0;
-        int activeSlot = -1;
-        int skippedNoSlot = 0;
-        var usedSlots = new HashSet<int>(_store.GetExistingProfiles(k2DeviceId));
+        var usedSlots = new HashSet<int>();
+
+        // Existing K2 macro names, so "Run Macro" bindings resolve against the user's
+        // macro library — same pattern as the DisplayPad/Everest/Everest60 BC imports.
+        var macroNames = _macroStore?.GetAll()
+            .Select(m => m.Name)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .ToList();
 
         foreach (var profile in profiles)
         {
             try
             {
                 int targetSlot = BaseCampDbImporter.FindFreeSlot(usedSlots);
-                if (targetSlot == 0) { skippedNoSlot++; continue; }
+                if (targetSlot == 0) continue; // sanity ceiling only (5 real firmware slots)
                 usedSlots.Add(targetSlot);
 
-                int n = BaseCampDbImporter.ImportMacroPadProfile(dbPath, profile, k2DeviceId, _store, targetSlot);
+                int n = BaseCampDbImporter.ImportMacroPadProfile(dbPath, profile, k2DeviceId, _store, targetSlot, macroNames);
                 totalKeys += n;
                 Log($"[IMP-BC] slot {profile.Slot} '{profile.Name}' -> K2 slot {targetSlot}: {n} keys");
-                if (profile.IsSelected) activeSlot = targetSlot;
             }
             catch (Exception ex)
             {
@@ -843,14 +931,12 @@ public partial class MainWindow
             }
         }
 
-        if (skippedNoSlot > 0)
-            MessageBox.Show(this, Loc.Get("import_some_skipped_no_slot", skippedNoSlot),
-                "Import from Base Camp", MessageBoxButton.OK, MessageBoxImage.Warning);
-
-        // Switch to active BC profile and reload UI
-        int slotToShow = activeSlot > 0 ? activeSlot : CurrentProfile();
+        // Always land on the FIRST imported profile and force a reload — simpler and
+        // safer than trying to restore whatever was active in Base Camp (user request:
+        // a plain, predictable refresh after import beats guessing at BC's own state).
+        int slotToShow = usedSlots.DefaultIfEmpty(0).Min();
         MpRefreshProfiles(k2DeviceId);
-        MpSelectProfileSlot(slotToShow);
+        if (slotToShow > 0) MpSelectProfileSlot(slotToShow);
         ReloadCurrentProfile();
 
         Log($"[IMP-BC] Done: {totalKeys} keys across {profiles.Count} profiles");
@@ -883,7 +969,7 @@ public partial class MainWindow
 
     /// <summary>Currently selected profile for editing (1..5).</summary>
     private int CurrentProfile()
-        => CbProfile.SelectedItem is MpProfileItem pi ? pi.Slot : 1;
+        => LstMpProfile.SelectedItem is MpProfileItem pi ? pi.Slot : 1;
 
     // ================================================================
     // Profile switching (called by IActionHost.SwitchProfile when

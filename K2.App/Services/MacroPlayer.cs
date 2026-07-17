@@ -58,9 +58,10 @@ public sealed class MacroPlayer
             for (int i = 0; i < iterations && !ct.IsCancellationRequested; i++)
             {
                 heldKeys.Clear();
-                foreach (var input in macro.Inputs)
+                for (int idx = 0; idx < macro.Inputs.Count; idx++)
                 {
                     if (ct.IsCancellationRequested) break;
+                    var input = macro.Inputs[idx];
 
                     // Delay
                     int delay = macro.DelayOption switch
@@ -71,6 +72,25 @@ public sealed class MacroPlayer
                     };
                     if (delay > 0)
                         HoldRepeat(delay, heldKeys, ct);
+
+                    // Alt+Numpad code (Alt held, numpad digits, Alt released — e.g.
+                    // Alt+0192 = "À"): compose the character ourselves and inject it as
+                    // a single Unicode keystroke instead of replaying the raw keys.
+                    // Windows' own Alt+Numpad composer has proven unreliable with
+                    // injected input on this machine — a clean SendInput stream (with
+                    // scan codes, with/without the HoldRepeat modifier re-assert)
+                    // produced empty text in a dedicated standalone harness, root cause
+                    // never isolated (see CHANGELOG 2026-07-14). Composing the group
+                    // deterministically removes every timing/composer dependency.
+                    // Only when no other key is currently held by the macro: a group
+                    // played under e.g. a held Ctrl isn't a plain Alt code.
+                    if (heldKeys.Count == 0
+                        && TryComposeAltCode(macro.Inputs, idx, out char altChar, out int groupEnd))
+                    {
+                        SendCharInput(altChar);
+                        idx = groupEnd; // skip the whole group, intra-group delays included
+                        continue;
+                    }
 
                     ExecuteInput(input, heldKeys);
                 }
@@ -108,6 +128,65 @@ public sealed class MacroPlayer
                 if (IsModifierKey(vk))
                     SendKeyInput(vk, false);
         }
+    }
+
+    /// <summary>
+    /// Detects an Alt+Numpad compose group starting at <paramref name="start"/>:
+    /// a keydown of plain Alt (VK_MENU/VK_LMENU — not AltGr, which is Ctrl+Alt and
+    /// never a plain Alt code) followed exclusively by numpad-digit keydown/keyups
+    /// (VK_NUMPAD0-9) up to the matching Alt keyup. On success returns the composed
+    /// character and the index of the closing Alt keyup. Decoding follows Windows'
+    /// own legacy rule: a leading 0 selects the active ANSI code page (e.g. Alt+0192
+    /// → cp1252 "À"), no leading 0 the OEM code page — resolved via
+    /// MultiByteToWideChar so the result matches this system's exact code pages
+    /// without any encoding-provider dependency. Any other event inside the group
+    /// (another key, a mouse event) means "not an Alt code" — caller falls back to
+    /// normal key playback.
+    /// </summary>
+    private static bool TryComposeAltCode(
+        IReadOnlyList<MacroInput> inputs, int start, out char ch, out int end)
+    {
+        ch = '\0';
+        end = start;
+        if (inputs[start].Type != "keydown") return false;
+        ushort altVk = (ushort)inputs[start].Key;
+        if (altVk is not (0x12 or 0xA4)) return false; // VK_MENU, VK_LMENU
+
+        var digits = new System.Text.StringBuilder();
+        for (int j = start + 1; j < inputs.Count; j++)
+        {
+            var ev = inputs[j];
+            ushort vk = (ushort)ev.Key;
+
+            if (ev.Type == "keyup" && (vk == altVk || vk == 0x12))
+            {
+                if (digits.Length == 0 || !TryDecodeAltCode(digits.ToString(), out ch))
+                    return false;
+                end = j;
+                return true;
+            }
+
+            if (ev.Type is not ("keydown" or "keyup")) return false;
+            if (vk is < 0x60 or > 0x69) return false; // numpad digits only
+            if (ev.Type == "keydown")
+                digits.Append((char)('0' + (vk - 0x60)));
+            if (digits.Length > 10) return false; // runaway/garbage recording
+        }
+        return false; // Alt never released within the macro
+    }
+
+    private static bool TryDecodeAltCode(string digits, out char ch)
+    {
+        ch = '\0';
+        if (!int.TryParse(digits, out int value) || value <= 0) return false;
+        // Windows' legacy composer uses the low byte of the accumulated number.
+        var bytes = new[] { (byte)(value & 0xFF) };
+        uint codePage = digits[0] == '0' ? CP_ACP : CP_OEMCP;
+        var buf = new char[2];
+        int n = MultiByteToWideChar(codePage, 0, bytes, bytes.Length, buf, buf.Length);
+        if (n <= 0) return false;
+        ch = buf[0];
+        return true;
     }
 
     private static bool IsModifierKey(ushort vk) => vk switch
@@ -284,4 +363,12 @@ public sealed class MacroPlayer
 
     [DllImport("user32.dll")]
     private static extern uint MapVirtualKey(uint uCode, uint uMapType);
+
+    private const uint CP_ACP   = 0; // active ANSI code page
+    private const uint CP_OEMCP = 1; // active OEM code page
+
+    [DllImport("kernel32.dll")]
+    private static extern int MultiByteToWideChar(
+        uint codePage, uint dwFlags, byte[] lpMultiByteStr, int cbMultiByte,
+        [Out] char[] lpWideCharStr, int cchWideChar);
 }

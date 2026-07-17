@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using K2.App.Services;
+using K2.Core;
 
 namespace K2.App.Models;
 
@@ -24,7 +25,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
     public DisplayPadKey(int index) => Index = index;
 
     public int Index { get; }
-    public string Label => $"#{Index}";
+    public string Label => Loc.Get("dp_key_button_label", Index + 1);
 
     private string? _imagePath;
     public string? ImagePath
@@ -132,6 +133,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
             OnChanged();
             OnChanged(nameof(HasAction));
             OnChanged(nameof(HasImageNoAction));
+            OnChanged(nameof(HasUnresolvedAction));
             OnChanged(nameof(Display));
             OnChanged(nameof(ListDisplay));
         }
@@ -146,12 +148,19 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
             if (_actionValue == value) return;
             _actionValue = value;
             OnChanged();
+            OnChanged(nameof(HasUnresolvedAction));
             OnChanged(nameof(Display));
             OnChanged(nameof(ListDisplay));
         }
     }
 
     public bool HasAction => !string.IsNullOrEmpty(_actionType);
+
+    /// <summary>True for a "Play macro" action imported from Base Camp with no matching
+    /// macro found by name (see BaseCampDbImporter.TranslateDefaultAction) — shown with the
+    /// same warning triangle as <see cref="HasImageNoAction"/> so the user notices it needs
+    /// a macro picked manually.</summary>
+    public bool HasUnresolvedAction => ActionTypeHelper.IsMacroMissingTarget(_actionType, _actionValue);
 
     /// <summary>Label shown on the overlay button.</summary>
     public string Display
@@ -167,7 +176,8 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
                     "exec"      => Path.GetFileName(_actionValue ?? ""),
                     "dp_folder" => "▸",   // folder — label comes from image
                     "dp_back"   => "◂",   // back — label comes from image
-                    _           => _actionType ?? "",
+                    "macro"     => ActionTypeHelper.MacroSummary(_actionValue),
+                    _           => ActionTypeHelper.IsUnrecognized(_actionType) ? Loc.Get("act_unrecognized") : _actionType ?? "",
                 };
             // Empty key: show index only in debug mode
             return _debugMode ? $"#{Index}" : "";
@@ -196,7 +206,8 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
         "exec"      => Path.GetFileName(_actionValue ?? ""),
         "dp_folder" => "Folder",
         "dp_back"   => "Back",
-        _           => _actionType ?? "",
+        "macro"     => ActionTypeHelper.MacroSummary(_actionValue),
+        _           => ActionTypeHelper.IsUnrecognized(_actionType) ? Loc.Get("act_unrecognized") : _actionType ?? "",
     };
 
     /// <summary>Refreshes display-related bindings after a DebugMode change.</summary>

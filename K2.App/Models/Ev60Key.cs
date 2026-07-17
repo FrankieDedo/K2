@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using K2.Core;
 
 namespace K2.App.Models;
 
@@ -53,7 +54,7 @@ public sealed class Ev60Key : INotifyPropertyChanged
     public string? ActionValue
     {
         get => _actionValue;
-        set { if (_actionValue == value) return; _actionValue = value; OnChanged(); }
+        set { if (_actionValue == value) return; _actionValue = value; OnChanged(); OnChanged(nameof(Display)); }
     }
 
     private bool _isHighlighted;
@@ -73,7 +74,9 @@ public sealed class Ev60Key : INotifyPropertyChanged
     {
         get
         {
-            string body = string.IsNullOrEmpty(_actionType) ? "(empty)" : _actionType;
+            string body = ActionTypeHelper.IsUnrecognized(_actionType) ? Loc.Get("act_unrecognized")
+                        : string.Equals(_actionType, "macro", System.StringComparison.Ordinal) ? ActionTypeHelper.MacroSummary(_actionValue)
+                        : string.IsNullOrEmpty(_actionType) ? "(empty)" : _actionType;
             return $"{Name}  —  {body}";
         }
     }

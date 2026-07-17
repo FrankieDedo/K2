@@ -311,7 +311,7 @@ public partial class DpKeyConfigDialog : Window
             "command" => $"Command: {val}",
             "macro"   => $"Macro: {val}",
             "pyscript"=> "Python script",
-            _         => $"{ActionType}: {val}",
+            _         => ActionTypeHelper.IsUnrecognized(ActionType) ? Loc.Get("act_unrecognized") : $"{ActionType}: {val}",
         };
     }
 

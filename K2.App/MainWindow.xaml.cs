@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using K2.App.Services;
@@ -83,8 +84,9 @@ public partial class MainWindow : Window
         Log("distributed with K2. To use the MacroPad, choose one option:");
         Log($"  1) copy '{dll}' from the Base Camp installation folder");
         Log("     next to K2.App.exe;");
-        Log("  2) keep Base Camp installed: K2 detects it automatically;");
-        Log($"  3) set the environment variable {NativeDependencyResolver.BaseCampDirEnvVar}");
+        Log("  2) pick the Base Camp DLL folder in Settings > Base Camp DLL folder;");
+        Log("  3) keep Base Camp installed: K2 detects it automatically;");
+        Log($"  4) set the environment variable {NativeDependencyResolver.BaseCampDirEnvVar}");
         Log("     to the path of the Base Camp folder.");
         Log(NativeDependencyResolver.DescribeSearch(dll));
         Log("──────────────────────────────────────────────");
@@ -327,6 +329,18 @@ public partial class MainWindow : Window
                      .Where(t => (t.Tag as string)?.StartsWith(prefix) == true)
                      .ToList())
             TcDevices.Items.Remove(t);
+    }
+
+    /// <summary>Shared by every device's profile list (K2SideProfileItemStyle's
+    /// PreviewMouseRightButtonDown EventSetter): a plain ListBox doesn't move selection
+    /// on a right-click the way it does on left-click, but every per-device profile
+    /// ContextMenu (DpBuildProfileContextMenu etc.) is built once and acts on whatever
+    /// row is currently SelectedItem — so the row under the cursor must become selected
+    /// BEFORE the context menu opens, or "Rename"/"Delete"/... would silently act on the
+    /// previously-selected profile instead of the one the user right-clicked.</summary>
+    private void ProfileItem_PreviewRightClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is ListBoxItem item) item.IsSelected = true;
     }
 
     /// <summary>Shows or hides a static top-level device tab (Everest Max/60, Makalu,

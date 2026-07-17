@@ -56,11 +56,92 @@ public partial class MainWindow
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (res != MessageBoxResult.Yes) return;
 
+        // Macros FIRST, before any device's key bindings: a "Default" FunctionType binding
+        // (BaseCampDbImporter.TranslateDefaultAction) is matched by name against the K2 macro
+        // library at import time — if the library is still empty because this cascade never
+        // imported macros, every named-macro reference lands unresolved (red "action not
+        // found" triangle) even though the same-named macro exists right there in BaseCamp.db.
+        // Reuses the same button handler (and its own confirm/count dialogs) as the standalone
+        // "Import from BaseCamp" button on the Macro tab — same pattern every device below
+        // already follows (each shows its own confirmation in this cascade).
+        BtnMacroImportBC_Click(this, new RoutedEventArgs());
+
         BtnEvImportBc_Click(this, new RoutedEventArgs());
         BtnEv60ImportBc_Click(this, new RoutedEventArgs());
         BtnMkImportBc_Click(this, new RoutedEventArgs());
         BtnMpImportBc_Click(this, new RoutedEventArgs());
-        BtnDpImportBc_Click(this, new RoutedEventArgs());
+        // DisplayPad supports multiple simultaneous physical devices — repeat the
+        // per-device import (incl. the Base Camp device picker, when needed) once per
+        // connected pad instead of the single-tab BtnDpImportBc_Click.
+        DpImportBcForAllDevices();
+    }
+
+    /// <summary>Loads the persisted "Base Camp DLL folder" (see
+    /// <see cref="AppSettings.BaseCampDllFolder"/>) into the picker, mirrors the
+    /// installer's "detected install vs. manual folder" radio choice (see
+    /// K2Setup.iss's BcPage), and refreshes the found/missing status of the three
+    /// non-redistributable Base Camp native DLLs (MacroPadSDK.dll, SDKDLL.dll,
+    /// Everest360_USB.dll — see <see cref="NativeDependencyResolver"/>). Called once
+    /// from InitAppSettingsPanel and again after the user changes the radio or
+    /// browses the folder.</summary>
+    private void InitBcDllFolderPanel()
+    {
+        if (_bcDllPanelUpdating) return; // re-entrancy guard: setting IsChecked below fires RbBcDllMode_Checked
+        _bcDllPanelUpdating = true;
+        try
+        {
+            string? detected = NativeDependencyResolver.BaseCampDirectories().FirstOrDefault();
+            RbBcDllAuto.IsEnabled = detected is not null;
+            TxtBcDetected.Text = detected ?? Loc.Get("settings_bc_dll_radio_auto_notfound");
+
+            // Manual mode whenever the user has an explicit override saved, or nothing
+            // was auto-detected to fall back on (same default as the installer's page).
+            bool manual = !string.IsNullOrWhiteSpace(AppSettings.BaseCampDllFolder) || detected is null;
+            RbBcDllManual.IsChecked = manual;
+            RbBcDllAuto.IsChecked = !manual;
+            TxtBcDllFolder.IsEnabled = manual;
+            BtnBcDllFolderBrowse.IsEnabled = manual;
+
+            TxtBcDllFolder.Text = AppSettings.BaseCampDllFolder ?? Loc.Get("settings_bc_dll_none");
+            RefreshBcDllStatus();
+        }
+        finally
+        {
+            _bcDllPanelUpdating = false;
+        }
+    }
+
+    private bool _bcDllPanelUpdating;
+
+    private void RefreshBcDllStatus()
+    {
+        var parts = NativeDependencyResolver.BaseCampNativeDlls.Select(dll =>
+            $"{dll}: {(NativeDependencyResolver.IsResolvable(dll) ? Loc.Get("settings_bc_dll_found") : Loc.Get("settings_bc_dll_missing"))}");
+        TxtBcDllStatus.Text = string.Join("   ", parts);
+    }
+
+    /// <summary>Fires when either "Base Camp DLL folder" radio is checked. Switching to
+    /// auto-detect clears any saved manual override so <see cref="NativeDependencyResolver"/>
+    /// falls back to its own detection; switching to manual just unlocks the folder
+    /// picker below (the folder itself is only saved once the user browses to one).</summary>
+    private void RbBcDllMode_Checked(object sender, RoutedEventArgs e)
+    {
+        if (RbBcDllAuto.IsChecked == true)
+            AppSettings.SetBaseCampDllFolder(null);
+        InitBcDllFolderPanel();
+    }
+
+    /// <summary>"Browse…" in the "Base Camp DLL folder" group — lets the user point K2
+    /// at a folder containing the Base Camp native DLLs (e.g. copied from another PC or
+    /// extracted from the Base Camp installer) without installing Base Camp itself or
+    /// setting the K2_BASECAMP_DIR environment variable by hand.</summary>
+    private void BtnBcDllFolderBrowse_Click(object sender, RoutedEventArgs e)
+    {
+        var folder = new Microsoft.Win32.OpenFolderDialog { Title = Loc.Get("settings_bc_dll_browse") };
+        if (folder.ShowDialog(this) != true) return;
+
+        AppSettings.SetBaseCampDllFolder(folder.FolderName);
+        InitBcDllFolderPanel();
     }
 
     /// <summary>Loads persisted AppSettings into the Settings tab UI and applies
@@ -70,7 +151,6 @@ public partial class MainWindow
     {
         bool debug = AppSettings.DebugMode;
         CkAppDebugMode.IsChecked = debug;
-        PnlDebugNativeEngines.Visibility = debug ? Visibility.Visible : Visibility.Collapsed;
 
         switch (AppSettings.LogLevel)
         {
@@ -79,12 +159,12 @@ public partial class MainWindow
             default:                 RbLogNormal.IsChecked  = true; break;
         }
 
-        CkDpNativeEngine.IsChecked = AppSettings.DisplayPadNativeEngine;
-        CkEvNativeEngine.IsChecked = AppSettings.EverestNativeEngine;
         CkAutoStopBaseCamp.IsChecked = AppSettings.AutoStopBaseCamp;
         CkKillBcWorker.IsChecked = AppSettings.KillBaseCampWorker;
         CkRestartBcOnClose.IsChecked = AppSettings.RestartBaseCampOnClose;
         InitBcAutostartCheckbox();
+
+        InitBcDllFolderPanel();
 
         CkCloseToTray.IsChecked = AppSettings.CloseToTray;
         CkStartMinToTray.IsChecked = AppSettings.StartMinimizedToTray;
@@ -216,27 +296,11 @@ public partial class MainWindow
         InitBcAutostartCheckbox();
     }
 
-    /// <summary>Persists the DisplayPad native-engine flag. The backend is chosen when
-    /// MainWindow is constructed (see _dpClient initializer), so this takes effect at
-    /// the next app start — the hint text under the checkbox says so.</summary>
-    private void CkDpNativeEngine_Click(object sender, RoutedEventArgs e)
-    {
-        AppSettings.SetDisplayPadNativeEngine(CkDpNativeEngine.IsChecked == true);
-    }
-
-    /// <summary>Persists the Everest native-engine flag (Phase 1: connectivity + numpad
-    /// D1-D4 buttons only — see EverestService._nativePad). Takes effect at next start.</summary>
-    private void CkEvNativeEngine_Click(object sender, RoutedEventArgs e)
-    {
-        AppSettings.SetEverestNativeEngine(CkEvNativeEngine.IsChecked == true);
-    }
-
     private void CkAppDebugMode_Click(object sender, RoutedEventArgs e)
     {
         bool debug = CkAppDebugMode.IsChecked == true;
         AppSettings.SetDebugMode(debug);
         ApplyDebugModeToAllDevices(debug);
-        PnlDebugNativeEngines.Visibility = debug ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void RbLogLevel_Checked(object sender, RoutedEventArgs e)

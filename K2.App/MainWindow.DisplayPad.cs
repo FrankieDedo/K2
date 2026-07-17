@@ -176,7 +176,9 @@ public partial class MainWindow
             };
 
         LvDpDevices.ItemsSource = _dpDevices;
-        // DP device tabs are added to TcDevices by DpRefreshDevices; CbDpProfile by DpRefreshProfiles
+        // DP device tabs are added to TcDevices by DpRefreshDevices; LstDpProfile by DpRefreshProfiles
+        LstDpProfile.ContextMenu = DpBuildProfileContextMenu();
+        BtnDpProfileMenu.ContextMenu = DpBuildProfileMenuNoEdit();
 
         LstDpPages.ItemsSource = _dpPages;
 
@@ -413,7 +415,7 @@ public partial class MainWindow
     private void BtnDpRenameProfile_Click(object sender, RoutedEventArgs e)
     {
         if (DpSelectedDeviceId() is not int id) return;
-        if (CbDpProfile.SelectedItem is not DpProfileItem pi || pi.IsNew) return;
+        if (LstDpProfile.SelectedItem is not DpProfileItem pi || pi.IsNew) return;
         int slot = pi.Slot;
         string current = _dpStore.GetProfileName(id, slot) ?? Loc.Get("profile_n", slot);
         string? name = ShowRenameDialog(current,
@@ -429,7 +431,7 @@ public partial class MainWindow
     private void BtnDpDeleteProfile_Click(object sender, RoutedEventArgs e)
     {
         if (DpSelectedDeviceId() is not int id) return;
-        if (CbDpProfile.SelectedItem is not DpProfileItem pi || pi.IsNew) return;
+        if (LstDpProfile.SelectedItem is not DpProfileItem pi || pi.IsNew) return;
         int slot = pi.Slot;
         // Cannot delete the last real profile
         var existing = _dpStore.GetExistingProfiles(id);
@@ -446,11 +448,20 @@ public partial class MainWindow
             MessageBoxButton.OKCancel,
             MessageBoxImage.Warning);
         if (res != MessageBoxResult.OK) return;
-        _dpStore.ClearProfile(id, slot);
-        _dpStore.SetSetting($"profile.{id}.{slot}.name", "");
+        DpDeleteProfileSlot(id, slot);
         DpLog($"[UI] Profile {slot} deleted.");
         DpRefreshProfiles(id);
-        // CbDpProfile_SelectionChanged will reload the key grid automatically
+        // LstDpProfile_SelectionChanged will reload the key grid automatically
+    }
+
+    /// <summary>Clears one profile slot's buttons+name — no "last profile" guard
+    /// (that's the button handler's job). Also used by the Base Camp wipe-before-import
+    /// flow (<see cref="DpImportBcForDevice"/>), which intentionally clears every slot
+    /// including the last one, since fresh profiles replace them right after.</summary>
+    private void DpDeleteProfileSlot(int deviceId, int slot)
+    {
+        _dpStore.ClearProfile(deviceId, slot);
+        _dpStore.SetSetting($"profile.{deviceId}.{slot}.name", "");
     }
 
     /// <summary>Resets the currently selected profile's button icons/actions/pages back
@@ -775,9 +786,9 @@ public partial class MainWindow
         int cur;
         if (isActive)
         {
-            if (CbDpProfile.ItemsSource is not List<DpProfileItem> items) return;
+            if (LstDpProfile.ItemsSource is not List<DpProfileItem> items) return;
             real = items.Where(x => !x.IsNew).Select(x => x.Slot).ToList();
-            cur  = CbDpProfile.SelectedItem is DpProfileItem pi ? pi.Slot : (real.Count > 0 ? real[0] : 1);
+            cur  = LstDpProfile.SelectedItem is DpProfileItem pi ? pi.Slot : (real.Count > 0 ? real[0] : 1);
         }
         else
         {
@@ -837,8 +848,8 @@ public partial class MainWindow
         _dpSuppressProfile = true;
         try
         {
-            if (CbDpProfile.ItemsSource is List<DpProfileItem> items)
-                CbDpProfile.SelectedItem = items.Find(x => x.Slot == slot && !x.IsNew) ?? items[0];
+            if (LstDpProfile.ItemsSource is List<DpProfileItem> items)
+                LstDpProfile.SelectedItem = items.Find(x => x.Slot == slot && !x.IsNew) ?? items[0];
         }
         finally { _dpSuppressProfile = false; }
     }
@@ -858,26 +869,28 @@ public partial class MainWindow
                 string name = _dpStore.GetProfileName(deviceId, slot) ?? Loc.Get("profile_n", slot);
                 items.Add(new DpProfileItem(slot, name));
             }
-            // Find the next free slot (1-5)
-            int nextFree = Enumerable.Range(1, 5).FirstOrDefault(s => !existing.Contains(s));
+            // Find the next free slot — DisplayPad profiles are pure K2-side bookkeeping
+            // (see DpSwitchProfile's doc comment), no firmware slot cap, so this is
+            // uncapped (999 is just a generous sanity ceiling, not a real limit).
+            int nextFree = BaseCampDbImporter.FindFreeSlot(existing, maxSlots: 999);
             if (nextFree > 0)
                 items.Add(new DpProfileItem(nextFree, Loc.Get("new_profile")));
 
-            CbDpProfile.DisplayMemberPath = nameof(DpProfileItem.Label);
-            CbDpProfile.ItemsSource = items;
+            LstDpProfile.DisplayMemberPath = nameof(DpProfileItem.Label);
+            LstDpProfile.ItemsSource = items;
 
             int current = _dpStore.GetCurrentProfile(deviceId);
             var match = items.Find(x => x.Slot == current && !x.IsNew);
-            CbDpProfile.SelectedItem = match ?? items[0];
+            LstDpProfile.SelectedItem = match ?? items[0];
         }
         finally { _dpSuppressProfile = false; }
     }
 
-    private void CbDpProfile_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void LstDpProfile_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_dpSuppressProfile) return;
         if (DpSelectedDeviceId() is not int id) return;
-        if (CbDpProfile.SelectedItem is not DpProfileItem pi) return;
+        if (LstDpProfile.SelectedItem is not DpProfileItem pi) return;
         int profile = pi.Slot;
 
         if (pi.IsNew)
@@ -892,8 +905,8 @@ public partial class MainWindow
             _dpSuppressProfile = true;
             try
             {
-                var items = CbDpProfile.ItemsSource as List<DpProfileItem>;
-                CbDpProfile.SelectedItem = items?.Find(x => x.Slot == profile && !x.IsNew);
+                var items = LstDpProfile.ItemsSource as List<DpProfileItem>;
+                LstDpProfile.SelectedItem = items?.Find(x => x.Slot == profile && !x.IsNew);
             }
             finally { _dpSuppressProfile = false; }
         }
@@ -1008,6 +1021,14 @@ public partial class MainWindow
             int rotation = _dpStore.GetRotation(id);
             int imported = 0;
 
+            // Existing K2 macro names, used by TranslateAction to auto-match a Base Camp
+            // named-macro reference ("Default" FunctionType) against the user's own macro
+            // library — see BaseCampDbImporter.TranslateDefaultAction's doc comment.
+            var macroNames = _macroStore?.GetAll()
+                .Select(m => m.Name)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .ToList();
+
             foreach (var b in bindings)
             {
                 bool isAssigned = b.Element("IsKeyAssigned")?.Value
@@ -1107,7 +1128,7 @@ public partial class MainWindow
                 }
                 else
                 {
-                    (actionType, actionValue) = BaseCampDbImporter.TranslateAction(funcType, subType, funcValue);
+                    (actionType, actionValue) = BaseCampDbImporter.TranslateAction(funcType, subType, funcValue, macroNames);
                 }
 
                 _dpStore.SaveButton(id, slot, pageId, btnIndex, imagePath, actionType, actionValue);
@@ -1150,7 +1171,7 @@ public partial class MainWindow
         var profiles = _dpStore.GetExistingProfiles(id)
             .Select(slot => (Slot: slot, Name: _dpStore.GetProfileName(id, slot) ?? Loc.Get("profile_n", slot)))
             .ToList();
-        int? currentSlot = CbDpProfile.SelectedItem is DpProfileItem pi && !pi.IsNew ? pi.Slot : null;
+        int? currentSlot = LstDpProfile.SelectedItem is DpProfileItem pi && !pi.IsNew ? pi.Slot : null;
         string deviceLabel = _dpDeviceLabels.GetValueOrDefault(id, $"DisplayPad {id}");
 
         ExportProfileHelper.Run(
@@ -1175,7 +1196,33 @@ public partial class MainWindow
 
     private void BtnDpImportBc_Click(object sender, RoutedEventArgs e)
     {
-        // 1. Locate the database
+        // Per-tab button: only ever touches the currently open tab's device — the
+        // "overall import" cascade (Settings) instead calls DpImportBcForAllDevices,
+        // which repeats this same per-device flow once per connected pad.
+        if (DpSelectedDeviceId() is not int id) return;
+        DpImportBcForDevice(id);
+    }
+
+    /// <summary>Runs the Base Camp import once per currently connected DisplayPad
+    /// (used by the "Import from Base Camp" cascade in Settings, MainWindow.Settings.cs) —
+    /// if Base Camp's DB has profiles for more than one physical device, the picker in
+    /// <see cref="DpImportBcForDevice"/> is shown once per connected pad here.</summary>
+    private void DpImportBcForAllDevices()
+    {
+        foreach (var id in _dpDeviceIds.ToList())
+            DpImportBcForDevice(id);
+    }
+
+    /// <summary>
+    /// Imports Base Camp profiles into ONE K2 DisplayPad device (<paramref name="k2DeviceId"/>).
+    /// If the DB has profiles for more than one physical device, prompts the user to choose
+    /// which one via <see cref="BcDevicePickerDialog"/> (skipped when there's only one
+    /// candidate — nothing to choose). Unlike the old free-slot-seeking import, this always
+    /// WIPES every existing K2 profile on the target device first (<see cref="DpDeleteProfileSlot"/>)
+    /// so the import replaces rather than appends.
+    /// </summary>
+    private void DpImportBcForDevice(int k2DeviceId)
+    {
         string? dbPath = BaseCampDbImporter.FindBaseCampDb();
         if (dbPath is null)
         {
@@ -1183,9 +1230,7 @@ public partial class MainWindow
             LblStatus.Text = Loc.Get("dp_bc_db_not_found");
             return;
         }
-        DpLog($"[IMP-BC] DB found: {dbPath}");
 
-        // 2. Read profiles grouped by device
         Dictionary<int, List<BaseCampDbImporter.BcProfile>> bcDevices;
         try { bcDevices = BaseCampDbImporter.ReadProfiles(dbPath); }
         catch (Exception ex)
@@ -1201,115 +1246,114 @@ public partial class MainWindow
             return;
         }
 
-        // 3. Auto-mapping: BC and K2 use the same SDK → DeviceIds match.
-        //    Show a summary with the automatic mapping.
-        var k2Devices = new HashSet<int>(_dpDeviceIds);
+        string deviceLabel = _dpDeviceLabels.GetValueOrDefault(k2DeviceId, $"DisplayPad {k2DeviceId}");
+
+        List<BaseCampDbImporter.BcProfile> profiles;
+        if (bcDevices.Count == 1)
+        {
+            profiles = bcDevices.Values.First();
+        }
+        else
+        {
+            var options = bcDevices.Select(kv => (
+                BcDeviceId: kv.Key,
+                Label: Loc.Get("bc_pick_device_label", kv.Key, kv.Value.Count,
+                    string.Join(", ", kv.Value.Select(p => p.Name)))
+            )).ToList();
+            var picker = new BcDevicePickerDialog(deviceLabel, options) { Owner = this };
+            if (picker.ShowDialog() != true) return;
+            profiles = bcDevices[picker.SelectedBcDeviceId!.Value];
+        }
+
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Automatic Base Camp → K2 mapping:\n");
-
-        int matchedDevices = 0;
-        int totalProfiles = 0;
-        foreach (var (bcDevId, profiles) in bcDevices)
-        {
-            bool hasK2 = k2Devices.Contains(bcDevId);
-            string status = hasK2 ? "→ K2 connected" : "→ NOT connected (skip)";
-            sb.AppendLine($"  DisplayPad #{bcDevId}  {status}");
-            foreach (var p in profiles)
-            {
-                string sel = p.IsSelected ? " [ACTIVE]" : "";
-                sb.AppendLine($"    Slot {p.Slot}: {p.Name}{sel}");
-            }
-            if (hasK2) { matchedDevices++; totalProfiles += profiles.Count; }
-        }
-
-        if (matchedDevices == 0)
-        {
-            sb.AppendLine("\nNo connected device matches the profiles in the DB.");
-            MessageBox.Show(this, sb.ToString(), "Import from Base Camp",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        sb.AppendLine($"\nImport {totalProfiles} profiles to {matchedDevices} devices?");
+        sb.AppendLine($"Import {profiles.Count} profile(s) into \"{deviceLabel}\"?\n");
+        foreach (var p in profiles)
+            sb.AppendLine($"  {(p.IsSelected ? "[ACTIVE] " : "")}{p.Name}");
+        sb.AppendLine();
+        sb.AppendLine(Loc.Get("bc_import_will_wipe", deviceLabel));
         if (MessageBox.Show(this, sb.ToString(), "Import from Base Camp",
-                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
 
-        // 4. Import: each profile goes to the K2 device with the same ID as BC
-        int totalButtons = 0;
-        int importedProfiles = 0;
-        int selectedDevId = DpSelectedDeviceId() ?? -1;
-        int selectedSlot = -1;
-        int skippedNoSlot = 0;
+        // Wipe: replace, don't append (see DpDeleteProfileSlot's doc comment).
+        foreach (var slot in _dpStore.GetExistingProfiles(k2DeviceId))
+            DpDeleteProfileSlot(k2DeviceId, slot);
 
-        foreach (var (bcDevId, profiles) in bcDevices)
+        int rotation = _dpStore.GetRotation(k2DeviceId);
+        // APEnable=false required before SetIconPic (UploadImageToProfile)
+        _dpClient.APEnable(k2DeviceId, false);
+
+        var usedSlots = new HashSet<int>();
+        int totalButtons = 0, importedProfiles = 0;
+
+        // Existing K2 macro names, used by TranslateAction to auto-match a Base Camp
+        // named-macro reference ("Default" FunctionType) against the user's own macro
+        // library — same lookup the XML import path already uses (BaseCampDbImporter.
+        // TranslateDefaultAction's doc comment), previously missing here so BC.db imports
+        // never resolved named macros even when the library had a matching name.
+        var macroNames = _macroStore?.GetAll()
+            .Select(m => m.Name)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .ToList();
+
+        foreach (var profile in profiles)
         {
-            if (!k2Devices.Contains(bcDevId)) continue;
-
-            // Rotation for this device
-            int rotation = _dpStore.GetRotation(bcDevId);
-            // APEnable=false required before SetIconPic (UploadImageToProfile)
-            _dpClient.APEnable(bcDevId, false);
-
-            // Always land in a FRESH slot per device — see BaseCampDbImporter.FindFreeSlot's
-            // doc comment; track slots claimed so far in this batch too.
-            var usedSlots = new HashSet<int>(_dpStore.GetExistingProfiles(bcDevId));
-
-            foreach (var profile in profiles)
+            try
             {
-                try
+                int targetSlot = BaseCampDbImporter.FindFreeSlot(usedSlots, maxSlots: 999);
+                if (targetSlot == 0) continue; // sanity ceiling only, practically unreachable
+                usedSlots.Add(targetSlot);
+
+                int n = BaseCampDbImporter.ImportProfile(dbPath, profile, k2DeviceId, _dpStore, targetSlot, macroNames);
+
+                // Upload root-page images only (folder pages are uploaded on navigation)
+                var buttons = _dpStore.LoadPage(k2DeviceId, targetSlot, 0);
+                foreach (var btn in buttons)
                 {
-                    int targetSlot = BaseCampDbImporter.FindFreeSlot(usedSlots);
-                    if (targetSlot == 0) { skippedNoSlot++; continue; }
-                    usedSlots.Add(targetSlot);
-
-                    int n = BaseCampDbImporter.ImportProfile(
-                        dbPath, profile, bcDevId, _dpStore, targetSlot);
-
-                    // Upload root-page images only (folder pages are uploaded on navigation)
-                    var buttons = _dpStore.LoadPage(bcDevId, targetSlot, 0);
-                    foreach (var btn in buttons)
+                    if (!string.IsNullOrEmpty(btn.ImagePath) && File.Exists(btn.ImagePath))
                     {
-                        if (!string.IsNullOrEmpty(btn.ImagePath) && File.Exists(btn.ImagePath))
-                        {
-                            bool ok = _dpClient.UploadImageToProfile(bcDevId, btn.ImagePath,
-                                btn.ButtonIndex, targetSlot, rotation);
-                            if (!ok)
-                                _dpClient.UploadImage(bcDevId, btn.ImagePath, btn.ButtonIndex, rotation);
-                        }
+                        bool ok = _dpClient.UploadImageToProfile(k2DeviceId, btn.ImagePath,
+                            btn.ButtonIndex, targetSlot, rotation);
+                        if (!ok)
+                            _dpClient.UploadImage(k2DeviceId, btn.ImagePath, btn.ButtonIndex, rotation);
                     }
-
-                    DpLog($"[IMP-BC] dev#{bcDevId} {profile.Name} (BC slot {profile.Slot} -> K2 slot {targetSlot}): {n} keys");
-                    totalButtons += n;
-                    importedProfiles++;
-
-                    // Track the active profile for the currently selected device
-                    if (profile.IsSelected && bcDevId == selectedDevId)
-                        selectedSlot = targetSlot;
                 }
-                catch (Exception ex)
-                {
-                    DpLog($"[IMP-BC] Import error dev#{bcDevId}/{profile.Name}: {ex.Message}");
-                }
+
+                DpLog($"[IMP-BC] {profile.Name} -> K2 dev#{k2DeviceId} slot {targetSlot}: {n} keys");
+                totalButtons += n;
+                importedProfiles++;
+            }
+            catch (Exception ex)
+            {
+                DpLog($"[IMP-BC] Import error {profile.Name}: {ex.Message}");
             }
         }
 
-        if (skippedNoSlot > 0)
-            MessageBox.Show(this, Loc.Get("import_some_skipped_no_slot", skippedNoSlot),
-                "Import from Base Camp", MessageBoxButton.OK, MessageBoxImage.Warning);
+        // Always land on the FIRST imported profile and force a reload — simpler and
+        // safer than trying to restore whatever was active in Base Camp (user request:
+        // a plain, predictable refresh after import beats guessing at BC's own state).
+        int activateSlot = usedSlots.DefaultIfEmpty(0).Min();
+        bool isActive = k2DeviceId == DpSelectedDeviceId();
 
-        // 5. Activate the profile that was selected in BC for the current device
-        if (selectedSlot > 0 && selectedDevId > 0)
+        // DpRefreshProfiles/DpSelectProfileSlot (foreground-only, see their own doc
+        // comments) MUST run BEFORE DpRequestRepaint below: the repaint's foreground path
+        // (DpReloadAndPreloadProfile -> DpCurrentProfile()) reads the profile straight off
+        // LstDpProfile.SelectedItem, not the store — repainting first left the UI showing
+        // "Profile 1" selected while the panel kept whatever profile was selected BEFORE
+        // the import (e.g. Profile 2), since the list hadn't been moved to slot 1 yet.
+        if (isActive)
         {
-            // No native SwitchProfile — see DpSwitchProfile.
-            _dpStore.SetCurrentProfile(selectedDevId, selectedSlot);
-            ResetDpNavigation();
-            DpRefreshProfiles(selectedDevId);
-            DpSelectProfileSlot(selectedSlot);
-            DpRequestRepaint(selectedDevId);
+            DpRefreshProfiles(k2DeviceId);
+            if (activateSlot > 0) DpSelectProfileSlot(activateSlot);
+        }
+        if (activateSlot > 0)
+        {
+            _dpStore.SetCurrentProfile(k2DeviceId, activateSlot);
+            if (isActive) ResetDpNavigation();
+            DpRequestRepaint(k2DeviceId);
         }
 
-        DpLog($"[IMP-BC] Done: {totalButtons} keys across {importedProfiles} profiles / {matchedDevices} devices");
+        DpLog($"[IMP-BC] Done: {totalButtons} keys across {importedProfiles} profile(s) on device #{k2DeviceId}");
         LblStatus.Text = Loc.Get("dp_imported", importedProfiles, totalButtons);
     }
 
@@ -1461,6 +1505,64 @@ public partial class MainWindow
     // ================================================================
     // Context menu
     // ================================================================
+
+    /// <summary>Right-click menu for LstDpProfile rows — replaces the old standalone
+    /// Rename/Delete/Import/Export buttons (see MainWindow.xaml's Profile group).
+    /// A single ContextMenu is shared by every row; K2SideProfileItemStyle's
+    /// PreviewMouseRightButtonDown EventSetter (ProfileItem_PreviewRightClick, in
+    /// MainWindow.xaml.cs) selects the right-clicked row first, so every handler below
+    /// (already written to read LstDpProfile.SelectedItem) works unmodified.</summary>
+    private ContextMenu DpBuildProfileContextMenu()
+    {
+        var menu = new ContextMenu();
+        var miRename = new MenuItem { Header = Loc.Get("rename_profile") };
+        miRename.Click += BtnDpRenameProfile_Click;
+        var miImportXml = new MenuItem { Header = Loc.Get("dp_import_xml") };
+        miImportXml.Click += BtnDpImportXml_Click;
+        var miImportBc = new MenuItem { Header = Loc.Get("dp_import_bc") };
+        miImportBc.Click += BtnDpImportBc_Click;
+        var miExport = new MenuItem { Header = Loc.Get("export_profiles_btn") };
+        miExport.Click += BtnDpExportProfiles_Click;
+        var miDelete = new MenuItem { Header = Loc.Get("delete_profile") };
+        miDelete.Click += BtnDpDeleteProfile_Click;
+        menu.Items.Add(miRename);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miImportXml);
+        menu.Items.Add(miImportBc);
+        menu.Items.Add(miExport);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miDelete);
+        return menu;
+    }
+
+    /// <summary>Same items as <see cref="DpBuildProfileContextMenu"/> minus Rename/Delete —
+    /// opened from the small "…" button in the Profile header (BtnDpProfileMenu_Click),
+    /// which is not tied to a specific row so renaming/deleting a specific profile
+    /// wouldn't make sense there.</summary>
+    private ContextMenu DpBuildProfileMenuNoEdit()
+    {
+        var menu = new ContextMenu();
+        var miImportXml = new MenuItem { Header = Loc.Get("dp_import_xml") };
+        miImportXml.Click += BtnDpImportXml_Click;
+        var miImportBc = new MenuItem { Header = Loc.Get("dp_import_bc") };
+        miImportBc.Click += BtnDpImportBc_Click;
+        var miExport = new MenuItem { Header = Loc.Get("export_profiles_btn") };
+        miExport.Click += BtnDpExportProfiles_Click;
+        menu.Items.Add(miImportXml);
+        menu.Items.Add(miImportBc);
+        menu.Items.Add(miExport);
+        return menu;
+    }
+
+    private void BtnDpProfileMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.ContextMenu is ContextMenu cm)
+        {
+            cm.PlacementTarget = btn;
+            cm.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            cm.IsOpen = true;
+        }
+    }
 
     private ContextMenu BuildDpKeyContextMenu()
     {
@@ -1727,8 +1829,39 @@ public partial class MainWindow
     /// only updates the UI/store above; without this the old icon stays on-screen
     /// until the next full repaint (profile switch, reconnect, ...).
     /// </summary>
-    private void DpClearKeyOnDevice(int id, int btnIndex) =>
-        _dpClient.TryUploadRawBgr(id, new byte[DpHidNative.IconBytes], btnIndex);
+    private void DpClearKeyOnDevice(int id, int btnIndex)
+    {
+        if (_dpClient.TryUploadRawBgr(id, new byte[DpHidNative.IconBytes], btnIndex)) return;
+        // Satellite/SDK backend: TryUploadRawBgr is a hard "false" there (no raw-buffer
+        // command over the pipe), so this method used to be a silent no-op on that
+        // backend — combined with DisplayPadResetPicture failing on some machines
+        // (observed 2026-07-16, satellite log "[ResetPictures/native] ok=False" on every
+        // profile switch), NOTHING could ever blank a key and stale icons survived every
+        // switch. Fall back to uploading a solid-black PNG through the normal path,
+        // which those same logs show always works.
+        _dpClient.UploadImage(id, DpBlackIconPath(), btnIndex, 0);
+    }
+
+    private static string? _dpBlackIconPath;
+
+    /// <summary>Path of a solid-black 102×102 PNG, generated once on first use (blank-key
+    /// fallback for backends without raw-buffer uploads — see <see cref="DpClearKeyOnDevice"/>).</summary>
+    private static string DpBlackIconPath()
+    {
+        if (_dpBlackIconPath is string cached && File.Exists(cached)) return cached;
+        string dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "K2.DisplayPad");
+        Directory.CreateDirectory(dir);
+        string path = Path.Combine(dir, "blank_black_102.png");
+        if (!File.Exists(path))
+        {
+            using var bmp = new System.Drawing.Bitmap(DpHidNative.IconSize, DpHidNative.IconSize);
+            using (var g = System.Drawing.Graphics.FromImage(bmp))
+                g.Clear(System.Drawing.Color.Black);
+            bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+        }
+        return _dpBlackIconPath = path;
+    }
 
     // ================================================================
     // Refresh / Persistence
@@ -1850,7 +1983,7 @@ public partial class MainWindow
             : "0 DisplayPad tabs created (SDK reported no plugged device)");
     }
 
-    private int DpCurrentProfile() => CbDpProfile.SelectedItem is DpProfileItem pi ? pi.Slot : 1;
+    private int DpCurrentProfile() => LstDpProfile.SelectedItem is DpProfileItem pi ? pi.Slot : 1;
 
     /// <summary>
     /// Reloads the current page's keys from the store and uploads images.
@@ -1918,10 +2051,13 @@ public partial class MainWindow
         }
 
         // Any key without an image on THIS page must go blank on the panel — otherwise it
-        // keeps showing whatever the previously-displayed page (or profile) had there. Only
-        // matters when neither blankFirst (ResetPictures already blanks the whole panel) nor
-        // fullscreenActive (a fullscreen image already owns all 12 slots) is in play.
-        var toBlank = (blankFirst || fullscreenActive)
+        // keeps showing whatever the previously-displayed page (or profile) had there.
+        // Computed even when blankFirst is set: ResetPictures can FAIL (the SDK wrapper
+        // call returns false on some machines — observed 2026-07-16), and when it does
+        // these per-key blanks are the only thing standing between the user and stale
+        // old-profile icons. Skipped only under fullscreenActive (a fullscreen image
+        // already owns all 12 slots).
+        var toBlank = fullscreenActive
             ? Array.Empty<int>()
             : Enumerable.Range(0, _dpKeys.Length).Where(i => !keysWithImage.Contains(i)).ToArray();
 
@@ -1939,7 +2075,13 @@ public partial class MainWindow
             var next = previous.ContinueWith(_ =>
             {
                 if (ct.IsCancellationRequested) return;
-                if (blankFirst) _dpClient.ResetPictures(id);
+                bool panelBlanked = false;
+                if (blankFirst)
+                {
+                    panelBlanked = _dpClient.ResetPictures(id);
+                    if (!panelBlanked)
+                        DpLogAsync("ResetPictures failed — blanking empty keys individually instead");
+                }
 
                 if (fullscreenActive)
                 {
@@ -1948,7 +2090,8 @@ public partial class MainWindow
                     return;
                 }
 
-                foreach (int btnIndex in toBlank)
+                // Redundant (and skipped) when the full-panel reset above really worked.
+                foreach (int btnIndex in panelBlanked ? Array.Empty<int>() : toBlank)
                 {
                     if (ct.IsCancellationRequested) return;
                     DpClearKeyOnDevice(id, btnIndex);
@@ -2062,7 +2205,7 @@ public partial class MainWindow
     /// responding to its own physical key presses and shows the right icons right away —
     /// see <see cref="DpHandleBackgroundKey"/>. Mirrors the essential part of
     /// <see cref="DpActivateDevice"/>/<see cref="DpReloadAndPreloadProfile"/> WITHOUT
-    /// touching any UI-bound field (_dpKeys, CbDpProfile, _dpRotation, ...) — those only
+    /// touching any UI-bound field (_dpKeys, LstDpProfile, _dpRotation, ...) — those only
     /// ever represent whichever single device tab is actually visible.
     /// </summary>
     private void DpActivateBackgroundDevice(int id)
@@ -2100,14 +2243,22 @@ public partial class MainWindow
         var keysWithImage = new HashSet<int>(
             rows.Where(r => !string.IsNullOrEmpty(r.ImagePath) && File.Exists(r.ImagePath))
                 .Select(r => r.ButtonIndex));
-        var toBlank = (blankFirst || fullscreenActive)
+        // Same ResetPictures-can-fail fallback as DpReloadCurrentProfile — see the
+        // comment on toBlank there.
+        var toBlank = fullscreenActive
             ? Array.Empty<int>()
             : Enumerable.Range(0, 12).Where(i => !keysWithImage.Contains(i)).ToArray();
 
         var previous = _dpUploadChain.TryGetValue(id, out var p) ? p : Task.CompletedTask;
         var next = previous.ContinueWith(_ =>
         {
-            if (blankFirst) _dpClient.ResetPictures(id);
+            bool panelBlanked = false;
+            if (blankFirst)
+            {
+                panelBlanked = _dpClient.ResetPictures(id);
+                if (!panelBlanked)
+                    DpLogAsync($"ResetPictures failed (bg device {id}) — blanking empty keys individually instead");
+            }
 
             if (fullscreenActive)
             {
@@ -2115,7 +2266,7 @@ public partial class MainWindow
                     fullscreen!.Value.Path, fullscreen.Value.Rotation, rotation);
                 return;
             }
-            foreach (int btnIndex in toBlank)
+            foreach (int btnIndex in panelBlanked ? Array.Empty<int>() : toBlank)
                 DpClearKeyOnDevice(id, btnIndex);
 
             foreach (var r in rows)

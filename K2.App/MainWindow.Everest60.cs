@@ -145,6 +145,8 @@ public partial class MainWindow
         _ev60Engine = new ButtonActionEngine(_ev60ActionHost);
         _ev60Engine.Start();
 
+        LstEv60Profile.ContextMenu = Ev60BuildProfileContextMenu();
+        BtnEv60ProfileMenu.ContextMenu = Ev60BuildProfileMenuNoEdit();
         Ev60RefreshProfiles();
         Ev60ReloadProfile(Ev60CurrentProfile());
 
@@ -186,7 +188,7 @@ public partial class MainWindow
     }
 
     private int Ev60CurrentProfile()
-        => CbEv60Profile.SelectedItem is Ev60ProfileItem pi ? pi.Slot : 1;
+        => LstEv60Profile.SelectedItem is Ev60ProfileItem pi ? pi.Slot : 1;
 
     private void Ev60RefreshProfiles()
     {
@@ -196,11 +198,11 @@ public partial class MainWindow
             var items = Enumerable.Range(1, Ev60ProfileCount)
                 .Select(s => new Ev60ProfileItem(s, _ev60Store.GetProfileName(s) ?? Loc.Get("profile_n", s)))
                 .ToList();
-            CbEv60Profile.DisplayMemberPath = nameof(Ev60ProfileItem.Label);
-            CbEv60Profile.ItemsSource = items;
+            LstEv60Profile.DisplayMemberPath = nameof(Ev60ProfileItem.Label);
+            LstEv60Profile.ItemsSource = items;
 
             int current = _ev60Store.GetCurrentProfile();
-            CbEv60Profile.SelectedItem = items.Find(x => x.Slot == current) ?? items[0];
+            LstEv60Profile.SelectedItem = items.Find(x => x.Slot == current) ?? items[0];
         }
         finally { _ev60SuppressProfile = false; }
     }
@@ -210,8 +212,8 @@ public partial class MainWindow
         _ev60SuppressProfile = true;
         try
         {
-            if (CbEv60Profile.ItemsSource is List<Ev60ProfileItem> items)
-                CbEv60Profile.SelectedItem = items.Find(x => x.Slot == slot) ?? items[0];
+            if (LstEv60Profile.ItemsSource is List<Ev60ProfileItem> items)
+                LstEv60Profile.SelectedItem = items.Find(x => x.Slot == slot) ?? items[0];
         }
         finally { _ev60SuppressProfile = false; }
     }
@@ -229,7 +231,7 @@ public partial class MainWindow
     /// profile slot — mirrors MainWindow.Everest.cs's EvSwitchProfile, but
     /// there is no firmware call to make (see the "Profile management" doc
     /// comment above): switching just reloads the slot's stored keys/lighting,
-    /// same as picking it from CbEv60Profile.
+    /// same as picking it from LstEv60Profile.
     /// </summary>
     private void Ev60SwitchProfile(string target)
     {
@@ -258,13 +260,67 @@ public partial class MainWindow
         LogEverest60($"[EXEC] profile -> {next}");
     }
 
-    private void CbEv60Profile_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void LstEv60Profile_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_ev60SuppressProfile) return;
-        if (CbEv60Profile.SelectedItem is not Ev60ProfileItem pi) return;
+        if (LstEv60Profile.SelectedItem is not Ev60ProfileItem pi) return;
         _ev60Store.SetCurrentProfile(pi.Slot);
         LogEverest60($"[UI ] Everest 60 profile selected: {pi.Slot}");
         Ev60ReloadProfile(pi.Slot);
+    }
+
+    /// <summary>Right-click menu for LstEv60Profile rows — see DpBuildProfileContextMenu
+    /// (MainWindow.DisplayPad.cs) for the shared pattern/rationale.</summary>
+    private ContextMenu Ev60BuildProfileContextMenu()
+    {
+        var menu = new ContextMenu();
+        var miRename = new MenuItem { Header = Loc.Get("rename_profile") };
+        miRename.Click += BtnEv60RenameProfile_Click;
+        var miImportXml = new MenuItem { Header = Loc.Get("dp_import_xml") };
+        miImportXml.Click += BtnEv60ImportXml_Click;
+        var miImportBc = new MenuItem { Header = Loc.Get("import_bc") };
+        miImportBc.Click += BtnEv60ImportBc_Click;
+        var miExport = new MenuItem { Header = Loc.Get("export_profiles_btn") };
+        miExport.Click += BtnEv60ExportProfiles_Click;
+        var miDelete = new MenuItem { Header = Loc.Get("delete_profile") };
+        miDelete.Click += BtnEv60DeleteProfile_Click;
+        menu.Items.Add(miRename);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miImportXml);
+        menu.Items.Add(miImportBc);
+        menu.Items.Add(miExport);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miDelete);
+        return menu;
+    }
+
+    /// <summary>Same items as <see cref="Ev60BuildProfileContextMenu"/> minus Rename/Delete —
+    /// opened from the small "…" button in the Profile header (BtnEv60ProfileMenu_Click),
+    /// which is not tied to a specific row so renaming/deleting a specific profile
+    /// wouldn't make sense there.</summary>
+    private ContextMenu Ev60BuildProfileMenuNoEdit()
+    {
+        var menu = new ContextMenu();
+        var miImportXml = new MenuItem { Header = Loc.Get("dp_import_xml") };
+        miImportXml.Click += BtnEv60ImportXml_Click;
+        var miImportBc = new MenuItem { Header = Loc.Get("import_bc") };
+        miImportBc.Click += BtnEv60ImportBc_Click;
+        var miExport = new MenuItem { Header = Loc.Get("export_profiles_btn") };
+        miExport.Click += BtnEv60ExportProfiles_Click;
+        menu.Items.Add(miImportXml);
+        menu.Items.Add(miImportBc);
+        menu.Items.Add(miExport);
+        return menu;
+    }
+
+    private void BtnEv60ProfileMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.ContextMenu is ContextMenu cm)
+        {
+            cm.PlacementTarget = btn;
+            cm.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            cm.IsOpen = true;
+        }
     }
 
     private void BtnEv60RenameProfile_Click(object sender, RoutedEventArgs e)
@@ -345,45 +401,74 @@ public partial class MainWindow
             return;
         }
 
-        var allProfiles = bcDevices.Values.SelectMany(x => x).OrderBy(p => p.Slot).ToList();
+        string deviceLabel = AppSettings.Everest60DeviceName ?? (TabEverest60.Header as string) ?? Loc.Get("tab_everest60");
+
+        List<BaseCampDbImporter.BcProfile> allProfiles;
+        if (bcDevices.Count == 1)
+        {
+            allProfiles = bcDevices.Values.First().OrderBy(p => p.Slot).ToList();
+        }
+        else
+        {
+            var options = bcDevices.Select(kv => (
+                BcDeviceId: kv.Key,
+                Label: Loc.Get("bc_pick_device_label", kv.Key, kv.Value.Count,
+                    string.Join(", ", kv.Value.Select(p => p.Name)))
+            )).ToList();
+            var picker = new BcDevicePickerDialog(deviceLabel, options) { Owner = this };
+            if (picker.ShowDialog() != true) return;
+            allProfiles = bcDevices[picker.SelectedBcDeviceId!.Value].OrderBy(p => p.Slot).ToList();
+        }
 
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Base Camp -> K2 Everest 60 import:\n");
+        sb.AppendLine($"Import {allProfiles.Count} profile(s) into \"{deviceLabel}\"?\n");
         foreach (var p in allProfiles)
-            sb.AppendLine($"  Slot {p.Slot}: {p.Name}{(p.IsSelected ? " [ACTIVE]" : "")}");
-        sb.AppendLine($"\nImport {allProfiles.Count} profile(s)?");
+            sb.AppendLine($"  {(p.IsSelected ? "[ACTIVE] " : "")}{p.Name}");
+        sb.AppendLine();
+        sb.AppendLine(Loc.Get("bc_import_will_wipe", deviceLabel));
 
         if (MessageBox.Show(this, sb.ToString(), "Import from Base Camp",
-                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
 
+        // Wipe: replace, don't append. Everest 60 always has 5 fixed K2-side slots (no
+        // firmware profile concept — see the "Profile management" doc comment above).
+        for (int slot = 1; slot <= Ev60ProfileCount; slot++)
+            _ev60Store.ClearProfile(slot);
+
         int totalKeys = 0;
-        int activeSlot = -1;
-        int skippedNoSlot = 0;
-        var usedSlots = new HashSet<int>(_ev60Store.GetExistingProfiles());
+        var usedSlots = new HashSet<int>();
+
+        // Existing K2 macro names, used by TranslateAction to auto-match a Base Camp
+        // named-macro reference ("Default" FunctionType) against the user's own macro
+        // library — same lookup the DisplayPad/Everest import paths use (BaseCampDbImporter.
+        // TranslateDefaultAction's doc comment).
+        var macroNames = _macroStore?.GetAll()
+            .Select(m => m.Name)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .ToList();
+
         foreach (var profile in allProfiles)
         {
             try
             {
                 int targetSlot = BaseCampDbImporter.FindFreeSlot(usedSlots);
-                if (targetSlot == 0) { skippedNoSlot++; continue; }
+                if (targetSlot == 0) continue; // sanity ceiling only (5 fixed slots)
                 usedSlots.Add(targetSlot);
 
-                int keys = BaseCampDbImporter.ImportEverest60Profile(dbPath, profile, _ev60Store, targetSlot);
+                int keys = BaseCampDbImporter.ImportEverest60Profile(dbPath, profile, _ev60Store, targetSlot, macroNames);
                 totalKeys += keys;
-                if (profile.IsSelected) activeSlot = targetSlot;
                 LogEverest60($"[IMP-BC] slot {profile.Slot} '{profile.Name}' -> K2 slot {targetSlot}: keys={keys}");
             }
             catch (Exception ex) { LogEverest60($"[IMP-BC] slot {profile.Slot} error: {ex.Message}"); }
         }
 
-        if (skippedNoSlot > 0)
-            MessageBox.Show(this, Loc.Get("import_some_skipped_no_slot", skippedNoSlot),
-                "Import from Base Camp", MessageBoxButton.OK, MessageBoxImage.Warning);
-
-        if (activeSlot > 0) _ev60Store.SetCurrentProfile(activeSlot);
+        // Always land on the FIRST imported profile and force a reload — simpler and
+        // safer than trying to restore whatever was active in Base Camp (user request:
+        // a plain, predictable refresh after import beats guessing at BC's own state).
+        int finalSlot = usedSlots.DefaultIfEmpty(1).Min();
+        _ev60Store.SetCurrentProfile(finalSlot);
         Ev60RefreshProfiles();
-        int finalSlot = activeSlot > 0 ? activeSlot : Ev60CurrentProfile();
         Ev60SelectProfileSlot(finalSlot);
         Ev60ReloadProfile(finalSlot);
         LogEverest60(Loc.Get("ev60_imported_bc", allProfiles.Count, totalKeys));
@@ -484,7 +569,7 @@ public partial class MainWindow
         var profiles = Enumerable.Range(1, 5)
             .Select(slot => (Slot: slot, Name: _ev60Store.GetProfileName(slot) ?? Loc.Get("profile_n", slot)))
             .ToList();
-        int? currentSlot = CbEv60Profile.SelectedItem is Ev60ProfileItem pi ? pi.Slot : null;
+        int? currentSlot = LstEv60Profile.SelectedItem is Ev60ProfileItem pi ? pi.Slot : null;
 
         ExportProfileHelper.Run(
             owner: this,
@@ -560,7 +645,6 @@ public partial class MainWindow
                     HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
                 },
                 Tag = kd.MatrixId, // LED index 0-63
-                ToolTip = $"{kd.Label}  (LED {kd.MatrixId})",
             };
             btn.Click += Ev60KeyboardButton_Click;
             Canvas.SetLeft(btn, kd.X);
@@ -589,7 +673,6 @@ public partial class MainWindow
                     HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
                 },
                 IsHitTestVisible = false, // decorative only — no protocol for this accessory
-                ToolTip = Loc.Get("ev60_numpad_decorative_tip"),
             };
             Canvas.SetLeft(btn, kd.X);
             Canvas.SetTop(btn, kd.Y);
@@ -720,7 +803,10 @@ public partial class MainWindow
 
         if (!_ev60DllKeyIdToLedIndex.TryGetValue(wMatrix, out int ledIndex)) return;
 
-        Ev60HighlightKeyboardButton(ledIndex, pressed);
+        // Physical-press highlight disabled (2026-07-17, user request): fired
+        // inconsistently across keys, same reasoning as Everest Max's
+        // EvHighlightKeyboardButton (MainWindow.Everest.cs).
+        // Ev60HighlightKeyboardButton(ledIndex, pressed);
 
         var key = Ev60KeyBindingPanel.ByLed(ledIndex);
         if (key is null) return;

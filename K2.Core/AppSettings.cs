@@ -30,8 +30,6 @@ public static class AppSettings
     {
         public bool DebugMode { get; set; }
         public K2LogLevel LogLevel { get; set; } = K2LogLevel.Normal;
-        public bool DisplayPadNativeEngine { get; set; } = true;
-        public bool EverestNativeEngine { get; set; } = true;
         public bool KillBaseCampWorker { get; set; } = true;
         public bool AutoStopBaseCamp { get; set; } = true;
         public bool CloseToTray { get; set; }
@@ -43,6 +41,7 @@ public static class AppSettings
         public string? Everest60DeviceName { get; set; }
         public string AppFontFamily { get; set; } = Services.FontCatalog.DefaultKey;
         public bool BcImportPromptShown { get; set; }
+        public string? BaseCampDllFolder { get; set; }
     }
 
     private static Data _data = new();
@@ -82,54 +81,26 @@ public static class AppSettings
 
     /// <summary>
     /// Drive the DisplayPad through the raw USB-HID engine (DisplayPadNativeClient)
-    /// instead of DisplayPadSDK.dll + satellite process. Default ON — the native engine
-    /// is now the standard path; the checkbox only surfaces under Settings &gt; Debug Mode
-    /// as a diagnostic opt-out (fall back to the SDK) if it ever needs ruling out.
-    /// Read once at startup (backend is chosen when MainWindow is constructed), so
-    /// changing it requires an app restart.
+    /// instead of DisplayPadSDK.dll + satellite process. Hardcoded ON since 2026-07-16:
+    /// it went opt-in → default-ON → fixed as the native engines proved reliable, while
+    /// the SDK backend accumulated machine-specific failures (DisplayPadResetPicture
+    /// returning false on some installs, no raw-buffer blanking). The constant is kept
+    /// (rather than deleting every call site) so the SDK/satellite code path stays
+    /// compilable as reference and can be re-enabled here in one line if a machine ever
+    /// needs ruling out. Old persisted values in app_settings.json are simply ignored.
     /// </summary>
-    public static bool DisplayPadNativeEngine
-    {
-        get { EnsureLoaded(); return _data.DisplayPadNativeEngine; }
-    }
-
-    public static void SetDisplayPadNativeEngine(bool value)
-    {
-        EnsureLoaded();
-        lock (_lock)
-        {
-            if (_data.DisplayPadNativeEngine == value) return;
-            _data.DisplayPadNativeEngine = value;
-            Save();
-        }
-        Changed?.Invoke();
-    }
+    public static bool DisplayPadNativeEngine => true;
 
     /// <summary>
     /// Drive the Everest Max's connectivity (open/close/init) and RGB effects through the
     /// raw USB-HID engine (<c>EverestHidNative</c>) instead of SDKDLL.dll. The full
     /// 171-key remap event stream, numpad display icons, and Media Dock still go through
     /// SDKDLL.dll regardless of this flag — those are not natively implemented yet
-    /// (unconfirmed wire protocol, see task/memory "Everest nativo — Fase 3/4"). Default
-    /// ON for what it covers; the checkbox only surfaces under Settings &gt; Debug Mode as
-    /// a diagnostic opt-out. Read once at startup, so changing it requires a restart.
+    /// (unconfirmed wire protocol, see task/memory "Everest nativo — Fase 3/4").
+    /// Hardcoded ON since 2026-07-16 — same rationale and re-enable path as
+    /// <see cref="DisplayPadNativeEngine"/>.
     /// </summary>
-    public static bool EverestNativeEngine
-    {
-        get { EnsureLoaded(); return _data.EverestNativeEngine; }
-    }
-
-    public static void SetEverestNativeEngine(bool value)
-    {
-        EnsureLoaded();
-        lock (_lock)
-        {
-            if (_data.EverestNativeEngine == value) return;
-            _data.EverestNativeEngine = value;
-            Save();
-        }
-        Changed?.Invoke();
-    }
+    public static bool EverestNativeEngine => true;
 
     /// <summary>
     /// When the native DisplayPad engine is active, automatically terminate Base Camp's
@@ -323,6 +294,29 @@ public static class AppSettings
         Changed?.Invoke();
     }
 
+    /// <summary>User-chosen folder to search for non-redistributable Base Camp native
+    /// DLLs (MacroPadSDK.dll, SDKDLL.dll, Everest360_USB.dll) when Base Camp isn't
+    /// installed on this PC and the user doesn't want to copy them next to K2.App.exe
+    /// or set the K2_BASECAMP_DIR environment variable by hand. Checked by
+    /// K2.App's NativeDependencyResolver — see Settings tab's "Base Camp DLL folder"
+    /// picker.</summary>
+    public static string? BaseCampDllFolder
+    {
+        get { EnsureLoaded(); return _data.BaseCampDllFolder; }
+    }
+
+    public static void SetBaseCampDllFolder(string? value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.BaseCampDllFolder == value) return;
+            _data.BaseCampDllFolder = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
     /// <summary>Resets every app-wide preference (tray/autostart/font/log level/native
     /// engine toggles/auto-stop/kill-worker/recent paths/device nicknames) back to its
     /// built-in default and persists it. Used by the app-wide "Restore all defaults"
@@ -424,6 +418,7 @@ public static class AppSettings
             // Corrupt/missing settings file: fall back to defaults.
             _data = new Data();
         }
+
     }
 
     private static void Save()

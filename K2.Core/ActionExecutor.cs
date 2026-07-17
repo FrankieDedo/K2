@@ -166,9 +166,9 @@ public static class ActionExecutor
         // Replicates the mapping from BaseCampProfileImporter.MapActionExt
         switch ((s.FunctionType ?? "").Trim())
         {
-            case "Run Program":      return ("exec", s.FunctionValue, null);
+            case "Run Program":      return ImportExecOrBrowserAction(s.FunctionValue);
             case "Open Folder":      return ("folder", s.FunctionValue, null);
-            case "Run browser":      return ("browser", "", null);
+            case "Run browser":      return ImportBrowserAction();
             case "Adobe":
             case "DaVinci":
             case "Zoom":
@@ -180,6 +180,27 @@ public static class ActionExecutor
             case "Profile":          return ("profile", s.FunctionValue, null);
             default:                 return (null, null, $"FunctionType \"{s.FunctionType}\" not handled");
         }
+    }
+
+    /// <summary>Same "Run browser" -> native browser action mapping as
+    /// BaseCampDbImporter/BaseCampProfileImporter — pre-selects the first detected browser
+    /// instead of running with no browser chosen (OS default via ShellExecute).</summary>
+    private static (string? Type, string? Value, string? Reason) ImportBrowserAction()
+    {
+        var installed = BrowserDetector.DetectInstalled();
+        var payload = new BrowserActionPayload { Browser = installed.Count > 0 ? installed[0].Id : "other" };
+        return ("browser", payload.ToJson(), null);
+    }
+
+    /// <summary>Same "Run Program" -> "exec" (or native "browser" if it targets a known browser
+    /// executable) mapping as BaseCampDbImporter/BaseCampProfileImporter.</summary>
+    private static (string? Type, string? Value, string? Reason) ImportExecOrBrowserAction(string? execPath)
+    {
+        string? browserId = BrowserDetector.TryIdentifyByExeName(execPath);
+        if (browserId is null) return ("exec", execPath, null);
+
+        var payload = new BrowserActionPayload { Browser = browserId };
+        return ("browser", payload.ToJson(), null);
     }
 
     public sealed class MultiStep

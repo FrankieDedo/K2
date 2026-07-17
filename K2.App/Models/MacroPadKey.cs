@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using K2.Core;
 
 namespace K2.App.Models;
 
@@ -92,7 +93,8 @@ public sealed class MacroPadKey : INotifyPropertyChanged
         "keys"  => _actionValue ?? _actionType!,
         "exec"  => System.IO.Path.GetFileName(_actionValue ?? _actionType!),
         "media" => _actionValue ?? _actionType!,
-        _       => _actionType ?? "",
+        "macro" => ActionTypeHelper.MacroSummary(_actionValue),
+        _       => ActionTypeHelper.IsUnrecognized(_actionType) ? Loc.Get("act_unrecognized") : _actionType ?? "",
     };
 
     public event PropertyChangedEventHandler? PropertyChanged;

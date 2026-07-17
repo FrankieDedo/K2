@@ -192,7 +192,8 @@ public sealed class BaseCampDbImporter
         BcProfile profile,
         int k2DeviceId,
         DisplayPadStore store,
-        int targetSlot)
+        int targetSlot,
+        IReadOnlyCollection<string>? macroNames = null)
     {
         var buttons = ReadButtons(dbPath, profile.ProfileId);
         int slot = targetSlot;
@@ -267,7 +268,7 @@ public sealed class BaseCampDbImporter
             else
             {
                 (actionType, actionValue) = TranslateAction(
-                    btn.FunctionType, btn.SubFunctionType, btn.FunctionValue);
+                    btn.FunctionType, btn.SubFunctionType, btn.FunctionValue, macroNames);
             }
 
             store.SaveButton(k2DeviceId, slot, pageId, btn.ButtonIndex,
@@ -286,6 +287,40 @@ public sealed class BaseCampDbImporter
     /// </summary>
     internal static bool IsBcDefaultAction(string? actionType) =>
         string.Equals(actionType, "bc:Default", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Maps Base Camp's "Run browser" action to K2's native "browser" action instead of the
+    /// generic "url" type or a valueless placeholder — pre-selects the first browser
+    /// <see cref="BrowserDetector"/> finds installed (its fixed chrome/edge/firefox/opera/brave
+    /// order) so the imported button already points at a real, launchable browser instead of
+    /// relying on the legacy "no browser chosen" fallback (OS default via ShellExecute).
+    /// </summary>
+    private static (string? ActionType, string? ActionValue) ImportBrowserAction(string? url)
+    {
+        var installed = BrowserDetector.DetectInstalled();
+        var payload = new BrowserActionPayload
+        {
+            Browser = installed.Count > 0 ? installed[0].Id : "other",
+            Url     = url ?? "",
+        };
+        return ("browser", payload.ToJson());
+    }
+
+    /// <summary>
+    /// Maps Base Camp's "Run Program" action to K2's "exec" action — unless the target
+    /// executable is one of the well-known browsers (<see cref="BrowserDetector.TryIdentifyByExeName"/>),
+    /// in which case it becomes K2's native "browser" action with that browser pre-selected instead
+    /// (a "Run Program" pointed at chrome.exe/msedge.exe/etc. is really a browser-open action that
+    /// just wasn't expressed as one in Base Camp).
+    /// </summary>
+    private static (string? ActionType, string? ActionValue) ImportExecOrBrowserAction(string? execPath)
+    {
+        string? browserId = BrowserDetector.TryIdentifyByExeName(execPath);
+        if (browserId is null) return ("exec", execPath);
+
+        var payload = new BrowserActionPayload { Browser = browserId, Url = "" };
+        return ("browser", payload.ToJson());
+    }
 
     /// <summary>Parses {"Id":2407,...} from OptionalText to extract the folder page ID.</summary>
     internal static int ParseFolderPageId(string? optionalText)
@@ -306,14 +341,15 @@ public sealed class BaseCampDbImporter
     /// into K2.Core action types (ActionType/ActionValue).
     /// </summary>
     public static (string? ActionType, string? ActionValue) TranslateAction(
-        string? funcType, string? subType, string? funcValue)
+        string? funcType, string? subType, string? funcValue,
+        IReadOnlyCollection<string>? macroNames = null)
     {
         if (string.IsNullOrEmpty(funcType)) return (null, null);
 
         return funcType switch
         {
             "Run Program" =>
-                ("exec", subType ?? funcValue),   // subType = path to exe
+                ImportExecOrBrowserAction(subType ?? funcValue),   // subType = path to exe
 
             "Open Folder" =>
                 ("folder", subType),              // opens OS folder in Explorer
@@ -325,11 +361,7 @@ public sealed class BaseCampDbImporter
                 ("dp_back", null),
 
             "Run browser" =>
-                funcValue switch
-                {
-                    null or "" or "Run browser" => ("browser", null),
-                    _ => ("url", funcValue)
-                },
+                ImportBrowserAction(funcValue is null or "" or "Run browser" ? null : funcValue),
 
             "Profile" => subType switch
             {
@@ -345,8 +377,15 @@ public sealed class BaseCampDbImporter
             "Multi Key" =>
                 ("keys", funcValue),
 
-            "Macro" =>
-                ("macro", funcValue),
+            // "Run Macro" is the FunctionType real Base Camp data uses for a Macro Library
+            // reference (verified in the user's live BaseCamp.db): DisplayPad rows carry the
+            // macro's name in BOTH SubFunctionType and FunctionValue, Everest rows in
+            // FunctionValue only — TranslateDefaultAction's subType-then-funcValue fallback
+            // covers both shapes. Previously only "Macro" (never seen in real data) and
+            // "Default" were handled, so every real macro key fell through to the generic
+            // "bc:Run Macro" arm below and showed up as an unrecognized action.
+            "Macro" or "Run Macro" =>
+                TranslateDefaultAction(subType, funcValue, macroNames),
 
             "Open Website" or "Open URL" =>
                 ("url", funcValue),
@@ -369,13 +408,47 @@ public sealed class BaseCampDbImporter
             "Mouse Button" =>
                 ("mouse", subType?.ToLowerInvariant()),
 
-            "Disable" or "Disabled" or "Default" =>
+            "Disable" or "Disabled" =>
                 (null, null),
+
+            "Default" =>
+                TranslateDefaultAction(subType, funcValue, macroNames),
 
             _ =>
                 // Unknown type: preserve it generically
                 ($"bc:{funcType}", funcValue ?? subType)
         };
+    }
+
+    /// <summary>
+    /// Base Camp's "Default" FunctionType is ALWAYS a reference to a NAMED macro from BC's own
+    /// Macro Library (SubFunctionType holds the macro's name) — including single-character
+    /// entries like "À": confirmed via a real decompiled snapshot of a user's BC macro DB
+    /// (K2.DisplayPad/Assets/BaseCampMacros.json) that lists "À"/"È"/etc. as genuine named
+    /// macros (type "text", value = that same character), not a distinct raw-literal case.
+    /// An earlier version of this method special-cased single-character names as literal
+    /// "text" actions directly, which produced the right on-screen character by coincidence
+    /// but skipped macro-name matching entirely — reported by the user as "le macro non sono
+    /// state riconosciute come macro ma come paste text" after importing a profile whose only
+    /// Default bindings happened to be single accented characters. K2 doesn't import BC's
+    /// macro CONTENT automatically (it lives in a separate DB table real BC XML exports don't
+    /// even include), so every name becomes K2's own "macro" (Play Macro) action type, matched
+    /// case-insensitively against <paramref name="macroNames"/> (the caller's current K2 macro
+    /// library) when a same-named macro already exists there — otherwise left with no macro
+    /// assigned, which <see cref="ActionTypeHelper.IsMacroMissingTarget"/> flags so the UI's
+    /// "action not found" warning triangle surfaces it for manual assignment instead of
+    /// silently dropping the binding. Also used for the "Run Macro"/"Macro" FunctionTypes
+    /// (same named-macro reference, name in SubFunctionType and/or FunctionValue).
+    /// </summary>
+    private static (string? ActionType, string? ActionValue) TranslateDefaultAction(
+        string? subType, string? funcValue, IReadOnlyCollection<string>? macroNames)
+    {
+        var name = !string.IsNullOrEmpty(subType) ? subType : funcValue;
+        if (string.IsNullOrEmpty(name)) return (null, null);
+
+        string? matched = macroNames?.FirstOrDefault(
+            n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
+        return ("macro", matched);
     }
 
     // =========================================================
@@ -476,11 +549,23 @@ public sealed class BaseCampDbImporter
     /// slot picked by the caller via <see cref="FindFreeSlot"/>, not <c>profile.Slot</c>.
     /// </summary>
     public static (int Regular, int Touch) ImportEverestProfile(
-        string dbPath, BcProfile profile, EverestStore store, int targetSlot)
+        string dbPath, BcProfile profile, EverestStore store, int targetSlot,
+        IReadOnlyCollection<string>? macroNames = null)
     {
         var bindings = ReadKeyBindings(dbPath, profile.ProfileId);
         int slot = targetSlot;
         int regular = 0, touch = 0;
+
+        // Register the profile's name unconditionally, BEFORE translating any binding —
+        // mirrors ImportMakaluProfile/ImportEverest60Profile. Without this, a profile whose
+        // regular keys all translate to (null, null) (e.g. only "Default"/unmapped bindings,
+        // or a profile that's entirely NDK/touch-key content) writes no Keys row and stays
+        // entirely invisible to EverestStore.GetExistingProfiles (which has no other way to
+        // know the slot exists — the NDK settings written below aren't checked by it either),
+        // so the profile silently disappears after import instead of showing up empty.
+        // Confirmed real bug (user report 2026-07-17: "a volte quando si importa da xml non
+        // viene creato nessun nuovo profilo, resta solo il primo").
+        store.SetProfileName(slot, profile.Name);
 
         // Split: regular keys (actions) vs touch keys (LCD images)
         var touchKeys = bindings.Where(b => b.IsTouchKey).OrderBy(b => b.DLLMatrixIndex).ToList();
@@ -491,7 +576,7 @@ public sealed class BaseCampDbImporter
         // (EverestStore has no ClearProfile: we just overwrite via SaveKey)
         foreach (var b in regularKeys)
         {
-            var (at, av) = TranslateAction(b.FunctionType, b.SubFunctionType, b.FunctionValue);
+            var (at, av) = TranslateAction(b.FunctionType, b.SubFunctionType, b.FunctionValue, macroNames);
             if (at is null) continue;
             store.SaveKey(new EverestKeyRecord(slot, b.DLLMatrixIndex, null, at, av));
             regular++;
@@ -526,7 +611,7 @@ public sealed class BaseCampDbImporter
             if (imagePath is not null)
                 store.SetSetting($"{prefix}.imagePath", imagePath);
 
-            var (at, av) = TranslateAction(b.FunctionType, b.SubFunctionType, b.FunctionValue);
+            var (at, av) = TranslateAction(b.FunctionType, b.SubFunctionType, b.FunctionValue, macroNames);
             if (at is not null)
             {
                 store.SetSetting($"{prefix}.actionType",  at);
@@ -617,7 +702,8 @@ public sealed class BaseCampDbImporter
     /// <see cref="FindFreeSlot"/>, not <c>profile.Slot</c>.
     /// </summary>
     public static int ImportMacroPadProfile(
-        string dbPath, BcProfile profile, int k2DeviceId, MacroPadStore store, int targetSlot)
+        string dbPath, BcProfile profile, int k2DeviceId, MacroPadStore store, int targetSlot,
+        IReadOnlyCollection<string>? macroNames = null)
     {
         var bindings = ReadMakaluBindings(dbPath, profile.ProfileId);
         int slot = targetSlot;
@@ -627,7 +713,7 @@ public sealed class BaseCampDbImporter
         {
             if (!b.IsAssigned) continue;
 
-            var (at, av) = TranslateMakaluAction(b.FunctionType, b.FunctionValue);
+            var (at, av) = TranslateMakaluAction(b.FunctionType, b.FunctionValue, macroNames);
             if (at is null) continue;
             store.SaveKey(new MacroKeyRecord(k2DeviceId, slot, b.ButtonIndex, at, av));
             imported++;
@@ -643,7 +729,8 @@ public sealed class BaseCampDbImporter
     /// but no execution: preserved only so the information isn't lost.
     /// </summary>
     public static (string? ActionType, string? ActionValue) TranslateMakaluAction(
-        string? functionType, string? functionValue)
+        string? functionType, string? functionValue,
+        IReadOnlyCollection<string>? macroNames = null)
     {
         var ft = (functionType ?? "").Trim();
         var fv = (functionValue ?? "").Trim();
@@ -652,7 +739,7 @@ public sealed class BaseCampDbImporter
         switch (ft)
         {
             case "Run Program":
-                return string.IsNullOrEmpty(fv) ? (null, null) : ("exec", fv);
+                return string.IsNullOrEmpty(fv) ? (null, null) : ImportExecOrBrowserAction(fv);
 
             case "Keyboard Shortcuts":
                 return string.IsNullOrEmpty(fv) ? (null, null) : ("keys", fv);
@@ -668,7 +755,7 @@ public sealed class BaseCampDbImporter
                     "Volume down"     => ("media", "volume_down"),
                     "Mute"            => ("media", "mute"),
                     "Mic Mute"        => ("media", "mic_mute"),
-                    "Run browser"     => ("browser", null),
+                    "Run browser"     => ImportBrowserAction(null),
                     "Calculator"      => ("oscmd", "calculator"),
                     _ => ("none", $"[media] {fv}")
                 };
@@ -698,7 +785,7 @@ public sealed class BaseCampDbImporter
                 return fv switch
                 {
                     "Run task manager" => ("oscmd", "run task manager"),
-                    "Run browser"      => ("browser", null),
+                    "Run browser"      => ImportBrowserAction(null),
                     "Lock computer"    => ("oscmd", "lock computer"),
                     "Shut down"        => ("oscmd", "shutdown"),
                     "Sleep"            => ("oscmd", "sleep"),
@@ -708,9 +795,15 @@ public sealed class BaseCampDbImporter
                 };
 
             case "Run Macro":
-                // K2 doesn't have a macro engine (yet): preserve the reference as an
-                // inert placeholder instead of executing something wrong.
-                return ("none", $"[macro] {fv}");
+                // Named-macro reference, same as the shared TranslateAction's "Run Macro"
+                // arm: K2's macro engine plays these via ButtonActionEngine's "macro"
+                // action, so resolve the name against the user's K2 macro library instead
+                // of the old inert "[macro]" placeholder (written when K2 had no macro
+                // engine yet). Unmatched names stay as a valueless "macro" action, flagged
+                // by ActionTypeHelper.IsMacroMissingTarget.
+                return string.IsNullOrEmpty(fv)
+                    ? (null, null)
+                    : TranslateDefaultAction(null, fv, macroNames);
 
             case "Battery level check":
             case "Brightness cycle":
@@ -1131,7 +1224,8 @@ public sealed class BaseCampDbImporter
     /// see class-level doc comment) into Everest60Store. Returns the number
     /// of key bindings imported. <paramref name="targetSlot"/> is a fresh slot
     /// picked by the caller via <see cref="FindFreeSlot"/>, not <c>profile.Slot</c>.</summary>
-    public static int ImportEverest60Profile(string dbPath, BcProfile profile, Everest60Store store, int targetSlot)
+    public static int ImportEverest60Profile(string dbPath, BcProfile profile, Everest60Store store, int targetSlot,
+        IReadOnlyCollection<string>? macroNames = null)
     {
         int slot = targetSlot;
         store.ClearProfile(slot);
@@ -1150,7 +1244,7 @@ public sealed class BaseCampDbImporter
             int ledIndex = Array.IndexOf(Everest60RemapData.LedIndexToDllKeyIdArray, b.DllKeyId);
             if (ledIndex < 0) continue;
 
-            var (at, av) = TranslateAction(b.FunctionType, b.SubFunctionType, b.FunctionValue);
+            var (at, av) = TranslateAction(b.FunctionType, b.SubFunctionType, b.FunctionValue, macroNames);
             if (at is null) continue;
 
             store.SaveKey(new Ev60KeyRecord(slot, ledIndex, null, at, av));

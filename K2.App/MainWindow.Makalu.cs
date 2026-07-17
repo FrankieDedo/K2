@@ -56,6 +56,8 @@ public partial class MainWindow
         BuildMkHotspots();
         InitMkSectionNav();
 
+        LstMkProfile.ContextMenu = MkBuildProfileContextMenu();
+        BtnMkProfileMenu.ContextMenu = MkBuildProfileMenuNoEdit();
         MkRefreshProfiles();
         MkReloadProfile(MkCurrentProfile());
 
@@ -72,7 +74,7 @@ public partial class MainWindow
     // device), persisted in MakaluStore. Switching means re-sending the
     // stored lighting/DPI/remap/settings to the device — see
     // MakaluRgbSettingsPanel.MkReloadProfile / MakaluDpiRemapPanel.MkReloadRemap.
-    // Mirrors CbEvProfile_SelectionChanged/EvRefreshProfiles/EvSelectProfileSlot
+    // Mirrors LstEvProfile_SelectionChanged/EvRefreshProfiles/EvSelectProfileSlot
     // in MainWindow.Everest.cs.
     // ------------------------------------------------------------
 
@@ -82,7 +84,7 @@ public partial class MainWindow
     }
 
     private int MkCurrentProfile()
-        => CbMkProfile.SelectedItem is MkProfileItem pi ? pi.Slot : 1;
+        => LstMkProfile.SelectedItem is MkProfileItem pi ? pi.Slot : 1;
 
     private void MkRefreshProfiles()
     {
@@ -92,11 +94,11 @@ public partial class MainWindow
             var items = Enumerable.Range(1, 5)
                 .Select(s => new MkProfileItem(s, _mkStore.GetProfileName(s) ?? Loc.Get("profile_n", s)))
                 .ToList();
-            CbMkProfile.DisplayMemberPath = nameof(MkProfileItem.Label);
-            CbMkProfile.ItemsSource = items;
+            LstMkProfile.DisplayMemberPath = nameof(MkProfileItem.Label);
+            LstMkProfile.ItemsSource = items;
 
             int current = _mkStore.GetCurrentProfile();
-            CbMkProfile.SelectedItem = items.Find(x => x.Slot == current) ?? items[0];
+            LstMkProfile.SelectedItem = items.Find(x => x.Slot == current) ?? items[0];
         }
         finally { _mkSuppressProfile = false; }
     }
@@ -106,8 +108,8 @@ public partial class MainWindow
         _mkSuppressProfile = true;
         try
         {
-            if (CbMkProfile.ItemsSource is List<MkProfileItem> items)
-                CbMkProfile.SelectedItem = items.Find(x => x.Slot == slot) ?? items[0];
+            if (LstMkProfile.ItemsSource is List<MkProfileItem> items)
+                LstMkProfile.SelectedItem = items.Find(x => x.Slot == slot) ?? items[0];
         }
         finally { _mkSuppressProfile = false; }
     }
@@ -120,13 +122,67 @@ public partial class MainWindow
         MkDpiRemap.MkReloadRemap(slot);
     }
 
-    private void CbMkProfile_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void LstMkProfile_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_mkSuppressProfile) return;
-        if (CbMkProfile.SelectedItem is not MkProfileItem pi) return;
+        if (LstMkProfile.SelectedItem is not MkProfileItem pi) return;
         _mkStore.SetCurrentProfile(pi.Slot);
         LogMakalu($"[UI ] Makalu profile selected: {pi.Slot}");
         MkReloadProfile(pi.Slot);
+    }
+
+    /// <summary>Right-click menu for LstMkProfile rows — see DpBuildProfileContextMenu
+    /// (MainWindow.DisplayPad.cs) for the shared pattern/rationale.</summary>
+    private ContextMenu MkBuildProfileContextMenu()
+    {
+        var menu = new ContextMenu();
+        var miRename = new MenuItem { Header = Loc.Get("rename_profile") };
+        miRename.Click += BtnMkRenameProfile_Click;
+        var miImportXml = new MenuItem { Header = Loc.Get("dp_import_xml") };
+        miImportXml.Click += BtnMkImportXml_Click;
+        var miImportBc = new MenuItem { Header = Loc.Get("import_bc") };
+        miImportBc.Click += BtnMkImportBc_Click;
+        var miExport = new MenuItem { Header = Loc.Get("export_profiles_btn") };
+        miExport.Click += BtnMkExportProfiles_Click;
+        var miDelete = new MenuItem { Header = Loc.Get("delete_profile") };
+        miDelete.Click += BtnMkDeleteProfile_Click;
+        menu.Items.Add(miRename);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miImportXml);
+        menu.Items.Add(miImportBc);
+        menu.Items.Add(miExport);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miDelete);
+        return menu;
+    }
+
+    /// <summary>Same items as <see cref="MkBuildProfileContextMenu"/> minus Rename/Delete —
+    /// opened from the small "…" button in the Profile header (BtnMkProfileMenu_Click),
+    /// which is not tied to a specific row so renaming/deleting a specific profile
+    /// wouldn't make sense there.</summary>
+    private ContextMenu MkBuildProfileMenuNoEdit()
+    {
+        var menu = new ContextMenu();
+        var miImportXml = new MenuItem { Header = Loc.Get("dp_import_xml") };
+        miImportXml.Click += BtnMkImportXml_Click;
+        var miImportBc = new MenuItem { Header = Loc.Get("import_bc") };
+        miImportBc.Click += BtnMkImportBc_Click;
+        var miExport = new MenuItem { Header = Loc.Get("export_profiles_btn") };
+        miExport.Click += BtnMkExportProfiles_Click;
+        menu.Items.Add(miImportXml);
+        menu.Items.Add(miImportBc);
+        menu.Items.Add(miExport);
+        return menu;
+    }
+
+    private void BtnMkProfileMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.ContextMenu is ContextMenu cm)
+        {
+            cm.PlacementTarget = btn;
+            cm.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            cm.IsOpen = true;
+        }
     }
 
     private void BtnMkRenameProfile_Click(object sender, RoutedEventArgs e)
@@ -209,45 +265,64 @@ public partial class MainWindow
             return;
         }
 
-        var allProfiles = bcDevices.Values.SelectMany(x => x).OrderBy(p => p.Slot).ToList();
+        string deviceLabel = AppSettings.MakaluDeviceName ?? (TabMakalu.Header as string) ?? Loc.Get("tab_makalu");
+
+        List<BaseCampDbImporter.BcProfile> allProfiles;
+        if (bcDevices.Count == 1)
+        {
+            allProfiles = bcDevices.Values.First().OrderBy(p => p.Slot).ToList();
+        }
+        else
+        {
+            var options = bcDevices.Select(kv => (
+                BcDeviceId: kv.Key,
+                Label: Loc.Get("bc_pick_device_label", kv.Key, kv.Value.Count,
+                    string.Join(", ", kv.Value.Select(p => p.Name)))
+            )).ToList();
+            var picker = new BcDevicePickerDialog(deviceLabel, options) { Owner = this };
+            if (picker.ShowDialog() != true) return;
+            allProfiles = bcDevices[picker.SelectedBcDeviceId!.Value].OrderBy(p => p.Slot).ToList();
+        }
 
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Base Camp -> K2 Makalu import:\n");
+        sb.AppendLine($"Import {allProfiles.Count} profile(s) into \"{deviceLabel}\"?\n");
         foreach (var p in allProfiles)
-            sb.AppendLine($"  Slot {p.Slot}: {p.Name}{(p.IsSelected ? " [ACTIVE]" : "")}");
-        sb.AppendLine($"\nImport {allProfiles.Count} profile(s)?");
+            sb.AppendLine($"  {(p.IsSelected ? "[ACTIVE] " : "")}{p.Name}");
+        sb.AppendLine();
+        sb.AppendLine(Loc.Get("bc_import_will_wipe", deviceLabel));
 
         if (MessageBox.Show(this, sb.ToString(), "Import from Base Camp",
-                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
 
+        // Wipe: replace, don't append. Makalu always has 5 fixed K2-side slots (no
+        // firmware profile concept — see the "Profile management" doc comment above).
+        for (int slot = 1; slot <= 5; slot++)
+            _mkStore.ClearProfile(slot);
+
         int totalRemap = 0;
-        int activeSlot = -1;
-        int skippedNoSlot = 0;
-        var usedSlots = new HashSet<int>(_mkStore.GetExistingProfiles());
+        var usedSlots = new HashSet<int>();
         foreach (var profile in allProfiles)
         {
             try
             {
                 int targetSlot = BaseCampDbImporter.FindFreeSlot(usedSlots);
-                if (targetSlot == 0) { skippedNoSlot++; continue; }
+                if (targetSlot == 0) continue; // sanity ceiling only (5 fixed slots)
                 usedSlots.Add(targetSlot);
 
                 var (remap, lighting, settings) = BaseCampDbImporter.ImportMakaluProfile(dbPath, profile, _mkStore, targetSlot);
                 totalRemap += remap;
-                if (profile.IsSelected) activeSlot = targetSlot;
                 LogMakalu($"[IMP-BC] slot {profile.Slot} '{profile.Name}' -> K2 slot {targetSlot}: remap={remap} lighting={lighting} settings={settings}");
             }
             catch (Exception ex) { LogMakalu($"[IMP-BC] slot {profile.Slot} error: {ex.Message}"); }
         }
 
-        if (skippedNoSlot > 0)
-            MessageBox.Show(this, Loc.Get("import_some_skipped_no_slot", skippedNoSlot),
-                "Import from Base Camp", MessageBoxButton.OK, MessageBoxImage.Warning);
-
-        if (activeSlot > 0) _mkStore.SetCurrentProfile(activeSlot);
+        // Always land on the FIRST imported profile and force a reload — simpler and
+        // safer than trying to restore whatever was active in Base Camp (user request:
+        // a plain, predictable refresh after import beats guessing at BC's own state).
+        int finalSlot = usedSlots.DefaultIfEmpty(1).Min();
+        _mkStore.SetCurrentProfile(finalSlot);
         MkRefreshProfiles();
-        int finalSlot = activeSlot > 0 ? activeSlot : MkCurrentProfile();
         MkSelectProfileSlot(finalSlot);
         MkReloadProfile(finalSlot);
         LogMakalu(Loc.Get("mk_imported_bc", allProfiles.Count, totalRemap));
@@ -362,7 +437,7 @@ public partial class MainWindow
         var profiles = Enumerable.Range(1, 5)
             .Select(slot => (Slot: slot, Name: _mkStore.GetProfileName(slot) ?? Loc.Get("profile_n", slot)))
             .ToList();
-        int? currentSlot = CbMkProfile.SelectedItem is MkProfileItem pi ? pi.Slot : null;
+        int? currentSlot = LstMkProfile.SelectedItem is MkProfileItem pi ? pi.Slot : null;
 
         ExportProfileHelper.Run(
             owner: this,
