@@ -75,7 +75,9 @@
   <string name="act_command">Shell command</string>
   <string name="act_text">Paste text</string>
   <string name="act_macro">Play macro</string>
+  <string name="act_macro_unresolved">Play macro (unassigned)</string>
   <string name="act_pyscript">Python Script</string>
+  <string name="act_unrecognized">Not recognized</string>
   <string name="py_file">File .py</string>
   <string name="py_inline">Inline code</string>
   <string name="py_browse">Browse…</string>
@@ -155,6 +157,16 @@
   <string name="settings_bc_import_hint">Looks for an existing Base Camp installation and offers to import its profiles and settings for every K2 device (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). Shown automatically the first time K2 runs — use this button to run it again any time.</string>
   <string name="bc_import_prompt_title">Import from Base Camp</string>
   <string name="bc_import_prompt_text">A Base Camp installation was detected on this PC. Would you like to import its existing profiles and settings into K2? You'll get a chance to review what's found for each connected device before anything is imported.</string>
+  <!-- Base Camp DLL folder picker -->
+  <string name="settings_bc_dll_group">Base Camp DLL folder</string>
+  <string name="settings_bc_dll_hint">MacroPad, Everest Max and Everest 60 rely on a few native DLLs that are internal Base Camp components and are NOT distributed with K2 (MacroPadSDK.dll, SDKDLL.dll, Everest360_USB.dll). Either use a detected Base Camp installation, or point K2 at a folder containing the DLLs.</string>
+  <string name="settings_bc_dll_radio_auto">Use the Base Camp installation found on this PC:</string>
+  <string name="settings_bc_dll_radio_auto_notfound">No Base Camp installation was detected automatically.</string>
+  <string name="settings_bc_dll_radio_manual">Specify a folder manually:</string>
+  <string name="settings_bc_dll_browse">Browse…</string>
+  <string name="settings_bc_dll_none">No folder set.</string>
+  <string name="settings_bc_dll_found">found</string>
+  <string name="settings_bc_dll_missing">missing</string>
   <!-- Restore defaults -->
   <string name="settings_danger_zone">Danger zone</string>
   <string name="restore_defaults">Restore defaults</string>
@@ -487,6 +499,7 @@
   <string name="dp_mapping_done">DisplayPad mapping complete.</string>
   <string name="dp_imported_xml">Profile '{0}' imported to slot {1}.</string>
   <string name="dp_choose_image">Choose image for key #{0}</string>
+  <string name="dp_key_button_label">Button {0}</string>
   <string name="dp_load_image">Load image…</string>
   <string name="dp_rotate_image">Rotate image:</string>
   <string name="dp_action_section">Action</string>
@@ -564,6 +577,12 @@
   <string name="delete_profile_last">Cannot delete the last profile.</string>
   <string name="import_no_free_slot">All 5 profile slots are already used — delete or free one before importing "{0}".</string>
   <string name="import_some_skipped_no_slot">{0} profile(s) skipped: no free slot left (all 5 are used).</string>
+  <!-- Base Camp device picker (shown when the DB has profiles for more than one physical device of the same type) -->
+  <string name="bc_pick_device_title">Choose Base Camp device</string>
+  <string name="bc_pick_device_text">Base Camp has profiles for more than one device. Choose which one to import into "{0}":</string>
+  <string name="bc_pick_device_none">Choose a device to import from.</string>
+  <string name="bc_pick_device_label">Device #{0} — {1} profile(s): {2}</string>
+  <string name="bc_import_will_wipe">This will DELETE all existing K2 profiles on "{0}" before importing.</string>
   <!-- Everest import -->
   <string name="ev_no_profiles_in_bc">No Everest profiles found in the Base Camp database.</string>
   <string name="ev_imported_bc">Imported {0} Everest profiles ({1} keys) from Base Camp.</string>

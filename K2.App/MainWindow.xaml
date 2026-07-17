@@ -310,6 +310,12 @@
                             <DataTrigger Binding="{Binding HasImageNoAction}" Value="True">
                                 <Setter TargetName="WarnTriangle" Property="Visibility" Value="Visible"/>
                             </DataTrigger>
+                            <!-- Imported "Play macro" action with no macro matched by name
+                                 (BaseCampDbImporter.TranslateDefaultAction) — same "action not
+                                 found" warning triangle as an image without an action. -->
+                            <DataTrigger Binding="{Binding HasUnresolvedAction}" Value="True">
+                                <Setter TargetName="WarnTriangle" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -415,6 +421,64 @@
             <Setter Property="Margin" Value="0,0,0,6"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
         </Style>
+
+        <!-- Profile picker: replaces K2SideActionCombo for the per-device profile
+             selector (see MainWindow.{Device}.cs's Refresh...Profiles methods) — an
+             always-visible list (no hidden dropdown) instead of a ComboBox, so more
+             than a handful of profiles (DisplayPad has no hard cap) stay browsable.
+             Same Width as every other sidebar control so the column doesn't resize. -->
+        <Style x:Key="K2SideProfileItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="#9A9AA2"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="8,7"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <EventSetter Event="PreviewMouseRightButtonDown" Handler="ProfileItem_PreviewRightClick"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderThickness="3,0,0,0" BorderBrush="Transparent"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1E1E26"/>
+                                <Setter Property="Foreground" Value="#DCDCE0"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource K2AccentBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource K2AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource K2AccentTextBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="K2SideProfileList" TargetType="ListBox">
+            <Setter Property="Width" Value="190"/>
+            <Setter Property="Height" Value="150"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="Background" Value="#111115"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource K2SideProfileItemStyle}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBox">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="4">
+                            <ScrollViewer Background="Transparent" CanContentScroll="False">
+                                <ItemsPresenter/>
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="K2SideGroupHeader" TargetType="TextBlock">
             <Setter Property="FontSize" Value="9"/>
             <Setter Property="FontWeight" Value="Bold"/>
@@ -1197,7 +1261,7 @@
                                                         </StackPanel>
                                                     </WrapPanel>
 
-                                                    <TextBlock Text="{loc:Get dial_screensaver_section}" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                                    <TextBlock Text="{loc:Get dial_screensaver_section}" FontWeight="SemiBold" Margin="0,-10,0,8"/>
                                                     <Grid Margin="0,0,0,12">
                                                         <Grid.ColumnDefinitions>
                                                             <!-- Fixed-width label column so both rows' entries share the same left edge -->
@@ -1216,7 +1280,9 @@
                                                                   Content="{loc:Get dial_screensaver}" VerticalAlignment="Center"
                                                                   ToolTip="{loc:Get dial_screensaver_enable_tip}"
                                                                   Click="CkDialScreenSaverEnable_Click"/>
-                                                        <TextBox  Grid.Row="0" Grid.Column="1" x:Name="TxtDialScreenSaver" Margin="0,0,6,0"
+                                                        <TextBox  Grid.Row="0" Grid.Column="1" x:Name="TxtDialScreenSaver" Width="48" Height="30"
+                                                                  Margin="0,0,6,0" Padding="4,0" VerticalContentAlignment="Center"
+                                                                  VerticalAlignment="Center" HorizontalAlignment="Left"
                                                                   TextChanged="TxtDialScreenSaver_TextChanged"/>
                                                         <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Get unit_seconds}" VerticalAlignment="Center"/>
                                                         <TextBlock Grid.Row="0" Grid.Column="3" Text="{loc:Get dial_screensaver_function_label}"
@@ -1240,13 +1306,15 @@
                                                         </StackPanel>
 
                                                         <CheckBox Grid.Row="1" Grid.Column="0" x:Name="CkDialTurnOffEnable"
-                                                                  Content="{loc:Get dial_autooff}" VerticalAlignment="Center" Margin="0,8,0,0"
+                                                                  Content="{loc:Get dial_autooff}" VerticalAlignment="Center" Margin="0,-7,0,0"
                                                                   ToolTip="{loc:Get dial_turnoff_enable_tip}"
                                                                   Click="CkDialTurnOffEnable_Click"/>
-                                                        <TextBox  Grid.Row="1" Grid.Column="1" x:Name="TxtDialTurnOff" Margin="0,8,6,0"
+                                                        <TextBox  Grid.Row="1" Grid.Column="1" x:Name="TxtDialTurnOff" Width="48" Height="30"
+                                                                  Margin="0,-7,6,0" Padding="4,0" VerticalContentAlignment="Center"
+                                                                  VerticalAlignment="Center" HorizontalAlignment="Left"
                                                                   TextChanged="TxtDialTurnOff_TextChanged"/>
                                                         <TextBlock Grid.Row="1" Grid.Column="2" Text="{loc:Get unit_seconds}"
-                                                                   VerticalAlignment="Center" Margin="0,8,0,0"/>
+                                                                   VerticalAlignment="Center" Margin="0,-7,0,0"/>
                                                     </Grid>
                                                 </StackPanel>
                                             </Grid>
@@ -1424,30 +1492,19 @@
                         <Border Grid.Column="2" Background="#111115" CornerRadius="6"
                                 Margin="8,0,0,0" Padding="10" VerticalAlignment="Top">
                             <StackPanel>
-                                <TextBlock Text="{loc:Get profile}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <ComboBox x:Name="CbEvProfile" Style="{StaticResource K2SideActionCombo}"
-                                          SelectionChanged="CbEvProfile_SelectionChanged"/>
-                                <Button x:Name="BtnEvRenameProfile" Content="{loc:Get rename_profile}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
-                                        Click="BtnEvRenameProfile_Click"/>
-                                <Button x:Name="BtnEvDeleteProfile" Content="{loc:Get delete_profile}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE74D;"
-                                        Click="BtnEvDeleteProfile_Click"/>
-
-                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
-                                <TextBlock Text="{loc:Get import}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Button x:Name="BtnEvImportXml" Content="{loc:Get dp_import_xml}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8E5;"
-                                        Click="BtnEvImportXml_Click"/>
-                                <Button x:Name="BtnEvImportBc" Content="{loc:Get import_bc}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8B5;"
-                                        Click="BtnEvImportBc_Click"/>
-
-                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
-                                <TextBlock Text="{loc:Get export}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Button x:Name="BtnEvExportProfiles" Content="{loc:Get export_profiles_btn}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE896;"
-                                        Click="BtnEvExportProfiles_Click"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Get profile}"
+                                               Style="{StaticResource K2SideGroupHeader}" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" x:Name="BtnEvProfileMenu"
+                                            Style="{StaticResource MacroRowIconButton}" Tag="&#xE712;"
+                                            ToolTip="{loc:Get profile}" Click="BtnEvProfileMenu_Click"/>
+                                </Grid>
+                                <ListBox x:Name="LstEvProfile" Style="{StaticResource K2SideProfileList}"
+                                         SelectionChanged="LstEvProfile_SelectionChanged"/>
 
                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
                                 <TextBlock Text="{loc:Get device}" Style="{StaticResource K2SideGroupHeader}"/>
@@ -1694,34 +1751,23 @@
 
                         <!-- RIGHT: generic settings — Profile/Import/Export now backed by
                              Everest60Store (see MainWindow.Everest60.cs), same pattern as
-                             Everest Max's CbEvProfile block. Device rename via AppSettings unchanged. -->
+                             Everest Max's LstEvProfile block. Device rename via AppSettings unchanged. -->
                         <Border Grid.Column="2" Background="#111115" CornerRadius="6"
                                 Margin="8,0,0,0" Padding="10" VerticalAlignment="Top">
                             <StackPanel>
-                                <TextBlock Text="{loc:Get profile}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <ComboBox x:Name="CbEv60Profile" Style="{StaticResource K2SideActionCombo}"
-                                          SelectionChanged="CbEv60Profile_SelectionChanged"/>
-                                <Button x:Name="BtnEv60RenameProfile" Content="{loc:Get rename_profile}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
-                                        Click="BtnEv60RenameProfile_Click"/>
-                                <Button x:Name="BtnEv60DeleteProfile" Content="{loc:Get delete_profile}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE74D;"
-                                        Click="BtnEv60DeleteProfile_Click"/>
-
-                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
-                                <TextBlock Text="{loc:Get import}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Button x:Name="BtnEv60ImportXml" Content="{loc:Get dp_import_xml}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8E5;"
-                                        Click="BtnEv60ImportXml_Click"/>
-                                <Button x:Name="BtnEv60ImportBc" Content="{loc:Get import_bc}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8B5;"
-                                        Click="BtnEv60ImportBc_Click"/>
-
-                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
-                                <TextBlock Text="{loc:Get export}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Button x:Name="BtnEv60ExportProfiles" Content="{loc:Get export_profiles_btn}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE896;"
-                                        Click="BtnEv60ExportProfiles_Click"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Get profile}"
+                                               Style="{StaticResource K2SideGroupHeader}" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" x:Name="BtnEv60ProfileMenu"
+                                            Style="{StaticResource MacroRowIconButton}" Tag="&#xE712;"
+                                            ToolTip="{loc:Get profile}" Click="BtnEv60ProfileMenu_Click"/>
+                                </Grid>
+                                <ListBox x:Name="LstEv60Profile" Style="{StaticResource K2SideProfileList}"
+                                         SelectionChanged="LstEv60Profile_SelectionChanged"/>
 
                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
                                 <TextBlock Text="{loc:Get device}" Style="{StaticResource K2SideGroupHeader}"/>
@@ -1895,34 +1941,23 @@
 
                         <!-- RIGHT: generic settings — Profile/Import/Export now backed by
                              MakaluStore (see MainWindow.Makalu.cs), same pattern as Everest Max's
-                             CbEvProfile block. Device rename via AppSettings unchanged. -->
+                             LstEvProfile block. Device rename via AppSettings unchanged. -->
                         <Border Grid.Column="2" Background="#111115" CornerRadius="6"
                                 Margin="8,0,0,0" Padding="10" VerticalAlignment="Top">
                             <StackPanel>
-                                <TextBlock Text="{loc:Get profile}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <ComboBox x:Name="CbMkProfile" Style="{StaticResource K2SideActionCombo}"
-                                          SelectionChanged="CbMkProfile_SelectionChanged"/>
-                                <Button x:Name="BtnMkRenameProfile" Content="{loc:Get rename_profile}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
-                                        Click="BtnMkRenameProfile_Click"/>
-                                <Button x:Name="BtnMkDeleteProfile" Content="{loc:Get delete_profile}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE74D;"
-                                        Click="BtnMkDeleteProfile_Click"/>
-
-                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
-                                <TextBlock Text="{loc:Get import}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Button x:Name="BtnMkImportXml" Content="{loc:Get dp_import_xml}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8E5;"
-                                        Click="BtnMkImportXml_Click"/>
-                                <Button x:Name="BtnMkImportBc" Content="{loc:Get import_bc}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8B5;"
-                                        Click="BtnMkImportBc_Click"/>
-
-                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
-                                <TextBlock Text="{loc:Get export}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Button x:Name="BtnMkExportProfiles" Content="{loc:Get export_profiles_btn}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE896;"
-                                        Click="BtnMkExportProfiles_Click"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Get profile}"
+                                               Style="{StaticResource K2SideGroupHeader}" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" x:Name="BtnMkProfileMenu"
+                                            Style="{StaticResource MacroRowIconButton}" Tag="&#xE712;"
+                                            ToolTip="{loc:Get profile}" Click="BtnMkProfileMenu_Click"/>
+                                </Grid>
+                                <ListBox x:Name="LstMkProfile" Style="{StaticResource K2SideProfileList}"
+                                         SelectionChanged="LstMkProfile_SelectionChanged"/>
 
                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
                                 <TextBlock Text="{loc:Get device}" Style="{StaticResource K2SideGroupHeader}"/>
@@ -2239,30 +2274,19 @@
                         <Border Grid.Column="2" Background="#111115" CornerRadius="6"
                                 Margin="8,0,0,0" Padding="10" VerticalAlignment="Top">
                             <StackPanel>
-                                <TextBlock Text="{loc:Get profile}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <ComboBox x:Name="CbProfile" Style="{StaticResource K2SideActionCombo}"
-                                          SelectionChanged="CbProfile_SelectionChanged"/>
-                                <Button x:Name="BtnMpRenameProfile" Content="{loc:Get rename_profile}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
-                                        Click="BtnMpRenameProfile_Click"/>
-                                <Button x:Name="BtnMpDeleteProfile" Content="{loc:Get delete_profile}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE74D;"
-                                        Click="BtnMpDeleteProfile_Click"/>
-
-                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
-                                <TextBlock Text="{loc:Get import}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Button x:Name="BtnMpImportXml" Content="{loc:Get dp_import_xml}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8E5;"
-                                        Click="BtnMpImportXml_Click"/>
-                                <Button x:Name="BtnMpImportBc" Content="{loc:Get import_bc}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8B5;"
-                                        Click="BtnMpImportBc_Click"/>
-
-                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
-                                <TextBlock Text="{loc:Get export}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Button x:Name="BtnMpExportProfiles" Content="{loc:Get export_profiles_btn}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE896;"
-                                        Click="BtnMpExportProfiles_Click"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Get profile}"
+                                               Style="{StaticResource K2SideGroupHeader}" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" x:Name="BtnMpProfileMenu"
+                                            Style="{StaticResource MacroRowIconButton}" Tag="&#xE712;"
+                                            ToolTip="{loc:Get profile}" Click="BtnMpProfileMenu_Click"/>
+                                </Grid>
+                                <ListBox x:Name="LstMpProfile" Style="{StaticResource K2SideProfileList}"
+                                         SelectionChanged="LstMpProfile_SelectionChanged"/>
 
                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
                                 <TextBlock Text="{loc:Get device}" Style="{StaticResource K2SideGroupHeader}"/>
@@ -2543,15 +2567,19 @@
                         <Border Grid.Column="2" Background="#111115" CornerRadius="6"
                                 Margin="8,0,0,0" Padding="10" VerticalAlignment="Top">
                             <StackPanel>
-                                <TextBlock Text="{loc:Get profile}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <ComboBox x:Name="CbDpProfile" Style="{StaticResource K2SideActionCombo}"
-                                          SelectionChanged="CbDpProfile_SelectionChanged"/>
-                                <Button x:Name="BtnDpRenameProfile" Content="{loc:Get rename_profile}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8D3;"
-                                        Click="BtnDpRenameProfile_Click"/>
-                                <Button x:Name="BtnDpDeleteProfile" Content="{loc:Get delete_profile}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE74D;"
-                                        Click="BtnDpDeleteProfile_Click"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Get profile}"
+                                               Style="{StaticResource K2SideGroupHeader}" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" x:Name="BtnDpProfileMenu"
+                                            Style="{StaticResource MacroRowIconButton}" Tag="&#xE712;"
+                                            ToolTip="{loc:Get profile}" Click="BtnDpProfileMenu_Click"/>
+                                </Grid>
+                                <ListBox x:Name="LstDpProfile" Style="{StaticResource K2SideProfileList}"
+                                         SelectionChanged="LstDpProfile_SelectionChanged"/>
 
                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
                                 <TextBlock Text="{loc:Get dp_fullscreen_group}" Style="{StaticResource K2SideGroupHeader}"/>
@@ -2561,21 +2589,6 @@
                                 <Button x:Name="BtnDpFullscreenClear" Content="{loc:Get dp_fullscreen_clear}"
                                         Style="{StaticResource K2SideActionButton}" Tag="&#xE74D;"
                                         Click="BtnDpFullscreenClear_Click"/>
-
-                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
-                                <TextBlock Text="{loc:Get import}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Button x:Name="BtnDpImportXml" Content="{loc:Get dp_import_xml}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE8E5;"
-                                        Click="BtnDpImportXml_Click"/>
-                                <Button x:Name="BtnDpImportBc" Content="{loc:Get dp_import_bc}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE896;"
-                                        Click="BtnDpImportBc_Click"/>
-
-                                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
-                                <TextBlock Text="{loc:Get export}" Style="{StaticResource K2SideGroupHeader}"/>
-                                <Button x:Name="BtnDpExportProfiles" Content="{loc:Get export_profiles_btn}"
-                                        Style="{StaticResource K2SideActionButton}" Tag="&#xE896;"
-                                        Click="BtnDpExportProfiles_Click"/>
 
                                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
                                 <TextBlock Text="{loc:Get device}" Style="{StaticResource K2SideGroupHeader}"/>
@@ -2902,6 +2915,29 @@
                         </StackPanel>
                     </GroupBox>
 
+                    <GroupBox x:Name="GbAppBcDllFolder" Header="{loc:Get settings_bc_dll_group}" Margin="0,0,0,20">
+                        <StackPanel Margin="8">
+                            <TextBlock Text="{loc:Get settings_bc_dll_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,0,0,8" FontSize="12"/>
+
+                            <RadioButton x:Name="RbBcDllAuto" Content="{loc:Get settings_bc_dll_radio_auto}"
+                                         GroupName="BcDllMode" Margin="0,4" Checked="RbBcDllMode_Checked"/>
+                            <TextBlock x:Name="TxtBcDetected" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="20,0,0,10" FontSize="12"/>
+
+                            <RadioButton x:Name="RbBcDllManual" Content="{loc:Get settings_bc_dll_radio_manual}"
+                                         GroupName="BcDllMode" Margin="0,4" Checked="RbBcDllMode_Checked"/>
+                            <TextBox x:Name="TxtBcDllFolder" IsReadOnly="True" Margin="20,4,0,8"/>
+                            <Button x:Name="BtnBcDllFolderBrowse" Content="{loc:Get settings_bc_dll_browse}"
+                                    Padding="8,4" HorizontalAlignment="Left" Margin="20,0,0,0"
+                                    Click="BtnBcDllFolderBrowse_Click"
+                                    Style="{StaticResource K2IconButton}" Tag="&#xE8DA;"/>
+
+                            <TextBlock x:Name="TxtBcDllStatus" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,8,0,0" FontSize="12"/>
+                        </StackPanel>
+                    </GroupBox>
+
                     <GroupBox x:Name="GbAppGeneral" Header="{loc:Get settings_general}" Margin="0,0,0,20">
                         <StackPanel Margin="8">
                             <CheckBox x:Name="CkCloseToTray" Content="{loc:Get settings_close_to_tray}"
@@ -2937,19 +2973,9 @@
                     <TextBlock Text="{loc:Get settings_debug_mode_hint}" Foreground="#9A9AA2"
                                TextWrapping="Wrap" Margin="20,4,0,20" FontSize="12"/>
 
-                    <!-- Native USB engines are always on by default now — surfaced only under
-                         Debug Mode, as a diagnostic opt-out rather than a base setting. -->
-                    <StackPanel x:Name="PnlDebugNativeEngines" Margin="20,0,0,20" Visibility="Collapsed">
-                        <CheckBox x:Name="CkDpNativeEngine" Content="{loc:Get settings_dp_native}"
-                                  Click="CkDpNativeEngine_Click" FontSize="14"/>
-                        <TextBlock Text="{loc:Get settings_dp_native_hint}" Foreground="#9A9AA2"
-                                   TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
-
-                        <CheckBox x:Name="CkEvNativeEngine" Content="{loc:Get settings_ev_native}"
-                                  Click="CkEvNativeEngine_Click" FontSize="14" Margin="0,16,0,0"/>
-                        <TextBlock Text="{loc:Get settings_ev_native_hint}" Foreground="#9A9AA2"
-                                   TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
-                    </StackPanel>
+                    <!-- Native USB engines (DisplayPad/Everest raw-HID) are hardcoded ON —
+                         see AppSettings.DisplayPadNativeEngine. The Debug Mode opt-out
+                         checkboxes that used to live here were removed 2026-07-16. -->
 
                     <GroupBox x:Name="GbAppLogLevel" Header="{loc:Get settings_log_level}" Margin="0,4,0,0">
                         <StackPanel Margin="8">

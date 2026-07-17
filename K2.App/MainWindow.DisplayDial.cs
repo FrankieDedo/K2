@@ -162,7 +162,13 @@ public partial class MainWindow
         {
             _dialLoading = false;
         }
-        _dialAppliedFormat24h = DialClockTypeIndex == 0;
+        // Inverted on purpose: real hardware test (2026-07-16) showed
+        // SetClockInfo's format24h parameter behaves opposite to its name —
+        // the "24h" button only produces a 24-hour clock on the device when
+        // format24h is sent as false (DialClockTypeIndex==1, i.e. what the UI
+        // calls "12h"). Trusting the hardware result over the SDK's own
+        // parameter name.
+        _dialAppliedFormat24h = DialClockTypeIndex == 1;
 
         if (_dialClockTimer is null)
         {
@@ -293,7 +299,13 @@ public partial class MainWindow
 
         // Clock format doesn't live in FW_EXTEND_INFO (see file header) — push
         // it separately, on the same "Apply to device" trigger as everything else.
-        _dialAppliedFormat24h = DialClockTypeIndex == 0;
+        // Inverted on purpose: real hardware test (2026-07-16) showed
+        // SetClockInfo's format24h parameter behaves opposite to its name —
+        // the "24h" button only produces a 24-hour clock on the device when
+        // format24h is sent as false (DialClockTypeIndex==1, i.e. what the UI
+        // calls "12h"). Trusting the hardware result over the SDK's own
+        // parameter name.
+        _dialAppliedFormat24h = DialClockTypeIndex == 1;
         LogEverest($"[DIAL] UpdateClock(format24h={_dialAppliedFormat24h}) -> " +
                    $"{_everest.UpdateClock(_dialAppliedFormat24h)}");
 

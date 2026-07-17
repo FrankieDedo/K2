@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using K2.Core;
 
 namespace K2.App.Models;
 
@@ -75,7 +76,7 @@ public sealed class EverestKey : INotifyPropertyChanged
     public string? ActionValue
     {
         get => _actionValue;
-        set { if (_actionValue == value) return; _actionValue = value; OnChanged(); }
+        set { if (_actionValue == value) return; _actionValue = value; OnChanged(); OnChanged(nameof(Display)); }
     }
 
     private bool _isHighlighted;
@@ -98,8 +99,10 @@ public sealed class EverestKey : INotifyPropertyChanged
     {
         get
         {
-            string body = !string.IsNullOrEmpty(_actionType) ? _actionType
-                         : _hasImage ? K2.Core.Loc.Get("ev_display_key_icon_only")
+            string body = ActionTypeHelper.IsUnrecognized(_actionType) ? Loc.Get("act_unrecognized")
+                         : string.Equals(_actionType, "macro", System.StringComparison.Ordinal) ? ActionTypeHelper.MacroSummary(_actionValue)
+                         : !string.IsNullOrEmpty(_actionType) ? _actionType
+                         : _hasImage ? Loc.Get("ev_display_key_icon_only")
                          : "(empty)";
             return $"{Name}  —  {body}";
         }

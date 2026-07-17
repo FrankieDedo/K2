@@ -74,7 +74,9 @@
   <string name="act_command">Comando shell</string>
   <string name="act_text">Incolla testo</string>
   <string name="act_macro">Riproduci macro</string>
+  <string name="act_macro_unresolved">Riproduci macro (non assegnata)</string>
   <string name="act_pyscript">Script Python</string>
+  <string name="act_unrecognized">Non riconosciuto</string>
   <string name="py_file">File .py</string>
   <string name="py_inline">Codice inline</string>
   <string name="py_browse">Sfoglia…</string>
@@ -154,6 +156,16 @@
   <string name="settings_bc_import_hint">Cerca un'installazione di Base Camp esistente e propone di importarne profili e impostazioni per ogni dispositivo K2 (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). Viene mostrato automaticamente al primo avvio di K2 — usa questo pulsante per rilanciarlo in qualsiasi momento.</string>
   <string name="bc_import_prompt_title">Importa da Base Camp</string>
   <string name="bc_import_prompt_text">È stata rilevata un'installazione di Base Camp su questo PC. Vuoi importare i suoi profili e impostazioni esistenti in K2? Per ogni dispositivo collegato potrai controllare cosa è stato trovato prima che venga importato qualcosa.</string>
+  <!-- Base Camp DLL folder picker -->
+  <string name="settings_bc_dll_group">Cartella DLL Base Camp</string>
+  <string name="settings_bc_dll_hint">MacroPad, Everest Max ed Everest 60 usano alcune DLL native che sono componenti interni di Base Camp e NON vengono distribuite con K2 (MacroPadSDK.dll, SDKDLL.dll, Everest360_USB.dll). Usa un'installazione di Base Camp rilevata automaticamente, oppure indica a K2 una cartella che contiene le DLL.</string>
+  <string name="settings_bc_dll_radio_auto">Usa l'installazione di Base Camp trovata su questo PC:</string>
+  <string name="settings_bc_dll_radio_auto_notfound">Nessuna installazione di Base Camp rilevata automaticamente.</string>
+  <string name="settings_bc_dll_radio_manual">Specifica una cartella manualmente:</string>
+  <string name="settings_bc_dll_browse">Sfoglia…</string>
+  <string name="settings_bc_dll_none">Nessuna cartella impostata.</string>
+  <string name="settings_bc_dll_found">trovata</string>
+  <string name="settings_bc_dll_missing">mancante</string>
   <!-- Ripristina impostazioni predefinite -->
   <string name="settings_danger_zone">Zona pericolosa</string>
   <string name="restore_defaults">Ripristina predefiniti</string>
@@ -486,6 +498,7 @@
   <string name="dp_mapping_done">Rimappatura DisplayPad completata.</string>
   <string name="dp_imported_xml">Profilo '{0}' importato nello slot {1}.</string>
   <string name="dp_choose_image">Scegli immagine per il tasto #{0}</string>
+  <string name="dp_key_button_label">Tasto {0}</string>
   <string name="dp_load_image">Carica immagine…</string>
   <string name="dp_rotate_image">Ruota immagine:</string>
   <string name="dp_action_section">Azione</string>
@@ -563,6 +576,11 @@
   <string name="delete_profile_last">Impossibile eliminare l'ultimo profilo.</string>
   <string name="import_no_free_slot">Tutti e 5 gli slot profilo sono già occupati — elimina o libera uno slot prima di importare "{0}".</string>
   <string name="import_some_skipped_no_slot">{0} profilo/i saltato/i: nessuno slot libero rimasto (tutti e 5 sono occupati).</string>
+  <string name="bc_pick_device_title">Scegli dispositivo Base Camp</string>
+  <string name="bc_pick_device_text">Base Camp ha profili per più di un dispositivo. Scegli quale importare su "{0}":</string>
+  <string name="bc_pick_device_none">Scegli un dispositivo da cui importare.</string>
+  <string name="bc_pick_device_label">Dispositivo #{0} — {1} profilo/i: {2}</string>
+  <string name="bc_import_will_wipe">Questa operazione ELIMINERÀ tutti i profili K2 esistenti su "{0}" prima di importare.</string>
   <string name="ev_no_profiles_in_bc">Nessun profilo Everest trovato nel database Base Camp.</string>
   <string name="ev_imported_bc">Importati {0} profili Everest ({1} tasti) da Base Camp.</string>
   <string name="mp_no_profiles_in_bc">Nessun profilo MacroPad trovato nel database Base Camp.</string>

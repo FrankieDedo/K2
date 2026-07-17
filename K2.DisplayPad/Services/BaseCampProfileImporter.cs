@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Xml.Linq;
+using K2.Core;
 
 namespace K2.DisplayPad.Services;
 
@@ -178,9 +179,9 @@ public sealed class BaseCampProfileImporter
 
         switch (ft)
         {
-            case "Run Program":   return string.IsNullOrEmpty(fv) ? (null,null,"Run Program without FunctionValue") : ("exec",  fv, null);
+            case "Run Program":   return string.IsNullOrEmpty(fv) ? (null,null,"Run Program without FunctionValue") : ImportExecOrBrowserAction(fv);
             case "Open Folder":   return string.IsNullOrEmpty(fv) ? (null,null,"Open Folder without FunctionValue") : ("folder",fv, null);
-            case "Run browser":   return ("browser", "", null);
+            case "Run browser":   return ImportBrowserAction(fv is "" or "Run browser" ? null : fv);
             case "Profile":       return ("profile", string.IsNullOrEmpty(fv) ? sft : fv, null);
             case "Adobe":
             case "DaVinci":
@@ -205,19 +206,30 @@ public sealed class BaseCampProfileImporter
                 // 1) literal character as SubFunctionType
                 if (sft.Length == 1) return ("text", sft, null);
                 if (!string.IsNullOrEmpty(fv) && fv.Length == 1) return ("text", fv, null);
-                // 2) named macro resolved via MacroLibrary
-                if (!string.IsNullOrEmpty(sft) && _macros.TryGet(sft, out var def))
+                goto case "Run Macro";
+
+            // "Run Macro" is what real Base Camp data uses for a Macro Library reference
+            // (name in SubFunctionType and/or FunctionValue) — same named-macro lookup as
+            // "Default"'s case 2. The standalone app has no macro engine, so the macro is
+            // reduced to text/keys via MacroLibrary when possible (K2.App instead resolves
+            // it to its own "macro" Play Macro action — BaseCampDbImporter.TranslateAction).
+            case "Run Macro":
+            {
+                var name = !string.IsNullOrEmpty(sft) ? sft : fv;
+                // named macro resolved via MacroLibrary
+                if (!string.IsNullOrEmpty(name) && _macros.TryGet(name, out var def))
                 {
                     if (def.Type == "text" && !string.IsNullOrEmpty(def.Value))
                         return ("text", def.Value, null);
                     if (def.Type == "keys" && !string.IsNullOrEmpty(def.Value))
                         return ("keys", def.Value, null);
                     // raw or unknown: leave as a placeholder
-                    return ("none", $"[macro raw] {sft}", $"macro \"{sft}\" not reducible (raw)");
+                    return ("none", $"[macro raw] {name}", $"macro \"{name}\" not reducible (raw)");
                 }
-                if (!string.IsNullOrEmpty(sft))
-                    return ("none", $"[macro] {sft}", $"macro \"{sft}\" not in library");
-                return (null, null, "Default with no information");
+                if (!string.IsNullOrEmpty(name))
+                    return ("none", $"[macro] {name}", $"macro \"{name}\" not in library");
+                return (null, null, $"{ft} with no information");
+            }
 
             case "":
                 return (null, null, null);
@@ -242,7 +254,7 @@ public sealed class BaseCampProfileImporter
             case "Run Program":
                 return string.IsNullOrEmpty(fv)
                     ? (null, null, "Run Program without FunctionValue")
-                    : ("exec", fv, null);
+                    : ImportExecOrBrowserAction(fv);
 
             case "Open Folder":
                 return string.IsNullOrEmpty(fv)
@@ -250,7 +262,7 @@ public sealed class BaseCampProfileImporter
                     : ("folder", fv, null);
 
             case "Run browser":
-                return ("browser", "", null);
+                return ImportBrowserAction(fv is "" or "Run browser" ? null : fv);
 
             case "Profile":
                 // E.g. "Next Profile", "Previous Profile", or a profile name
@@ -283,6 +295,36 @@ public sealed class BaseCampProfileImporter
             default:
                 return (null, null, $"FunctionType \"{ft}\" not handled");
         }
+    }
+
+    /// <summary>Maps Base Camp's "Run browser" action to K2's native "browser" action,
+    /// pre-selecting the first browser <see cref="BrowserDetector"/> finds installed, so the
+    /// imported button already points at a real, launchable browser instead of relying on the
+    /// legacy "no browser chosen" fallback (OS default via ShellExecute). <paramref name="url"/>
+    /// carries over Base Camp's FunctionValue when it holds an actual URL (not the literal
+    /// "Run browser" placeholder some exports use) — previously dropped, leaving every imported
+    /// "Run browser" button with an empty URL regardless of what BC had configured.</summary>
+    private static (string? Type, string? Value, string? UnmappedReason) ImportBrowserAction(string? url)
+    {
+        var installed = BrowserDetector.DetectInstalled();
+        var payload = new BrowserActionPayload
+        {
+            Browser = installed.Count > 0 ? installed[0].Id : "other",
+            Url     = url ?? "",
+        };
+        return ("browser", payload.ToJson(), null);
+    }
+
+    /// <summary>Maps a "Run Program" action to "exec" — unless the target executable is one of
+    /// the well-known browsers (<see cref="BrowserDetector.TryIdentifyByExeName"/>), in which case
+    /// it becomes the native "browser" action with that browser pre-selected instead.</summary>
+    private static (string? Type, string? Value, string? UnmappedReason) ImportExecOrBrowserAction(string? execPath)
+    {
+        string? browserId = BrowserDetector.TryIdentifyByExeName(execPath);
+        if (browserId is null) return ("exec", execPath, null);
+
+        var payload = new BrowserActionPayload { Browser = browserId };
+        return ("browser", payload.ToJson(), null);
     }
 }
 

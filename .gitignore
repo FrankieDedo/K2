@@ -17,6 +17,7 @@ __pycache__/
 # --- Junk locale (scorciatoie Windows, file temporanei) --------------------
 *.lnk
 *.tmp
+*_wpftmp.csproj
 
 # --- Artefatti di build dell'installer (ricreati da build-installer.bat) --
 Installer/publish/

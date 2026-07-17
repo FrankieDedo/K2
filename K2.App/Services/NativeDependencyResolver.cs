@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using K2.Core;
 using Microsoft.Win32;
 
 namespace K2.App.Services;
@@ -19,6 +20,8 @@ namespace K2.App.Services;
 /// </para>
 /// <list type="number">
 ///   <item>next to <c>K2.App.exe</c> (the user copied it there manually);</item>
+///   <item>in the folder chosen via Settings &gt; "Base Camp DLL folder"
+///         (<see cref="AppSettings.BaseCampDllFolder"/>);</item>
 ///   <item>in the folder indicated by the <c>K2_BASECAMP_DIR</c> environment
 ///         variable (explicit override);</item>
 ///   <item>in a Base Camp installation found via the system registry
@@ -125,12 +128,17 @@ internal static class NativeDependencyResolver
         // 1) next to the executable
         yield return Path.Combine(AppContext.BaseDirectory, dll);
 
-        // 2) explicit override via environment variable
+        // 2) folder chosen via Settings > "Base Camp DLL folder"
+        var custom = AppSettings.BaseCampDllFolder;
+        if (!string.IsNullOrWhiteSpace(custom))
+            yield return Path.Combine(custom.Trim(), dll);
+
+        // 3) explicit override via environment variable
         var env = Environment.GetEnvironmentVariable(BaseCampDirEnvVar);
         if (!string.IsNullOrWhiteSpace(env))
             yield return Path.Combine(env.Trim(), dll);
 
-        // 3) detected Base Camp installations
+        // 4) detected Base Camp installations
         foreach (var dir in BaseCampDirectories())
             yield return Path.Combine(dir, dll);
     }

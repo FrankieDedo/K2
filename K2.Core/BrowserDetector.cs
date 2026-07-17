@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Microsoft.Win32;
 
 namespace K2.Core;
@@ -43,6 +44,20 @@ public static class BrowserDetector
         foreach (var (kid, _, exe) in Known)
             if (string.Equals(kid, id, StringComparison.OrdinalIgnoreCase))
                 return ResolveAppPath(exe);
+        return null;
+    }
+
+    /// <summary>Returns the known browser id whose executable filename matches <paramref name="execPath"/>
+    /// (e.g. "C:\...\chrome.exe" → "chrome"), or null if it's not one of the well-known browsers this
+    /// class tracks. Used when importing a generic "run program" action that happens to point at a
+    /// browser executable, so it becomes K2's native "browser" action instead of a plain exec.</summary>
+    public static string? TryIdentifyByExeName(string? execPath)
+    {
+        if (string.IsNullOrWhiteSpace(execPath)) return null;
+        string fileName = Path.GetFileName(execPath);
+        foreach (var (id, _, exe) in Known)
+            if (string.Equals(exe, fileName, StringComparison.OrdinalIgnoreCase))
+                return id;
         return null;
     }
 

@@ -270,8 +270,11 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
 
     public int GetCurrentProfile(int deviceId, int fallback = 1)
     {
+        // No upper bound: DisplayPad profiles are pure K2-side bookkeeping (no firmware
+        // slot cap, unlike Everest/MacroPad's real 5-slot FW_NUM_PROFILE) — see
+        // MainWindow.DisplayPad.cs's DpSwitchProfile doc comment.
         var s = GetSetting($"device.{deviceId}.currentProfile");
-        return int.TryParse(s, out var v) && v >= 1 && v <= 5 ? v : fallback;
+        return int.TryParse(s, out var v) && v >= 1 ? v : fallback;
     }
 
     public void SetCurrentProfile(int deviceId, int profile) =>

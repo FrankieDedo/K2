@@ -198,6 +198,8 @@ public partial class MainWindow
     private void InitEverestModule()
     {
         LvEvKeys.ItemsSource    = _evKeys;
+        LstEvProfile.ContextMenu = EvBuildProfileContextMenu();
+        BtnEvProfileMenu.ContextMenu = EvBuildProfileMenuNoEdit();
         EvRefreshProfiles();
         EvSelectProfileSlot(_evStore.GetCurrentProfile());
 
@@ -539,13 +541,6 @@ public partial class MainWindow
                     };
                 }
 
-                var tip = string.IsNullOrEmpty(kd.Label) ? "Space" : kd.Label;
-                if (altLbl   is not null) tip += $"  ⇧ {altLbl}";
-                if (altGrLbl is not null) tip += $"  AltGr {altGrLbl}";
-                if (sAltGrLbl is not null) tip += $"  ⇧AltGr {sAltGrLbl}";
-                tip += $"   (0x{kd.MatrixId:X2})";
-                if (kd.MatrixId == 261) tip += "  — riservato, non configurabile";
-
                 var btn = new Button
                 {
                     Width   = kd.W,
@@ -553,7 +548,6 @@ public partial class MainWindow
                     Style   = keyStyle,
                     Content = content,
                     Tag     = kd.MatrixId,
-                    ToolTip = tip,
                 };
 
                 btn.Click += EvKeyboardButton_Click;
@@ -770,7 +764,7 @@ public partial class MainWindow
             var match = _evKeyVisuals.FirstOrDefault(kv => ReferenceEquals(kv.Value.Button, btn0));
             if (match.Value.Button != null)
             {
-                string label = (btn0.Content as TextBlock)?.Text ?? $"0x{matrixId:X2}";
+                string label = (btn0.Content as TextBlock)?.Text ?? EvKeyLabelForMatrix(matrixId) ?? "";
                 OpenEvKeycapCustomizeDialog(match.Key, label);
             }
             return;
@@ -1065,7 +1059,11 @@ public partial class MainWindow
         ApplyCurrentEffect();
         ApplyEverestSettingsToDevice();
         StartLedPreview();
-        EvUploadNdkImages(); // resync current profile's NDK pictures in case this is a different/reset device
+        // NDK image resync intentionally NOT done here (2026-07-16, user report):
+        // sending the numpad display key pictures during the automatic startup
+        // open hung the whole app on some setups. Still runs on a manual
+        // "Open driver" click (BtnEvOpen_Click) and on profile switch/NDK
+        // hot-plug, just not unconditionally at launch.
 
         // Restore custom device name if previously set
         var savedName = _evStore.GetSetting("device.name");
@@ -1189,19 +1187,34 @@ public partial class MainWindow
                 return;
             }
 
+            // Register the profile's name unconditionally, BEFORE translating any binding —
+            // same fix as BaseCampDbImporter.ImportEverestProfile: without this, a profile
+            // whose regular keys all translate to no action (or one that's entirely NDK/
+            // touch-key content) writes no Keys row and never shows up in
+            // EverestStore.GetExistingProfiles, so it silently disappears after import.
+            _evStore.SetProfileName(slot, profileName);
+
             int regular = 0, touch = 0;
+
+            // Existing K2 macro names, used by TranslateAction to auto-match a Base Camp
+            // named-macro reference ("Default" FunctionType) against the user's own macro
+            // library — see BaseCampDbImporter.TranslateDefaultAction's doc comment.
+            var macroNames = _macroStore?.GetAll()
+                .Select(m => m.Name)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .ToList();
 
             // FunctionType=="K2Action" is K2's own round-trip encoding (ActionType/Value
             // stashed verbatim in SubFunctionType/FunctionValue); anything else is real
             // Base Camp vocabulary translated through the shared table.
-            static (string? ActionType, string? ActionValue) TranslateBinding(System.Xml.Linq.XElement b)
+            (string? ActionType, string? ActionValue) TranslateBinding(System.Xml.Linq.XElement b)
             {
                 string? funcType  = b.Element("FunctionType")?.Value;
                 string? subType   = b.Element("SubFunctionType")?.Value;
                 string? funcValue = b.Element("FunctionValue")?.Value;
                 if (funcType == "K2Action")
                     return (subType, string.IsNullOrEmpty(funcValue) ? null : funcValue);
-                return BaseCampDbImporter.TranslateAction(funcType, subType, funcValue);
+                return BaseCampDbImporter.TranslateAction(funcType, subType, funcValue, macroNames);
             }
 
             var touchBindings = new List<(int MatrixId, System.Xml.Linq.XElement El)>();
@@ -1287,7 +1300,7 @@ public partial class MainWindow
         var profiles = Enumerable.Range(1, EverestService.ProfileCount)
             .Select(slot => (Slot: slot, Name: _evStore.GetProfileName(slot) ?? Loc.Get("profile_n", slot)))
             .ToList();
-        int? currentSlot = CbEvProfile.SelectedItem is EvProfileItem pi ? pi.Slot : null;
+        int? currentSlot = LstEvProfile.SelectedItem is EvProfileItem pi ? pi.Slot : null;
 
         ExportProfileHelper.Run(
             owner: this,
@@ -1331,38 +1344,66 @@ public partial class MainWindow
             return;
         }
 
-        // All Everest profiles share the same single device — collect them all
-        var allProfiles = bcDevices.Values.SelectMany(x => x).OrderBy(p => p.Slot).ToList();
+        string deviceLabel = TabEverest.Header as string ?? Loc.Get("tab_everest");
+
+        List<BaseCampDbImporter.BcProfile> allProfiles;
+        if (bcDevices.Count == 1)
+        {
+            allProfiles = bcDevices.Values.First().OrderBy(p => p.Slot).ToList();
+        }
+        else
+        {
+            // Base Camp has profiles for more than one physical Everest keyboard — let the
+            // user pick which one, instead of silently flattening every BC device's
+            // profiles together (the old behavior).
+            var options = bcDevices.Select(kv => (
+                BcDeviceId: kv.Key,
+                Label: Loc.Get("bc_pick_device_label", kv.Key, kv.Value.Count,
+                    string.Join(", ", kv.Value.Select(p => p.Name)))
+            )).ToList();
+            var picker = new BcDevicePickerDialog(deviceLabel, options) { Owner = this };
+            if (picker.ShowDialog() != true) return;
+            allProfiles = bcDevices[picker.SelectedBcDeviceId!.Value].OrderBy(p => p.Slot).ToList();
+        }
 
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Base Camp → K2 Everest import:\n");
+        sb.AppendLine($"Import {allProfiles.Count} profile(s) into \"{deviceLabel}\"?\n");
         foreach (var p in allProfiles)
-            sb.AppendLine($"  Slot {p.Slot}: {p.Name}{(p.IsSelected ? " [ACTIVE]" : "")}");
-        sb.AppendLine($"\nImport {allProfiles.Count} profile(s)?");
+            sb.AppendLine($"  {(p.IsSelected ? "[ACTIVE] " : "")}{p.Name}");
+        sb.AppendLine();
+        sb.AppendLine(Loc.Get("bc_import_will_wipe", deviceLabel));
 
         if (MessageBox.Show(this, sb.ToString(), "Import from Base Camp",
-                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
 
-        int totalRegular = 0, totalTouch = 0;
-        int activeSlot = -1;
-        int skippedNoSlot = 0;
+        // Wipe: replace, don't append (unlike the old free-slot-seeking import).
+        foreach (var slot in _evStore.GetExistingProfiles())
+            _evStore.ClearProfile(slot);
 
-        // Each imported profile lands in a FRESH slot, never profile.Slot verbatim (see
-        // BaseCampDbImporter.FindFreeSlot's doc comment) — track slots claimed so far in
-        // THIS batch too, so importing 3 profiles in one go doesn't pick the same free
-        // slot for all of them.
-        var usedSlots = new HashSet<int>(_evStore.GetExistingProfiles());
+        int totalRegular = 0, totalTouch = 0;
+
+        var usedSlots = new HashSet<int>();
+
+        // Existing K2 macro names, used by TranslateAction to auto-match a Base Camp
+        // named-macro reference ("Default" FunctionType) against the user's own macro
+        // library — same lookup the XML import path already uses (BaseCampDbImporter.
+        // TranslateDefaultAction's doc comment), previously missing here so BC.db imports
+        // never resolved named macros even when the library had a matching name.
+        var macroNames = _macroStore?.GetAll()
+            .Select(m => m.Name)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .ToList();
 
         foreach (var profile in allProfiles)
         {
             try
             {
                 int targetSlot = BaseCampDbImporter.FindFreeSlot(usedSlots);
-                if (targetSlot == 0) { skippedNoSlot++; continue; }
+                if (targetSlot == 0) continue; // sanity ceiling only (5 real firmware slots)
                 usedSlots.Add(targetSlot);
 
-                var (reg, touch) = BaseCampDbImporter.ImportEverestProfile(dbPath, profile, _evStore, targetSlot);
+                var (reg, touch) = BaseCampDbImporter.ImportEverestProfile(dbPath, profile, _evStore, targetSlot, macroNames);
                 totalRegular += reg;
                 totalTouch   += touch;
                 LogEverest($"[IMP-BC] slot {profile.Slot} '{profile.Name}' -> K2 slot {targetSlot}: {reg} keys, {touch} display keys");
@@ -1372,8 +1413,6 @@ public partial class MainWindow
                 // overlay is up. Same behavior real Base Camp shows during a DB/profile
                 // import (see K2/_reference/usb_dumps analysis, 2026-07-16).
                 if (touch > 0 && _everest.IsOpen) EvUploadNdkImages(targetSlot);
-
-                if (profile.IsSelected) activeSlot = targetSlot;
             }
             catch (Exception ex)
             {
@@ -1381,23 +1420,18 @@ public partial class MainWindow
             }
         }
 
-        if (skippedNoSlot > 0)
-            MessageBox.Show(this, Loc.Get("import_some_skipped_no_slot", skippedNoSlot),
-                "Import from Base Camp", MessageBoxButton.OK, MessageBoxImage.Warning);
-
-        // Switch to the active BC profile and reload UI
-        if (activeSlot > 0)
+        // Always land on the FIRST imported profile and force a reload — simpler and
+        // safer than trying to restore whatever was active in Base Camp (user request:
+        // a plain, predictable refresh after import beats guessing at BC's own state).
+        int activateSlot = usedSlots.DefaultIfEmpty(0).Min();
+        EvRefreshProfiles();
+        if (activateSlot > 0)
         {
-            _evStore.SetCurrentProfile(activeSlot);
-            EvSelectProfileSlot(activeSlot);
-            ReloadEverestProfile();
-            LoadNdkState();
+            _evStore.SetCurrentProfile(activateSlot);
+            EvSelectProfileSlot(activateSlot);
         }
-        else
-        {
-            ReloadEverestProfile();
-            LoadNdkState();
-        }
+        ReloadEverestProfile();
+        LoadNdkState();
 
         LogEverest($"[IMP-BC] Done: {totalRegular} regular + {totalTouch} display keys across {allProfiles.Count} profiles");
         LblStatus.Text = Loc.Get("ev_imported_bc", allProfiles.Count, totalRegular);
@@ -1441,10 +1475,10 @@ public partial class MainWindow
         if (any) NdkRefreshDevicePicSlots();
     }
 
-    private void CbEvProfile_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void LstEvProfile_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_evSuppressProfile) return;
-        if (CbEvProfile.SelectedItem is not EvProfileItem pi) return;
+        if (LstEvProfile.SelectedItem is not EvProfileItem pi) return;
         int slot = pi.Slot;
 
         if (pi.IsNew)
@@ -1582,8 +1616,10 @@ public partial class MainWindow
         // Translate SDK wMatrix to visual layout matrixId
         int matrix = EvTranslateMatrix(rawMatrix);
 
-        // Highlight in the visual keyboard overlay
-        EvHighlightKeyboardButton(matrix, e.Pressed);
+        // Physical-press highlight disabled (2026-07-17, user request): the
+        // wMatrix→matrixId translation has gaps, so the tint fired inconsistently
+        // across keys and read as broken rather than useful.
+        // EvHighlightKeyboardButton(matrix, e.Pressed);
 
         if (_evByMatrix.TryGetValue(matrix, out var key))
         {
@@ -1671,7 +1707,7 @@ public partial class MainWindow
     // ============================================================
 
     private int EvCurrentProfile()
-        => CbEvProfile.SelectedItem is EvProfileItem pi ? pi.Slot : 1;
+        => LstEvProfile.SelectedItem is EvProfileItem pi ? pi.Slot : 1;
 
     /// <summary>Populates the Everest profile combo with configured profiles + "New
     /// profile…" (device firmware always has 5 fixed slots — see EverestStore.
@@ -1695,8 +1731,8 @@ public partial class MainWindow
             if (nextFree > 0)
                 items.Add(new EvProfileItem(nextFree, Loc.Get("new_profile")));
 
-            CbEvProfile.DisplayMemberPath = nameof(EvProfileItem.Label);
-            CbEvProfile.ItemsSource = items;
+            LstEvProfile.DisplayMemberPath = nameof(EvProfileItem.Label);
+            LstEvProfile.ItemsSource = items;
         }
         finally { _evSuppressProfile = false; }
     }
@@ -1707,10 +1743,64 @@ public partial class MainWindow
         _evSuppressProfile = true;
         try
         {
-            if (CbEvProfile.ItemsSource is List<EvProfileItem> items)
-                CbEvProfile.SelectedItem = items.Find(x => x.Slot == slot && !x.IsNew) ?? items[0];
+            if (LstEvProfile.ItemsSource is List<EvProfileItem> items)
+                LstEvProfile.SelectedItem = items.Find(x => x.Slot == slot && !x.IsNew) ?? items[0];
         }
         finally { _evSuppressProfile = false; }
+    }
+
+    /// <summary>Right-click menu for LstEvProfile rows — see DpBuildProfileContextMenu
+    /// (MainWindow.DisplayPad.cs) for the shared pattern/rationale.</summary>
+    private ContextMenu EvBuildProfileContextMenu()
+    {
+        var menu = new ContextMenu();
+        var miRename = new MenuItem { Header = Loc.Get("rename_profile") };
+        miRename.Click += BtnEvRenameProfile_Click;
+        var miImportXml = new MenuItem { Header = Loc.Get("dp_import_xml") };
+        miImportXml.Click += BtnEvImportXml_Click;
+        var miImportBc = new MenuItem { Header = Loc.Get("import_bc") };
+        miImportBc.Click += BtnEvImportBc_Click;
+        var miExport = new MenuItem { Header = Loc.Get("export_profiles_btn") };
+        miExport.Click += BtnEvExportProfiles_Click;
+        var miDelete = new MenuItem { Header = Loc.Get("delete_profile") };
+        miDelete.Click += BtnEvDeleteProfile_Click;
+        menu.Items.Add(miRename);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miImportXml);
+        menu.Items.Add(miImportBc);
+        menu.Items.Add(miExport);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miDelete);
+        return menu;
+    }
+
+    /// <summary>Same items as <see cref="EvBuildProfileContextMenu"/> minus Rename/Delete —
+    /// opened from the small "…" button in the Profile header (BtnEvProfileMenu_Click),
+    /// which is not tied to a specific row so renaming/deleting a specific profile
+    /// wouldn't make sense there.</summary>
+    private ContextMenu EvBuildProfileMenuNoEdit()
+    {
+        var menu = new ContextMenu();
+        var miImportXml = new MenuItem { Header = Loc.Get("dp_import_xml") };
+        miImportXml.Click += BtnEvImportXml_Click;
+        var miImportBc = new MenuItem { Header = Loc.Get("import_bc") };
+        miImportBc.Click += BtnEvImportBc_Click;
+        var miExport = new MenuItem { Header = Loc.Get("export_profiles_btn") };
+        miExport.Click += BtnEvExportProfiles_Click;
+        menu.Items.Add(miImportXml);
+        menu.Items.Add(miImportBc);
+        menu.Items.Add(miExport);
+        return menu;
+    }
+
+    private void BtnEvProfileMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.ContextMenu is ContextMenu cm)
+        {
+            cm.PlacementTarget = btn;
+            cm.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            cm.IsOpen = true;
+        }
     }
 
     private void BtnEvRenameProfile_Click(object sender, RoutedEventArgs e)
@@ -1822,7 +1912,7 @@ public partial class MainWindow
 
         _everest.SwitchProfile(next);
         _evStore.SetCurrentProfile(next);
-        // EvSelectProfileSlot suppresses CbEvProfile_SelectionChanged (avoids re-entrant
+        // EvSelectProfileSlot suppresses LstEvProfile_SelectionChanged (avoids re-entrant
         // handling while this method is already mid-switch) — which means it does NOT
         // call ReloadEverestProfile on its own. Call it explicitly so the key list AND
         // the NDK hardware re-upload (see ReloadEverestProfile's doc comment) actually

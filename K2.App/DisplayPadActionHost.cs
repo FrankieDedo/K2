@@ -18,8 +18,11 @@ internal sealed class DisplayPadActionHost : IActionHost
     Dispatcher IActionHost.Dispatcher => _win.Dispatcher;
     void IActionHost.Log(string message) => _win.Dispatcher.Invoke(() => _win.DpLogPublic(message));
     int IActionHost.CurrentDevice => _win._activeDpDeviceId ?? 0;
-    int IActionHost.CurrentProfile => _win.CbDpProfile.SelectedItem is DpProfileItem pi ? pi.Slot : 1;
-    int IActionHost.ProfileCount => 5;
+    int IActionHost.CurrentProfile => _win.LstDpProfile.SelectedItem is DpProfileItem pi ? pi.Slot : 1;
+    // See DisplayPadBackgroundActionHost.ProfileCount below for the rationale.
+    int IActionHost.ProfileCount => _win._activeDpDeviceId is int id
+        ? System.Math.Max(5, _win._dpStore.GetExistingProfiles(id).DefaultIfEmpty(0).Max())
+        : 5;
     int IActionHost.ButtonCount => 12;
     int IActionHost.SdkVersion => 0; // not relevant over IPC
     string? IActionHost.ConfiguredPythonPath => null;
@@ -90,7 +93,11 @@ internal sealed class DisplayPadBackgroundActionHost : IActionHost
     void IActionHost.Log(string message) => _win.Dispatcher.Invoke(() => _win.DpLogPublic($"[bg {_deviceId}] {message}"));
     int IActionHost.CurrentDevice => _deviceId;
     int IActionHost.CurrentProfile => _win._dpStore.GetCurrentProfile(_deviceId);
-    int IActionHost.ProfileCount => 5;
+    // No firmware slot cap for DisplayPad (see DpSwitchProfile's doc comment) — reflect
+    // however many profiles actually exist, floored at 5 for parity with the other
+    // devices' real firmware limit, so the "switch to profile N" action picker
+    // (ButtonActionDialog.Profile.cs) always offers at least the classic 5.
+    int IActionHost.ProfileCount => System.Math.Max(5, _win._dpStore.GetExistingProfiles(_deviceId).DefaultIfEmpty(0).Max());
     int IActionHost.ButtonCount => 12;
     int IActionHost.SdkVersion => 0;
     string? IActionHost.ConfiguredPythonPath => null;

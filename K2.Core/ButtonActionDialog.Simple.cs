@@ -105,7 +105,13 @@ public partial class ButtonActionDialog
 
         var match = CbComboValue.Items.OfType<ComboBoxItem>()
             .FirstOrDefault(i => string.Equals((string?)i.Tag, selectValue, System.StringComparison.OrdinalIgnoreCase));
-        CbComboValue.SelectedItem = match ?? (CbComboValue.Items.Count > 0 ? CbComboValue.Items[0] : null);
+        // For "macro" (dynamic library list), no match is a real, expected state — an
+        // imported Base Camp named-macro reference that didn't resolve to any macro in the
+        // user's K2 library (see BaseCampDbImporter.TranslateDefaultAction). Defaulting to
+        // the first macro in the list here would silently bind the key to an unrelated macro
+        // the moment the user opens and saves the dialog without noticing. Fixed enums
+        // (oscmd/media/mouse) keep the old fallback since a mismatch there shouldn't happen.
+        CbComboValue.SelectedItem = match ?? (tag == "macro" ? null : (CbComboValue.Items.Count > 0 ? CbComboValue.Items[0] : null));
     }
 
     private string SaveComboSpec()
