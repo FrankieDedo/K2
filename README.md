@@ -138,3 +138,13 @@ Start as admin and keep in mind that it should close all Base Camp process autom
 
 
 Powered by <a href="https://nerdando.com" target="_blank"><img src="https://nerdando.com/wp-content/uploads/2024/11/logo-orizzontale-1.png" height="36" align="absmiddle" alt="Nerdando" /></a>  
+
+<details>
+<summary><strong>Screenshots</strong></summary>
+<img src="images/k2_a.jpg" width="800" alt="K2 screenshot" />
+<img src="images/k2_b.jpg" width="800" alt="K2 screenshot" />
+<img src="images/k2_c.jpg" width="800" alt="K2 screenshot" />
+<img src="images/k2_d.jpg" width="800" alt="K2 screenshot" />
+<img src="images/k2_e.jpg" width="800" alt="K2 screenshot" />
+<img src="images/k2_f.jpg" width="800" alt="K2 screenshot" />
+</details>
