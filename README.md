@@ -12,6 +12,18 @@ The project is still in a beta stage, but most of the stuff should work alright.
 
 Start as admin and keep in mind that it should close all Base Camp process automatically (you can avoid this behaviour disabling it in the settings). If it does, you can restart them manually or just reboot the pc and you're back as before.
 
+<h1>Screenshots</summary></h1>
+<details>
+<summary><strong>Check it out</strong></summary>
+<br>
+<img src="images/k2_a.jpg" width="800" alt="K2 screenshot" />
+<img src="images/k2_b.jpg" width="800" alt="K2 screenshot" />
+<img src="images/k2_c.jpg" width="800" alt="K2 screenshot" />
+<img src="images/k2_d.jpg" width="800" alt="K2 screenshot" />
+<img src="images/k2_e.jpg" width="800" alt="K2 screenshot" />
+<img src="images/k2_f.jpg" width="800" alt="K2 screenshot" />
+</details>
+
 <h1>K2 — Feature Overview</h1>
 
 <details open>
@@ -139,12 +151,4 @@ Start as admin and keep in mind that it should close all Base Camp process autom
 
 Powered by <a href="https://nerdando.com" target="_blank"><img src="https://nerdando.com/wp-content/uploads/2024/11/logo-orizzontale-1.png" height="36" align="absmiddle" alt="Nerdando" /></a>  
 
-<details>
-<summary><strong>Screenshots</strong></summary>
-<img src="images/k2_a.jpg" width="800" alt="K2 screenshot" />
-<img src="images/k2_b.jpg" width="800" alt="K2 screenshot" />
-<img src="images/k2_c.jpg" width="800" alt="K2 screenshot" />
-<img src="images/k2_d.jpg" width="800" alt="K2 screenshot" />
-<img src="images/k2_e.jpg" width="800" alt="K2 screenshot" />
-<img src="images/k2_f.jpg" width="800" alt="K2 screenshot" />
-</details>
+
