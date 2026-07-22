@@ -857,7 +857,7 @@
 
             <!-- Loading overlay — covers tab strip + content while AutoOpenDrivers runs.
                  Collapsed by code once all drivers are open. -->
-            <Grid x:Name="PnlLoading" Grid.RowSpan="3" Panel.ZIndex="10" Background="#1A1A1E" Visibility="Collapsed">
+            <Grid x:Name="PnlLoading" Grid.RowSpan="3" Panel.ZIndex="10" Background="#1A1A1E" Visibility="Visible">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <Image Source="Assets/K2_logo.png" Width="96" Height="96"
                            HorizontalAlignment="Center" Margin="0,0,0,16"
@@ -1915,7 +1915,7 @@
                                              Ev60KeyBindingPanel until the user manually clicked into
                                              Lighting once — visible as both sections' content overlapping
                                              on first opening the Everest 60 tab. -->
-                                        <local:Everest60RgbPanel x:Name="Ev60RgbPanel" Visibility="Collapsed"/>
+                                        <local:Everest60RgbPanel x:Name="Ev60RgbPanel" Loaded="Ev60RgbPanel_Loaded" Visibility="Collapsed"/>
                                         <local:Everest60KeyBindingPanel x:Name="Ev60KeyBindingPanel" Visibility="Collapsed"/>
 
                                         <!-- ── SETTINGS ── Keycap Appearance: purely cosmetic, same

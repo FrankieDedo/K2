@@ -313,6 +313,59 @@ public partial class MainWindow
         }
     }
 
+    /// <summary>
+    /// Startup-only variant of <see cref="DpOpenDriver"/>: right after Open() succeeds, the
+    /// vendor SDK still reports zero devices for a bit — <c>lstDeviceID</c> (and its
+    /// per-slot fallback, see SdkHandler.CmdDeviceIds) is only populated once the SDK's own
+    /// async plug callback fires, same path as a live hardware replug — so a refresh done
+    /// immediately after Open() finds nothing, and the "dp_*" tabs only appear a couple of
+    /// seconds later, on top of an already-visible Home. Polls DeviceIds() until two
+    /// consecutive reads agree (including two empty reads, for the "nothing connected" case)
+    /// before the caller (AutoOpenDrivers) hides the loading overlay, so the tabs are already
+    /// there when Home is first shown. Capped at maxWaitMs total so a truly empty setup
+    /// doesn't hang the startup sequence.
+    /// </summary>
+    internal async Task DpOpenDriverAutoAsync()
+    {
+        if (!_dpClient.IsConnected)
+        {
+            DpLog("Starting DisplayPad satellite...");
+            if (!_dpClient.Connect())
+            {
+                LblStatus.Text = Loc.Get("dp_satellite_failed");
+                DpLog("Satellite not reachable — skipping");
+                return;
+            }
+        }
+        DpLog($"SDK version: {_dpClient.SdkVersion()}");
+        LblDpSdk.Text = "DisplayPadSDK (satellite x64)";
+
+        var result = _dpClient.Open();
+        bool ok = result?.GetBool("ok") ?? false;
+        LblStatus.Text = ok ? Loc.Get("dp_driver_opened") : Loc.Get("dp_driver_open_failed");
+        DpLog($"Open -> {ok}");
+        if (!ok)
+        {
+            DpLog("Open failed — DisplayPad tab will NOT be created this session " +
+                  "(DpRefreshDevices/device enumeration never runs without a successful Open)");
+            return;
+        }
+
+        const int pollMs = 300, requiredStableHits = 2, maxWaitMs = 3000;
+        int lastCount = -1, stableHits = 0, waited = 0;
+        while (waited < maxWaitMs)
+        {
+            int count = _dpClient.DeviceIds().Count;
+            if (count == lastCount) stableHits++;
+            else { stableHits = 1; lastCount = count; }
+            if (stableHits >= requiredStableHits) break;
+            await Task.Delay(pollMs);
+            waited += pollMs;
+        }
+
+        DpRefreshDevices();
+    }
+
     private void BtnDpRefresh_Click(object sender, RoutedEventArgs e) => DpRefreshDevices();
 
     private void BtnDpClose_Click(object sender, RoutedEventArgs e)

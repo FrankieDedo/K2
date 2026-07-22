@@ -48,7 +48,7 @@
                       Click="CkEv60AutoOffEnable_Click" VerticalAlignment="Center" Margin="0,0,14,0"/>
                     <TextBlock Text="{loc:Get backlight_auto_off_seconds}" Margin="0,0,6,0" VerticalAlignment="Center"/>
                     <TextBox x:Name="TxtEv60AutoOffSeconds" Width="70" TextAlignment="Center"
-                     LostFocus="TxtEv60AutoOffSeconds_LostFocus" Text="5" VerticalAlignment="Center"/>
+                     LostFocus="TxtEv60AutoOffSeconds_LostFocus" VerticalAlignment="Center" Height="25" Padding="8,2,8,0" Text="60"/>
                     <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
                 </WrapPanel>
                 <!-- Row 2: direction (only when the effect supports it) -->
@@ -72,12 +72,12 @@
                                      Checked="RbEv60ColorMode_Checked" ToolTip="{loc:Get rgb_rainbow_tip}"/>
                     </StackPanel>
                     <StackPanel x:Name="PnlEv60Color1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
-                        <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,5,0"/>
                         <Button x:Name="BtnEv60Color1" Width="30" Height="30" Background="#900000"
                                 BorderThickness="2" BorderBrush="#3A3A40" Click="BtnEv60Color_Click" Tag="1"/>
                     </StackPanel>
                     <StackPanel x:Name="PnlEv60Color2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,5,0"/>
                         <Button x:Name="BtnEv60Color2" Width="30" Height="30" Background="#1A1A1E"
                                 BorderThickness="2" BorderBrush="#3A3A40" Click="BtnEv60Color_Click" Tag="2"/>
                     </StackPanel>
@@ -88,16 +88,16 @@
                      with a Lighting section). Elements stay in the tree (code-behind
                      still references them) so re-enabling is a one-line Visibility flip. -->
                 <StackPanel x:Name="PnlEv60SideRingSection" Visibility="Collapsed">
-                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,10,0,8"/>
-                <TextBlock Text="{loc:Get ev60_side_ring}" FontWeight="Bold" Margin="0,0,0,8"/>
-                <WrapPanel Orientation="Horizontal">
-                    <Button x:Name="BtnEv60SideColor" Width="30" Height="30" Background="#900000"
+                    <Separator Style="{StaticResource K2SideSeparator}" Margin="0,10,0,8"/>
+                    <TextBlock Text="{loc:Get ev60_side_ring}" FontWeight="Bold" Margin="0,0,0,8"/>
+                    <WrapPanel Orientation="Horizontal">
+                        <Button x:Name="BtnEv60SideColor" Width="30" Height="30" Background="#900000"
                             BorderThickness="2" BorderBrush="#3A3A40" Click="BtnEv60SideColor_Click"
                             Margin="0,0,10,0"/>
-                    <Button x:Name="BtnEv60SideApply" Content="{loc:Get ev60_side_apply}"
+                        <Button x:Name="BtnEv60SideApply" Content="{loc:Get ev60_side_apply}"
                             Click="BtnEv60SideApply_Click" Padding="8,4"/>
-                </WrapPanel>
-                <TextBlock Text="{loc:Get ev60_side_hint}" TextWrapping="Wrap"
+                    </WrapPanel>
+                    <TextBlock Text="{loc:Get ev60_side_hint}" TextWrapping="Wrap"
                            Foreground="{StaticResource K2TextMutedBrush}" FontStyle="Italic" FontSize="11"
                            Margin="0,8,0,0" MaxWidth="640"/>
                 </StackPanel>
@@ -110,32 +110,32 @@
                      Everest Max's "Custom Lighting (per-key)" block
                      (MainWindow.CustomLighting.cs). -->
                 <StackPanel x:Name="PnlEv60KeyLightingSection" Visibility="Collapsed">
-                <Separator Style="{StaticResource K2SideSeparator}" Margin="0,10,0,8"/>
-                <TextBlock Text="{loc:Get ev60_key_lighting}" FontWeight="Bold" Margin="0,0,0,6"/>
-                <TextBlock Text="{loc:Get ev60_key_lighting_hint}"
+                    <Separator Style="{StaticResource K2SideSeparator}" Margin="0,10,0,8"/>
+                    <TextBlock Text="{loc:Get ev60_key_lighting}" FontWeight="Bold" Margin="0,0,0,6"/>
+                    <TextBlock Text="{loc:Get ev60_key_lighting_hint}"
                            Foreground="#9A9AA2" FontStyle="Italic"
                            TextWrapping="Wrap" Margin="0,0,0,6"/>
-                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-                    <CheckBox x:Name="CkEv60CustomPaint" Content="{loc:Get custom_paint_mode}"
+                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <CheckBox x:Name="CkEv60CustomPaint" Content="{loc:Get custom_paint_mode}"
                               Foreground="White" Margin="0,0,12,0"
                               Checked="CkEv60CustomPaint_Checked"
                               Unchecked="CkEv60CustomPaint_Checked"/>
-                    <TextBlock Text="{loc:Get custom_color}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                    <Button x:Name="BtnEv60CustomBrushColor" Width="30" Height="30"
+                        <TextBlock Text="{loc:Get custom_color}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <Button x:Name="BtnEv60CustomBrushColor" Width="30" Height="30"
                             Background="#900000" BorderThickness="2"
                             BorderBrush="#3A3A40" Click="BtnEv60CustomBrushColor_Click"/>
-                </WrapPanel>
-                <WrapPanel Orientation="Horizontal">
-                    <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <Slider x:Name="SldEv60CustomBrightness" Minimum="0" Maximum="100" Width="120"
+                    </WrapPanel>
+                    <WrapPanel Orientation="Horizontal">
+                        <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <Slider x:Name="SldEv60CustomBrightness" Minimum="0" Maximum="100" Width="120"
                             TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
                             VerticalAlignment="Center" ValueChanged="SldEv60CustomBrightness_ValueChanged"/>
-                    <TextBlock x:Name="LblEv60CustomBrightness" Text="100%" VerticalAlignment="Center" Margin="6,0,16,0" MinWidth="36"/>
-                    <Button x:Name="BtnEv60CustomApply" Content="{loc:Get apply_to_device}" Padding="8,2" Margin="0,0,4,0"
+                        <TextBlock x:Name="LblEv60CustomBrightness" Text="100%" VerticalAlignment="Center" Margin="6,0,16,0" MinWidth="36"/>
+                        <Button x:Name="BtnEv60CustomApply" Content="{loc:Get apply_to_device}" Padding="8,2" Margin="0,0,4,0"
                             Click="BtnEv60CustomApply_Click" Style="{StaticResource K2IconAccentButton}" Tag="&#xE73E;"/>
-                    <Button x:Name="BtnEv60CustomClear" Content="{loc:Get custom_clear}" Padding="8,2"
+                        <Button x:Name="BtnEv60CustomClear" Content="{loc:Get custom_clear}" Padding="8,2"
                             Click="BtnEv60CustomClear_Click" Style="{StaticResource K2IconButton}" Tag="&#xE74D;"/>
-                </WrapPanel>
+                    </WrapPanel>
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

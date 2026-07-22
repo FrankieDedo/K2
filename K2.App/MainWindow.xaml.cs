@@ -159,7 +159,10 @@ public partial class MainWindow : Window
         await Task.Delay(AutoOpenStaggerMs);
 
         // --- DisplayPad satellite ---
-        DpOpenDriver();
+        // Waits for the SDK's device list to settle (see DpOpenDriverAutoAsync's doc comment)
+        // so the "dp_*" tabs exist before PnlLoading is hidden below, instead of popping in a
+        // couple of seconds after Home is already showing.
+        await DpOpenDriverAutoAsync();
 
         // --- All drivers attempted: hide loading overlay, land on the first visible tab.
         // TabHome is always visible and always first, so this normally lands on Home — the
@@ -651,6 +654,11 @@ public partial class MainWindow : Window
     }
 
     private void TxtEvAutoOffSeconds_TextChanged(object sender, TextChangedEventArgs e)
+    {
+
+    }
+
+    private void Ev60RgbPanel_Loaded(object sender, RoutedEventArgs e)
     {
 
     }

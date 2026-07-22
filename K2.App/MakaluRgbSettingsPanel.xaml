@@ -155,7 +155,7 @@
                 </DockPanel>
                 <DockPanel Margin="0,0,0,12">
                     <TextBox x:Name="TxtMkDpi" DockPanel.Dock="Right" Width="70" Margin="8,0,0,0" TextAlignment="Center"
-                             KeyDown="TxtMkDpi_KeyDown" LostFocus="TxtMkDpi_LostFocus"/>
+                             KeyDown="TxtMkDpi_KeyDown" LostFocus="TxtMkDpi_LostFocus" Height="25" Padding="3,2,3,0"/>
                     <Slider x:Name="SldMkDpi" Minimum="50" Maximum="19000"
                             TickFrequency="50" ValueChanged="SldMkDpi_ValueChanged" VerticalAlignment="Center"/>
                 </DockPanel>
