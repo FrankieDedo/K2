@@ -11,6 +11,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using K2.Core;
 
 namespace K2.App.Services;
 
@@ -245,9 +246,7 @@ internal static class DpFullscreenAnimator
     private static List<FsFrame>? LoadFrames(string sourcePath, int userRotation, int deviceRotation)
     {
         string cacheKey = ComputeCacheKey(sourcePath, userRotation, deviceRotation);
-        string cacheDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "K2.DisplayPad", "fullscreen_frames", cacheKey);
+        string cacheDir = Path.Combine(K2Paths.For("K2.DisplayPad"), "fullscreen_frames", cacheKey);
         string manifestPath = Path.Combine(cacheDir, "frames.json");
 
         if (File.Exists(manifestPath))

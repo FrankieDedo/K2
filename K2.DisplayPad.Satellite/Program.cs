@@ -178,9 +178,14 @@ internal static class Program
         Console.Error.WriteLine(line);
         try
         {
+            // No K2.Core reference in this standalone satellite project (kept
+            // deliberately minimal — see its .csproj), so the "K2\K2.DisplayPad"
+            // nesting is hardcoded here rather than going through K2.Core.K2Paths;
+            // K2.App/K2.DisplayPad.exe (which do use K2Paths) own migrating any
+            // legacy top-level "K2.DisplayPad" folder into it.
             string logDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "K2.DisplayPad");
+                "K2", "K2.DisplayPad");
             Directory.CreateDirectory(logDir);
             File.AppendAllText(Path.Combine(logDir, "satellite.log"), line + Environment.NewLine);
         }

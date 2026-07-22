@@ -201,8 +201,7 @@ public sealed class BaseCampDbImporter
 
         // Directory for the imported images
         string iconsDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "K2.DisplayPad", "imported_bc", $"dev{k2DeviceId}_slot{slot}_{profile.Name}");
+            K2Paths.For("K2.DisplayPad"), "imported_bc", $"dev{k2DeviceId}_slot{slot}_{profile.Name}");
         Directory.CreateDirectory(iconsDir);
 
         store.ClearProfile(k2DeviceId, slot);
@@ -638,8 +637,7 @@ public sealed class BaseCampDbImporter
                 try
                 {
                     iconsDir ??= Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "K2.App", "imported_bc_ev", $"slot{slot}_{profile.Name}");
+                        K2Paths.For("K2.App"), "imported_bc_ev", $"slot{slot}_{profile.Name}");
                     Directory.CreateDirectory(iconsDir);
                     string iconFile = Path.Combine(iconsDir, $"ndk_{i}.png");
                     var imgBytes = DecodeBase64Image(b.Base64Image);

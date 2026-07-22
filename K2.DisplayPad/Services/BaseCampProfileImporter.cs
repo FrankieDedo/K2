@@ -34,9 +34,7 @@ public sealed class BaseCampProfileImporter
 
     public BaseCampProfileImporter(string? imageDir = null, MacroLibrary? macros = null)
     {
-        _imageDir = imageDir ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "K2.DisplayPad", "images");
+        _imageDir = imageDir ?? Path.Combine(K2Paths.For("K2.DisplayPad"), "images");
         Directory.CreateDirectory(_imageDir);
         _macros = macros ?? MacroLibrary.Load();
     }

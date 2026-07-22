@@ -391,9 +391,14 @@ internal sealed class SdkHandler : IDisposable
     // Icon rotation (same logic as K2.DisplayPad IconRotator)
     // ================================================================
 
+    // No K2.Core reference in this standalone satellite project (kept
+    // deliberately minimal — see its .csproj), so the "K2\K2.DisplayPad" nesting
+    // is hardcoded here rather than going through K2.Core.K2Paths; K2.App/
+    // K2.DisplayPad.exe (which do use K2Paths) own migrating any legacy
+    // top-level "K2.DisplayPad" folder into it.
     private static readonly string CacheDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "K2.DisplayPad", "rotated");
+        "K2", "K2.DisplayPad", "rotated");
 
     private static string ResolveForUpload(string path, int rotationDegrees)
     {

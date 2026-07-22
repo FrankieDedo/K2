@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using K2.Core;
 using Microsoft.Data.Sqlite;
 
 namespace K2.App.Services;
@@ -31,9 +32,7 @@ public sealed class MakaluStore : IDisposable
 
     public static string DefaultDbPath()
     {
-        var dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "K2.App");
+        var dir = K2Paths.For("K2.App");
         return Path.Combine(dir, "makalu.db");
     }
 

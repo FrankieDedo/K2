@@ -12,6 +12,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using K2.Core;
 
 namespace K2.App.Services;
 
@@ -228,9 +229,7 @@ internal static class DpGifAnimator
         if (_memCache.TryGetValue(cacheKey, out var mem) && mem.All(f => File.Exists(f.PngPath)))
             return mem;
 
-        string cacheDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "K2.DisplayPad", "gif_frames", cacheKey);
+        string cacheDir = Path.Combine(K2Paths.For("K2.DisplayPad"), "gif_frames", cacheKey);
         string manifestPath = Path.Combine(cacheDir, "frames.json");
 
         // A cached PNG (already device-rotated, from a previous session) still needs its

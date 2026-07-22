@@ -21,7 +21,7 @@ namespace K2.App;
 public partial class App : Application
 {
     /// <summary>
-    /// Per-user, always-writable data folder (%LocalAppData%\K2.App\), shared by all
+    /// Per-user, always-writable data folder (%LocalAppData%\K2\K2.App\), shared by all
     /// modules. NOT next to the executable: K2 installs to Program Files by default,
     /// which is admin-write-protected — writing there without elevation used to fail
     /// silently and drop all logging.
@@ -30,8 +30,7 @@ public partial class App : Application
 
     private static string EnsureDataDir()
     {
-        var dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "K2.App");
+        var dir = K2Paths.For("K2.App");
         try { Directory.CreateDirectory(dir); } catch { /* best-effort, same as the writers below */ }
         return dir;
     }

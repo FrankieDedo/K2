@@ -81,8 +81,7 @@ public partial class MainWindow
     /// time (<see cref="_dpRotation"/>), no special-casing needed.
     /// </summary>
     private static readonly string DpAutoIconDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "K2.DisplayPad", "auto_icons");
+        K2Paths.For("K2.DisplayPad"), "auto_icons");
 
     /// <summary>Cache path for an auto-generated icon, under <see cref="DpAutoIconDir"/>.</summary>
     private static string DpAutoIconCachePath(string kind, string sourceValue)
@@ -409,9 +408,7 @@ public partial class MainWindow
         if (DpSelectedDeviceId() is not int devId) return;
         int profile = DpCurrentProfile();
 
-        string cacheRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "K2.DisplayPad", "user_rotated");
+        string cacheRoot = Path.Combine(K2Paths.For("K2.DisplayPad"), "user_rotated");
         Directory.CreateDirectory(cacheRoot);
 
         var flipType = degrees switch
@@ -1298,9 +1295,7 @@ public partial class MainWindow
                 return;
             }
 
-            string iconsDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "K2.DisplayPad", "imported_xml", profileName);
+            string iconsDir = Path.Combine(K2Paths.For("K2.DisplayPad"), "imported_xml", profileName);
             Directory.CreateDirectory(iconsDir);
 
             _dpStore.ClearProfile(id, slot);
@@ -2153,8 +2148,7 @@ public partial class MainWindow
     private static string DpBlackIconPath()
     {
         if (_dpBlackIconPath is string cached && File.Exists(cached)) return cached;
-        string dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "K2.DisplayPad");
+        string dir = K2Paths.For("K2.DisplayPad");
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, "blank_black_102.png");
         if (!File.Exists(path))

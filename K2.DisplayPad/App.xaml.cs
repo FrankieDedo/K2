@@ -4,13 +4,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using K2.Core;
 using K2.DisplayPad.Dialogs;
 
 namespace K2.DisplayPad;
 
 public partial class App : Application
 {
-    // %LocalAppData%\K2.DisplayPad\, not next to the exe: K2 installs to Program
+    // %LocalAppData%\K2\K2.DisplayPad\, not next to the exe: K2 installs to Program
     // Files by default (admin-write-protected), so writing there without elevation
     // used to fail silently and drop all logging. Matches the convention already
     // used by StateStore/CellConfigDialog/etc. in this project.
@@ -18,8 +19,7 @@ public partial class App : Application
 
     private static string EnsureLogPath()
     {
-        var dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "K2.DisplayPad");
+        var dir = K2Paths.For("K2.DisplayPad");
         try { Directory.CreateDirectory(dir); } catch { /* best-effort, same as the writers below */ }
         return Path.Combine(dir, "K2.DisplayPad.log");
     }

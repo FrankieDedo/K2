@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using K2.Core;
 using Microsoft.Data.Sqlite;
 
 namespace K2.App.Services;
@@ -17,9 +18,7 @@ public sealed class DisplayPadStore : IDisposable
 
     public DisplayPadStore()
     {
-        var dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "K2.DisplayPad.AppSide");
+        var dir = K2Paths.For("K2.DisplayPad.AppSide");
         Directory.CreateDirectory(dir);
         string dbPath = Path.Combine(dir, "state.db");
         _conn = new SqliteConnection($"Data Source={dbPath};Cache=Shared");

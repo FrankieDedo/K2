@@ -271,8 +271,7 @@ public partial class DpKeyConfigDialog : Window
 
     /// <summary>Matches <c>MainWindow.DpAutoIconDir</c> exactly.</summary>
     private static readonly string AutoIconCacheRoot = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "K2.DisplayPad", "auto_icons");
+        K2Paths.For("K2.DisplayPad"), "auto_icons");
 
     /// <summary>Removing the action also clears the key's picture — a picture with no
     /// action behind it is just a stale, misleading tile (this covers both auto-generated
@@ -370,9 +369,7 @@ public partial class DpKeyConfigDialog : Window
     /// </summary>
     private static string ApplyUserRotation(string sourcePath, int degrees)
     {
-        string cacheRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            CacheDir_UserRotated);
+        string cacheRoot = Path.Combine(K2Paths.Root, CacheDir_UserRotated);
         Directory.CreateDirectory(cacheRoot);
 
         // Cache key: path + mtime + rotation degrees (avoids collisions and

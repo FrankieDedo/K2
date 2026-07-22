@@ -178,9 +178,7 @@ public partial class NdkKeyConfigDialog : Window
 
     private static string AutoIconCachePath(string kind, string sourceValue)
     {
-        string cacheRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "K2.App", "auto_icons");
+        string cacheRoot = Path.Combine(K2Paths.For("K2.App"), "auto_icons");
         Directory.CreateDirectory(cacheRoot);
 
         long mtime = 0;

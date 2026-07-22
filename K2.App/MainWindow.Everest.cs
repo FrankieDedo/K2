@@ -1168,8 +1168,7 @@ public partial class MainWindow
                         if (bytes is not null)
                         {
                             string dir = System.IO.Path.Combine(
-                                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                                "K2.App", "imported_xml_ev", $"slot{slot}");
+                                K2Paths.For("K2.App"), "imported_xml_ev", $"slot{slot}");
                             System.IO.Directory.CreateDirectory(dir);
                             string file = System.IO.Path.Combine(dir, $"ndk_{ndkIndex}.png");
                             System.IO.File.WriteAllBytes(file, bytes);
