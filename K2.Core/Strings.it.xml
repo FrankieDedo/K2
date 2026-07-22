@@ -26,6 +26,7 @@
   <string name="backlight_auto_off_group">Spegnimento automatico retroilluminazione</string>
   <string name="backlight_auto_off_enable">Spegni retroilluminazione se inattivo</string>
   <string name="backlight_auto_off_seconds">Dopo</string>
+  <string name="keyboard_language_layout">Impostazioni lingua</string>
   <string name="pos_horizontal">Orizzontale ({0}°)</string>
   <string name="pos_vertical">Verticale ({0}°)</string>
   <string name="brightness">Luminosità:</string>

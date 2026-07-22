@@ -108,6 +108,20 @@ public partial class MainWindow
     /// fallback pattern to port.</summary>
     private readonly Dictionary<int, int> _ev60DllKeyIdToLedIndex = new();
 
+    /// <summary>Reverse of <see cref="Everest60RemapData.NumpadDllKeyId"/>
+    /// (DllKeyId -> NumpadIndex 0-16), built once in
+    /// <see cref="InitEverest60Module"/> — used by <see cref="OnEv60NumpadKeyPressed"/>
+    /// to translate <see cref="_ev60NumpadKeyPoller"/>'s event back to a
+    /// numpad key identity.</summary>
+    private readonly Dictionary<int, int> _ev60NumpadDllKeyIdToIndex = new();
+
+    /// <summary>Numpad accessory Key Binding: polls for physical presses over
+    /// the same raw-HID channel as lighting — see
+    /// <see cref="Everest60NumpadKeyPoller"/>'s doc comment for why this is
+    /// "always on" (unlike <see cref="_ev60LedPoller"/>, not gated to the
+    /// Lighting section).</summary>
+    private Everest60NumpadKeyPoller? _ev60NumpadKeyPoller;
+
     /// <summary>Called once from the MainWindow constructor.</summary>
     private void InitEverest60Module()
     {
@@ -139,6 +153,11 @@ public partial class MainWindow
         for (int led = 0; led < table.Length; led++)
             _ev60DllKeyIdToLedIndex[table[led]] = led;
 
+        // DllKeyId -> NumpadIndex reverse map (see _ev60NumpadDllKeyIdToIndex's doc comment).
+        var numpadTable = Everest60RemapData.NumpadDllKeyId;
+        for (int npi = 0; npi < numpadTable.Length; npi++)
+            _ev60NumpadDllKeyIdToIndex[numpadTable[npi]] = npi;
+
         _ev60Sdk.KeyEvent += OnEv60Key;
 
         _ev60ActionHost = new Ev60ActionHost(
@@ -156,6 +175,9 @@ public partial class MainWindow
             listMacroNames:        ListAllMacroNames,
             playMacro:             PlayMacroByName);
         Ev60KeyBindingPanel.SetActionHost(_ev60ActionHost);
+        Ev60KeyBindingPanel.SetNumpadDevicePush(
+            writeBinding:     (dllKeyId, label) => { _ev60.WriteNumpadKeyBinding(dllKeyId, label); StartEv60NumpadPresenceGrace(); },
+            unassignBinding:  dllKeyId => { _ev60.UnassignNumpadKey(dllKeyId); StartEv60NumpadPresenceGrace(); });
 
         _ev60Engine = new ButtonActionEngine(_ev60ActionHost);
         _ev60Engine.Start();
@@ -168,9 +190,16 @@ public partial class MainWindow
         _ev60LedPoller = new Everest60LedColorPoller(_ev60);
         _ev60LedPoller.ColorsUpdated += OnEv60ColorsUpdated;
 
+        // Always-on (not gated to a section, unlike _ev60LedPoller) — see
+        // Everest60NumpadKeyPoller's doc comment.
+        _ev60NumpadKeyPoller = new Everest60NumpadKeyPoller(_ev60);
+        _ev60NumpadKeyPoller.KeyPressed += OnEv60NumpadKeyPressed;
+        _ev60NumpadKeyPoller.Start();
+
         Closed += (_, _) =>
         {
             try { _ev60LedPoller?.Dispose(); } catch { /* ignore */ }
+            try { _ev60NumpadKeyPoller?.Dispose(); } catch { /* ignore */ }
             try { _ev60Engine?.Dispose(); } catch { /* ignore */ }
             try { _ev60Sdk.Dispose(); } catch { /* ignore */ }
         };
@@ -265,6 +294,25 @@ public partial class MainWindow
     {
         Ev60RgbPanel.Ev60ReloadProfile(slot);
         Ev60KeyBindingPanel.Ev60ReloadKeyBindings(slot);
+        PushNumpadKeyBindingsToDevice();
+    }
+
+    /// <summary>Re-writes every numpad key currently bound in this profile to
+    /// the physical device — the firmware doesn't persist a binding across a
+    /// replug/profile switch (same reason lighting needs re-applying via
+    /// Ev60RgbPanel.Ev60ReloadProfile above), unlike the main board's
+    /// bindings which live purely in K2 software and need no device push at
+    /// all.</summary>
+    private void PushNumpadKeyBindingsToDevice()
+    {
+        bool wroteAny = false;
+        foreach (var key in Ev60KeyBindingPanel.Keys)
+            if (key.NumpadIndex is int npi)
+            {
+                _ev60.WriteNumpadKeyBinding(Everest60RemapData.NumpadDllKeyId[npi], key.Label);
+                wroteAny = true;
+            }
+        if (wroteAny) StartEv60NumpadPresenceGrace();
     }
 
     /// <summary>
@@ -762,8 +810,12 @@ public partial class MainWindow
                     TextAlignment = TextAlignment.Center,
                     HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
                 },
-                IsHitTestVisible = false, // decorative only — no protocol for this accessory
+                Tag = kd.NumpadIndex, // 0-16, see KeyDef.NumpadIndex
             };
+            // Key Binding identity/persistence only (Fase 1) — no device write,
+            // no physical-press detection yet, see Ev60NumpadButton_Click and
+            // Everest60KeyBindingPanel.SelectNumpadKey's doc comments.
+            btn.Click += Ev60NumpadButton_Click;
             Canvas.SetLeft(btn, kd.X);
             Canvas.SetTop(btn, kd.Y);
             CvsEv60Numpad.Children.Add(btn);
@@ -949,6 +1001,21 @@ public partial class MainWindow
             ApplyEv60KeyOverlay(v, color);
     }
 
+    /// <summary>Key click on the 17-key numpad accessory overlay. Only does
+    /// anything while the Key Binding section is active — unlike the main
+    /// board, the numpad has no per-key paint mode and no keycap-customize
+    /// dialog (it only gets the shared base Keycap Appearance colors, see
+    /// BuildEverest60KeyboardOverlay's numpad loop), so any other section is
+    /// a no-op here, same as before this click handler existed.</summary>
+    private void Ev60NumpadButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: int numpadIndex } btn) return;
+        if (!ReferenceEquals(_activeEv60Section, Ev60KeyBindingPanel)) return;
+
+        string label = (btn.Content as TextBlock)?.Text ?? $"#{numpadIndex}";
+        Ev60KeyBindingPanel.SelectNumpadKey(numpadIndex, label);
+    }
+
     // ============================================================
     // IActionHost adapter (delegates passed to Ev60ActionHost) +
     // physical key-press execution
@@ -1006,6 +1073,23 @@ public partial class MainWindow
         if (pressed) ExecuteEv60Key(key);
     }
 
+    /// <summary>Physical press of a numpad accessory key, reported by
+    /// <see cref="_ev60NumpadKeyPoller"/> (raw-HID poll, cmd 0x08 — see
+    /// Everest60Protocol.NumpadKeyBinding, NOT the SDK callback <see cref="HandleEv60Key"/>
+    /// uses for the main board). Only fires for a numpad key the user has
+    /// actually bound in K2 — an unbound key never reaches this poller at
+    /// all (it's still typing its normal literal digit, no device write was
+    /// ever made for it).</summary>
+    private void OnEv60NumpadKeyPressed(int dllKeyId)
+    {
+        if (!_ev60NumpadDllKeyIdToIndex.TryGetValue(dllKeyId, out int numpadIndex)) return;
+
+        var key = Ev60KeyBindingPanel.Keys.FirstOrDefault(k => k.NumpadIndex == numpadIndex);
+        if (key is null) return;
+
+        ExecuteEv60Key(key);
+    }
+
     /// <summary>Same "Tint" overlay approach as Everest Max's
     /// EvHighlightKeyboardButton (MainWindow.Everest.cs) — SetKeyTint/
     /// SetLegendForeground live in MainWindow.KeycapAppearance.cs and own
@@ -1027,6 +1111,45 @@ public partial class MainWindow
     /// comment); side (left/right) is NOT re-derived each poll, only
     /// presence is — see Ev60RefreshStatus for why.</summary>
     private Ev60NumpadPosition _ev60NumpadPosition = Ev60NumpadPosition.None;
+
+    /// <summary>Consecutive "not present" readings from <see cref="Everest60Service.TryGetNumpadPresent"/>.
+    /// Debounced (hide only after 2 in a row) so a single blip doesn't
+    /// flicker the UI — but see <see cref="_ev60NumpadPresenceGraceUntil"/>
+    /// for the real fix: diagnostic logging on real hardware (2026-07-22,
+    /// see CHANGELOG) confirmed this ISN'T a brief host-side race at all —
+    /// after a Key Binding write, <c>cmd 0x20</c> genuinely, repeatedly reads
+    /// an all-zero "not present" buffer for **~20+ consecutive seconds**
+    /// (5+ clean, fast, correctly-echoed reads in a row, all "empty") before
+    /// self-recovering, with the write's own <c>CommitKeyBinding</c> (cmd
+    /// 0x2C) never getting a clean ack either (3 retries, stale echo every
+    /// time). This is the firmware itself — likely the same long-standing,
+    /// previously-reported "Ev60 numpad sometimes disappears, replug fixes
+    /// it" hardware quirk, now confirmed to correlate with a Key Binding
+    /// write specifically — nothing on the host side to fix. A 2-tick
+    /// debounce alone doesn't cover 20+ seconds; presence coming back is
+    /// never debounced — reconnecting (real or after the firmware settles)
+    /// should still feel instant.</summary>
+    private int _ev60NumpadAbsentStreak;
+
+    /// <summary>Suppresses hiding the numpad (but never suppresses showing
+    /// it) until this time — set by <see cref="StartEv60NumpadPresenceGrace"/>
+    /// right after any numpad Key Binding write, to ride out the firmware's
+    /// own "not present" window documented on <see cref="_ev60NumpadAbsentStreak"/>
+    /// instead of hiding the accessory for real. Each new write RENEWS this
+    /// (confirmed working via a 2026-07-22 log: three writes ~4-14s apart
+    /// each pushed the deadline out, keeping <c>grace=True</c> the whole
+    /// time) — but a single 30s window turned out too short for that same
+    /// back-to-back-writes case: the numpad was still reading absent 33s
+    /// after the LAST write when the grace expired and it got hidden, with
+    /// no sign of recovery yet in that log. Widened to 60s (evidence-based
+    /// margin, not a guess pulled from nowhere: covers the single-write
+    /// ~23s case with room to spare, and the observed 45s-and-still-absent
+    /// multi-write case) — widen further if a future log still shows it
+    /// hidden before recovering.</summary>
+    private DateTime _ev60NumpadPresenceGraceUntil = DateTime.MinValue;
+
+    private void StartEv60NumpadPresenceGrace() =>
+        _ev60NumpadPresenceGraceUntil = DateTime.UtcNow.AddSeconds(60);
 
     /// <summary>Moves/mirrors/shows-or-hides CvsEv60Numpad for the given
     /// position. No separate right-side art exists (Base Camp itself only
@@ -1282,13 +1405,30 @@ public partial class MainWindow
         // as the only physical unit seen in every capture/log so far.
         Ev60NumpadPosition numpadPos;
         if (!connected)
+        {
             numpadPos = Ev60NumpadPosition.None;
+            _ev60NumpadAbsentStreak = 0;
+        }
         else
         {
             bool? present = _ev60.TryGetNumpadPresent();
-            numpadPos = present == true
-                ? (_ev60NumpadPosition == Ev60NumpadPosition.None ? Ev60NumpadPosition.Right : _ev60NumpadPosition)
-                : Ev60NumpadPosition.None;
+            if (present == true)
+            {
+                _ev60NumpadAbsentStreak = 0;
+                numpadPos = _ev60NumpadPosition == Ev60NumpadPosition.None ? Ev60NumpadPosition.Right : _ev60NumpadPosition;
+            }
+            else
+            {
+                _ev60NumpadAbsentStreak++;
+                bool inGrace = DateTime.UtcNow < _ev60NumpadPresenceGraceUntil;
+                // Debounced (2-tick) normally; during the post-write grace
+                // window (see _ev60NumpadPresenceGraceUntil) never hide at
+                // all — the firmware's own ~20+s "not present" spell after a
+                // binding write is expected, not a real disconnect.
+                numpadPos = (!inGrace && _ev60NumpadAbsentStreak >= 2) ? Ev60NumpadPosition.None : _ev60NumpadPosition;
+            }
+            LogEverest60($"[Ev60-NumpadTick] present={present?.ToString() ?? "null"} " +
+                         $"streak={_ev60NumpadAbsentStreak} grace={DateTime.UtcNow < _ev60NumpadPresenceGraceUntil} -> pos={numpadPos}");
         }
         ApplyEv60NumpadPosition(numpadPos);
     }

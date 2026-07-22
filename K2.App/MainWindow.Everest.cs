@@ -1755,6 +1755,34 @@ public partial class MainWindow
         LoadNdkState();
         EvAddNdkEntriesToKeyList();
         LogEverest($"[DB  ] profile {profile}: loaded {_evKeys.Count} keys");
+
+        ReloadEverestRgbForProfileSwitch();
+    }
+
+    /// <summary>
+    /// Re-loads the RGB lighting panel for the profile that just became active
+    /// (device firmware is already switched to it at this point — see callers of
+    /// <see cref="ReloadEverestProfile"/>) and resends the effect, so each profile
+    /// keeps its own remembered lighting when "sync across profiles" is off
+    /// (no-op in practice when synced: same shared keys, same values). Mirrors
+    /// Everest 60/Makalu's ReloadProfile. User request 2026-07-22.
+    /// </summary>
+    private void ReloadEverestRgbForProfileSwitch()
+    {
+        if (!_evRgbInitialized) return;
+        bool prev = _evRgbSuppress;
+        _evRgbSuppress = true;
+        try
+        {
+            LoadEverestRgbFromStore();
+            UpdateEvCapabilities();
+            LblEvBrightness.Text = $"{(int)SldEvBrightness.Value}%";
+            ApplyColorButton(BtnEvColor1, _evColor1);
+            ApplyColorButton(BtnEvColor2, _evColor2);
+            ApplyColorButton(BtnEvColor3, _evColor3);
+        }
+        finally { _evRgbSuppress = prev; }
+        ApplyCurrentEffect();
     }
 
     /// <summary>
@@ -2106,8 +2134,10 @@ public partial class MainWindow
     // firmware (firmware presets are "fire & forget"). Colors are chosen with
     // System.Windows.Forms.ColorDialog (WPF has no built-in color dialog).
     //
-    // State (effect + params + colors) lives only in memory — per-profile
-    // persistence is a future step.
+    // State (effect + params + colors) is persisted in Settings — shared
+    // across profiles ("rgb.*") when "sync across profiles" is on, or
+    // per-profile ("rgb.p{N}.*") when off, mirroring Everest 60/Makalu (see
+    // EvRgbPrefix, user request 2026-07-22).
     // ------------------------------------------------------------
 
     /// <summary>
@@ -2279,24 +2309,35 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// Loads RGB parameters saved from the previous session (keys
-    /// <c>rgb.*</c> in the Settings table). Global state, not per-profile:
-    /// per-profile extension is a future step.
+    /// Key namespace for the RGB effect settings: shared (<c>"rgb."</c>) when
+    /// "sync across profiles" is on, or profile-scoped (<c>"rgb.p{N}."</c>)
+    /// when off — synced means one shared effect for every profile by
+    /// definition, so only the un-synced case needs per-profile storage
+    /// (mirrors Everest 60/Makalu, user request 2026-07-22).
+    /// </summary>
+    private string EvRgbPrefix() =>
+        CkEvSync.IsChecked == true ? "rgb." : $"rgb.p{EvCurrentProfile()}.";
+
+    /// <summary>
+    /// Loads RGB parameters saved from the previous session/profile (see
+    /// <see cref="EvRgbPrefix"/>). The "sync" flag itself and the auto-off
+    /// timer are always global device settings, not per-profile.
     /// </summary>
     private void LoadEverestRgbFromStore()
     {
         int? IntSetting(string key) =>
             int.TryParse(_evStore.GetSetting(key), out var v) ? v : null;
 
-        if (IntSetting("rgb.effect") is int eIdx)
+        if (IntSetting("rgb.sync") is int sy) CkEvSync.IsChecked = sy != 0;
+
+        string prefix = EvRgbPrefix();
+        if ((IntSetting(prefix + "effect") ?? IntSetting("rgb.effect")) is int eIdx)
         {
             for (int i = 0; i < EvEffectList.Length; i++)
                 if ((byte)EvEffectList[i].Eff == eIdx) { CbEvEffect.SelectedIndex = i; break; }
         }
         if (CbEvEffect.SelectedItem is EvEffectChoice pick)
             LoadEffectParamsIntoControls(pick.Eff);
-
-        if (IntSetting("rgb.sync") is int sy) CkEvSync.IsChecked = sy != 0;
 
         CkEvAutoOffEnable.IsChecked = IntSetting("rgb.autoOffEnable") == 1;
         TxtEvAutoOffSeconds.Text    = (IntSetting("rgb.autoOffSeconds") ?? 60).ToString();
@@ -2318,28 +2359,33 @@ public partial class MainWindow
     {
         int? I(string key) =>
             int.TryParse(_evStore.GetSetting(key), out var v) ? v : null;
-        string p = $"rgb.{(byte)eff}.";
+        // Profile-scoped (or shared, if synced — see EvRgbPrefix) namespace first,
+        // falling back to the legacy always-global "rgb.{effectByte}." keys —
+        // one-time seeding for existing installs/profiles that never had their
+        // own per-profile value saved yet.
+        string p  = $"{EvRgbPrefix()}{(byte)eff}.";
+        string gp = $"rgb.{(byte)eff}.";
 
-        int speed = I(p + "speed") ?? I("rgb.speed") ?? 50;
+        int speed = I(p + "speed") ?? I(gp + "speed") ?? 50;
         if (speed is >= 0 and <= 100) SldEvSpeed.Value = speed;
 
         // Direction is applied by UpdateEvCapabilities (options depend on effect);
         // here we only restore the saved index, used there if valid.
-        _evSavedDirIndex = I(p + "direction") ?? I("rgb.direction") ?? 0;
+        _evSavedDirIndex = I(p + "direction") ?? I(gp + "direction") ?? 0;
         _evDirIndex      = _evSavedDirIndex;
 
-        int bright = I(p + "brightness") ?? I("rgb.brightness") ?? 100;
+        int bright = I(p + "brightness") ?? I(gp + "brightness") ?? 100;
         if (bright is >= 0 and <= 100) SldEvBrightness.Value = bright;
 
         // Rainbow/Double/Single are one mutually-exclusive radio group — Rainbow
         // wins if both were somehow persisted true (shouldn't happen going forward).
-        if ((I(p + "rainbow") ?? I("rgb.rainbow") ?? 0) != 0) RbEvRainbow.IsChecked = true;
-        else if ((I(p + "colorDouble") ?? I("rgb.colorDouble") ?? 0) != 0) RbEvColorDouble.IsChecked = true;
+        if ((I(p + "rainbow") ?? I(gp + "rainbow") ?? 0) != 0) RbEvRainbow.IsChecked = true;
+        else if ((I(p + "colorDouble") ?? I(gp + "colorDouble") ?? 0) != 0) RbEvColorDouble.IsChecked = true;
         else RbEvColorSingle.IsChecked = true;
 
-        _evColor1 = (I(p + "color1") ?? I("rgb.color1") ?? _evColor1) & 0xFFFFFF;
-        _evColor2 = (I(p + "color2") ?? I("rgb.color2") ?? _evColor2) & 0xFFFFFF;
-        _evColor3 = (I(p + "color3") ?? I("rgb.color3") ?? _evColor3) & 0xFFFFFF;
+        _evColor1 = (I(p + "color1") ?? I(gp + "color1") ?? _evColor1) & 0xFFFFFF;
+        _evColor2 = (I(p + "color2") ?? I(gp + "color2") ?? _evColor2) & 0xFFFFFF;
+        _evColor3 = (I(p + "color3") ?? I(gp + "color3") ?? _evColor3) & 0xFFFFFF;
         ApplyColorButton(BtnEvColor1, _evColor1);
         ApplyColorButton(BtnEvColor2, _evColor2);
         ApplyColorButton(BtnEvColor3, _evColor3);
@@ -2394,16 +2440,18 @@ public partial class MainWindow
         EvApplyAutoOffConfig();
     }
 
-    /// <summary>Saves the current panel payload to Settings — the effect-independent
-    /// bits under global keys (<c>rgb.effect</c>/<c>rgb.sync</c>), everything else
-    /// under the selected effect's own <c>rgb.{effectByte}.*</c> namespace (see
-    /// <see cref="LoadEffectParamsIntoControls"/>).</summary>
+    /// <summary>Saves the current panel payload to Settings — under the shared or
+    /// profile-scoped namespace given by <see cref="EvRgbPrefix"/> (effect id under
+    /// <c>{prefix}effect</c>, everything else under <c>{prefix}{effectByte}.*</c>,
+    /// see <see cref="LoadEffectParamsIntoControls"/>). <c>rgb.sync</c> itself is
+    /// always the global device flag.</summary>
     private void SaveEverestRgbToStore()
     {
         if (!_evRgbInitialized || _evRgbSuppress) return;
         if (CbEvEffect.SelectedItem is not EvEffectChoice pick) return;
-        string p = $"rgb.{(byte)pick.Eff}.";
-        _evStore.SetSetting("rgb.effect",      ((byte)pick.Eff).ToString());
+        string prefix = EvRgbPrefix();
+        string p = $"{prefix}{(byte)pick.Eff}.";
+        _evStore.SetSetting(prefix + "effect", ((byte)pick.Eff).ToString());
         _evStore.SetSetting(p + "speed",       ((int)SldEvSpeed.Value).ToString());
         _evStore.SetSetting(p + "direction",   _evDirIndex.ToString());
         _evStore.SetSetting(p + "brightness",  ((int)SldEvBrightness.Value).ToString());

@@ -38,4 +38,9 @@ public partial class NewDisplayPadProfileDialog : Window
         DedicatedType = IsDedicated ? CbDedicatedType.SelectedItem as string : null;
         DialogResult = true;
     }
+
+    private void CbDedicatedType_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+
+    }
 }

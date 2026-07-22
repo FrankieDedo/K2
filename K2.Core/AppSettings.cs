@@ -29,7 +29,7 @@ public static class AppSettings
     private sealed class Data
     {
         public bool DebugMode { get; set; }
-        public K2LogLevel LogLevel { get; set; } = K2LogLevel.Normal;
+        public K2LogLevel LogLevel { get; set; } = K2LogLevel.Off;
         public bool KillBaseCampWorker { get; set; } = true;
         public bool AutoStopBaseCamp { get; set; } = true;
         public bool CloseToTray { get; set; }

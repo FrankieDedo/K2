@@ -20,13 +20,17 @@ namespace K2.App.Models;
 /// 64 keys total, **no backtick key** — confirmed hardware quirk of this
 /// board, not an omission.</para>
 ///
-/// <para><b>Numpad accessory:</b> no source (Base Camp Windows, BaseCampLinux,
-/// or the decompiled DB schema) has ever modeled a LED/remap protocol for
-/// it — <c>has_numpad=False</c> everywhere it's referenced in BaseCampLinux.
-/// This layout is a hand-estimated approximation (same "eyeballed" spirit as
-/// the Makalu hotspots) for **visual/decorative purposes only**: every key
-/// has <see cref="KeyDef.MatrixId"/> = -1 and is not wired to any click
-/// handler or lighting command.</para>
+/// <para><b>Numpad accessory:</b> hand-estimated geometry (same "eyeballed"
+/// spirit as the Makalu hotspots) — no source ever modeled its layout.
+/// <see cref="KeyDef.MatrixId"/> stays -1 (no lighting/remap protocol via
+/// that identity), but each key now carries a real <see cref="KeyDef.NumpadIndex"/>
+/// (0-16, same order as <c>Everest60Protocol.NumpadLedIndex</c>), confirmed
+/// 2026-07-22 via USBPcap capture analysis (see CHANGELOG): the 17 keys speak
+/// standard USB HID boot-keyboard reports when unassigned, and Base Camp's
+/// own remap writes a real per-key binding over the existing lighting
+/// feature-report channel. Key Binding UI wiring (identity/persistence) is
+/// in place; the physical-press detection + device-side write are a
+/// follow-up (Fase 2, pending one more targeted capture) — see the plan.</para>
 /// </summary>
 public static class Everest60KeyboardLayout
 {
@@ -69,8 +73,9 @@ public static class Everest60KeyboardLayout
         return built;
     }
 
-    /// <summary>Decorative-only numpad accessory keys (MatrixId = -1: not
-    /// paintable, not clickable — no known protocol for this block).</summary>
+    /// <summary>Numpad accessory keys — not paintable (MatrixId stays -1, no
+    /// per-key lighting protocol), but each has a real <see cref="KeyDef.NumpadIndex"/>
+    /// (0-16) for Key Binding identity.</summary>
     public static readonly KeyDef[] Numpad = BuildNumpad();
 
     // ======================================================================
@@ -245,13 +250,14 @@ public static class Everest60KeyboardLayout
         const double npL = 14;
         const double npT = 14;
         double y = npT;
+        int idx = 0; // 0-16, same insertion order as Everest60Protocol.NumpadLedIndex
 
         void R(double yy, params (string label, double w)[] keys)
         {
             double x = npL;
             foreach (var (label, w) in keys)
             {
-                k.Add(new KeyDef(-1, label, x, yy, w, U));
+                k.Add(new KeyDef(-1, label, x, yy, w, U, idx++));
                 x += w + G;
             }
         }
@@ -259,12 +265,12 @@ public static class Everest60KeyboardLayout
         R(y, ("Num", U), ("/", U), ("*", U), ("-", U));
         y += RH;
         R(y, ("7", U), ("8", U), ("9", U));
-        k.Add(new KeyDef(-1, "+", npL + 3 * (U + G), y, U, RH + U));
+        k.Add(new KeyDef(-1, "+", npL + 3 * (U + G), y, U, RH + U, idx++));
         y += RH;
         R(y, ("4", U), ("5", U), ("6", U));
         y += RH;
         R(y, ("1", U), ("2", U), ("3", U));
-        k.Add(new KeyDef(-1, "↵", npL + 3 * (U + G), y, U, RH + U));
+        k.Add(new KeyDef(-1, "↵", npL + 3 * (U + G), y, U, RH + U, idx++));
         y += RH;
         R(y, ("0", 62), (".", U));
 

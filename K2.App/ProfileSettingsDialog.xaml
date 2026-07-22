@@ -14,7 +14,7 @@
                    FontSize="16" FontWeight="Bold" Margin="0,0,0,12"/>
 
         <TextBlock Text="{loc:Get profile_settings_name_label}" Foreground="#AAA" FontSize="11" Margin="0,0,0,4"/>
-        <TextBox x:Name="TxtName" Margin="0,0,0,12" Height="25"/>
+        <TextBox x:Name="TxtName" Margin="0,0,0,12" Height="25" Padding="3,2,3,0"/>
 
         <TextBlock Text="{loc:Get profile_settings_exe_label}" Foreground="#AAA" FontSize="11" Margin="0,0,0,4"/>
         <Grid Margin="0,0,0,4">
@@ -23,7 +23,7 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBox x:Name="TxtExePath" Grid.Column="0" IsReadOnly="True" Margin="0,0,6,0" Height="25"/>
+            <TextBox x:Name="TxtExePath" Grid.Column="0" IsReadOnly="True" Margin="0,0,6,0" Height="25" Padding="3,2,3,0"/>
             <Button Grid.Column="1" Content="{loc:Get browse}" Click="BtnBrowse_Click" Margin="0,0,4,0" UseLayoutRounding="True" ScrollViewer.CanContentScroll="True" Padding="12,0,12,0"/>
             <Button Grid.Column="2" Content="{loc:Get profile_settings_clear}" Click="BtnClearExe_Click" UseLayoutRounding="True" ScrollViewer.CanContentScroll="True" Padding="12,0,12,0"/>
         </Grid>
