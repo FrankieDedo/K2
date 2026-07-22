@@ -228,6 +228,13 @@ internal static class EverestHidNative
                 WaitResp(_ => true, 1500);
                 if (!WriteCmd(cmd2)) continue;
                 WaitResp(_ => true, 1500);
+                // NB: an `11 80 00 00 01` packet (seen in Base Camp's startup,
+                // evicon.pcapng) was briefly sent here as a candidate "suppress firmware
+                // default display-key actions" flag — REMOVED same day: it did not stop
+                // the double execution and coincided with icon uploads/resets no longer
+                // refreshing the LCDs (unknown semantics, likely needs a companion
+                // command we haven't captured). Do not re-add without a capture of BC
+                // assigning an action to a defaulted key.
                 _log($"[EvNative] init OK");
                 return;
             }
@@ -257,6 +264,248 @@ internal static class EverestHidNative
                 if (!WriteCmd(wire64)) return null;
                 return WaitResp(match, timeoutMs);
             }
+        }
+
+        private static byte[] Cmd(params byte[] head)
+        {
+            var wire = new byte[PktSize];
+            Buffer.BlockCopy(head, 0, wire, 0, head.Length);
+            return wire;
+        }
+
+        /// <summary>
+        /// Sends a command and waits for its own ECHO ack (a response whose first byte
+        /// equals the command's) — NOT just any response. The device continuously streams
+        /// LED-color packets (byte0 = 0x02-0x0A/0x11, from the color poller's 11 83
+        /// reads), so a permissive wait returns instantly on unrelated traffic and the
+        /// next command gets fired within microseconds — real Base Camp paces multi-packet
+        /// sequences ~150ms apart precisely by waiting each command's echo (evprofiles.pcapng:
+        /// every OUT on ep 0x05 is answered by an IN on ep 0x84 starting with the same
+        /// byte). Without this, the ResetDisplayKeyPic sequence was accepted ("True") but
+        /// visibly ignored by the firmware (user report 2026-07-19).
+        /// </summary>
+        private bool SendCmdAcked(byte[] wire64, int timeoutMs = 1200)
+        {
+            byte b0 = wire64[0];
+            var resp = SendCommand(wire64, r => r.Length > 0 && r[0] == b0, timeoutMs);
+            // Full cmd/echo hex at Verbose: the echo's payload may carry a status the
+            // firmware uses to say "received but refused" — needed to diagnose sequences
+            // that ack fine yet visibly do nothing (display-key reset, 2026-07-19).
+            if (K2.Core.AppSettings.LogLevel == K2.Core.K2LogLevel.Verbose)
+                _log($"[EvNative] cmd  {Convert.ToHexString(wire64, 0, 12)} -> " +
+                     (resp is null ? "TIMEOUT" : $"echo {Convert.ToHexString(resp, 0, Math.Min(12, resp.Length))}"));
+            return resp is not null;
+        }
+
+        /// <summary>
+        /// Claims a display-key press on behalf of the host software, replicating what
+        /// Base Camp does after EVERY key report (evicon.pcapng, 2026-07-19): read
+        /// status (<c>11 00</c>) then send <c>11 02 00 01 [profile] [wMatrix] 02</c>
+        /// (response <c>FF AA FF</c>). Without this claim the firmware executes the
+        /// key's own stored/default action AUTONOMOUSLY (standalone mode) — the cause of
+        /// the "double action" the user saw with K2: firmware fired the default AND K2's
+        /// engine fired the configured action on the same press (BC's captures show only
+        /// the custom action firing while it acks every press; with BC closed only the
+        /// default fires). Cross-checked against the older evprofiles.pcapng session end,
+        /// which contains <c>11 02 00 01 03 50 02</c> = same shape with profile 3 active
+        /// and wMatrix 0x50 = 80 = display key D2.
+        /// </summary>
+        public void AckKeyPress(int profile, byte wMatrix)
+        {
+            SendCommand(Cmd(0x11, 0x00), r => r.Length > 1 && r[0] == 0x11 && r[1] == 0x00, 400);
+            SendCommand(Cmd(0x11, 0x02, 0x00, 0x01, (byte)profile, wMatrix, 0x02),
+                        r => r.Length > 0 && r[0] == 0xFF, 400);
+        }
+
+        /// <summary>
+        /// Writes a display key's ACTION BINDING into the firmware — the write that marks
+        /// the key as "custom" so the firmware STOPS executing its own built-in default
+        /// action on press (the root of the "double action" bug: K2 never wrote bindings,
+        /// so the firmware kept firing defaults alongside K2's software action). Captured
+        /// from real Base Camp (evicon.pcapng 2026-07-19: assigning a URL action to D2 =
+        /// <c>12 08 00 01</c> then <c>17 AB 13 00 02 "https://google..."</c>; evprofiles
+        /// .pcapng: multi-chunk exe paths, e.g. <c>17 AD 3C 01 01 "C:\...Telegra"</c> +
+        /// <c>17 AD 05 03 "m.exe"</c>). Wire format:
+        ///   first chunk:  17 [0xAA+key] [1+dataLen] [flag] [type] [ASCII data ≤59]
+        ///   next chunks:  17 [0xAA+key] [dataLen]   [flag]        [ASCII data ≤60]
+        /// flag: 00 = single chunk, 01 = first of many, 03 = final (02 = middle, inferred).
+        /// type: 01 = executable path, 02 = URL. For K2 action types the firmware has no
+        /// concept of, callers pass a synthetic type-01 payload — the point is flipping
+        /// the key to custom mode, execution stays in K2 either way.
+        /// </summary>
+        public bool WriteDisplayKeyBinding(int keyIndex, byte type, string payload)
+        {
+            byte key = (byte)(0xAA + keyIndex);
+            byte[] data = Encoding.ASCII.GetBytes(payload ?? "");
+
+            bool ok = SendCmdAcked(Cmd(0x12, 0x08, 0x00, 0x01));
+
+            int off = 0;
+            bool first = true;
+            while (first || off < data.Length)
+            {
+                int cap = first ? 59 : 60;
+                int n = Math.Min(cap, data.Length - off);
+                bool last = off + n >= data.Length;
+
+                var pkt = new byte[PktSize];
+                pkt[0] = 0x17;
+                pkt[1] = key;
+                if (first)
+                {
+                    pkt[2] = (byte)(n + 1);                    // len counts the type byte
+                    pkt[3] = last ? (byte)0x00 : (byte)0x01;
+                    pkt[4] = type;
+                    Buffer.BlockCopy(data, off, pkt, 5, n);
+                }
+                else
+                {
+                    pkt[2] = (byte)n;
+                    pkt[3] = last ? (byte)0x03 : (byte)0x02;
+                    Buffer.BlockCopy(data, off, pkt, 4, n);
+                }
+                ok &= SendCmdAcked(pkt);
+                off += n;
+                first = false;
+            }
+
+            _log($"[EvNative] WriteDisplayKeyBinding(key={keyIndex}, type=0x{type:X2}, len={data.Length}) -> {ok}");
+            return ok;
+        }
+
+        /// <summary>
+        /// Switches the keyboard's active firmware profile (1-5): wire cmd
+        /// <c>14 00 00 00 [profile] 01</c>. Captured from real Base Camp
+        /// (evprofiles.pcapng, 2026-07-19): the user's 5 UI profile switches
+        /// (3→2→3→1→2→3) appear as exactly this packet with byte4 = target profile and
+        /// NOTHING else — the per-profile NDK pictures/lighting swap instantly because
+        /// they already live in that profile's flash slot. Replaces the SDKDLL
+        /// SwitchProfile call in native-engine mode, where SDKDLL has no OpenUSBDriver
+        /// state and its True return was unverifiable.
+        /// </summary>
+        public bool SwitchProfile(int profile)
+        {
+            var ok = SendCmdAcked(Cmd(0x14, 0x00, 0x00, 0x00, (byte)profile, 0x01));
+            _log($"[EvNative] SwitchProfile({profile}) -> {ok}");
+            return ok;
+        }
+
+        /// <summary>
+        /// Restores display key <paramref name="keyIndex"/> (0-3) of firmware profile
+        /// <paramref name="profile"/> (1-5) to its factory-default artwork. Sequence
+        /// captured from real Base Camp deleting one icon:
+        ///   12 08 00 01 → 14 20 [AA+key] 00 FF (x2) → 13 42 + key mask
+        ///   → 12 08 00 01 → 14 20 [AA+key] 00 FF (x2) → 12 00 00 00 32
+        /// The 13 42 command carries ONE KEY-BITMASK FIELD PER PROFILE, at byte index
+        /// 4 + (profile - 1) — NOT a single mask acting on the active profile. Cross-
+        /// confirmed by two independent captures (2026-07-19): deleting D1..D4 while BC
+        /// sat on profile 3 produced masks 01/02/04/08 at byte 6 (evprofiles.pcapng),
+        /// while deleting D3 on profile 2 produced mask 04 at byte 5 (evicon.pcapng).
+        /// An earlier revision hardcoded the mask at byte 6, so every reset silently
+        /// targeted PROFILE 3's picture slots regardless of the profile being edited —
+        /// acked by the firmware, invisible to the user (report 2026-07-19).
+        /// </summary>
+        public bool ResetDisplayKeyPic(int keyIndex, int profile)
+        {
+            if (profile is < 1 or > 5)
+            {
+                _log($"[EvNative] ResetDisplayKeyPic: invalid profile {profile}");
+                return false;
+            }
+
+            byte key = (byte)(0xAA + keyIndex);
+            var reset = Cmd(0x13, 0x42);
+            reset[4 + (profile - 1)] = (byte)(1 << keyIndex);
+
+            bool ok = true;
+            void Send(byte[] wire) => ok &= SendCmdAcked(wire);
+
+            Send(Cmd(0x12, 0x08, 0x00, 0x01));
+            Send(Cmd(0x14, 0x20, key, 0x00, 0xFF));
+            Send(Cmd(0x14, 0x20, key, 0x00, 0xFF));
+            Send(reset);
+            Send(Cmd(0x12, 0x08, 0x00, 0x01));
+            Send(Cmd(0x14, 0x20, key, 0x00, 0xFF));
+            Send(Cmd(0x14, 0x20, key, 0x00, 0xFF));
+            Send(Cmd(0x12, 0x00, 0x00, 0x00, 0x32));
+
+            _log($"[EvNative] ResetDisplayKeyPic(key={keyIndex}, profile={profile}) -> {ok}");
+            return ok;
+        }
+
+        /// <summary>Sends the 126 main-keycap LED colors via the raw-HID channel:
+        /// zone switch (<c>11 01 00 02 02 02</c>) then the 7 positional page packets
+        /// (<see cref="EverestSideLedProtocol.BuildKeycapPackets"/>) — replaces
+        /// SDKDLL.dll's <c>ChangeCustomizeEffect</c>, which produced NO wire traffic at
+        /// all on real hardware (evmax_fillall_k2.pcapng, 2026-07-22).
+        /// <paramref name="wireColors"/> indexed 0-132 (only 0-125 meaningful),
+        /// 0xRRGGBB per entry; <paramref name="brightness"/> 0-100.</summary>
+        public bool SendKeycapColors(int[] wireColors, byte brightness = 100)
+        {
+            bool ok = SwitchZoneToCustom(EverestSideLedProtocol.ZoneKeycaps);
+            foreach (var pkt in EverestSideLedProtocol.BuildKeycapPackets(wireColors, brightness))
+                ok &= SendCmdAcked(pkt);
+            _log($"[EvNative] SendKeycapColors -> {ok}");
+            return ok;
+        }
+
+        /// <summary>
+        /// Sends the <c>11 01 00 zone 02 02</c> zone switch and consumes its ENTIRE
+        /// response burst. The command doesn't ack with a single echo: the device dumps
+        /// the zone's current custom colors as one page packet per page
+        /// (<c>11 01 00 zone page ...</c>, page counting DOWN to 00 — 7 packets for
+        /// zone 02, 3 for zone 05; see evmax_anchors_bc.pcapng #4253-#4271). Waiting for
+        /// the LAST page (page byte 00) makes WaitResp dequeue-and-discard all the
+        /// earlier ones. Matching only the first packet (plain <see cref="SendCmdAcked"/>)
+        /// left 6 stale <c>11 xx</c> packets queued, which later got mistaken for
+        /// <c>11 83</c> module-status replies — numpad/media dock showed as disconnected
+        /// and every exchange timed out into retries (the "K2 slow + modules gone"
+        /// regression, first hardware test of this path 2026-07-22).
+        /// </summary>
+        private bool SwitchZoneToCustom(byte zone)
+        {
+            var resp = SendCommand(
+                EverestSideLedProtocol.BuildZoneSwitchPacket(zone),
+                r => r.Length >= 5 && r[0] == 0x11 && r[1] == 0x01 && r[3] == zone && r[4] == 0x00,
+                1200);
+            _log($"[EvNative] SwitchZoneToCustom(zone=0x{zone:X2}) -> {resp is not null}");
+            return resp is not null;
+        }
+
+        /// <summary>
+        /// Sends the 45 border ("side") LED colors — <see cref="EverestSideLedProtocol"/>,
+        /// NOT covered by SDKDLL.dll's Custom-mode struct (that one only ever carried the
+        /// 126 keycap LEDs). Prefixed by the zone-05 switch (<c>11 01 00 05 02 02</c>),
+        /// exactly as Base Camp does before every ring burst (2026-07-22 captures).
+        /// <paramref name="wireColors"/> is indexed 0-44 by WIRE index
+        /// (see <see cref="EverestSideLedProtocol.MainOrder"/>/<c>NumpadOrder</c> to
+        /// translate from physical border-square position), 0xRRGGBB per entry.
+        /// </summary>
+        public bool SendSideLedColors(int[] wireColors, byte brightness = 0xFF)
+        {
+            bool ok = SwitchZoneToCustom(EverestSideLedProtocol.ZoneSideRing);
+            foreach (var pkt in EverestSideLedProtocol.BuildSideLedPackets(wireColors, brightness))
+                ok &= SendCmdAcked(pkt);
+            _log($"[EvNative] SendSideLedColors -> {ok}");
+            return ok;
+        }
+
+        /// <summary>Enables Custom mode / sets overall brightness for the border LEDs
+        /// (<c>14 2C 0A</c>) — call before <see cref="SendSideLedColors"/>.</summary>
+        public bool EnableCustomLighting(byte brightness = 100)
+        {
+            bool ok = SendCmdAcked(EverestSideLedProtocol.BuildEnablePacket(brightness));
+            _log($"[EvNative] EnableCustomLighting(brightness={brightness}) -> {ok}");
+            return ok;
+        }
+
+        /// <summary>Persists the current Custom lighting (keys + border) to flash slot 6
+        /// (<c>13 55 00 00 06</c>) so it survives a power cycle.</summary>
+        public bool PersistCustomLighting()
+        {
+            bool ok = SendCmdAcked(EverestSideLedProtocol.BuildPersistPacket());
+            _log($"[EvNative] PersistCustomLighting -> {ok}");
+            return ok;
         }
 
         private bool WriteCmd(byte[] wire64)

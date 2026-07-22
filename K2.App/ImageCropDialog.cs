@@ -21,9 +21,12 @@ internal static class ImageCropDialog
     /// <paramref name="targetH"/>. Returns null if the user cancelled or the file couldn't
     /// be read.
     /// </summary>
-    public static string? Show(Window owner, string sourcePath, int targetW, int targetH, string title)
+    /// <param name="bakeRoundedCorners">Pass true when the target is a single rounded-bezel
+    /// key screen (e.g. Everest NDK) — see <see cref="CropEditor"/>'s constructor doc.</param>
+    public static string? Show(Window owner, string sourcePath, int targetW, int targetH, string title,
+        bool bakeRoundedCorners = false)
     {
-        var editor = new CropEditor(targetW, targetH);
+        var editor = new CropEditor(targetW, targetH, bakeRoundedCorners: bakeRoundedCorners);
         if (!editor.Load(sourcePath)) return null;
 
         string? resultPath = null;

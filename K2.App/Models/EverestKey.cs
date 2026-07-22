@@ -99,14 +99,19 @@ public sealed class EverestKey : INotifyPropertyChanged
     {
         get
         {
-            string body = ActionTypeHelper.IsUnrecognized(_actionType) ? Loc.Get("act_unrecognized")
-                         : string.Equals(_actionType, "macro", System.StringComparison.Ordinal) ? ActionTypeHelper.MacroSummary(_actionValue)
-                         : !string.IsNullOrEmpty(_actionType) ? _actionType
+            string body = HasAction ? ActionSummary
                          : _hasImage ? Loc.Get("ev_display_key_icon_only")
                          : "(empty)";
             return $"{Name}  —  {body}";
         }
     }
+
+    /// <summary>Short summary of the assigned action — mirrors DisplayPadKey.ActionSummary/
+    /// MacroPadKey.ActionSummary. Without this, every action type (not just "exec") showed
+    /// up as its raw internal tag (e.g. "exec", "keys") instead of something meaningful like
+    /// the executable's filename (user report 2026-07-18; extended to cover every action
+    /// type, e.g. "oscmd", via ActionTypeHelper.Summary — user report 2026-07-19).</summary>
+    private string ActionSummary => ActionTypeHelper.Summary(_actionType, _actionValue);
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnChanged([CallerMemberName] string? name = null) =>

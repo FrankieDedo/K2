@@ -88,7 +88,7 @@ public partial class MainWindow
 
     /// <summary>Slightly-gray white used as the "LED off" accent color: Pudding's border +
     /// Mount strip, and Reverse Pudding's center, when no LED effect is lighting the key.</summary>
-    private static readonly Color LedOffColor = Color.FromRgb(0xD0, 0xD0, 0xD0);
+    private static readonly Color LedOffColor = Color.FromRgb(0x77, 0x77, 0x77);
 
     /// <summary>LED index of the Esc key — identical on both Everest Max (LedMatrixMapping.
     /// EverestKeyboard maps VK 27 → 0) and Everest 60 (Everest60KeyboardLayout.MainBoard's first

@@ -69,7 +69,8 @@ public partial class NdkKeyConfigDialog : Window
         if (dlg.ShowDialog(this) != true) return;
 
         string picked = dlg.FileName;
-        string? cropped = ImageCropDialog.Show(this, picked, IconSize, IconSize, Loc.Get("crop_title", IconSize, IconSize));
+        string? cropped = ImageCropDialog.Show(this, picked, IconSize, IconSize,
+            Loc.Get("crop_title", IconSize, IconSize), bakeRoundedCorners: true);
         if (cropped is not null) picked = cropped;
 
         _pendingPath = picked;
@@ -211,7 +212,7 @@ public partial class NdkKeyConfigDialog : Window
             "mouse"    => $"Mouse: {val}",
             "text"     => $"Text: {val}",
             "command"  => $"Command: {val}",
-            "macro"    => $"Macro: {val}",
+            "macro"    => ActionTypeHelper.MacroSummary(val),
             "pyscript" => "Python script",
             _          => ActionTypeHelper.IsUnrecognized(ActionType) ? Loc.Get("act_unrecognized") : $"{ActionType}: {val}",
         };

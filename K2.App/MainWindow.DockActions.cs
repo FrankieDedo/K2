@@ -94,6 +94,26 @@ public partial class MainWindow
         for (int i = 0; i < 2; i++)
             PlaceHwOverlayButton(_hwSlots[4 + i], CvsEvDock, CrownHotspots[i], glyph: dialGlyphs[i],
                 glyphRotation: dialGlyphRotations[i]);
+
+        UpdateDockInteractivity();
+    }
+
+    /// <summary>
+    /// Assigning an action to a dock/crown button is a Key Binding-domain concept —
+    /// disables the 4 media buttons (still visible, just non-interactive: they're part
+    /// of the device artwork) and hides the 2 crown CW/CCW hotspots entirely whenever a
+    /// section OTHER than Key Binding is active (user request 2026-07-22). Called from
+    /// MainWindow.SectionNav.cs's ShowEvSection on every section switch, and once after
+    /// building the slots here (InitDockActionsPanel runs after InitSectionNav's first
+    /// call, so that first call saw an empty _hwSlots list).
+    /// </summary>
+    private void UpdateDockInteractivity()
+    {
+        bool keyBinding = IsEvKeyBindingSectionActive;
+        for (int i = 0; i < 4 && i < _hwSlots.Count; i++)
+            if (_hwSlots[i].UiButton is Button b) b.IsEnabled = keyBinding;
+        for (int i = 4; i < 6 && i < _hwSlots.Count; i++)
+            if (_hwSlots[i].UiButton is Button b) b.Visibility = keyBinding ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private HwActionSlot CreateHwSlot(string name, string prefix, int index)

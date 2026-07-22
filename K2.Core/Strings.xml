@@ -24,12 +24,22 @@
   <string name="profile">Profile</string>
   <string name="device">Device</string>
   <string name="positioning">Positioning</string>
+  <string name="backlight_auto_off_group">Backlight auto-off</string>
+  <string name="backlight_auto_off_enable">Turn off backlight when idle</string>
+  <string name="backlight_auto_off_seconds">After</string>
+  <string name="keyboard_language_layout">Language settings</string>
   <string name="pos_horizontal">Horizontal ({0}°)</string>
   <string name="pos_vertical">Vertical ({0}°)</string>
   <string name="brightness">Brightness:</string>
   <string name="save">Save</string>
   <string name="cancel">Cancel</string>
   <string name="ok">OK</string>
+  <string name="colorpicker_title">Pick color</string>
+  <string name="colorpicker_preview">Preview</string>
+  <string name="colorpicker_hex">Hex</string>
+  <string name="colorpicker_saved">Saved colors</string>
+  <string name="colorpicker_add">+ Add</string>
+  <string name="colorpicker_remove">Remove from saved colors</string>
   <string name="browse">Browse…</string>
   <string name="crop_hint">Drag to reposition, scroll or use the slider to zoom.</string>
   <string name="crop_title">Crop image ({0}×{1})</string>
@@ -110,6 +120,7 @@
   <string name="media_vol_up">Volume up</string>
   <string name="media_vol_down">Volume down</string>
   <string name="media_mute">Mute</string>
+  <string name="media_shuffle">Shuffle</string>
   <string name="mouse_left">Left button</string>
   <string name="mouse_right">Right button</string>
   <string name="mouse_middle">Middle button</string>
@@ -199,6 +210,8 @@
   <string name="ev_driver_closed">Everest driver closed.</string>
   <string name="loading_drivers">Initializing drivers…</string>
   <string name="hw_busy_uploading_image">Uploading image to the device, please wait…</string>
+  <string name="hw_busy_importing_profile">Importing profile, please wait…</string>
+  <string name="hw_busy_importing_profiles">Importing profiles, please wait…</string>
   <string name="ev_crash_recovering">Driver crashed — attempting auto-recovery in 3 s…</string>
   <string name="ev_crash_recovered">Driver recovered — LED preview restarted.</string>
   <string name="ev_crash_recovery_failed">Driver recovery failed — please restart K2.App.</string>
@@ -217,6 +230,10 @@
   <string name="rgb_direction">Direction:</string>
   <string name="rgb_rainbow">Rainbow</string>
   <string name="rgb_rainbow_tip">Rainbow colors (ignores color pickers).</string>
+  <string name="rgb_single">Single color</string>
+  <string name="rgb_single_tip">Use one solid color for the effect.</string>
+  <string name="rgb_double">Double color</string>
+  <string name="rgb_double_tip">Use two colors for the effect (not supported by every effect).</string>
   <string name="rgb_sync_profiles">Sync profiles</string>
   <string name="rgb_primary">Primary:</string>
   <string name="rgb_secondary">Secondary:</string>
@@ -226,10 +243,13 @@
 
   <!-- Custom Lighting -->
   <string name="custom_lighting">Custom Lighting (per-key)</string>
-  <string name="custom_paint_hint">Enable paint mode, pick a color and click keys on the keyboard above to color them.</string>
+  <string name="custom_paint_hint">Pick an effect and a color and select keys or ring LEDs on the keyboard above, then click "Apply" to color them. You can also draw a square and select multiple LEDs.</string>
   <string name="custom_paint_mode">Paint mode</string>
+  <string name="custom_paint_effect">Applied effect:</string>
+  <string name="apply">Apply</string>
   <string name="custom_color">Color:</string>
   <string name="custom_fill_all">Fill all</string>
+  <string name="custom_read_tooltip">Reloads the last saved colors (not a live device read — unreliable on this hardware).</string>
   <string name="custom_clear">Clear</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -382,7 +402,7 @@
   <string name="settings_keyboard_color">Keyboard color</string>
   <string name="color_silver">Silver</string>
   <string name="color_black">Black</string>
-  <string name="settings_keycap_group">Keycap appearance (on-screen preview)</string>
+  <string name="settings_keycap_group">Keycap appearance</string>
   <string name="settings_keycap_color">Keycap color</string>
   <string name="settings_keycap_black">Black</string>
   <string name="settings_keycap_white">White</string>
@@ -475,6 +495,7 @@
   <string name="led_sync_profiles">Sync across profiles</string>
   <string name="led_backlight_off">Backlight OFF</string>
   <string name="led_backlight_on">Backlight ON</string>
+  <string name="led_backlight_label">Backlight:</string>
   <string name="led_save_flash_tip">Make the applied effect permanent (survives unplug/restart).</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -577,12 +598,25 @@
   <string name="delete_profile_last">Cannot delete the last profile.</string>
   <string name="import_no_free_slot">All 5 profile slots are already used — delete or free one before importing "{0}".</string>
   <string name="import_some_skipped_no_slot">{0} profile(s) skipped: no free slot left (all 5 are used).</string>
+  <!-- New profile chooser (DisplayPad) -->
+  <string name="new_profile_dialog_title">New profile</string>
+  <string name="new_profile_generic">Generic Profile</string>
+  <string name="new_profile_dedicated">Dedicated profile</string>
+  <string name="new_profile_dedicated_hint">Choose which app/function this profile is for:</string>
+  <string name="new_profile_create_btn">Create</string>
+  <!-- Profile settings popup (gear icon, all devices) -->
+  <string name="profile_settings_title">Profile settings</string>
+  <string name="profile_settings_name_label">Name</string>
+  <string name="profile_settings_exe_label">Launch executable</string>
+  <string name="profile_settings_exe_hint">When this program starts, K2 automatically switches to this profile.</string>
+  <string name="profile_settings_clear">Clear</string>
   <!-- Base Camp device picker (shown when the DB has profiles for more than one physical device of the same type) -->
   <string name="bc_pick_device_title">Choose Base Camp device</string>
   <string name="bc_pick_device_text">Base Camp has profiles for more than one device. Choose which one to import into "{0}":</string>
   <string name="bc_pick_device_none">Choose a device to import from.</string>
   <string name="bc_pick_device_label">Device #{0} — {1} profile(s): {2}</string>
   <string name="bc_import_will_wipe">This will DELETE all existing K2 profiles on "{0}" before importing.</string>
+  <string name="bc_import_read_failed">Could not read the Base Camp database ({0}). Nothing was imported and your existing K2 profiles were left untouched.</string>
   <!-- Everest import -->
   <string name="ev_no_profiles_in_bc">No Everest profiles found in the Base Camp database.</string>
   <string name="ev_imported_bc">Imported {0} Everest profiles ({1} keys) from Base Camp.</string>

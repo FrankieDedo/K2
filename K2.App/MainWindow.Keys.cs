@@ -12,6 +12,7 @@ using System.Windows.Media;
 using K2.App.Models;
 using K2.App.Services;
 using K2.Core;
+using K2.Core.Services;
 using Microsoft.Win32;
 
 namespace K2.App;
@@ -239,9 +240,51 @@ public partial class MainWindow
         if (res != MessageBoxResult.OK) return;
         _store.ClearProfile(id, slot);
         _store.SetSetting($"profile.{id}.{slot}.name", "");
+        _store.SetSetting($"profile.{id}.{slot}.launchExe", "");
         Log($"[UI ] MacroPad profile {slot} deleted.");
         MpRefreshProfiles(id);
         // LstMpProfile_SelectionChanged will reload the key grid automatically
+    }
+
+    /// <summary>Gear-icon popup for a MacroPad profile row (see ProfileGear_Click in
+    /// MainWindow.xaml.cs): rename, delete (same guard as <see cref="BtnMpDeleteProfile_Click"/>),
+    /// or link an executable whose launch auto-switches to this profile (see
+    /// K2.Core.Services.ProfileLaunchWatcher, registered from <see cref="MpRefreshProfiles"/>).</summary>
+    private void MpShowProfileGear(MpProfileItem pi)
+    {
+        if (CurrentDeviceId() is not int id) return;
+        string currentName = _store.GetProfileName(id, pi.Slot) ?? Loc.Get("profile_n", pi.Slot);
+        string currentExe = _store.GetSetting($"profile.{id}.{pi.Slot}.launchExe") ?? "";
+        var dlg = new ProfileSettingsDialog(currentName, currentExe) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+
+        if (dlg.DeleteRequested)
+        {
+            var existing = _store.GetExistingProfiles(id);
+            if (existing.Count <= 1)
+            {
+                MessageBox.Show(Loc.Get("delete_profile_last"),
+                    Loc.Get("delete_profile"), MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var res = MessageBox.Show(
+                Loc.Get("delete_profile_confirm", currentName),
+                Loc.Get("delete_profile"),
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning);
+            if (res != MessageBoxResult.OK) return;
+            _store.ClearProfile(id, pi.Slot);
+            _store.SetSetting($"profile.{id}.{pi.Slot}.name", "");
+            _store.SetSetting($"profile.{id}.{pi.Slot}.launchExe", "");
+            Log($"[UI ] MacroPad profile {pi.Slot} deleted (gear).");
+        }
+        else
+        {
+            _store.SetProfileName(id, pi.Slot, dlg.ProfileName);
+            _store.SetSetting($"profile.{id}.{pi.Slot}.launchExe", dlg.ExePath);
+            Log($"[UI ] MacroPad profile {pi.Slot} settings updated (gear).");
+        }
+        MpRefreshProfiles(id);
     }
 
     /// <summary>Resets the currently selected profile's key actions back to K2's defaults
@@ -344,6 +387,10 @@ public partial class MainWindow
         RebuildKeyGrid();
         _store.SetSetting("macropad.rotation", ((int)_rotation).ToString());
         Log($"[UI] MacroPad orientation: {MacroPadLayout.Label(_rotation)}");
+        // A running Wave direction is screen-relative (see MacroPhysicalDirIndex
+        // in MainWindow.MacroLed.cs) — resend so it keeps pointing the same way
+        // on screen under the new mounting.
+        ApplyCurrentMacroEffect();
     }
 
     /// <summary>Restores the saved orientation (called at startup).</summary>
@@ -602,14 +649,36 @@ public partial class MainWindow
             if (nextFree > 0)
                 items.Add(new MpProfileItem(nextFree, Loc.Get("new_profile")));
 
-            LstMpProfile.DisplayMemberPath = nameof(MpProfileItem.Label);
             LstMpProfile.ItemsSource = items;
 
             int current = _store.GetCurrentProfile(deviceId);
             var match = items.Find(x => x.Slot == current && !x.IsNew);
             LstMpProfile.SelectedItem = match ?? items[0];
+
+            MpRegisterProfileLaunchWatchers(deviceId, existing);
         }
         finally { _suppressProfileUpdate = false; }
+    }
+
+    /// <summary>Registers this device's profiles with K2.Core.Services.ProfileLaunchWatcher
+    /// — see DpRegisterProfileLaunchWatchers (MainWindow.DisplayPad.cs) for the shared
+    /// pattern/rationale.</summary>
+    private void MpRegisterProfileLaunchWatchers(int deviceId, List<int> existing)
+    {
+        string scope = $"Mp:{deviceId}:";
+        var currentKeys = new HashSet<string>();
+        foreach (var slot in existing)
+        {
+            string? exe = _store.GetSetting($"profile.{deviceId}.{slot}.launchExe");
+            if (string.IsNullOrWhiteSpace(exe)) continue;
+            string key = scope + slot;
+            currentKeys.Add(key);
+            int capturedSlot = slot;
+            ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe,
+                () => MpSwitchProfile(deviceId, capturedSlot.ToString()));
+        }
+        foreach (var staleKey in ProfileLaunchWatcher.Instance.KeysWithPrefix(scope).Except(currentKeys))
+            ProfileLaunchWatcher.Instance.RemoveRegistration(staleKey);
     }
 
     /// <summary>Selects a slot in the MacroPad profile combo (suppressing the event).</summary>
@@ -667,6 +736,8 @@ public partial class MainWindow
     /// <summary>Handles an SDK key event (remapping, highlighting, execution).</summary>
     private void HandleKeyEvent(MacroPadKeyEventArgs e)
     {
+        _macroAutoOffTimer?.RegisterActivity();
+
         int matrix = e.KeyMatrix;
 
         // Remapping in progress: assign the matrix to the awaited cell.
@@ -895,6 +966,22 @@ public partial class MainWindow
         if (MessageBox.Show(this, sb.ToString(), "Import from Base Camp",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
+
+        // Pre-read every profile's bindings BEFORE wiping anything: this import is
+        // destructive (replace, not append), so a corrupt/locked Base Camp DB must surface
+        // while the existing K2 profiles are still intact — not after they're gone.
+        try
+        {
+            foreach (var p in profiles)
+                BaseCampDbImporter.ReadMakaluBindings(dbPath, p.ProfileId);
+        }
+        catch (Exception ex)
+        {
+            Log($"[IMP-BC] Pre-read failed, aborting before wipe: {ex.Message}");
+            MessageBox.Show(this, Loc.Get("bc_import_read_failed", ex.Message),
+                "Import from Base Camp", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
 
         // Wipe: replace, don't append.
         foreach (var slot in _store.GetExistingProfiles(k2DeviceId))

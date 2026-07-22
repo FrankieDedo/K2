@@ -241,6 +241,12 @@ public partial class MainWindow
 
     private void OnEverestColorsUpdated(EverestSdkNative.FWColor[] colors)
     {
+        // While Custom paint mode is on, the key visuals show the user's UNSAVED
+        // paint overlays — a poll tick repainting them from the hardware's actual
+        // (pre-Apply) colors made Fill All look like a no-op and single clicks look
+        // dead (user report 2026-07-22). Same guard the Everest 60 preview has
+        // (Everest60RgbPanel.IsPaintModeActive / OnEv60ColorsUpdated).
+        if (_customPaintMode) return;
         if (_evColorLogCount < 3)
         {
             _evColorLogCount++;

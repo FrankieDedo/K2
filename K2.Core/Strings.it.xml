@@ -23,12 +23,21 @@
   <string name="profile">Profilo</string>
   <string name="device">Dispositivo</string>
   <string name="positioning">Posizionamento</string>
+  <string name="backlight_auto_off_group">Spegnimento automatico retroilluminazione</string>
+  <string name="backlight_auto_off_enable">Spegni retroilluminazione se inattivo</string>
+  <string name="backlight_auto_off_seconds">Dopo</string>
   <string name="pos_horizontal">Orizzontale ({0}°)</string>
   <string name="pos_vertical">Verticale ({0}°)</string>
   <string name="brightness">Luminosità:</string>
   <string name="save">Salva</string>
   <string name="cancel">Annulla</string>
   <string name="ok">OK</string>
+  <string name="colorpicker_title">Scegli colore</string>
+  <string name="colorpicker_preview">Anteprima</string>
+  <string name="colorpicker_hex">Hex</string>
+  <string name="colorpicker_saved">Colori salvati</string>
+  <string name="colorpicker_add">+ Aggiungi</string>
+  <string name="colorpicker_remove">Rimuovi dai colori salvati</string>
   <string name="browse">Sfoglia…</string>
   <string name="crop_hint">Trascina per riposizionare, scorri o usa lo slider per zoomare.</string>
   <string name="crop_title">Ritaglia immagine ({0}×{1})</string>
@@ -109,6 +118,7 @@
   <string name="media_vol_up">Volume su</string>
   <string name="media_vol_down">Volume giù</string>
   <string name="media_mute">Muto</string>
+  <string name="media_shuffle">Riproduzione casuale</string>
   <string name="mouse_left">Tasto sinistro</string>
   <string name="mouse_right">Tasto destro</string>
   <string name="mouse_middle">Tasto centrale</string>
@@ -198,6 +208,8 @@
   <string name="ev_driver_closed">Driver Everest chiuso.</string>
   <string name="loading_drivers">Inizializzazione driver in corso…</string>
   <string name="hw_busy_uploading_image">Caricamento immagine sul dispositivo, attendere…</string>
+  <string name="hw_busy_importing_profile">Importazione profilo in corso, attendere…</string>
+  <string name="hw_busy_importing_profiles">Importazione profili in corso, attendere…</string>
   <string name="ev_crash_recovering">Driver in crash — tentativo di recovery tra 3 s…</string>
   <string name="ev_crash_recovered">Driver recuperato — LED preview riavviata.</string>
   <string name="ev_crash_recovery_failed">Recovery fallita — riavviare K2.App.</string>
@@ -216,6 +228,10 @@
   <string name="rgb_direction">Direzione:</string>
   <string name="rgb_rainbow">Arcobaleno</string>
   <string name="rgb_rainbow_tip">Colori arcobaleno (ignora i color picker).</string>
+  <string name="rgb_single">Colore singolo</string>
+  <string name="rgb_single_tip">Usa un solo colore per l'effetto.</string>
+  <string name="rgb_double">Doppio colore</string>
+  <string name="rgb_double_tip">Usa due colori per l'effetto (non supportato da tutti gli effetti).</string>
   <string name="rgb_sync_profiles">Sincronizza profili</string>
   <string name="rgb_primary">Primario:</string>
   <string name="rgb_secondary">Secondario:</string>
@@ -225,10 +241,13 @@
 
   <!-- Illuminazione personalizzata -->
   <string name="custom_lighting">Illuminazione personalizzata (per tasto)</string>
-  <string name="custom_paint_hint">Abilita la modalità pittura, scegli un colore e clicca i tasti sulla tastiera per colorarli.</string>
+  <string name="custom_paint_hint">Scegli un effetto e un colore e seleziona tasti o LED dell'anello sulla tastiera qui sopra, poi premi "Applica" per colorarli. Puoi anche disegnare un rettangolo per selezionare più LED.</string>
   <string name="custom_paint_mode">Modalità pittura</string>
+  <string name="custom_paint_effect">Effetto applicato:</string>
+  <string name="apply">Applica</string>
   <string name="custom_color">Colore:</string>
   <string name="custom_fill_all">Riempi tutti</string>
+  <string name="custom_read_tooltip">Ricarica gli ultimi colori salvati (non una lettura live dal device — inaffidabile su questo hardware).</string>
   <string name="custom_clear">Azzera</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -381,7 +400,7 @@
   <string name="settings_keyboard_color">Colore tastiera</string>
   <string name="color_silver">Argento</string>
   <string name="color_black">Nero</string>
-  <string name="settings_keycap_group">Aspetto keycap (anteprima a schermo)</string>
+  <string name="settings_keycap_group">Aspetto keycap</string>
   <string name="settings_keycap_color">Colore keycap</string>
   <string name="settings_keycap_black">Nero</string>
   <string name="settings_keycap_white">Bianco</string>
@@ -474,6 +493,7 @@
   <string name="led_sync_profiles">Sincronizza tra profili</string>
   <string name="led_backlight_off">Retroilluminazione OFF</string>
   <string name="led_backlight_on">Retroilluminazione ON</string>
+  <string name="led_backlight_label">Retroilluminazione:</string>
   <string name="led_save_flash_tip">Rende l'effetto applicato permanente (sopravvive a unplug/riavvio).</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -576,11 +596,24 @@
   <string name="delete_profile_last">Impossibile eliminare l'ultimo profilo.</string>
   <string name="import_no_free_slot">Tutti e 5 gli slot profilo sono già occupati — elimina o libera uno slot prima di importare "{0}".</string>
   <string name="import_some_skipped_no_slot">{0} profilo/i saltato/i: nessuno slot libero rimasto (tutti e 5 sono occupati).</string>
+  <!-- New profile chooser (DisplayPad) -->
+  <string name="new_profile_dialog_title">Nuovo profilo</string>
+  <string name="new_profile_generic">Profilo generico</string>
+  <string name="new_profile_dedicated">Profilo dedicato</string>
+  <string name="new_profile_dedicated_hint">Scegli per quale app/funzione è questo profilo:</string>
+  <string name="new_profile_create_btn">Crea</string>
+  <!-- Profile settings popup (gear icon, tutti i device) -->
+  <string name="profile_settings_title">Impostazioni profilo</string>
+  <string name="profile_settings_name_label">Nome</string>
+  <string name="profile_settings_exe_label">Eseguibile di avvio</string>
+  <string name="profile_settings_exe_hint">Quando questo programma si avvia, K2 passa automaticamente a questo profilo.</string>
+  <string name="profile_settings_clear">Cancella</string>
   <string name="bc_pick_device_title">Scegli dispositivo Base Camp</string>
   <string name="bc_pick_device_text">Base Camp ha profili per più di un dispositivo. Scegli quale importare su "{0}":</string>
   <string name="bc_pick_device_none">Scegli un dispositivo da cui importare.</string>
   <string name="bc_pick_device_label">Dispositivo #{0} — {1} profilo/i: {2}</string>
   <string name="bc_import_will_wipe">Questa operazione ELIMINERÀ tutti i profili K2 esistenti su "{0}" prima di importare.</string>
+  <string name="bc_import_read_failed">Impossibile leggere il database di Base Camp ({0}). Nessun dato importato: i profili K2 esistenti non sono stati toccati.</string>
   <string name="ev_no_profiles_in_bc">Nessun profilo Everest trovato nel database Base Camp.</string>
   <string name="ev_imported_bc">Importati {0} profili Everest ({1} tasti) da Base Camp.</string>
   <string name="mp_no_profiles_in_bc">Nessun profilo MacroPad trovato nel database Base Camp.</string>

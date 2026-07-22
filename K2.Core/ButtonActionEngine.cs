@@ -68,12 +68,7 @@ public sealed class ButtonActionEngine : IDisposable
 
             case "exec":
                 if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] exec without payload"); break; }
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = value,
-                    UseShellExecute = true,
-                    WorkingDirectory = Path.GetDirectoryName(value) ?? ""
-                });
+                RunExecAction(value);
                 Log($"[EXEC] exec -> {value}");
                 break;
 
@@ -102,8 +97,9 @@ public sealed class ButtonActionEngine : IDisposable
                 {
                     FileName = "cmd.exe",
                     Arguments = "/c " + value,
-                    UseShellExecute = true,
-                    CreateNoWindow = false
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
                 });
                 Log($"[EXEC] command -> {value}");
                 break;
@@ -156,6 +152,13 @@ public sealed class ButtonActionEngine : IDisposable
 
             case "macro":
                 if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] macro without payload"); break; }
+                if (ActionTypeHelper.IsUnresolvedMacroValue(value))
+                {
+                    // Imported Base Camp reference that never got matched to a K2 macro —
+                    // the value is just the preserved original name, not something playable.
+                    Log($"[EXEC] macro unresolved (BC name \"{ActionTypeHelper.StripUnresolvedMacroPrefix(value)}\") — nothing to play");
+                    break;
+                }
                 _host.PlayMacro(value);
                 Log($"[EXEC] macro -> {value}");
                 break;
@@ -184,9 +187,7 @@ public sealed class ButtonActionEngine : IDisposable
             case "url":
                 Process.Start(new ProcessStartInfo { FileName = value, UseShellExecute = true }); break;
             case "exec":
-                if (!string.IsNullOrWhiteSpace(value))
-                    Process.Start(new ProcessStartInfo { FileName = value, UseShellExecute = true,
-                        WorkingDirectory = Path.GetDirectoryName(value) ?? "" });
+                if (!string.IsNullOrWhiteSpace(value)) RunExecAction(value);
                 break;
             case "folder":
                 if (!string.IsNullOrWhiteSpace(value))
@@ -250,6 +251,33 @@ public sealed class ButtonActionEngine : IDisposable
         {
             try { _host.SwitchProfile(string.IsNullOrEmpty(t.Key) ? null : t.Key, t.Target); }
             catch (Exception ex) { log($"[EXEC] profile: target \"{t.Key}\" error: {ex.Message}"); }
+        }
+    }
+
+    /// <summary>
+    /// Runs the "exec" action. .bat/.cmd scripts are launched hidden via cmd.exe
+    /// (ShellExecute on a batch file always flashes a console window for an instant);
+    /// anything else keeps using ShellExecute so file associations/UAC still work.
+    /// </summary>
+    private static void RunExecAction(string value)
+    {
+        var dir = Path.GetDirectoryName(value) ?? "";
+        var ext = Path.GetExtension(value);
+        if (ext.Equals(".bat", StringComparison.OrdinalIgnoreCase) || ext.Equals(".cmd", StringComparison.OrdinalIgnoreCase))
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/c \"{value}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+                WorkingDirectory = dir
+            });
+        }
+        else
+        {
+            Process.Start(new ProcessStartInfo { FileName = value, UseShellExecute = true, WorkingDirectory = dir });
         }
     }
 

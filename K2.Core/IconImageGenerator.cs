@@ -132,6 +132,46 @@ public static class IconImageGenerator
         }
     }
 
+    /// <summary>
+    /// Plain caption-only tile (no glyph): black canvas with <paramref name="caption"/>
+    /// centered, larger than <see cref="DrawCaption"/>'s bottom-strip layout since there's
+    /// no icon above it competing for space. Used for auto-populated action keys (e.g. the
+    /// Spotify profile's media-control tiles) where a real glyph-per-action lookup would be
+    /// overkill — the label alone is enough to identify the button.
+    /// </summary>
+    public static bool TryGenerateCaptionIcon(string caption, int size, string outputPngPath)
+    {
+        try
+        {
+            using var canvas = new Bitmap(size, size);
+            using (var g = Graphics.FromImage(canvas))
+            {
+                g.SmoothingMode = SmoothingMode.HighQuality;
+                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                g.Clear(FolderBackgroundColor);
+
+                using var font = new Font("Segoe UI", size * 0.16f, FontStyle.Regular, GraphicsUnit.Pixel);
+                using var brush = new SolidBrush(Color.White);
+                var rect = new RectangleF(size * 0.08f, 0, size * 0.84f, size);
+                using var format = new StringFormat
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center,
+                    Trimming = StringTrimming.EllipsisCharacter,
+                };
+                g.DrawString(caption, font, brush, rect, format);
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
+            canvas.Save(outputPngPath, ImageFormat.Png);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     /// <summary>Draws the Segoe MDL2 Assets "Back" glyph (U+E72B) centered in the same
     /// square icon area <see cref="TryGenerateFolderIcon"/>/<see cref="TryGenerateDiskFolderIcon"/>
     /// use, so all three auto-generated tile flavors align.</summary>

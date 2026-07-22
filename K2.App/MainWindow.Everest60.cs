@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using K2.App.Models;
 using K2.App.Services;
 using K2.Core;
+using K2.Core.Services;
 
 namespace K2.App;
 
@@ -54,6 +55,12 @@ public partial class MainWindow
     private bool _ev60Connected;
     private Everest60Store _ev60Store = null!;
     private bool _ev60SuppressProfile;
+
+    /// <summary>Backlight-off-when-idle timer (device setting, global across
+    /// profiles). Owned here (not by Ev60RgbPanel) — same split as
+    /// _ev60ActionHost/_ev60Sdk — because it needs the panel's
+    /// SetBacklightForcedOff, not the other way around.</summary>
+    private BacklightIdleTimer? _ev60AutoOffTimer;
 
     /// <summary>Locale legend selection for the 64-key overlay (Settings' "Layout"
     /// combo) — see <see cref="Everest60KeyboardLayout.GetMainBoard"/>'s doc comment:
@@ -107,8 +114,16 @@ public partial class MainWindow
         _ev60 = new Everest60Service(LogEverest60);
         _ev60Store = new Everest60Store();
 
-        Ev60RgbPanel.Init(_ev60, LogEverest60, _ev60Store, Ev60CurrentProfile);
         Ev60RgbPanel.CustomKeysCleared += ApplyEv60KeycapAppearanceToAllKeys;
+        _ev60AutoOffTimer = new BacklightIdleTimer(Dispatcher,
+            () => Ev60RgbPanel.SetBacklightForcedOff(true),
+            () => Ev60RgbPanel.SetBacklightForcedOff(false));
+        Ev60RgbPanel.BacklightManuallyToggled += () => _ev60AutoOffTimer?.RegisterActivity();
+        // Init() raises AutoOffConfigChanged once with the loaded value — must be
+        // subscribed before Init() runs so that first push isn't missed (see
+        // Everest60RgbPanel.Init's doc comment on the event).
+        Ev60RgbPanel.AutoOffConfigChanged += (enabled, seconds) => _ev60AutoOffTimer?.Configure(enabled, seconds);
+        Ev60RgbPanel.Init(_ev60, LogEverest60, _ev60Store, Ev60CurrentProfile);
         Ev60KeyBindingPanel.Init(_ev60Store, Ev60CurrentProfile, LogEverest60, () => _ev60LayoutType);
         InitEv60SectionNav();
 
@@ -184,6 +199,9 @@ public partial class MainWindow
 
     private sealed record Ev60ProfileItem(int Slot, string Label)
     {
+        // Fixed 5 slots, no "+ New profile" row (see class doc comment above) — always real.
+        public bool IsNew => false;
+        public bool IsRealProfile => true;
         public override string ToString() => Label;
     }
 
@@ -198,13 +216,36 @@ public partial class MainWindow
             var items = Enumerable.Range(1, Ev60ProfileCount)
                 .Select(s => new Ev60ProfileItem(s, _ev60Store.GetProfileName(s) ?? Loc.Get("profile_n", s)))
                 .ToList();
-            LstEv60Profile.DisplayMemberPath = nameof(Ev60ProfileItem.Label);
             LstEv60Profile.ItemsSource = items;
 
             int current = _ev60Store.GetCurrentProfile();
             LstEv60Profile.SelectedItem = items.Find(x => x.Slot == current) ?? items[0];
+
+            Ev60RegisterProfileLaunchWatchers();
         }
         finally { _ev60SuppressProfile = false; }
+    }
+
+    /// <summary>Registers this device's profiles with K2.Core.Services.ProfileLaunchWatcher
+    /// — see DpRegisterProfileLaunchWatchers (MainWindow.DisplayPad.cs) for the shared
+    /// pattern/rationale. Fixed 5 slots (no "existing"/"new" filtering), so it loops
+    /// 1..Ev60ProfileCount directly instead of taking an "existing" list.</summary>
+    private void Ev60RegisterProfileLaunchWatchers()
+    {
+        const string scope = "Ev60:";
+        var currentKeys = new HashSet<string>();
+        for (int slot = 1; slot <= Ev60ProfileCount; slot++)
+        {
+            string? exe = _ev60Store.GetSetting($"profile.{slot}.launchExe");
+            if (string.IsNullOrWhiteSpace(exe)) continue;
+            string key = scope + slot;
+            currentKeys.Add(key);
+            int capturedSlot = slot;
+            ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe,
+                () => Ev60SwitchProfile(capturedSlot.ToString()));
+        }
+        foreach (var staleKey in ProfileLaunchWatcher.Instance.KeysWithPrefix(scope).Except(currentKeys))
+            ProfileLaunchWatcher.Instance.RemoveRegistration(staleKey);
     }
 
     private void Ev60SelectProfileSlot(int slot)
@@ -354,6 +395,42 @@ public partial class MainWindow
         Ev60ReloadProfile(slot);
     }
 
+    /// <summary>Gear-icon popup for an Everest 60 profile row (see ProfileGear_Click in
+    /// MainWindow.xaml.cs). Fixed 5 slots, no "last profile" guard — same as
+    /// <see cref="BtnEv60DeleteProfile_Click"/>, "delete" just wipes the slot in place.
+    /// Also links an executable whose launch auto-switches to this profile (see
+    /// K2.Core.Services.ProfileLaunchWatcher, registered from <see cref="Ev60RefreshProfiles"/>).</summary>
+    private void Ev60ShowProfileGear(Ev60ProfileItem pi)
+    {
+        string currentName = _ev60Store.GetProfileName(pi.Slot) ?? Loc.Get("profile_n", pi.Slot);
+        string currentExe = _ev60Store.GetSetting($"profile.{pi.Slot}.launchExe") ?? "";
+        var dlg = new ProfileSettingsDialog(currentName, currentExe) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+
+        if (dlg.DeleteRequested)
+        {
+            var res = MessageBox.Show(
+                Loc.Get("delete_profile_confirm", currentName),
+                Loc.Get("delete_profile"),
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning);
+            if (res != MessageBoxResult.OK) return;
+            _ev60Store.ClearProfile(pi.Slot);
+            _ev60Store.SetSetting($"profile.{pi.Slot}.launchExe", "");
+            LogEverest60($"[UI ] Everest 60 profile {pi.Slot} deleted (gear).");
+            Ev60RefreshProfiles();
+            Ev60SelectProfileSlot(pi.Slot);
+            Ev60ReloadProfile(pi.Slot);
+            return;
+        }
+
+        _ev60Store.SetProfileName(pi.Slot, dlg.ProfileName);
+        _ev60Store.SetSetting($"profile.{pi.Slot}.launchExe", dlg.ExePath);
+        LogEverest60($"[UI ] Everest 60 profile {pi.Slot} settings updated (gear).");
+        Ev60RefreshProfiles();
+        Ev60SelectProfileSlot(pi.Slot);
+    }
+
     /// <summary>Resets the currently selected profile's lighting and key bindings back to
     /// K2's defaults (see Everest60RgbPanel.RestoreDefaults / Everest60KeyBindingPanel.
     /// RestoreDefaults) and re-applies them to the keyboard if connected.</summary>
@@ -430,6 +507,25 @@ public partial class MainWindow
         if (MessageBox.Show(this, sb.ToString(), "Import from Base Camp",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
+
+        // Pre-read every profile's bindings+lighting BEFORE wiping anything: this import is
+        // destructive (replace, not append), so a corrupt/locked Base Camp DB must surface
+        // while the existing K2 profiles are still intact — not after they're gone.
+        try
+        {
+            foreach (var p in allProfiles)
+            {
+                BaseCampDbImporter.ReadEverest60KeyBindingsRaw(dbPath, p.ProfileId);
+                BaseCampDbImporter.ReadEverest60LightingRaw(dbPath, p.ProfileId);
+            }
+        }
+        catch (Exception ex)
+        {
+            LogEverest60($"[IMP-BC] Pre-read failed, aborting before wipe: {ex.Message}");
+            MessageBox.Show(this, Loc.Get("bc_import_read_failed", ex.Message),
+                "Import from Base Camp", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
 
         // Wipe: replace, don't append. Everest 60 always has 5 fixed K2-side slots (no
         // firmware profile concept — see the "Profile management" doc comment above).
@@ -637,13 +733,7 @@ public partial class MainWindow
             var btn = new Button
             {
                 Width = kd.W, Height = kd.H, Style = keyStyle,
-                Content = new TextBlock
-                {
-                    Text = kd.Label, Foreground = Brushes.White, FontSize = kd.W < 30 ? 6 : 7,
-                    FontFamily = new FontFamily("Segoe UI,system-ui,Arial,sans-serif"),
-                    TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap,
-                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
-                },
+                Content = BuildEv60KeyContent(kd),
                 Tag = kd.MatrixId, // LED index 0-63
             };
             btn.Click += Ev60KeyboardButton_Click;
@@ -667,8 +757,8 @@ public partial class MainWindow
                 Width = kd.W, Height = kd.H, Style = keyStyle,
                 Content = new TextBlock
                 {
-                    Text = kd.Label, Foreground = Brushes.White, FontSize = kd.W < 30 ? 6 : 7,
-                    FontFamily = new FontFamily("Segoe UI,system-ui,Arial,sans-serif"),
+                    Text = kd.Label, Foreground = Brushes.White, FontSize = kd.W < 30 ? 6 : 8,
+                    FontFamily = _evKeyFont,
                     TextAlignment = TextAlignment.Center,
                     HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
                 },
@@ -685,6 +775,105 @@ public partial class MainWindow
             if (btn.Template?.FindName("LedHalo", btn) is Border halo)
                 _ev60NumpadVisuals.Add(new KeyVisual(btn, halo));
         }
+    }
+
+    /// <summary>
+    /// Builds a main-board key's legend content — same rendering as Everest Max's
+    /// board (<see cref="BuildEverestKeyboardOverlay"/> in MainWindow.Everest.cs:
+    /// shared <c>_evKeyFont</c>/<c>_evBaseBrush</c>/<c>_evShiftBrush</c>/
+    /// <c>_evAltGrBrush</c>/<see cref="BuildCornerLegend"/>/<see cref="BuildWinIcon"/>,
+    /// all private members of this same partial class), bumped up one step in font
+    /// size to read better on this board's slightly bigger single-legend keys (2026-07-19,
+    /// user request: "increase the font a bit and use the same legends as Everest Max").
+    /// AltGr/Shift corner legends come from the SAME <see cref="KeyLabelMap"/> Everest
+    /// Max uses, keyed by VK code via <see cref="Everest60KeyboardLayout.LedIndexToVk"/>
+    /// (this board's own MatrixId is the LED index, not a VK code — see that table's
+    /// doc comment) — modifier/nav keys have no VK entry, so they always fall through
+    /// to the plain single-legend case below, same as before.
+    /// </summary>
+    private FrameworkElement BuildEv60KeyContent(KeyDef kd)
+    {
+        double fs      = kd.W < 30 ? 7 : 9;   // single legend (Everest Max: 6/8)
+        double fsMulti = kd.W < 30 ? 6 : 8;   // multi-legend  (Everest Max: 6/7)
+        double fsBig   = fs + 1;
+
+        if (kd.MatrixId == 56) // Win key ("⊞" placeholder in BuildMainBoard)
+            return BuildWinIcon();
+
+        if (kd.MatrixId == 14) // Tab: word + arrow, same as Everest Max
+        {
+            var tabSp = new StackPanel
+            {
+                VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            tabSp.Children.Add(new TextBlock
+            {
+                Text = "TAB", Foreground = Brushes.White, FontSize = fsMulti, FontFamily = _evKeyFont,
+                TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
+            });
+            tabSp.Children.Add(new TextBlock
+            {
+                Text = "⇆", Foreground = Brushes.White, FontSize = fsMulti + 1, FontFamily = _evKeyFont,
+                TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
+            });
+            return tabSp;
+        }
+
+        string? altLbl = null, altGrLbl = null, sAltGrLbl = null;
+        if (Everest60KeyboardLayout.LedIndexToVk.TryGetValue(kd.MatrixId, out int vk))
+        {
+            altLbl    = KeyLabelMap.AltLabel(_ev60LayoutType, vk);
+            altGrLbl  = KeyLabelMap.AltGrLabel(_ev60LayoutType, vk);
+            sAltGrLbl = KeyLabelMap.ShiftAltGrLabel(_ev60LayoutType, vk);
+        }
+
+        if (altGrLbl is not null && (altLbl is not null || sAltGrLbl is not null))
+            return BuildCornerLegend(kd.Label, altLbl, altGrLbl, sAltGrLbl, fsBig, fsBig);
+
+        if (altGrLbl is not null)
+        {
+            var sp = new StackPanel
+            {
+                VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            sp.Children.Add(new TextBlock
+            {
+                Text = kd.Label, Foreground = Brushes.White, FontSize = fsBig, FontFamily = _evKeyFont,
+                TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
+            });
+            sp.Children.Add(new TextBlock
+            {
+                Text = altGrLbl, Foreground = _evAltGrBrush, FontSize = fsMulti + 1, FontFamily = _evKeyFont,
+                TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
+            });
+            return sp;
+        }
+
+        if (altLbl is not null)
+        {
+            var sp = new StackPanel
+            {
+                VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            sp.Children.Add(new TextBlock
+            {
+                Text = altLbl, Foreground = _evShiftBrush, FontSize = fsMulti, FontFamily = _evKeyFont,
+                TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
+            });
+            sp.Children.Add(new TextBlock
+            {
+                Text = kd.Label, Foreground = Brushes.White, FontSize = fs, FontFamily = _evKeyFont,
+                TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
+            });
+            return sp;
+        }
+
+        return new TextBlock
+        {
+            Text = kd.Label, Foreground = Brushes.White, FontSize = fs, FontFamily = _evKeyFont,
+            TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+        };
     }
 
     // ---- Layout selector (Settings' "Layout" combo) ------------------------
@@ -798,6 +987,8 @@ public partial class MainWindow
 
     private void HandleEv60Key(ushort wMatrix, bool pressed)
     {
+        _ev60AutoOffTimer?.RegisterActivity();
+
         if (AppSettings.LogLevel == K2LogLevel.Verbose)
             LogEverest60($"[KEY ] wMatrix=0x{wMatrix:X2} {(pressed ? "down" : "up")}");
 

@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
         Title="{loc:Get makalu_custom_title}"
-        Height="470" Width="340"
+        Height="500" Width="340"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
         Style="{StaticResource K2WindowStyle}">

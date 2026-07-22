@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <UseWPF>true</UseWPF>
     <!-- ColorDialog nativo (System.Windows.Forms.ColorDialog) usato dal
          pannello "Illuminazione RGB" del tab Everest Max: WPF non ne include
@@ -40,7 +40,7 @@
 
   <!-- Persistenza delle azioni assegnate ai tasti del MacroPad. -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.29" />
   </ItemGroup>
 
   <!-- MacroPadSDK.dll NON e' ridistribuibile: e' un componente interno
@@ -83,6 +83,10 @@
     <Resource Include="Assets\everest60_board.png" />
     <Resource Include="Assets\everest60_numpad.png" />
     <Resource Include="Assets\mountain_logo.png" />
+    <Resource Include="Assets\arrow_up.png" />
+    <Resource Include="Assets\arrow_down.png" />
+    <Resource Include="Assets\arrow_left.png" />
+    <Resource Include="Assets\arrow_right.png" />
   </ItemGroup>
 
   <!-- Home tab device tiles (Grafiche\png_home, see MainWindow.Home.cs) -->

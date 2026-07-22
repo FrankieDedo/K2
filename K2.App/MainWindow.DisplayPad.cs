@@ -14,6 +14,7 @@ using System.Windows.Media.Imaging;
 using K2.App.Models;
 using K2.App.Services;
 using K2.Core;
+using K2.Core.Services;
 using Microsoft.Win32;
 
 namespace K2.App;
@@ -62,7 +63,16 @@ public partial class MainWindow
     private bool _dpSuppressProfile;
     private bool _dpSuppressBrightness;
     private bool _dpSuppressRotation;
+    private bool _dpSuppressAutoOff;
     private int _dpRotation; // 0, 90, 270
+
+    /// <summary>Backlight-off-when-idle timers, one per physical DisplayPad
+    /// (device setting, global across profiles — DisplayPad supports several
+    /// simultaneously connected units, each with its own countdown). Lazily
+    /// created by <see cref="DpGetAutoOffTimer"/>, disposed when a device
+    /// disappears (see the "goneId" cleanup in DpRefreshDevices).</summary>
+    private readonly Dictionary<int, BacklightIdleTimer> _dpAutoOffTimers = new();
+    private readonly Dictionary<int, int> _dpSavedBrightness = new();
 
     /// <summary>
     /// Cache folder for images auto-generated from an action (exec icon / folder glyph,
@@ -303,6 +313,59 @@ public partial class MainWindow
         }
     }
 
+    /// <summary>
+    /// Startup-only variant of <see cref="DpOpenDriver"/>: right after Open() succeeds, the
+    /// vendor SDK still reports zero devices for a bit — <c>lstDeviceID</c> (and its
+    /// per-slot fallback, see SdkHandler.CmdDeviceIds) is only populated once the SDK's own
+    /// async plug callback fires, same path as a live hardware replug — so a refresh done
+    /// immediately after Open() finds nothing, and the "dp_*" tabs only appear a couple of
+    /// seconds later, on top of an already-visible Home. Polls DeviceIds() until two
+    /// consecutive reads agree (including two empty reads, for the "nothing connected" case)
+    /// before the caller (AutoOpenDrivers) hides the loading overlay, so the tabs are already
+    /// there when Home is first shown. Capped at maxWaitMs total so a truly empty setup
+    /// doesn't hang the startup sequence.
+    /// </summary>
+    internal async Task DpOpenDriverAutoAsync()
+    {
+        if (!_dpClient.IsConnected)
+        {
+            DpLog("Starting DisplayPad satellite...");
+            if (!_dpClient.Connect())
+            {
+                LblStatus.Text = Loc.Get("dp_satellite_failed");
+                DpLog("Satellite not reachable — skipping");
+                return;
+            }
+        }
+        DpLog($"SDK version: {_dpClient.SdkVersion()}");
+        LblDpSdk.Text = "DisplayPadSDK (satellite x64)";
+
+        var result = _dpClient.Open();
+        bool ok = result?.GetBool("ok") ?? false;
+        LblStatus.Text = ok ? Loc.Get("dp_driver_opened") : Loc.Get("dp_driver_open_failed");
+        DpLog($"Open -> {ok}");
+        if (!ok)
+        {
+            DpLog("Open failed — DisplayPad tab will NOT be created this session " +
+                  "(DpRefreshDevices/device enumeration never runs without a successful Open)");
+            return;
+        }
+
+        const int pollMs = 300, requiredStableHits = 2, maxWaitMs = 3000;
+        int lastCount = -1, stableHits = 0, waited = 0;
+        while (waited < maxWaitMs)
+        {
+            int count = _dpClient.DeviceIds().Count;
+            if (count == lastCount) stableHits++;
+            else { stableHits = 1; lastCount = count; }
+            if (stableHits >= requiredStableHits) break;
+            await Task.Delay(pollMs);
+            waited += pollMs;
+        }
+
+        DpRefreshDevices();
+    }
+
     private void BtnDpRefresh_Click(object sender, RoutedEventArgs e) => DpRefreshDevices();
 
     private void BtnDpClose_Click(object sender, RoutedEventArgs e)
@@ -462,6 +525,47 @@ public partial class MainWindow
     {
         _dpStore.ClearProfile(deviceId, slot);
         _dpStore.SetSetting($"profile.{deviceId}.{slot}.name", "");
+        _dpStore.SetSetting($"profile.{deviceId}.{slot}.launchExe", "");
+    }
+
+    /// <summary>Gear-icon popup for a DisplayPad profile row (see ProfileGear_Click in
+    /// MainWindow.xaml.cs): rename, delete (same guard as <see cref="BtnDpDeleteProfile_Click"/>),
+    /// or link an executable whose launch auto-switches to this profile (see
+    /// K2.Core.Services.ProfileLaunchWatcher, registered from <see cref="DpRefreshProfiles"/>).</summary>
+    private void DpShowProfileGear(DpProfileItem pi)
+    {
+        if (DpSelectedDeviceId() is not int id) return;
+        string currentName = _dpStore.GetProfileName(id, pi.Slot) ?? Loc.Get("profile_n", pi.Slot);
+        string currentExe = _dpStore.GetSetting($"profile.{id}.{pi.Slot}.launchExe") ?? "";
+        var dlg = new ProfileSettingsDialog(currentName, currentExe) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+
+        if (dlg.DeleteRequested)
+        {
+            var existing = _dpStore.GetExistingProfiles(id);
+            if (existing.Count <= 1)
+            {
+                MessageBox.Show(Loc.Get("delete_profile_last"),
+                    Loc.Get("delete_profile"), MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var res = MessageBox.Show(
+                Loc.Get("delete_profile_confirm", currentName),
+                Loc.Get("delete_profile"),
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning);
+            if (res != MessageBoxResult.OK) return;
+            DpDeleteProfileSlot(id, pi.Slot);
+            DpLog($"[UI] Profile {pi.Slot} deleted (gear).");
+        }
+        else
+        {
+            _dpStore.SetProfileName(id, pi.Slot, dlg.ProfileName);
+            _dpStore.SetSetting($"profile.{id}.{pi.Slot}.launchExe", dlg.ExePath);
+            DpLog($"[UI] Profile {pi.Slot} settings updated (gear).");
+        }
+        DpRefreshProfiles(id);
+        DpSelectProfileSlot(_dpStore.GetCurrentProfile(id));
     }
 
     /// <summary>Resets the currently selected profile's button icons/actions/pages back
@@ -704,6 +808,63 @@ public partial class MainWindow
     internal int? _activeDpDeviceId;
     private int? DpSelectedDeviceId() => _activeDpDeviceId;
 
+    private BacklightIdleTimer DpGetAutoOffTimer(int id)
+    {
+        if (!_dpAutoOffTimers.TryGetValue(id, out var t))
+        {
+            t = new BacklightIdleTimer(Dispatcher, () => DpAutoOffTimeout(id), () => DpAutoOffWake(id));
+            _dpAutoOffTimers[id] = t;
+        }
+        return t;
+    }
+
+    private void DpAutoOffTimeout(int id)
+    {
+        int b = _dpClient.GetBrightness(id);
+        _dpSavedBrightness[id] = b >= 0 ? b : (int)SldDpBrightness.Value;
+        DpLog($"[UI] auto-off: SetBrightness(id={id}, 0) -> {_dpClient.SetBrightness(id, 0)}");
+    }
+
+    private void DpAutoOffWake(int id)
+    {
+        int restore = _dpSavedBrightness.TryGetValue(id, out var b) && b > 0 ? b : 100;
+        DpLog($"[UI] auto-off wake: SetBrightness(id={id}, {restore}) -> {_dpClient.SetBrightness(id, restore)}");
+        if (DpSelectedDeviceId() == id)
+        {
+            _dpSuppressBrightness = true;
+            try { SldDpBrightness.Value = restore; LblDpBrightness.Text = $"{restore}%"; }
+            finally { _dpSuppressBrightness = false; }
+        }
+    }
+
+    private void CkDpAutoOffEnable_Click(object sender, RoutedEventArgs e)
+    {
+        if (_dpSuppressAutoOff) return;
+        if (DpSelectedDeviceId() is not int id) return;
+        _dpStore.SetSetting($"device.{id}.autoOffEnable", CkDpAutoOffEnable.IsChecked == true ? "1" : "0");
+        DpApplyAutoOffConfig(id);
+    }
+
+    private void TxtDpAutoOffSeconds_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_dpSuppressAutoOff) return;
+        if (DpSelectedDeviceId() is not int id) return;
+        if (!int.TryParse(TxtDpAutoOffSeconds.Text, out int seconds) || seconds < 0)
+        {
+            seconds = 60;
+            TxtDpAutoOffSeconds.Text = seconds.ToString();
+        }
+        _dpStore.SetSetting($"device.{id}.autoOffSeconds", seconds.ToString());
+        DpApplyAutoOffConfig(id);
+    }
+
+    private void DpApplyAutoOffConfig(int id)
+    {
+        bool enabled = CkDpAutoOffEnable.IsChecked == true;
+        int  seconds = int.TryParse(TxtDpAutoOffSeconds.Text, out int s) ? s : 0;
+        DpGetAutoOffTimer(id).Configure(enabled, seconds);
+    }
+
     // ── Device selection (driven by top-level TcDevices) ──────────
     private void CbDpDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -765,7 +926,19 @@ public partial class MainWindow
         finally { _dpSuppressRotation = false; }
         DpRebuildKeyGrid();
 
+        _dpSuppressAutoOff = true;
+        try
+        {
+            bool aoEnabled = _dpStore.GetSetting($"device.{id}.autoOffEnable") == "1";
+            int  aoSeconds = int.TryParse(_dpStore.GetSetting($"device.{id}.autoOffSeconds"), out var aoS) ? aoS : 60;
+            CkDpAutoOffEnable.IsChecked = aoEnabled;
+            TxtDpAutoOffSeconds.Text = aoSeconds.ToString();
+            DpGetAutoOffTimer(id).Configure(aoEnabled, aoSeconds);
+        }
+        finally { _dpSuppressAutoOff = false; }
+
         DpReloadAndPreloadProfile();
+        DpSyncSpotifyCoverService(id);
     }
 
     /// <summary>
@@ -839,7 +1012,82 @@ public partial class MainWindow
         // Hardware repaint is serialized + coalesced per device (see DpRequestRepaint):
         // the store/UI switched instantly above; the device repaints when free.
         DpRequestRepaint(id);
+        DpSyncSpotifyCoverService(id);
         DpLog($"[EXEC] DisplayPad profile -> {slot} (device {id})");
+    }
+
+    /// <summary>Reserved profile name that marks a DisplayPad profile as the built-in
+    /// "Spotify" one (see <see cref="DpCreateSpotifyProfile"/>/<see cref="DpSyncSpotifyCoverService"/>).
+    /// Profile identity is otherwise just an integer slot, so the name is the only
+    /// slot-independent way to recognize it.</summary>
+    private const string SpotifyProfileName = "Spotify";
+
+    /// <summary>Starts/stops the live Spotify cover-art overlay (see SpotifyCoverService) for
+    /// this device based on whether its CURRENT profile is the reserved "Spotify" profile
+    /// (identified by name, since profile identity itself is just an integer slot). Called
+    /// on every device activation and profile switch so the overlay always tracks whichever
+    /// profile is actually showing.</summary>
+    private void DpSyncSpotifyCoverService(int id)
+    {
+        int profile = _dpStore.GetCurrentProfile(id);
+        bool isSpotify = _dpStore.GetProfileName(id, profile) == SpotifyProfileName;
+        if (isSpotify)
+            SpotifyCoverService.Start(_dpClient, DpLogAsync, id, _dpStore.GetRotation(id));
+        else
+            SpotifyCoverService.Stop(id);
+    }
+
+    /// <summary>
+    /// Creates the reserved "Spotify" DisplayPad profile for the active device (if it
+    /// doesn't already exist) and switches to it. Layout: keys 0,1,6,7 (the left 2×2 block)
+    /// are left with no ActionType/ImagePath — they're driven live by SpotifyCoverService,
+    /// not a persisted per-key icon — while 2,3,4,5,8,9,10,11 get the 8 existing media
+    /// actions (Prev/Play-Pause/Next/Shuffle/VolDown/VolUp/Mute/Stop) with an auto-generated
+    /// caption tile, same pattern as DpMnuSetBack_Click's auto-icon.
+    /// </summary>
+    private void DpCreateOrSwitchSpotifyProfile()
+    {
+        if (DpSelectedDeviceId() is not int id) return;
+
+        var existing = _dpStore.GetExistingProfiles(id);
+        int slot = existing.FirstOrDefault(s => _dpStore.GetProfileName(id, s) == SpotifyProfileName);
+        if (slot == 0)
+        {
+            slot = BaseCampDbImporter.FindFreeSlot(existing, maxSlots: 999);
+            _dpStore.ClearProfile(id, slot);
+            _dpStore.SetProfileName(id, slot, SpotifyProfileName);
+
+            (int Btn, string Value, string LocKey)[] seeds =
+            {
+                (2,  "Previous track", "media_prev"),
+                (3,  "Play/Pause",     "media_play_pause"),
+                (4,  "Next track",     "media_next"),
+                (5,  "Shuffle",        "media_shuffle"),
+                (8,  "Volume Down",    "media_vol_down"),
+                (9,  "Volume Up",      "media_vol_up"),
+                (10, "Mute",           "media_mute"),
+                (11, "Stop",           "media_stop"),
+            };
+            foreach (var (btn, value, locKey) in seeds)
+            {
+                string dest = DpAutoIconCachePath("spotify_media", value);
+                string? img = IconImageGenerator.TryGenerateCaptionIcon(Loc.Get(locKey), DpHidNative.IconSize, dest)
+                    ? dest : null;
+                _dpStore.SaveButton(id, slot, btn, img, "media", value);
+            }
+            // Materializes key 0 too (cover tile, no action) so the profile "exists" even
+            // if icon generation above failed for every seed.
+            _dpStore.SaveButton(id, slot, 0, null, null, null);
+            DpLog($"[UI] Spotify profile created: slot {slot} (device {id})");
+        }
+
+        DpRefreshProfiles(id);
+        _dpStore.SetCurrentProfile(id, slot);
+        DpSelectProfileSlot(slot);
+        ResetDpNavigation();
+        DpRequestRepaint(id);
+        DpSyncSpotifyCoverService(id);
+        DpLog($"[UI] Switched to Spotify profile (device {id})");
     }
 
     /// <summary>Selects a slot in the profile combo (suppressing the event).</summary>
@@ -876,14 +1124,37 @@ public partial class MainWindow
             if (nextFree > 0)
                 items.Add(new DpProfileItem(nextFree, Loc.Get("new_profile")));
 
-            LstDpProfile.DisplayMemberPath = nameof(DpProfileItem.Label);
             LstDpProfile.ItemsSource = items;
 
             int current = _dpStore.GetCurrentProfile(deviceId);
             var match = items.Find(x => x.Slot == current && !x.IsNew);
             LstDpProfile.SelectedItem = match ?? items[0];
+
+            DpRegisterProfileLaunchWatchers(deviceId, existing);
         }
         finally { _dpSuppressProfile = false; }
+    }
+
+    /// <summary>Registers this device's profiles with K2.Core.Services.ProfileLaunchWatcher
+    /// so that launching a linked executable auto-switches to its profile. Called on every
+    /// DpRefreshProfiles (rename/delete/create/tab activation) — cheap to rebuild since it's
+    /// a handful of dictionary entries, and keeps stale keys (deleted profiles) out.</summary>
+    private void DpRegisterProfileLaunchWatchers(int deviceId, List<int> existing)
+    {
+        string scope = $"Dp:{deviceId}:";
+        var currentKeys = new HashSet<string>();
+        foreach (var slot in existing)
+        {
+            string? exe = _dpStore.GetSetting($"profile.{deviceId}.{slot}.launchExe");
+            if (string.IsNullOrWhiteSpace(exe)) continue;
+            string key = scope + slot;
+            currentKeys.Add(key);
+            int capturedSlot = slot;
+            ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe,
+                () => DpSwitchProfile(deviceId, capturedSlot.ToString()));
+        }
+        foreach (var staleKey in ProfileLaunchWatcher.Instance.KeysWithPrefix(scope).Except(currentKeys))
+            ProfileLaunchWatcher.Instance.RemoveRegistration(staleKey);
     }
 
     private void LstDpProfile_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -895,7 +1166,22 @@ public partial class MainWindow
 
         if (pi.IsNew)
         {
-            // Create empty profile: save a placeholder to make it appear as existing
+            var dlg = new NewDisplayPadProfileDialog { Owner = this };
+            if (dlg.ShowDialog() != true)
+            {
+                // Nothing was committed yet — just revert the UI to whatever is actually current.
+                DpSelectProfileSlot(_dpStore.GetCurrentProfile(id));
+                return;
+            }
+            if (dlg.IsDedicated)
+            {
+                // Only "Spotify" exists today; DpCreateOrSwitchSpotifyProfile is self-contained
+                // (finds/creates the slot, refreshes, selects, reloads, repaints).
+                if (dlg.DedicatedType == "Spotify") DpCreateOrSwitchSpotifyProfile();
+                return;
+            }
+
+            // Generic: create empty profile, save a placeholder to make it appear as existing
             _dpStore.ClearProfile(id, profile);
             // Save at least key 0 empty to make the profile "exist"
             _dpStore.SaveButton(id, profile, 0, null, null, null);
@@ -916,6 +1202,7 @@ public partial class MainWindow
         ResetDpNavigation();
         DpLog($"SwitchProfile({id}, {profile})");
         DpRequestRepaint(id);
+        DpSyncSpotifyCoverService(id);
     }
 
     private void CbDpRotation_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1274,6 +1561,22 @@ public partial class MainWindow
         if (MessageBox.Show(this, sb.ToString(), "Import from Base Camp",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
+
+        // Pre-read every selected profile's buttons BEFORE wiping anything: this import is
+        // destructive (replace, not append), so a corrupt/locked Base Camp DB must surface
+        // while the existing K2 profiles are still intact — not after they're gone.
+        try
+        {
+            foreach (var p in profiles)
+                BaseCampDbImporter.ReadButtons(dbPath, p.ProfileId);
+        }
+        catch (Exception ex)
+        {
+            DpLog($"[IMP-BC] Pre-read failed, aborting before wipe: {ex.Message}");
+            MessageBox.Show(this, Loc.Get("bc_import_read_failed", ex.Message),
+                "Import from Base Camp", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
 
         // Wipe: replace, don't append (see DpDeleteProfileSlot's doc comment).
         foreach (var slot in _dpStore.GetExistingProfiles(k2DeviceId))
@@ -1646,7 +1949,8 @@ public partial class MainWindow
         {
             string? cropped = ImageCropDialog.Show(this, picked,
                 DpHidNative.IconSize, DpHidNative.IconSize,
-                Loc.Get("crop_title", DpHidNative.IconSize, DpHidNative.IconSize));
+                Loc.Get("crop_title", DpHidNative.IconSize, DpHidNative.IconSize),
+                bakeRoundedCorners: true);
             if (cropped is not null) picked = cropped;
         }
         DpUploadAndPersist(id, DpCurrentProfile(), key, picked);
@@ -1897,6 +2201,8 @@ public partial class MainWindow
             // "already tracked" guard below.
             _dpBgPageId.Remove(goneId);
             _dpBgPageHistory.Remove(goneId);
+            if (_dpAutoOffTimers.Remove(goneId, out var goneTimer)) goneTimer.Dispose();
+            _dpSavedBrightness.Remove(goneId);
         }
         var items = new List<DpDeviceItem>();
         int progressive = 1;
@@ -2404,6 +2710,8 @@ public partial class MainWindow
             int matrix = e.Get("keyMatrix");
             bool pressed = e.GetBool("pressed");
 
+            DpGetAutoOffTimer(evtDevId).RegisterActivity();
+
             // The foreground tab (_activeDpDeviceId) uses the UI-bound state (_dpKeys,
             // _dpMatrixToIndex, _currentDpPageId, remap mode, press-bounce visual). Any OTHER
             // connected DisplayPad (multi-device setups) must still execute ITS OWN bindings —
@@ -2606,6 +2914,7 @@ public sealed class DpProfileItem(int slot, string label)
     public int Slot { get; } = slot;
     public string Label { get; } = label;
     public bool IsNew => Label.StartsWith("+");
+    public bool IsRealProfile => !IsNew;
     public override string ToString() => Label;
 }
 

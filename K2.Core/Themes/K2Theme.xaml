@@ -2,7 +2,8 @@
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib"
+                    xmlns:themes="clr-namespace:K2.Core.Themes">
 
     <!-- ============================================================
          K2 — Shared dark theme (DisplayPad / MacroPad / Everest).
@@ -96,7 +97,8 @@
     <Style x:Key="K2AccentButton" TargetType="Button">
         <Setter Property="Background" Value="{StaticResource K2AccentBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource K2AccentTextBrush}"/>
-        <Setter Property="Padding" Value="14,6"/>
+        <Setter Property="Height" Value="25"/>
+        <Setter Property="Padding" Value="14,0"/>
         <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Cursor" Value="Hand"/>
@@ -135,7 +137,8 @@
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource K2BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Padding" Value="12,6"/>
+        <Setter Property="Height" Value="25"/>
+        <Setter Property="Padding" Value="12,0"/>
         <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -177,7 +180,8 @@
     <Style x:Key="K2IconAccentButton" TargetType="Button">
         <Setter Property="Background" Value="{StaticResource K2AccentBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource K2AccentTextBrush}"/>
-        <Setter Property="Padding" Value="14,6"/>
+        <Setter Property="Height" Value="25"/>
+        <Setter Property="Padding" Value="14,0"/>
         <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Cursor" Value="Hand"/>
@@ -363,7 +367,8 @@
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource K2BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Padding" Value="12,6"/>
+        <Setter Property="Height" Value="25"/>
+        <Setter Property="Padding" Value="12,0"/>
         <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -468,7 +473,7 @@
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource K2BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Padding" Value="8,5"/>
+        <Setter Property="Padding" Value="8,0"/>
         <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="CaretBrush" Value="{StaticResource K2AccentBrush}"/>
         <Setter Property="SelectionBrush" Value="{StaticResource K2AccentBrush}"/>
@@ -589,6 +594,42 @@
         </Setter>
     </Style>
 
+    <!-- ===== Inline switch (pill only, no icon/label columns) =====
+         Compact CheckBox-as-toggle for inline use next to a label, unlike
+         K2ToggleRow (icon+label+pill, sized to fill a full row) — e.g.
+         "Backlight: <switch>" in the LED lighting panels. -->
+    <Style x:Key="K2InlineSwitch" TargetType="CheckBox">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Border x:Name="pill" Width="36" Height="18" CornerRadius="9"
+                            Background="{StaticResource K2SurfaceAltBrush}"
+                            BorderBrush="{StaticResource K2BorderStrongBrush}" BorderThickness="1.5">
+                        <Ellipse x:Name="knob" Width="12" Height="12"
+                                 Fill="{StaticResource K2TextMutedBrush}"
+                                 HorizontalAlignment="Left" Margin="1,0,0,0"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="pill" Property="Background" Value="{StaticResource K2AccentBrush}"/>
+                            <Setter TargetName="pill" Property="BorderBrush" Value="{StaticResource K2AccentBrush}"/>
+                            <Setter TargetName="knob" Property="HorizontalAlignment" Value="Right"/>
+                            <Setter TargetName="knob" Property="Margin" Value="0,0,1,0"/>
+                            <Setter TargetName="knob" Property="Fill" Value="White"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="pill" Property="BorderBrush" Value="{StaticResource K2AccentBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ===== RadioButton ===== -->
     <Style TargetType="RadioButton">
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
@@ -625,8 +666,13 @@
     <!-- Alternative to ComboBox/CheckBox for a short (2-3) list of mutually
          exclusive options — e.g. "Angle snapping: Off/On", "Lift-off: Low/High".
          Wrap a UniformGrid Rows="1" of these RadioButtons (same GroupName) in a
-         Border using K2SegmentedGroupBorder; the outer Border's rounded corners
-         + ClipToBounds give the pill look without templating per-segment radii. -->
+         Border using K2SegmentedGroupBorder. The pill look comes from each edge
+         button rounding its OWN inner Border via K2Segment.CornerRadius (set by
+         the caller — SegmentedButtonGroup for dynamic groups, static XAML for
+         fixed 2-way toggles), not from the group Border clipping its children:
+         Border.ClipToBounds only clips to the plain rectangular layout bounds,
+         not to CornerRadius, so a child's square corners paint right over a
+         parent's rounded ones — a child rounding itself has no such problem. -->
     <Style x:Key="K2SegmentedGroupBorder" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource K2SurfaceDarkBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource K2BorderBrush}"/>
@@ -642,11 +688,19 @@
         <Setter Property="Padding" Value="10,0"/>
         <Setter Property="MinWidth" Value="40"/>
         <Setter Property="Cursor" Value="Hand"/>
+        <!-- WPF's default focus adorner is a plain dashed rectangle drawn in
+             the AdornerLayer, above and unclipped by anything below it — an
+             edge segment being clicked (which both checks it AND gives it
+             keyboard focus) would otherwise square off its just-rounded
+             corner. The checked red fill already indicates selection clearly,
+             so the focus rect is redundant here; drop it. -->
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
                     <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                            BorderBrush="{StaticResource K2BorderBrush}" BorderThickness="0,0,1,0">
+                            BorderBrush="{StaticResource K2BorderBrush}" BorderThickness="0,0,1,0"
+                            CornerRadius="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(themes:K2Segment.CornerRadius)}">
                         <ContentPresenter Margin="{TemplateBinding Padding}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>

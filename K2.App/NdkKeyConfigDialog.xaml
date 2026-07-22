@@ -80,7 +80,7 @@
                                Foreground="#CCC"/>
                 </Border>
 
-                <Button Content="{loc:Get dp_configure_action}"
+                <Button Content="Select action…"
                         Click="BtnConfigureAction_Click"
                         Margin="0,0,0,6"/>
 

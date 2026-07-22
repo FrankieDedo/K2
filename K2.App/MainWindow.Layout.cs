@@ -40,6 +40,16 @@ public partial class MainWindow
     private bool _evDockConnected;
     private bool _evNumpadConnected;
 
+    /// <summary>Last numpad side (0=hidden, 1=right, 2=left) — cached so
+    /// <see cref="ApplyNumpadGap"/> can be called from MainWindow.CustomLighting.cs's
+    /// border-overlay toggle too, without re-querying the SDK.</summary>
+    private int _evNumpadPos = 1;
+
+    /// <summary>Whether a Media Dock/Display Dial accessory is physically attached
+    /// (dockPos != 0 in the last poll) — separate from GrdEvDock's actual Visibility,
+    /// which also depends on Custom Lighting's paint mode (see UpdateDockVisibility).</summary>
+    private bool _evDockPhysicallyConnected;
+
     /// <summary>
     /// Starts the 3s dock/numpad poll (same cadence as Ev60RefreshStatus).
     /// Idempotent — safe to call every time the Everest tab is (re)selected.
@@ -92,46 +102,88 @@ public partial class MainWindow
         // GrdEvDock carries both the artwork (ImgEvDock) and the clickable
         // hotspots (CvsEvDock: media buttons + crown rotation buttons), so they
         // move together when the dock's physical side changes.
-        if (dockPos != 0)
+        _evDockPhysicallyConnected = dockPos != 0;
+        PnlHwCaptureBar.Visibility = _evDockPhysicallyConnected ? Visibility.Visible : Visibility.Collapsed;
+        if (_evDockPhysicallyConnected)
         {
-            GrdEvDock.Visibility = Visibility.Visible;
-            PnlHwCaptureBar.Visibility = Visibility.Visible;
             // Align to the side where it is physically connected: 1=right, 2=left
             GrdEvDock.HorizontalAlignment = dockPos == 2
                 ? HorizontalAlignment.Left
                 : HorizontalAlignment.Right;
         }
-        else
-        {
-            GrdEvDock.Visibility = Visibility.Collapsed;
-            PnlHwCaptureBar.Visibility = Visibility.Collapsed;
-        }
+        UpdateDockVisibility();
 
         // ---- Numpad (left or right of the keyboard column) ----
         if (numpadPos == 0)
         {
             CvsEvNumpad.Visibility = Visibility.Collapsed;
+            // Keep the Custom Lighting border overlay in sync: its numpad squares are
+            // a separate canvas from CvsEvNumpad and would otherwise keep floating
+            // where the numpad used to be (see UpdateBorderOverlayVisibility).
+            UpdateBorderOverlayVisibility();
         }
         else
         {
             CvsEvNumpad.Visibility = Visibility.Visible;
 
-            // Reorder SpEvLayout children: [GrdEvKeyColumn] and [CvsEvNumpad]
+            // Reorder SpEvLayout children: [GrdEvKeyColumn] and [GrdEvNumpadColumn]
+            // (the latter wraps CvsEvNumpad — see MainWindow.xaml — so it, not
+            // CvsEvNumpad itself, is SpEvLayout's actual direct child).
             SpEvLayout.Children.Clear();
+            _evNumpadPos = numpadPos;
 
             if (numpadPos == 2) // left
             {
-                CvsEvNumpad.Margin = new Thickness(0, 0, 6, 0);
-                SpEvLayout.Children.Add(CvsEvNumpad);
+                SpEvLayout.Children.Add(GrdEvNumpadColumn);
                 SpEvLayout.Children.Add(GrdEvKeyColumn);
             }
             else // 1 or other = right (default)
             {
-                CvsEvNumpad.Margin = new Thickness(6, 0, 0, 0);
                 SpEvLayout.Children.Add(GrdEvKeyColumn);
-                SpEvLayout.Children.Add(CvsEvNumpad);
+                SpEvLayout.Children.Add(GrdEvNumpadColumn);
             }
+            // Also re-syncs the Custom Lighting border overlay (its numpad squares
+            // follow attach/detach) and the gap — UpdateBorderOverlayVisibility ends
+            // with ApplyNumpadGap itself.
+            UpdateBorderOverlayVisibility();
         }
+    }
+
+    /// <summary>
+    /// Sets GrdEvNumpadColumn's margin — the gap between it and GrdEvKeyColumn — based
+    /// on <see cref="_evNumpadPos"/> (which side the numpad sits on) and whether the
+    /// Custom Lighting border overlay is currently showing (needs a wider gap so its
+    /// squares, which extend past each canvas's edge, don't overlap — see
+    /// MainWindow.CustomLighting.cs's UpdateBorderOverlayVisibility, the other caller).
+    /// Centralized here because <see cref="UpdateKeyboardLayout"/> runs on a 3s poll
+    /// timer and used to unconditionally stomp a hardcoded margin over whatever
+    /// UpdateBorderOverlayVisibility had just set (user-reported bug 2026-07-22:
+    /// "quando allargo la finestra, numpad e tastiera si riavvicinano" — really any
+    /// poll tick, not specifically resize, just noticed then).
+    /// </summary>
+    /// <summary>
+    /// GrdEvDock (Media Dock/Display Dial artwork + its media/crown hotspots) is only
+    /// shown when the accessory is physically attached AND Custom Lighting's paint mode
+    /// isn't active — the dock sits right above the keyboard body where the border
+    /// overlay's top-row squares also live, so the two visually clash (user request
+    /// 2026-07-22: "quando attivi la modalità custom... nascondi anche media dock e
+    /// relativi tasti"). Called from UpdateKeyboardLayout (accessory poll) and from
+    /// MainWindow.CustomLighting.cs's SetCustomPaintModeActive (paint-mode toggle) —
+    /// same "two callers, one source of truth" pattern as ApplyNumpadGap below.
+    /// </summary>
+    private void UpdateDockVisibility()
+    {
+        GrdEvDock.Visibility = (_evDockPhysicallyConnected && !_customPaintMode)
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ApplyNumpadGap()
+    {
+        bool wide = CvsEvBorderMain.Visibility == Visibility.Visible;
+        double gap = wide ? 36 : 6;
+        GrdEvNumpadColumn.Margin = _evNumpadPos == 2
+            ? new Thickness(0, 0, gap, 0)   // numpad on the left: extra gap on its right edge
+            : new Thickness(gap, 0, 0, 0);  // numpad on the right (default): extra gap on its left edge
     }
 
     /// <summary>

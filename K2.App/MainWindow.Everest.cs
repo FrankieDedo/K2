@@ -11,6 +11,7 @@ using System.Windows.Threading;
 using K2.App.Models;
 using K2.App.Services;
 using K2.Core;
+using K2.Core.Services;
 using Microsoft.Win32;
 
 namespace K2.App;
@@ -62,116 +63,11 @@ public partial class MainWindow
     /// user-defined map exists, so "Mappa tasti" is not required on first run.
     /// Key insight: the SDK KEY_CALLBACK reports DLLMatrixIndex as wMatrix,
     /// NOT the VK code — so without this map Enter (DLLMatrixIndex=120) would
-    /// be mistaken for F9 (VK=120), etc.
+    /// be mistaken for F9 (VK=120), etc. Shared with BaseCampDbImporter (see
+    /// <see cref="EverestWMatrixMap"/>) so imported keys land in the same
+    /// VK-code space as live SDK presses translate to.
     /// </summary>
-    private static readonly IReadOnlyDictionary<int, int> s_defaultWMatrixMap =
-        new Dictionary<int, int>
-        {
-            {   0,  27 },  // Esc
-            {   2,   9 },  // Tab
-            {   3,  20 },  // Caps Lk
-            {   4, 160 },  // LShift
-            {   5, 162 },  // LCtrl
-            {   6, 144 },  // Num Lk
-            {   7, 107 },  // Num +
-            {   9, 112 },  // F1
-            {  10,  49 },  // 1
-            {  11,  81 },  // Q
-            {  12,  65 },  // A
-            {  13, 226 },  // < (ISO extra key)
-            {  14,  91 },  // Win
-            {  15, 109 },  // Num -
-            {  16, 106 },  // Num *
-            {  18, 113 },  // F2
-            {  19,  50 },  // 2
-            {  20,  87 },  // W
-            {  21,  83 },  // S
-            {  22,  90 },  // Z
-            {  23,  18 },  // Alt
-            {  24, 111 },  // Num /
-            {  27, 114 },  // F3
-            {  28,  51 },  // 3
-            {  29,  69 },  // E
-            {  30,  68 },  // D
-            {  31,  88 },  // X
-            {  33,  13 },  // Num Enter
-            {  34,  97 },  // Num 1
-            {  35, 173 },  // Mute
-            {  36, 115 },  // F4
-            {  37,  52 },  // 4
-            {  38,  82 },  // R
-            {  39,  70 },  // F
-            {  40,  67 },  // C
-            {  41,  32 },  // Space
-            {  42,  98 },  // Num 2
-            {  43,  99 },  // Num 3
-            {  45, 116 },  // F5
-            {  46,  53 },  // 5
-            {  47,  84 },  // T
-            {  48,  71 },  // G
-            {  49,  86 },  // V
-            {  51, 100 },  // Num 4
-            {  52, 101 },  // Num 5
-            {  53, 177 },  // Prev Track
-            {  54, 117 },  // F6
-            {  55,  54 },  // 6
-            {  56,  89 },  // Y
-            {  57,  72 },  // H
-            {  58,  66 },  // B
-            {  60, 102 },  // Num 6
-            {  61, 103 },  // Num 7
-            {  62, 176 },  // Next Track
-            {  63, 118 },  // F7
-            {  64,  55 },  // 7
-            {  65,  85 },  // U
-            {  66,  74 },  // J
-            {  67,  78 },  // N
-            {  68, 165 },  // Alt Gr (VK_RMENU)
-            {  69, 104 },  // Num 8
-            {  70, 105 },  // Num 9
-            {  72, 119 },  // F8
-            {  73,  56 },  // 8
-            {  74,  73 },  // I
-            {  76,  77 },  // M
-            {  77,  91 },  // Win (right)
-            {  78,  96 },  // Num 0
-            {  79, 110 },  // Num .
-            {  81, 120 },  // F9
-            {  82,  57 },  // 9
-            {  83,  79 },  // O
-            {  84,  76 },  // L
-            {  85, 188 },  // ,
-            {  87,   8 },  // Backspace
-            {  88,  46 },  // Del
-            {  90, 121 },  // F10
-            {  91,  48 },  // 0
-            {  92,  80 },  // P
-            {  93, 222 },  // ò
-            {  94, 190 },  // .
-            {  95, 163 },  // RCtrl
-            {  96,  45 },  // Insert
-            {  97,  35 },  // End
-            {  99, 122 },  // F11
-            { 101, 186 },  // è
-            { 102, 192 },  // à
-            { 103, 189 },  // -
-            { 104,  37 },  // ←
-            { 105,  36 },  // Home
-            { 106,  34 },  // PgDn
-            { 108, 123 },  // F12
-            { 110, 187 },  // +
-            { 111, 219 },  // ù
-            { 113,  40 },  // ↓
-            { 114, 145 },  // Scroll Lk
-            { 115,  33 },  // PgUp
-            { 117,  44 },  // Prt Sc
-            { 120,  13 },  // Enter  ← wMatrix=120 = Enter's DLLMatrixIndex
-            { 121, 161 },  // RShift
-            { 122,  39 },  // →
-            { 123,  19 },  // Pause
-            { 124,  38 },  // ↑
-            { 183, 179 },  // Play/Pause
-        };
+    private static readonly IReadOnlyDictionary<int, int> s_defaultWMatrixMap = EverestWMatrixMap.Default;
     /// <summary>Index of the key currently awaited during guided remapping (-1 = inactive).</summary>
     private int _evMapAwaitingIndex = -1;
     /// <summary>Ordered list of KeyDefs to remap (board_left + board_right).</summary>
@@ -186,6 +82,11 @@ public partial class MainWindow
     // is a future step (see _PROJECT_MAP.md). Colors are 0xRRGGBB integers.
     private bool _evRgbInitialized;
     private bool _evRgbSuppress;
+
+    /// <summary>Backlight-off-when-idle timer (device setting, global across
+    /// profiles — see BacklightIdleTimer). SetBacklight(false/true) is a real
+    /// firmware on/off toggle, so it doesn't disturb the configured effect.</summary>
+    private BacklightIdleTimer? _evAutoOffTimer;
     private int  _evColor1 = 0x900000; // K2 teal
     private int  _evColor2 = 0x000000;
     private int  _evColor3 = 0x000000;
@@ -204,6 +105,7 @@ public partial class MainWindow
         EvSelectProfileSlot(_evStore.GetCurrentProfile());
 
         _everest.KeyEvent += OnEverestKey;
+        _everest.NumpadButtonEvent += OnEverestNumpadButton;
 
         _evActionHost = new EverestActionHost(
             dispatcher:           Dispatcher,
@@ -241,6 +143,12 @@ public partial class MainWindow
         InitDockActionsPanel();
         _evLayoutType = EverestKeyboardLayout.DetectLayout();
         BuildEverestKeyboardOverlay();
+        // Edge case: if "Custom" was the persisted rgb.effect, earlier calls to
+        // SetCustomPaintModeActive(true)/ReapplyCustomOverlays (InitEverestRgbPanel,
+        // InitCustomLightingPanel) ran before this method built the actual keycap
+        // Buttons — catch up now.
+        if (_customPaintMode)
+            ReapplyCustomOverlays();
         InitNumpadDisplayKeys();
         InitKeyboardLayoutSelector();
         UpdateKeyboardLayout();
@@ -1055,6 +963,11 @@ public partial class MainWindow
         int ver = _everest.SdkVersion();
         LblEvSdk.Text = ver > 0 ? $"SDKDLL.dll v{ver}" : "SDKDLL.dll not available";
         EvRefresh();
+        // Land the device on K2's current profile right away — every per-profile
+        // operation (NDK uploads/resets target the ACTIVE firmware profile slot)
+        // assumes the two agree, and at startup the keyboard may be on whatever
+        // profile it was last left on.
+        _everest.SwitchProfile(EvCurrentProfile());
         UpdateKeyboardLayout();
         ApplyCurrentEffect();
         ApplyEverestSettingsToDevice();
@@ -1278,9 +1191,18 @@ public partial class MainWindow
             EvRefreshProfiles();
             EvSelectProfileSlot(slot);
             ReloadEverestProfile(); // refreshes NDK canvas thumbnails for the imported slot
+            // Land the DEVICE on the imported profile BEFORE pushing its pictures —
+            // EvSelectProfileSlot suppresses LstEvProfile_SelectionChanged, so the
+            // firmware-profile alignment done there doesn't run on this path (see that
+            // handler's comment for why the alignment matters at all).
+            if (_everest.IsOpen) _everest.SwitchProfile(slot);
             // A freshly imported profile's pictures have never reached THIS physical device —
-            // push them now (ReloadEverestProfile no longer does this on every plain switch).
-            if (touch > 0 && _everest.IsOpen) EvUploadNdkImages();
+            // push them now (ReloadEverestProfile no longer does this on every plain switch),
+            // then restore default artwork on any key the import left without an icon
+            // (stale flash pictures from previous use would otherwise keep showing).
+            if (touch > 0 && _everest.IsOpen) EvUploadNdkImages(busyMessage: Loc.Get("hw_busy_importing_profile"));
+            EvResetEmptyNdkSlots(Loc.Get("hw_busy_importing_profile"));
+            EvSyncNdkBindingsToFw();
 
             LogEverest($"[IMP-XML] '{profileName}' -> slot {slot}: {regular} keys, {touch} display keys");
             LblStatus.Text = Loc.Get("dp_imported_xml", profileName, slot);
@@ -1377,6 +1299,22 @@ public partial class MainWindow
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
 
+        // Pre-read every profile's bindings BEFORE wiping anything: this import is
+        // destructive (replace, not append), so a corrupt/locked Base Camp DB must surface
+        // while the existing K2 profiles are still intact — not after they're gone.
+        try
+        {
+            foreach (var p in allProfiles)
+                BaseCampDbImporter.ReadKeyBindings(dbPath, p.ProfileId);
+        }
+        catch (Exception ex)
+        {
+            LogEverest($"[IMP-BC] Pre-read failed, aborting before wipe: {ex.Message}");
+            MessageBox.Show(this, Loc.Get("bc_import_read_failed", ex.Message),
+                "Import from Base Camp", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
         // Wipe: replace, don't append (unlike the old free-slot-seeking import).
         foreach (var slot in _evStore.GetExistingProfiles())
             _evStore.ClearProfile(slot);
@@ -1412,7 +1350,7 @@ public partial class MainWindow
                 // device — push them now, per imported profile, while the "please wait"
                 // overlay is up. Same behavior real Base Camp shows during a DB/profile
                 // import (see K2/_reference/usb_dumps analysis, 2026-07-16).
-                if (touch > 0 && _everest.IsOpen) EvUploadNdkImages(targetSlot);
+                if (touch > 0 && _everest.IsOpen) EvUploadNdkImages(targetSlot, Loc.Get("hw_busy_importing_profiles"));
             }
             catch (Exception ex)
             {
@@ -1429,8 +1367,14 @@ public partial class MainWindow
         {
             _evStore.SetCurrentProfile(activateSlot);
             EvSelectProfileSlot(activateSlot);
+            // Same firmware-profile alignment as LstEvProfile_SelectionChanged (suppressed
+            // by EvSelectProfileSlot on this path) — the keyboard lands on the imported
+            // profile, so its per-profile NDK pictures actually become the visible ones.
+            if (_everest.IsOpen) _everest.SwitchProfile(activateSlot);
         }
         ReloadEverestProfile();
+        EvResetEmptyNdkSlots(Loc.Get("hw_busy_importing_profiles"));
+        EvSyncNdkBindingsToFw();
         LoadNdkState();
 
         LogEverest($"[IMP-BC] Done: {totalRegular} regular + {totalTouch} display keys across {allProfiles.Count} profiles");
@@ -1449,30 +1393,166 @@ public partial class MainWindow
     /// Shows the blocking "please wait" overlay for the whole batch, same as a single-key
     /// edit — each image is its own ~2s synchronous SDK call.
     /// </summary>
-    private void EvUploadNdkImages(int? forProfile = null)
+    private void EvUploadNdkImages(int? forProfile = null, string? busyMessage = null)
     {
         int profile = forProfile ?? EvCurrentProfile();
-        bool any = false;
-        ShowHwBusy(Loc.Get("hw_busy_uploading_image"));
-        try
+
+        // Resolve which keys actually have a picture to push BEFORE handing off to the
+        // background thread (RunHwBusy's work runs off the UI thread — _evStore's
+        // SqliteConnection isn't safe for concurrent multi-thread use, so no store access
+        // is allowed inside the lambda below).
+        var toUpload = new System.Collections.Generic.List<(int Index, string Path)>(4);
+        for (int i = 0; i < 4; i++)
         {
-            for (int i = 0; i < 4; i++)
-            {
-                var path = _evStore.GetSetting($"ndk.{profile}.{i}.imagePath");
-                if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) continue;
-                try
-                {
-                    bool ok = UploadNdkImage(i, path, profile);
-                    any |= ok;
-                }
-                catch (Exception ex)
-                {
-                    LogEverest($"[NDK] ndk.{profile}.{i} upload failed: {ex.Message}");
-                }
-            }
+            var path = _evStore.GetSetting($"ndk.{profile}.{i}.imagePath");
+            if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+                toUpload.Add((i, path));
         }
-        finally { HideHwBusy(); }
-        if (any) NdkRefreshDevicePicSlots();
+
+        var uploadedKeys = RunHwBusy(busyMessage ?? Loc.Get("hw_busy_uploading_image"), () =>
+        {
+            var okKeys = new System.Collections.Generic.List<int>();
+            foreach (var (i, path) in toUpload)
+            {
+                // StartPicUpdate returns instantly (async) but the firmware stays "busy"
+                // writing the previous image to flash for SEVERAL seconds afterwards, and
+                // instantly rejects any StartPicUpdate received in that window (confirmed
+                // via user logs 2026-07-19: back-to-back calls fail within 4ms; even a
+                // fixed 2.2s spacing still got keys 2-4 rejected — the window is longer
+                // than one nominal ~2s transfer). A single manual upload (NdkApplyImage)
+                // never hits this because human actions are naturally paced. So: retry
+                // with a 2s backoff until accepted (max ~12s/key) instead of guessing a
+                // fixed safe delay.
+                bool ok = false;
+                // 10 attempts × 2s ≈ 20s worst case: user log 2026-07-19 12:15 showed a
+                // key exhausting the previous 6-attempt (12s) budget and being skipped.
+                for (int attempt = 0; attempt < 10 && !ok; attempt++)
+                {
+                    if (attempt > 0) System.Threading.Thread.Sleep(2000);
+                    try { ok = UploadNdkImage(i, path, profile); }
+                    catch (Exception ex)
+                    {
+                        LogEverestSafe($"[NDK] ndk.{profile}.{i} upload threw: {ex.Message}");
+                        break;
+                    }
+                }
+                if (!ok) LogEverestSafe($"[NDK] ndk.{profile}.{i} still rejected after retries — skipped");
+                else okKeys.Add(i);
+            }
+            return okKeys;
+        });
+        // Flash now holds a CUSTOM picture for these keys: clear their "flashOk"
+        // marker (see EvResetEmptyNdkSlots) — store writes must stay on the UI thread.
+        foreach (int i in uploadedKeys)
+            _evStore.SetSetting($"ndk.{profile}.{i}.flashOk", "");
+        if (uploadedKeys.Count > 0) NdkRefreshDevicePicSlots();
+    }
+
+    /// <summary>
+    /// Restores the factory-default artwork on every display key of the CURRENT profile
+    /// that has NO custom icon configured in K2. Needed because the keyboard's flash keeps
+    /// each profile slot's last-written pictures forever: a K2 profile "without icons" can
+    /// still land on a firmware slot full of leftover pictures from Base Camp or earlier
+    /// tests, which then show up on a plain profile switch (user report 2026-07-19).
+    /// The per-key <c>ndk.{profile}.{i}.flashClean</c> marker records a successful reset so
+    /// the (multi-second, 8-packet) sequence isn't re-sent on every switch — it's cleared
+    /// whenever a custom picture is uploaded to that key (<see cref="EvUploadNdkImages"/>/
+    /// <see cref="NdkApplyImage"/>). Must be called AFTER the device has landed on
+    /// <see cref="EvCurrentProfile"/> — the native reset only acts on the active profile.
+    /// </summary>
+    private void EvResetEmptyNdkSlots(string? busyMessage = null)
+    {
+        if (!_everest.IsOpen) return;
+        int profile = EvCurrentProfile();
+
+        var toReset = new System.Collections.Generic.List<int>(4);
+        for (int i = 0; i < NdkCount; i++)
+        {
+            var img = _evStore.GetSetting($"ndk.{profile}.{i}.imagePath");
+            if (!string.IsNullOrEmpty(img) && System.IO.File.Exists(img)) continue;
+            // "flashOk" (NOT the earlier "flashClean" key, retired on purpose: markers
+            // written by the pre-2026-07-19f build could record resets the firmware had
+            // silently dropped — see the calm-window logic below — and permanently stuck
+            // profile 1 with its leftover icons on the user's machine).
+            if (_evStore.GetSetting($"ndk.{profile}.{i}.flashOk") == "1") continue;
+            toReset.Add(i);
+        }
+        if (toReset.Count == 0) return;
+
+        // The command echo only proves the firmware RECEIVED a reset, not that it applied
+        // it: for several seconds after a picture upload the firmware is still writing
+        // flash and silently drops (while still acking) further commands — confirmed via
+        // user log 2026-07-19: resets issued ~200ms after an import's upload batch were
+        // acked but the old pictures stayed on screen. So WAIT OUT the busy window inside
+        // the overlay before resetting (user request 2026-07-19: after an import, keys
+        // whose icon is empty must actually be cleared, not left showing stale pictures).
+        var done = RunHwBusy(busyMessage ?? Loc.Get("hw_busy_uploading_image"), () =>
+        {
+            EvSleepUntilNdkFlashCalm();
+            var okKeys = new System.Collections.Generic.List<int>(toReset.Count);
+            foreach (int i in toReset)
+                if (_everest.ClearNumpadImage(i, (byte)profile)) okKeys.Add(i);
+            return okKeys;
+        });
+        foreach (int i in done)
+            _evStore.SetSetting($"ndk.{profile}.{i}.flashOk", "1");
+        if (done.Count > 0)
+            LogEverest($"[NDK] profile {profile}: {done.Count} empty display key(s) restored to default artwork");
+    }
+
+    /// <summary>Blocks until the firmware's post-picture-upload busy window (~15s from the
+    /// last successful flash write, see <see cref="_evNdkFlashWriteTicks"/>) has elapsed —
+    /// commands sent inside it get acked but silently dropped. Call from a RunHwBusy
+    /// background lambda only, never on the UI thread.</summary>
+    private void EvSleepUntilNdkFlashCalm()
+    {
+        long last = System.Threading.Interlocked.Read(ref _evNdkFlashWriteTicks);
+        if (last == 0) return;
+        var wait = TimeSpan.FromSeconds(15) - (DateTime.UtcNow - new DateTime(last, DateTimeKind.Utc));
+        if (wait > TimeSpan.Zero) System.Threading.Thread.Sleep(wait);
+    }
+
+    /// <summary>
+    /// Writes the CURRENT profile's display-key action bindings into the firmware (see
+    /// EverestService.WriteNumpadBinding): the write that flips each key to "custom" mode
+    /// so the keyboard's built-in default action stops firing alongside K2's own execution
+    /// — the "double action" of user reports 2026-07-19 (per the evicon.pcapng capture,
+    /// assigning an action in Base Camp = exactly this binding write). The per-key
+    /// <c>ndk.{profile}.{i}.fwBind</c> marker records what was last written so unchanged
+    /// bindings aren't re-sent on every profile switch; keys with NO action are handled by
+    /// the reset flow instead (its 14 20 FF framing restores default mode — confirmed
+    /// working by the user's remove-action test). Must run AFTER the device has landed on
+    /// <see cref="EvCurrentProfile"/>.
+    /// </summary>
+    private void EvSyncNdkBindingsToFw()
+    {
+        if (!_everest.IsOpen) return;
+        int profile = EvCurrentProfile();
+
+        var toWrite = new System.Collections.Generic.List<(int Key, string Type, string Value, string Marker)>();
+        for (int i = 0; i < NdkCount; i++)
+        {
+            var at = _evStore.GetSetting($"ndk.{profile}.{i}.actionType");
+            if (string.IsNullOrEmpty(at)) continue;
+            var av = _evStore.GetSetting($"ndk.{profile}.{i}.actionValue") ?? "";
+            string marker = at + "|" + av;
+            if (_evStore.GetSetting($"ndk.{profile}.{i}.fwBind") == marker) continue;
+            toWrite.Add((i, at, av, marker));
+        }
+        if (toWrite.Count == 0) return;
+
+        var done = RunHwBusy(Loc.Get("hw_busy_uploading_image"), () =>
+        {
+            EvSleepUntilNdkFlashCalm();   // small writes are dropped in the busy window too
+            var ok = new System.Collections.Generic.List<(int Key, string Marker)>(toWrite.Count);
+            foreach (var (k, at, av, marker) in toWrite)
+                if (_everest.WriteNumpadBinding(k, at, av)) ok.Add((k, marker));
+            return ok;
+        });
+        foreach (var (k, marker) in done)
+            _evStore.SetSetting($"ndk.{profile}.{k}.fwBind", marker);
+        if (done.Count > 0)
+            LogEverest($"[NDK] profile {profile}: {done.Count} display-key binding(s) written to firmware");
     }
 
     private void LstEvProfile_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1491,9 +1571,28 @@ public partial class MainWindow
             EvSelectProfileSlot(slot);
         }
 
-        _evStore.SetCurrentProfile(slot);
         LogEverest($"[UI ] Everest profile selected: {slot}");
+        EvActivateProfileSlot(slot);
+    }
+
+    /// <summary>
+    /// Makes <paramref name="slot"/> the ACTIVE profile end-to-end: K2 store, device
+    /// firmware profile, key list reload and empty-display-key reset sync. The firmware
+    /// switch matters because NDK pictures and their uploads/clears are per-FIRMWARE-
+    /// profile (byTargetPic — see UploadNdkImage's doc comment): without it, icon
+    /// operations target flash slot N while the keyboard keeps displaying another
+    /// profile — writes succeed but are invisible (user report 2026-07-19). Mirrors real
+    /// Base Camp, which switches the active profile when one is selected in its UI.
+    /// Shared by LstEvProfile_SelectionChanged and BtnEvDeleteProfile_Click (which must
+    /// re-activate a SURVIVING slot — see its comment).
+    /// </summary>
+    private void EvActivateProfileSlot(int slot)
+    {
+        _evStore.SetCurrentProfile(slot);
+        if (_everest.IsOpen) _everest.SwitchProfile(slot);
         ReloadEverestProfile();
+        EvResetEmptyNdkSlots();
+        EvSyncNdkBindingsToFw();
     }
 
     // ============================================================
@@ -1583,6 +1682,8 @@ public partial class MainWindow
 
     private void HandleEverestKey(EverestKeyEventArgs e)
     {
+        _evAutoOffTimer?.RegisterActivity();
+
         int rawMatrix = e.KeyMatrix;
 
         // Per-key-press log: noisy in normal use, so it only fires at LogLevel.Verbose
@@ -1731,10 +1832,32 @@ public partial class MainWindow
             if (nextFree > 0)
                 items.Add(new EvProfileItem(nextFree, Loc.Get("new_profile")));
 
-            LstEvProfile.DisplayMemberPath = nameof(EvProfileItem.Label);
             LstEvProfile.ItemsSource = items;
+
+            EvRegisterProfileLaunchWatchers(existing);
         }
         finally { _evSuppressProfile = false; }
+    }
+
+    /// <summary>Registers this device's profiles with K2.Core.Services.ProfileLaunchWatcher
+    /// — see DpRegisterProfileLaunchWatchers (MainWindow.DisplayPad.cs) for the shared
+    /// pattern/rationale. Single-instance device, so the scope key has no device id.</summary>
+    private void EvRegisterProfileLaunchWatchers(List<int> existing)
+    {
+        const string scope = "Ev:";
+        var currentKeys = new HashSet<string>();
+        foreach (var slot in existing)
+        {
+            string? exe = _evStore.GetSetting($"profile.{slot}.launchExe");
+            if (string.IsNullOrWhiteSpace(exe)) continue;
+            string key = scope + slot;
+            currentKeys.Add(key);
+            int capturedSlot = slot;
+            ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe,
+                () => EvSwitchProfile(capturedSlot.ToString()));
+        }
+        foreach (var staleKey in ProfileLaunchWatcher.Instance.KeysWithPrefix(scope).Except(currentKeys))
+            ProfileLaunchWatcher.Instance.RemoveRegistration(staleKey);
     }
 
     /// <summary>Selects a profile slot in the Everest combo (suppresses event).</summary>
@@ -1837,8 +1960,57 @@ public partial class MainWindow
         _evStore.ClearProfile(slot);
         LogEverest($"[UI ] Everest profile {slot} deleted.");
         EvRefreshProfiles();
-        EvSelectProfileSlot(slot);
-        ReloadEverestProfile();
+        // Land on a SURVIVING slot and activate it fully. The old code re-selected the
+        // just-deleted slot: EvSelectProfileSlot's items[0] fallback then silently moved
+        // the UI selection WITHOUT running the activation flow (store current profile,
+        // hardware switch, reload), leaving half-updated state — the "phantom click" the
+        // user saw when the selection later landed on the remaining profile (report
+        // 2026-07-19: "simula un clic se ci clicco di nuovo sopra").
+        int fallback = _evStore.GetExistingProfiles().DefaultIfEmpty(1).First();
+        EvSelectProfileSlot(fallback);
+        EvActivateProfileSlot(fallback);
+    }
+
+    /// <summary>Gear-icon popup for an Everest Max profile row (see ProfileGear_Click in
+    /// MainWindow.xaml.cs): rename, delete (same guard as <see cref="BtnEvDeleteProfile_Click"/>),
+    /// or link an executable whose launch auto-switches to this profile (see
+    /// K2.Core.Services.ProfileLaunchWatcher, registered from <see cref="EvRefreshProfiles"/>).</summary>
+    private void EvShowProfileGear(EvProfileItem pi)
+    {
+        string currentName = _evStore.GetProfileName(pi.Slot) ?? Loc.Get("profile_n", pi.Slot);
+        string currentExe = _evStore.GetSetting($"profile.{pi.Slot}.launchExe") ?? "";
+        var dlg = new ProfileSettingsDialog(currentName, currentExe) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+
+        if (dlg.DeleteRequested)
+        {
+            if (_evStore.GetExistingProfiles().Count <= 1)
+            {
+                MessageBox.Show(Loc.Get("delete_profile_last"),
+                    Loc.Get("delete_profile"), MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var res = MessageBox.Show(
+                Loc.Get("delete_profile_confirm", currentName),
+                Loc.Get("delete_profile"),
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning);
+            if (res != MessageBoxResult.OK) return;
+            _evStore.ClearProfile(pi.Slot);
+            _evStore.SetSetting($"profile.{pi.Slot}.launchExe", "");
+            LogEverest($"[UI ] Everest profile {pi.Slot} deleted (gear).");
+            EvRefreshProfiles();
+            int fallback = _evStore.GetExistingProfiles().DefaultIfEmpty(1).First();
+            EvSelectProfileSlot(fallback);
+            EvActivateProfileSlot(fallback);
+            return;
+        }
+
+        _evStore.SetProfileName(pi.Slot, dlg.ProfileName);
+        _evStore.SetSetting($"profile.{pi.Slot}.launchExe", dlg.ExePath);
+        LogEverest($"[UI ] Everest profile {pi.Slot} settings updated (gear).");
+        EvRefreshProfiles();
+        EvSelectProfileSlot(pi.Slot);
     }
 
     /// <summary>Resets the currently selected profile's key bindings back to K2's
@@ -1920,6 +2092,8 @@ public partial class MainWindow
         // UI combo.
         EvSelectProfileSlot(next);
         ReloadEverestProfile();
+        EvResetEmptyNdkSlots();
+        EvSyncNdkBindingsToFw();
         LogEverest($"[EXEC] profile -> {next}");
     }
 
@@ -1960,6 +2134,7 @@ public partial class MainWindow
         new(EverestService.Effect.Matrix,    "Matrix"),
         new(EverestService.Effect.Matrix2,   "Matrix 2"),
         new(EverestService.Effect.Off,       "Off"),
+        new(EverestService.Effect.Custom,    "Custom"),
     };
 
     // ------------------------------------------------------------
@@ -2030,14 +2205,38 @@ public partial class MainWindow
                 PnlEvDirection.Visibility = Visibility.Collapsed;
             }
 
-            // Rainbow
-            CkEvRainbow.IsEnabled = caps.Rainbow;
-            if (!caps.Rainbow) CkEvRainbow.IsChecked = false;
+            // Color mode: Single/Double/Rainbow are one mutually-exclusive radio
+            // group now (GroupName="EvColorMode") — WPF's RadioButton group
+            // handles the mutual exclusion, no manual uncheck logic needed.
+            // Rainbow/Double are only selectable when the effect supports them
+            // (3rd color is always hidden); falls back to Single otherwise
+            // (same pattern as the Direction/Speed Collapsed-when-unsupported
+            // gating above).
+            RbEvRainbow.IsEnabled = caps.Rainbow;
+            RbEvRainbow.Visibility = caps.Rainbow ? Visibility.Visible : Visibility.Collapsed;
+            if (!caps.Rainbow && RbEvRainbow.IsChecked == true)
+                RbEvColorSingle.IsChecked = true;
 
-            // 2nd color (3rd is always hidden)
-            PnlEvColor2.Visibility = caps.MaxColors >= 2
-                ? System.Windows.Visibility.Visible
-                : System.Windows.Visibility.Collapsed;
+            RbEvColorDouble.IsEnabled = caps.MaxColors >= 2;
+            if (caps.MaxColors < 2 && RbEvColorDouble.IsChecked == true)
+                RbEvColorSingle.IsChecked = true;
+
+            UpdateEvColorRowVisibility();
+
+            // "Custom" swaps the whole left column (direction/color-mode, all
+            // irrelevant for per-key painting) for the Custom Lighting panel on the
+            // right — see MainWindow.xaml's 2-column Grid comment.
+            bool isCustom = pick.Eff == EverestService.Effect.Custom;
+            PnlEvNormalControls.Visibility = isCustom ? Visibility.Collapsed : Visibility.Visible;
+            PnlEvCustomLighting.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed;
+            // Only touch paint-mode/border-overlay state if RGB & Lighting is actually
+            // the visible section right now — otherwise this can fire during startup
+            // init (restoring a persisted "Custom" effect) while Key Binding/another
+            // section is shown, incorrectly turning the border overlay on underneath
+            // it. MainWindow.SectionNav.cs's ShowEvSection re-syncs correctly whenever
+            // the user actually navigates to/from RGB & Lighting.
+            if (_activeEvSection == PnlSecRgb)
+                SetCustomPaintModeActive(isCustom);
         }
         finally
         {
@@ -2047,6 +2246,8 @@ public partial class MainWindow
 
     private void InitEverestRgbPanel()
     {
+        _evAutoOffTimer = new BacklightIdleTimer(Dispatcher, EvAutoOffTimeout, EvAutoOffWake);
+
         _evRgbSuppress = true;
         try
         {
@@ -2060,6 +2261,7 @@ public partial class MainWindow
             CbEvEffect.SelectedIndex     = 2; // Wave
             SldEvSpeed.Value             = 50;
             SldEvBrightness.Value        = 100;
+            RbEvColorSingle.IsChecked    = true; // default, overridden by LoadEverestRgbFromStore if persisted
 
             LoadEverestRgbFromStore();
             UpdateEvCapabilities();
@@ -2091,32 +2293,126 @@ public partial class MainWindow
             for (int i = 0; i < EvEffectList.Length; i++)
                 if ((byte)EvEffectList[i].Eff == eIdx) { CbEvEffect.SelectedIndex = i; break; }
         }
-        if (IntSetting("rgb.speed")      is int sp && sp is >= 0 and <= 100) SldEvSpeed.Value = sp;
-        // Direction is set by UpdateEvCapabilities (depends on effect);
-        // here we only restore the saved index, applied later if valid.
-        if (IntSetting("rgb.direction")  is int dr && dr >= 0) _evSavedDirIndex = dr;
-        if (IntSetting("rgb.brightness") is int br && br is >= 0 and <= 100) SldEvBrightness.Value = br;
-        if (IntSetting("rgb.rainbow")    is int rb) CkEvRainbow.IsChecked = rb != 0;
-        if (IntSetting("rgb.color1")     is int c1) _evColor1 = c1 & 0xFFFFFF;
-        if (IntSetting("rgb.color2")     is int c2) _evColor2 = c2 & 0xFFFFFF;
-        if (IntSetting("rgb.color3")     is int c3) _evColor3 = c3 & 0xFFFFFF;
-        if (IntSetting("rgb.sync")       is int sy) CkEvSync.IsChecked = sy != 0;
+        if (CbEvEffect.SelectedItem is EvEffectChoice pick)
+            LoadEffectParamsIntoControls(pick.Eff);
+
+        if (IntSetting("rgb.sync") is int sy) CkEvSync.IsChecked = sy != 0;
+
+        CkEvAutoOffEnable.IsChecked = IntSetting("rgb.autoOffEnable") == 1;
+        TxtEvAutoOffSeconds.Text    = (IntSetting("rgb.autoOffSeconds") ?? 60).ToString();
+        EvApplyAutoOffConfig();
     }
 
-    /// <summary>Saves the current panel payload to Settings.</summary>
+    /// <summary>
+    /// Loads one effect's remembered parameters (speed/direction/brightness/color
+    /// mode/colors — keys <c>rgb.{effectByte}.*</c>) into the panel controls, so every
+    /// effect keeps its own settings across switches (user request 2026-07-22: "se vado
+    /// su custom e poi torno su wave ritrovo le stesse impostazioni"). Falls back to
+    /// the pre-per-effect global <c>rgb.*</c> keys (one-time seeding for existing
+    /// installs), then to the panel defaults. Caller is responsible for suppression
+    /// (_evRgbSuppress) and for calling UpdateEvCapabilities afterwards — this only
+    /// sets values. Custom's own state (per-LED colors) lives separately in
+    /// <c>custom.keyColors</c>/<c>custom.sideColors</c> (MainWindow.CustomLighting.cs).
+    /// </summary>
+    private void LoadEffectParamsIntoControls(EverestService.Effect eff)
+    {
+        int? I(string key) =>
+            int.TryParse(_evStore.GetSetting(key), out var v) ? v : null;
+        string p = $"rgb.{(byte)eff}.";
+
+        int speed = I(p + "speed") ?? I("rgb.speed") ?? 50;
+        if (speed is >= 0 and <= 100) SldEvSpeed.Value = speed;
+
+        // Direction is applied by UpdateEvCapabilities (options depend on effect);
+        // here we only restore the saved index, used there if valid.
+        _evSavedDirIndex = I(p + "direction") ?? I("rgb.direction") ?? 0;
+        _evDirIndex      = _evSavedDirIndex;
+
+        int bright = I(p + "brightness") ?? I("rgb.brightness") ?? 100;
+        if (bright is >= 0 and <= 100) SldEvBrightness.Value = bright;
+
+        // Rainbow/Double/Single are one mutually-exclusive radio group — Rainbow
+        // wins if both were somehow persisted true (shouldn't happen going forward).
+        if ((I(p + "rainbow") ?? I("rgb.rainbow") ?? 0) != 0) RbEvRainbow.IsChecked = true;
+        else if ((I(p + "colorDouble") ?? I("rgb.colorDouble") ?? 0) != 0) RbEvColorDouble.IsChecked = true;
+        else RbEvColorSingle.IsChecked = true;
+
+        _evColor1 = (I(p + "color1") ?? I("rgb.color1") ?? _evColor1) & 0xFFFFFF;
+        _evColor2 = (I(p + "color2") ?? I("rgb.color2") ?? _evColor2) & 0xFFFFFF;
+        _evColor3 = (I(p + "color3") ?? I("rgb.color3") ?? _evColor3) & 0xFFFFFF;
+        ApplyColorButton(BtnEvColor1, _evColor1);
+        ApplyColorButton(BtnEvColor2, _evColor2);
+        ApplyColorButton(BtnEvColor3, _evColor3);
+    }
+
+    private void EvApplyAutoOffConfig()
+    {
+        bool enabled = CkEvAutoOffEnable.IsChecked == true;
+        int  seconds = int.TryParse(TxtEvAutoOffSeconds.Text, out int s) ? s : 0;
+        _evAutoOffTimer?.Configure(enabled, seconds);
+    }
+
+    /// <summary>Backlight-off-when-idle timer callbacks. Deliberately do NOT use
+    /// SetMainBrightness/SetBacklight (SDKDLL.dll's on/off toggle): that call was
+    /// suspected of crashing the SDK's internal callback thread on real hardware
+    /// (2026-07-20 report — after auto-off engaged, no further physical key events
+    /// were ever delivered again, meaning RegisterActivity/wake never re-fired;
+    /// see App.xaml.cs's VEH crash-recovery mechanism, which exists precisely
+    /// because SDKDLL.dll is known to crash). Instead, mirror Everest 60's
+    /// approach (Everest60RgbPanel.SetBacklightForcedOff): resend the current
+    /// effect via the same ChangeEffect/SetEffect path already exercised by
+    /// every brightness-slider/effect change, just with brightness forced to 0,
+    /// without touching the persisted brightness setting or the slider itself.</summary>
+    private void EvAutoOffTimeout()
+    {
+        LogEverest("[RGB ] auto-off: resend effect at brightness=0");
+        ApplyCurrentEffect(brightnessOverride: 0);
+        CkEvBacklight.IsChecked = false;
+    }
+
+    private void EvAutoOffWake()
+    {
+        LogEverest("[RGB ] auto-off wake: resend current effect");
+        ApplyCurrentEffect();
+        CkEvBacklight.IsChecked = true;
+    }
+
+    private void CkEvAutoOffEnable_Click(object sender, RoutedEventArgs e)
+    {
+        _evStore.SetSetting("rgb.autoOffEnable", CkEvAutoOffEnable.IsChecked == true ? "1" : "0");
+        EvApplyAutoOffConfig();
+    }
+
+    private void TxtEvAutoOffSeconds_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (!int.TryParse(TxtEvAutoOffSeconds.Text, out int seconds) || seconds < 0)
+        {
+            seconds = 60;
+            TxtEvAutoOffSeconds.Text = seconds.ToString();
+        }
+        _evStore.SetSetting("rgb.autoOffSeconds", seconds.ToString());
+        EvApplyAutoOffConfig();
+    }
+
+    /// <summary>Saves the current panel payload to Settings — the effect-independent
+    /// bits under global keys (<c>rgb.effect</c>/<c>rgb.sync</c>), everything else
+    /// under the selected effect's own <c>rgb.{effectByte}.*</c> namespace (see
+    /// <see cref="LoadEffectParamsIntoControls"/>).</summary>
     private void SaveEverestRgbToStore()
     {
         if (!_evRgbInitialized || _evRgbSuppress) return;
         if (CbEvEffect.SelectedItem is not EvEffectChoice pick) return;
-        _evStore.SetSetting("rgb.effect",     ((byte)pick.Eff).ToString());
-        _evStore.SetSetting("rgb.speed",      ((int)SldEvSpeed.Value).ToString());
-        _evStore.SetSetting("rgb.direction",  _evDirIndex.ToString());
-        _evStore.SetSetting("rgb.brightness", ((int)SldEvBrightness.Value).ToString());
-        _evStore.SetSetting("rgb.color1",     _evColor1.ToString());
-        _evStore.SetSetting("rgb.color2",     _evColor2.ToString());
-        _evStore.SetSetting("rgb.color3",     _evColor3.ToString());
-        _evStore.SetSetting("rgb.sync",       CkEvSync.IsChecked == true ? "1" : "0");
-        _evStore.SetSetting("rgb.rainbow",    CkEvRainbow.IsChecked == true ? "1" : "0");
+        string p = $"rgb.{(byte)pick.Eff}.";
+        _evStore.SetSetting("rgb.effect",      ((byte)pick.Eff).ToString());
+        _evStore.SetSetting(p + "speed",       ((int)SldEvSpeed.Value).ToString());
+        _evStore.SetSetting(p + "direction",   _evDirIndex.ToString());
+        _evStore.SetSetting(p + "brightness",  ((int)SldEvBrightness.Value).ToString());
+        _evStore.SetSetting(p + "color1",      _evColor1.ToString());
+        _evStore.SetSetting(p + "color2",      _evColor2.ToString());
+        _evStore.SetSetting(p + "color3",      _evColor3.ToString());
+        _evStore.SetSetting("rgb.sync",        CkEvSync.IsChecked == true ? "1" : "0");
+        _evStore.SetSetting(p + "rainbow",     RbEvRainbow.IsChecked == true ? "1" : "0");
+        _evStore.SetSetting(p + "colorDouble", RbEvColorDouble.IsChecked == true ? "1" : "0");
     }
 
     // WPF does NOT raise SelectionChanged when re-clicking the already selected item,
@@ -2137,6 +2433,17 @@ public partial class MainWindow
     private void CbEvEffect_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         _evEffectChangedWhileOpen = true;
+        // Restore the newly selected effect's own remembered parameters before
+        // realigning/applying (per-effect memory — the old values were already
+        // saved under the previous effect's namespace on every change). Suppressed:
+        // ApplyCurrentEffect below does the single apply+save.
+        if (_evRgbInitialized && CbEvEffect.SelectedItem is EvEffectChoice pick)
+        {
+            bool prev = _evRgbSuppress;
+            _evRgbSuppress = true;
+            try { LoadEffectParamsIntoControls(pick.Eff); }
+            finally { _evRgbSuppress = prev; }
+        }
         UpdateEvCapabilities();   // realign the controls to the new effect
         ApplyCurrentEffect();
     }
@@ -2153,8 +2460,25 @@ public partial class MainWindow
         ApplyCurrentEffect();
     }
 
-    private void CkEvRainbow_Click(object sender, RoutedEventArgs e) =>
+    /// <summary>Single/Double/Rainbow color mode — one mutually-exclusive radio
+    /// group (GroupName="EvColorMode"), so no manual uncheck logic is needed.</summary>
+    private void RbEvColorMode_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_evRgbSuppress) return;
+        UpdateEvColorRowVisibility();
         ApplyCurrentEffect();
+    }
+
+    /// <summary>Swatch rows follow the selected color mode: hidden entirely
+    /// under Rainbow (colors are ignored), primary-only under Single, both
+    /// under Double.</summary>
+    private void UpdateEvColorRowVisibility()
+    {
+        bool rainbow = RbEvRainbow.IsChecked == true;
+        PnlEvColor1.Visibility = rainbow ? Visibility.Collapsed : Visibility.Visible;
+        PnlEvColor2.Visibility = !rainbow && RbEvColorDouble.IsChecked == true
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     private void SldEvBrightness_ValueChanged(object sender,
         System.Windows.RoutedPropertyChangedEventArgs<double> e)
@@ -2168,18 +2492,9 @@ public partial class MainWindow
         if (sender is not Button btn || btn.Tag is not string tag) return;
         int current = tag switch { "1" => _evColor1, "2" => _evColor2, _ => _evColor3 };
 
-        // WinForms ColorDialog: the one system dialog WPF doesn't have.
-        using var dlg = new System.Windows.Forms.ColorDialog
-        {
-            FullOpen     = true,
-            AnyColor     = true,
-            SolidColorOnly = true,
-            Color        = System.Drawing.Color.FromArgb(
-                (current >> 16) & 0xFF, (current >> 8) & 0xFF, current & 0xFF),
-        };
-        if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+        int? picked = K2.Core.ColorPickerDialog.Pick(this, current);
+        if (picked is not int rgb) return;
 
-        int rgb = (dlg.Color.R << 16) | (dlg.Color.G << 8) | dlg.Color.B;
         switch (tag)
         {
             case "1": _evColor1 = rgb; break;
@@ -2202,16 +2517,17 @@ public partial class MainWindow
         _everest.SetSyncAcrossProfiles(CkEvSync.IsChecked == true);
     }
 
-    private void BtnEvLightOn_Click(object sender, RoutedEventArgs e)
+    private void CkEvBacklight_Click(object sender, RoutedEventArgs e)
     {
         if (!_everest.IsOpen) { LogEverest("[WARN] Everest driver not open"); return; }
-        LogEverest($"[RGB ] SetBacklight(true) -> {_everest.SetBacklight(true)}");
-    }
-
-    private void BtnEvLightOff_Click(object sender, RoutedEventArgs e)
-    {
-        if (!_everest.IsOpen) { LogEverest("[WARN] Everest driver not open"); return; }
-        LogEverest($"[RGB ] SetBacklight(false) -> {_everest.SetBacklight(false)}");
+        bool on = CkEvBacklight.IsChecked == true;
+        LogEverest($"[RGB ] SetBacklight({on}) -> {_everest.SetBacklight(on)}");
+        // Keep the idle timer's own forced-off/countdown state in sync with a
+        // manual toggle — without this, turning the backlight back on here
+        // after an auto-off never restarts the timer (it was Stop()'d in
+        // Timer_Tick and only RegisterActivity/Configure ever call Start()
+        // again), so the backlight would never auto-off a second time.
+        _evAutoOffTimer?.RegisterActivity();
     }
 
     /// <summary>
@@ -2221,7 +2537,7 @@ public partial class MainWindow
     /// [RGB] log lines are diagnostic and go to the event panel so the user
     /// sees what happens without opening K2.App.log.
     /// </summary>
-    private void ApplyCurrentEffect()
+    private void ApplyCurrentEffect(int? brightnessOverride = null)
     {
         // Exit WITHOUT logging if the UI has not finished loading: during
         // InitializeComponent() the Slider raises ValueChanged setting Value=100
@@ -2238,6 +2554,18 @@ public partial class MainWindow
             return;
         }
         var effect = pick.Eff;
+        if (effect == EverestService.Effect.Custom)
+        {
+            // Selecting Custom applies the remembered per-LED colors right away —
+            // all-off if nothing was ever painted (user request 2026-07-22: entering
+            // custom with no saved LEDs must turn everything dark, not keep the
+            // previous effect running). The Custom panel's own Apply button covers
+            // subsequent paint edits (BtnCustomApply_Click, MainWindow.CustomLighting.cs).
+            byte cb = (byte)Math.Clamp(brightnessOverride ?? 100, 0, 100);
+            LogEverest($"[RGB ] Custom selected: applying stored per-LED colors (bright={cb})");
+            ApplyCustomColorsToDevice(cb);
+            return;
+        }
         var caps   = CapsFor(effect);
 
         // Speed: slider already snaps to 0/25/50/75/100 (scale 0..100, 0=slow, 100=fast).
@@ -2250,14 +2578,15 @@ public partial class MainWindow
         if (caps.DirCodes.Length > 0)
             dirByte = caps.DirCodes[Math.Clamp(_evDirIndex, 0, caps.DirCodes.Length - 1)];
 
-        bool rainbow    = caps.Rainbow && CkEvRainbow.IsChecked == true;
-        int  colorCount = rainbow ? 1 : caps.MaxColors;   // rainbow ignores color pickers
-        int  bright     = (int)SldEvBrightness.Value;
+        bool rainbow    = caps.Rainbow && RbEvRainbow.IsChecked == true;
+        bool useDouble  = !rainbow && caps.MaxColors >= 2 && RbEvColorDouble.IsChecked == true;
+        int  colorCount = rainbow ? 1 : (useDouble ? caps.MaxColors : 1);
+        int  bright     = brightnessOverride ?? (int)SldEvBrightness.Value;
 
         (byte r, byte g, byte b) C(int rgb) =>
             ((byte)((rgb >> 16) & 0xFF), (byte)((rgb >> 8) & 0xFF), (byte)(rgb & 0xFF));
         (byte r, byte g, byte b)? secondary = null;
-        if (caps.MaxColors >= 2) secondary = C(_evColor2);
+        if (useDouble) secondary = C(_evColor2);
 
         LogEverest($"[RGB ] apply eff={effect} speedByte={speedByte} dir={dirByte} rainbow={rainbow} " +
                    $"colors={colorCount} bright={bright}% c1=#{_evColor1:X6} c2=#{_evColor2:X6}");

@@ -113,8 +113,6 @@ public sealed class EverestService : IDisposable
 
     /// <summary>
     /// Opens via the native engine (Phase 1, see comment on the <see cref="_nativePad"/> field).
-    /// SDKDLL.dll is NEVER loaded on this path: it eliminates at the root the
-    /// crash from its timer thread for everything the native engine covers.
     /// </summary>
     private bool OpenNative()
     {
@@ -129,10 +127,40 @@ public sealed class EverestService : IDisposable
             var pad = new EverestHidNative.Pad(path, App.WriteLog);
             pad.Open();
             pad.NumpadButtonChanged += (btn, pressed) =>
+            {
                 NumpadButtonEvent?.Invoke(this, (btn, pressed));
+                // Claim the press like Base Camp does, so the firmware does NOT also run
+                // the key's own default action (see Pad.AckKeyPress). D1-D4's wMatrix
+                // codes are 71/80/89/98 (steps of 9 — straight from BaseCamp.db's
+                // EverestKeyBidings touch rows, confirmed by the 11 02 acks in both BC
+                // captures). Dispatched to the pool: this callback runs on the Pad's own
+                // reader thread, and AckKeyPress waits for responses that very thread
+                // must dequeue — calling it inline would stall the reader until timeout.
+                if (!pressed)
+                {
+                    byte wMatrix = (byte)(71 + 9 * btn);
+                    int profile = _cachedProfile;
+                    Task.Run(() => { try { pad.AckKeyPress(profile, wMatrix); } catch { /* best effort */ } });
+                }
+            };
             _nativePad = pad;
             _opened = true;
-            App.WriteLog("[Everest.Open] (native) OK — SDKDLL.dll not loaded");
+            App.WriteLog("[Everest.Open] (native) OK");
+
+            // Run Base Camp's own post-open init through SDKDLL even on the native path.
+            // Rationale (2026-07-19): the display-key reset sequence, replicated byte-for-
+            // byte from a real BC capture (evprofiles.pcapng) with identical pacing and
+            // firmware echoes (verified against K2's own capture, evdelete.pcapng), is
+            // acked by the firmware but visibly IGNORED — while the same bytes work from
+            // BC. Both BC captures start with Base Camp already running, so its session
+            // init has never been seen on the wire; the one known candidate for the
+            // missing device-side state is exactly this init (its doc comment already
+            // records that ChangeEffect is silently ignored without it). SDKDLL calls
+            // work without OpenUSBDriver (StartPicUpdate/GetExtendInfo already prove it
+            // in this very mode), and the DLL gets loaded ~3s later anyway by the first
+            // GetExtendInfo poll — so this adds no new crash surface, it only front-loads
+            // the same calls BC makes.
+            InitDllState();
             return true;
         }
         catch (Exception ex)
@@ -342,12 +370,23 @@ public sealed class EverestService : IDisposable
     }
 
     /// <summary>
-    /// Switches the keyboard's active profile. The second native parameter of
-    /// <c>SwitchProfile</c> is not confirmed by metadata: since the keyboard is
-    /// single-device we pass 0. To be verified on hardware.
+    /// Switches the keyboard's active profile. In native-engine mode this sends the
+    /// captured wire command directly (see <see cref="EverestHidNative.Pad.SwitchProfile"/>
+    /// — evprofiles.pcapng, 2026-07-19) instead of going through SDKDLL, whose
+    /// SwitchProfile returned True in this mode without a verifiable hardware effect
+    /// (no OpenUSBDriver state). SDKDLL fallback kept for the non-native path; its
+    /// second parameter is unconfirmed by metadata, we pass 0.
     /// </summary>
     public bool SwitchProfile(int profile)
     {
+        if (_nativePad is not null)
+        {
+            bool nok = _nativePad.SwitchProfile(profile);
+            if (nok) _cachedProfile = profile;   // keeps AckKeyPress's profile byte honest
+            App.WriteLog($"[Everest.SwitchProfile] (native) profile={profile} -> {nok}");
+            return nok;
+        }
+
         lock (_sdkLock)
         try
         {
@@ -418,6 +457,12 @@ public sealed class EverestService : IDisposable
         /// <summary>Matrix variant: same firmware index (9) but with
         /// byRandColor=16 → random vertical lines of color 2.</summary>
         Matrix2   = 200,
+        /// <summary>Per-key custom lighting (paint mode) — UI-only selection in
+        /// CbEvEffect, never sent through <see cref="SetEffect"/>: MainWindow.
+        /// ApplyCurrentEffect short-circuits on this value and shows the Custom
+        /// Lighting panel instead (a separate raw-HID apply path, see
+        /// MainWindow.CustomLighting.cs's use of ApplyEverestCustomLighting).</summary>
+        Custom    = (byte)EverestSdkNative.EffectIndex.Custom,
     }
 
     /// <summary>Effect speed.</summary>
@@ -826,6 +871,7 @@ public sealed class EverestService : IDisposable
     /// </summary>
     public bool EnableColorStream(int value = 10)
     {
+        lock (_sdkLock)
         try
         {
             bool ok = EverestSdkNative.SetVolumeInfo(value);
@@ -842,6 +888,7 @@ public sealed class EverestService : IDisposable
     /// <summary>Turns the backlight on/off ("main" brightness).</summary>
     public bool SetBacklight(bool on)
     {
+        lock (_sdkLock)
         try
         {
             bool ok = EverestSdkNative.SetMainBrightness(on);
@@ -954,6 +1001,39 @@ public sealed class EverestService : IDisposable
     }
 
     /// <summary>
+    /// Writes a display key's action binding into the firmware, flipping the key to
+    /// "custom" mode so its built-in default action stops firing on press — see
+    /// <see cref="EverestHidNative.Pad.WriteDisplayKeyBinding"/>. Only meaningful in
+    /// native-engine mode; K2 action types the firmware can't express are written as a
+    /// synthetic type-01 marker (suppression is the goal, K2 executes the action itself).
+    /// </summary>
+    public bool WriteNumpadBinding(int keyIndex, string actionType, string? actionValue)
+    {
+        if (_nativePad is null) return false;
+        byte type;
+        string payload;
+        if (string.Equals(actionType, "exec", StringComparison.Ordinal))
+        {
+            type = 0x01; payload = actionValue ?? "";
+        }
+        else if (string.Equals(actionType, "url", StringComparison.Ordinal)
+                 && actionValue?.StartsWith("http", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            type = 0x02; payload = actionValue;
+        }
+        else
+        {
+            type = 0x01; payload = "K2:" + actionType;   // synthetic — see doc comment
+        }
+        try { return _nativePad.WriteDisplayKeyBinding(keyIndex, type, payload); }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.WriteNumpadBinding] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Uploads an image to a numpad display key (square format 72×72).
     /// </summary>
     /// <param name="imagePathOrBase64">Path or base64 string.</param>
@@ -978,6 +1058,43 @@ public sealed class EverestService : IDisposable
         catch (Exception ex)
         {
             App.WriteLog("[Everest.UploadNumpadImage] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Clears a numpad display key's picture. In native-engine mode this restores the
+    /// FACTORY-DEFAULT artwork with the exact reset sequence real Base Camp sends when
+    /// deleting an icon (see <see cref="EverestHidNative.Pad.ResetDisplayKeyPic"/> —
+    /// the 13 42 reset command addresses the target profile's picture slots directly,
+    /// one bitmask field per profile). Non-native fallback: upload a solid-black 72×72
+    /// image (no SDKDLL call exists to blank a picture slot).
+    /// </summary>
+    /// <param name="keyIndex">Display key index (0-3).</param>
+    /// <param name="picSlot">Firmware PROFILE number (1-5) whose picture slot to clear.</param>
+    public bool ClearNumpadImage(int keyIndex, byte picSlot)
+    {
+        if (_nativePad is not null)
+        {
+            bool nok = _nativePad.ResetDisplayKeyPic(keyIndex, picSlot);
+            App.WriteLog($"[Everest.ClearNumpadImage] (native reset) key={keyIndex} profile={picSlot} -> {nok}");
+            return nok;
+        }
+
+        lock (_sdkLock)
+        try
+        {
+            using var black = new System.Drawing.Bitmap(72, 72);
+            using (var g = System.Drawing.Graphics.FromImage(black))
+                g.Clear(System.Drawing.Color.Black);
+            bool ok = EverestImageUploader.UploadBitmap(
+                black, EverestImageUploader.PicTarget.NumpadSquare, picSlot, (byte)keyIndex);
+            App.WriteLog($"[Everest.ClearNumpadImage] key={keyIndex} slot={picSlot} -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.ClearNumpadImage] threw: " + ex);
             return false;
         }
     }
@@ -1233,6 +1350,67 @@ public sealed class EverestService : IDisposable
         catch (Exception ex)
         {
             App.WriteLog("[Everest.SetCustomEffect] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Sends the 45 border ("side") LED colors only — raw HID, separate channel from
+    /// <see cref="SetCustomEffect"/> (SDKDLL.dll's struct never carried these, see
+    /// <see cref="EverestSideLedProtocol"/>). Prefer <see cref="ApplyEverestCustomLighting"/>
+    /// when also sending keycap colors in the same action (avoids a double persist-to-
+    /// flash write). Only available in native-engine mode (always on, see
+    /// <see cref="K2.Core.AppSettings.EverestNativeEngine"/>) — returns false if the
+    /// native pad isn't open. <paramref name="wireColors"/> indexed 0-44 by WIRE index,
+    /// 0xRRGGBB per entry; <paramref name="persist"/> writes to flash slot 6 afterward.
+    /// </summary>
+    public bool SetSideLedColors(int[] wireColors, byte brightness = 0xFF, bool persist = true)
+    {
+        if (_nativePad is null) return false;
+        try
+        {
+            bool ok = _nativePad.EnableCustomLighting(brightness);
+            ok &= _nativePad.SendSideLedColors(wireColors, brightness);
+            if (persist) ok &= _nativePad.PersistCustomLighting();
+            App.WriteLog($"[Everest.SetSideLedColors] persist={persist} -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.SetSideLedColors] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Sends BOTH the 126 keycap colors and the 45 border colors in one raw-HID action,
+    /// replicating Base Camp's own apply byte-for-byte (2026-07-22 captures): enable
+    /// (<c>14 2C 0A</c>, brightness 0-100) → zone-02 switch + 7 keycap pages → zone-05
+    /// switch + 3 ring pages → persist once. Replaces the SDKDLL.dll
+    /// <see cref="SetCustomEffect"/> path, which produced NO wire traffic at all
+    /// (evmax_fillall_k2.pcapng). <paramref name="keycapWireColors"/> indexed 0-132
+    /// (only 0-125 meaningful) in the LedMatrixMapping index domain —
+    /// capture-confirmed to be the wire position domain too;
+    /// <paramref name="sideWireColors"/> indexed 0-44 — both 0xRRGGBB.
+    /// <paramref name="brightness"/> is 0-100 (keycap pages; the ring pages keep 0xFF
+    /// like Base Camp does).
+    /// </summary>
+    public bool ApplyEverestCustomLighting(int[] keycapWireColors, int[] sideWireColors,
+                                            byte brightness = 100, bool persist = true)
+    {
+        if (_nativePad is null) return false;
+        try
+        {
+            bool ok = _nativePad.EnableCustomLighting(brightness);
+            ok &= _nativePad.SendKeycapColors(keycapWireColors, brightness);
+            ok &= _nativePad.SendSideLedColors(sideWireColors);
+            if (persist) ok &= _nativePad.PersistCustomLighting();
+            App.WriteLog($"[Everest.ApplyEverestCustomLighting] persist={persist} -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.ApplyEverestCustomLighting] threw: " + ex);
             return false;
         }
     }

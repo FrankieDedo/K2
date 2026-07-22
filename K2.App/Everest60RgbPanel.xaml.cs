@@ -44,6 +44,12 @@ public partial class Everest60RgbPanel : UserControl
     private Func<int>? _ev60Slot;
     private int CurrentSlot => _ev60Slot?.Invoke() ?? 1;
 
+    /// <summary>Which of the three mutually-exclusive lighting modes was last
+    /// sent to hardware (mirrors Ev60PersistLighting's activeMode tag) — used
+    /// by <see cref="SetBacklightForcedOff"/> to know what to resend on wake.</summary>
+    private string _ev60ActiveMode = "preset";
+    private bool _ev60BacklightForcedOff;
+
     public Everest60RgbPanel()
     {
         InitializeComponent();
@@ -118,17 +124,25 @@ public partial class Everest60RgbPanel : UserControl
             CbEv60Effect.SelectedIndex = 2; // Wave, mirrors Everest Max's default
 
             SldEv60Speed.Value = 50;
+            RbEv60ColorSingle.IsChecked = true; // default, overridden by Ev60ReloadProfile if persisted
 
             UpdateEv60Capabilities();
             ApplyColorButton(BtnEv60Color1, _ev60Color1);
             ApplyColorButton(BtnEv60Color2, _ev60Color2);
             ApplyColorButton(BtnEv60SideColor, _ev60SideColor);
+
+            // Backlight auto-off — moved here from MainWindow's Settings panel
+            // (user request 2026-07-21), same "settings.*" keys as before so
+            // existing saved values keep working.
+            CkEv60AutoOffEnable.IsChecked = _ev60Store.GetSetting("settings.autoOffEnable") == "1";
+            TxtEv60AutoOffSeconds.Text = int.TryParse(_ev60Store.GetSetting("settings.autoOffSeconds"), out var aoS) ? aoS.ToString() : "60";
         }
         finally
         {
             _ev60Suppress = false;
         }
         _ev60Initialized = true;
+        RaiseAutoOffConfigChanged();
     }
 
     internal void SetConnected(bool connected) => _ev60Connected = connected;
@@ -169,10 +183,22 @@ public partial class Everest60RgbPanel : UserControl
                 PnlEv60Direction.Visibility = Visibility.Collapsed;
             }
 
-            CkEv60Rainbow.IsEnabled = caps.Rainbow;
-            if (!caps.Rainbow) CkEv60Rainbow.IsChecked = false;
+            // Color mode: Single/Double/Rainbow are one mutually-exclusive radio
+            // group now (GroupName="Ev60ColorMode") — WPF's RadioButton group
+            // handles the mutual exclusion, no manual uncheck logic needed.
+            // Rainbow/Double are only selectable when the effect supports them;
+            // falls back to Single otherwise (same pattern as the
+            // Direction/Speed Collapsed-when-unsupported gating above).
+            RbEv60Rainbow.IsEnabled = caps.Rainbow;
+            RbEv60Rainbow.Visibility = caps.Rainbow ? Visibility.Visible : Visibility.Collapsed;
+            if (!caps.Rainbow && RbEv60Rainbow.IsChecked == true)
+                RbEv60ColorSingle.IsChecked = true;
 
-            PnlEv60Color2.Visibility = caps.MaxColors >= 2 ? Visibility.Visible : Visibility.Collapsed;
+            RbEv60ColorDouble.IsEnabled = caps.MaxColors >= 2;
+            if (caps.MaxColors < 2 && RbEv60ColorDouble.IsChecked == true)
+                RbEv60ColorSingle.IsChecked = true;
+
+            UpdateEv60ColorRowVisibility();
         }
         finally
         {
@@ -203,7 +229,35 @@ public partial class Everest60RgbPanel : UserControl
         ApplyCurrentEv60Effect();
     }
 
-    private void CkEv60Rainbow_Click(object sender, RoutedEventArgs e) => ApplyCurrentEv60Effect();
+    /// <summary>Manual backlight switch — reuses the same mechanism as the
+    /// auto-off idle timer (SetBacklightForcedOff): resends the current
+    /// mode's "Off" or active state directly, no real firmware on/off
+    /// toggle exists on this device.</summary>
+    private void CkEv60Backlight_Click(object sender, RoutedEventArgs e)
+    {
+        SetBacklightForcedOff(CkEv60Backlight.IsChecked != true);
+        BacklightManuallyToggled?.Invoke();
+    }
+
+    /// <summary>Single/Double/Rainbow color mode — one mutually-exclusive radio
+    /// group (GroupName="Ev60ColorMode"), so no manual uncheck logic is needed.</summary>
+    private void RbEv60ColorMode_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_ev60Suppress) return;
+        UpdateEv60ColorRowVisibility();
+        ApplyCurrentEv60Effect();
+    }
+
+    /// <summary>Swatch rows follow the selected color mode: hidden entirely
+    /// under Rainbow (colors are ignored), primary-only under Single, both
+    /// under Double.</summary>
+    private void UpdateEv60ColorRowVisibility()
+    {
+        bool rainbow = RbEv60Rainbow.IsChecked == true;
+        PnlEv60Color1.Visibility = rainbow ? Visibility.Collapsed : Visibility.Visible;
+        PnlEv60Color2.Visibility = !rainbow && RbEv60ColorDouble.IsChecked == true
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     private void BtnEv60Color_Click(object sender, RoutedEventArgs e)
     {
@@ -232,9 +286,10 @@ public partial class Everest60RgbPanel : UserControl
     /// so a profile edited with the keyboard unplugged is still saved.</summary>
     private void Ev60PersistLighting(string activeMode)
     {
+        _ev60ActiveMode = activeMode;
         if (_ev60Store is null) return;
         var eff = CbEv60Effect.SelectedItem is Ev60EffectChoice pick ? pick.Eff : Everest60Protocol.Effect.Off;
-        bool rainbow = CkEv60Rainbow.IsChecked == true;
+        bool rainbow = RbEv60Rainbow.IsChecked == true;
         int speedPct = (int)SldEv60Speed.Value;
         int customBrightPct = (int)SldEv60CustomBrightness.Value;
         var customDict = new Dictionary<int, int>();
@@ -243,7 +298,8 @@ public partial class Everest60RgbPanel : UserControl
 
         _ev60Store.SaveLighting(CurrentSlot, new Ev60LightingRecord(
             (int)eff, _ev60Color1, _ev60Color2, speedPct, _ev60DirIndex, rainbow,
-            Brightness, _ev60SideColor, customBrightPct, activeMode, customDict));
+            Brightness, _ev60SideColor, customBrightPct, activeMode, customDict,
+            ColorDouble: RbEv60ColorDouble.IsChecked == true));
     }
 
     /// <summary>Reads the panel and sends the effect to the firmware. No-op
@@ -263,7 +319,7 @@ public partial class Everest60RgbPanel : UserControl
         var caps = CapsFor(pick.Eff);
         int speedPct = (int)SldEv60Speed.Value;
         int brightPct = (int)Brightness;
-        bool rainbow = caps.Rainbow && CkEv60Rainbow.IsChecked == true;
+        bool rainbow = caps.Rainbow && RbEv60Rainbow.IsChecked == true;
 
         byte direction = caps.Directions.Length > 0
             ? caps.Directions[Math.Clamp(_ev60DirIndex, 0, caps.Directions.Length - 1)].Code
@@ -271,13 +327,42 @@ public partial class Everest60RgbPanel : UserControl
 
         (byte r, byte g, byte b) C(int rgb) =>
             ((byte)((rgb >> 16) & 0xFF), (byte)((rgb >> 8) & 0xFF), (byte)(rgb & 0xFF));
-        (byte, byte, byte)? secondary = caps.MaxColors >= 2 && !rainbow ? C(_ev60Color2) : null;
+        bool useDouble = !rainbow && caps.MaxColors >= 2 && RbEv60ColorDouble.IsChecked == true;
+        (byte, byte, byte)? secondary = useDouble ? C(_ev60Color2) : null;
 
         _log($"[RGB ] apply eff={pick.Eff} speed={speedPct}% bright={brightPct}% " +
              $"rainbow={rainbow} dir=0x{direction:X2} c1=#{_ev60Color1:X6}" +
              (secondary.HasValue ? $" c2=#{_ev60Color2:X6}" : ""));
         bool ok = _ev60.SetEffect(pick.Eff, speedPct, brightPct, C(_ev60Color1), secondary, rainbow, direction);
         _log($"[RGB ] SetEffect -> {ok}");
+    }
+
+    /// <summary>Backlight-off-when-idle timer callback (see MainWindow.Everest60.cs's
+    /// BacklightIdleTimer). Sends the "Off" preset directly to hardware without
+    /// touching persisted state or <see cref="_ev60ActiveMode"/> (so whichever of
+    /// preset/side/custom was actually active survives); waking resends that
+    /// same mode via the exact dispatch <see cref="Ev60ReloadProfile"/> uses.</summary>
+    internal void SetBacklightForcedOff(bool off)
+    {
+        if (off == _ev60BacklightForcedOff) return;
+        _ev60BacklightForcedOff = off;
+        CkEv60Backlight.IsChecked = !off;
+        if (!_ev60Connected) return;
+
+        if (off)
+        {
+            bool ok = _ev60.SetEffect(Everest60Protocol.Effect.Off, 0, 0, (0, 0, 0), null, false, 0);
+            _log($"[RGB ] auto-off: SetEffect(Off) -> {ok}");
+            return;
+        }
+
+        _log($"[RGB ] auto-off wake: resend active mode -> {_ev60ActiveMode}");
+        switch (_ev60ActiveMode)
+        {
+            case "side":   BtnEv60SideApply_Click(this, new RoutedEventArgs()); break;
+            case "custom": BtnEv60CustomApply_Click(this, new RoutedEventArgs()); break;
+            default:       ApplyCurrentEv60Effect(); break;
+        }
     }
 
     // ------------------------------------------------------------
@@ -331,6 +416,46 @@ public partial class Everest60RgbPanel : UserControl
     /// <summary>Raised when "Clear" is pressed, so MainWindow can reset the
     /// on-screen key Buttons it owns.</summary>
     internal event Action? CustomKeysCleared;
+
+    /// <summary>Raised on every manual click of the backlight switch, so
+    /// MainWindow can keep its BacklightIdleTimer's countdown/forced-off state
+    /// in sync (owned there, not here — see InitEverest60Module's doc comment
+    /// on _ev60AutoOffTimer). Without this, re-enabling the backlight here
+    /// after an auto-off never restarts the timer, so it would never auto-off
+    /// a second time.</summary>
+    internal event Action? BacklightManuallyToggled;
+
+    /// <summary>Raised whenever the backlight auto-off checkbox/seconds change
+    /// (including once from <see cref="Init"/>), so MainWindow can push the
+    /// new config into its own <c>_ev60AutoOffTimer</c> (owned there, not
+    /// here — same split as <see cref="BacklightManuallyToggled"/>).</summary>
+    internal event Action<bool, int>? AutoOffConfigChanged;
+
+    private void RaiseAutoOffConfigChanged()
+    {
+        bool enabled = CkEv60AutoOffEnable.IsChecked == true;
+        int seconds = int.TryParse(TxtEv60AutoOffSeconds.Text, out int s) ? s : 0;
+        AutoOffConfigChanged?.Invoke(enabled, seconds);
+    }
+
+    private void CkEv60AutoOffEnable_Click(object sender, RoutedEventArgs e)
+    {
+        if (_ev60Suppress) return;
+        _ev60Store?.SetSetting("settings.autoOffEnable", CkEv60AutoOffEnable.IsChecked == true ? "1" : "0");
+        RaiseAutoOffConfigChanged();
+    }
+
+    private void TxtEv60AutoOffSeconds_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_ev60Suppress) return;
+        if (!int.TryParse(TxtEv60AutoOffSeconds.Text, out int seconds) || seconds < 0)
+        {
+            seconds = 60;
+            TxtEv60AutoOffSeconds.Text = seconds.ToString();
+        }
+        _ev60Store?.SetSetting("settings.autoOffSeconds", seconds.ToString());
+        RaiseAutoOffConfigChanged();
+    }
 
     /// <summary>Called by MainWindow's Everest 60 keyboard-key click handler.
     /// Returns true (and the applied color) if paint mode is active.</summary>
@@ -460,7 +585,12 @@ public partial class Everest60RgbPanel : UserControl
             SldEv60Speed.Value = lighting.SpeedPct;
             if (LblEv60Speed != null) LblEv60Speed.Text = $"{lighting.SpeedPct}%";
 
-            if (CkEv60Rainbow.IsEnabled) CkEv60Rainbow.IsChecked = lighting.Rainbow;
+            // Single/Double/Rainbow are one mutually-exclusive radio group —
+            // Rainbow wins if both were somehow persisted true.
+            if (RbEv60Rainbow.IsEnabled && lighting.Rainbow) RbEv60Rainbow.IsChecked = true;
+            else if (RbEv60ColorDouble.IsEnabled && lighting.ColorDouble) RbEv60ColorDouble.IsChecked = true;
+            else RbEv60ColorSingle.IsChecked = true;
+            UpdateEv60ColorRowVisibility();
 
             Brightness = lighting.Brightness;
 

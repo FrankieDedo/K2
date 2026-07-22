@@ -87,11 +87,11 @@
 
         <WrapPanel Grid.Row="10" Orientation="Horizontal">
             <TextBlock Text="{loc:Get txt_bg_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <Button x:Name="BtnBgColor" Width="40" Height="22"
+            <Button x:Name="BtnBgColor" Width="30" Height="30"
                     Background="#1A1A1E" BorderThickness="2" BorderBrush="#3A3A40"
-                    Click="BtnBgColor_Click" Margin="0,0,16,0"/>
+                    Click="BtnBgColor_Click" Margin="0,0,10,0"/>
             <TextBlock Text="{loc:Get txt_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <Button x:Name="BtnTextColor" Width="40" Height="22"
+            <Button x:Name="BtnTextColor" Width="30" Height="30"
                     Background="White" BorderThickness="2" BorderBrush="#3A3A40"
                     Click="BtnTextColor_Click"/>
         </WrapPanel>

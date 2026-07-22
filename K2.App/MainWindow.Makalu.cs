@@ -12,6 +12,7 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using K2.App.Services;
 using K2.Core;
+using K2.Core.Services;
 
 namespace K2.App;
 
@@ -80,6 +81,9 @@ public partial class MainWindow
 
     private sealed record MkProfileItem(int Slot, string Label)
     {
+        // Fixed 5 slots, no "+ New profile" row (see class doc comment above) — always real.
+        public bool IsNew => false;
+        public bool IsRealProfile => true;
         public override string ToString() => Label;
     }
 
@@ -94,13 +98,35 @@ public partial class MainWindow
             var items = Enumerable.Range(1, 5)
                 .Select(s => new MkProfileItem(s, _mkStore.GetProfileName(s) ?? Loc.Get("profile_n", s)))
                 .ToList();
-            LstMkProfile.DisplayMemberPath = nameof(MkProfileItem.Label);
             LstMkProfile.ItemsSource = items;
 
             int current = _mkStore.GetCurrentProfile();
             LstMkProfile.SelectedItem = items.Find(x => x.Slot == current) ?? items[0];
+
+            MkRegisterProfileLaunchWatchers();
         }
         finally { _mkSuppressProfile = false; }
+    }
+
+    /// <summary>Registers this device's profiles with K2.Core.Services.ProfileLaunchWatcher
+    /// — see DpRegisterProfileLaunchWatchers (MainWindow.DisplayPad.cs) for the shared
+    /// pattern/rationale. Fixed 5 slots, same as Everest 60.</summary>
+    private void MkRegisterProfileLaunchWatchers()
+    {
+        const string scope = "Mk:";
+        var currentKeys = new HashSet<string>();
+        for (int slot = 1; slot <= 5; slot++)
+        {
+            string? exe = _mkStore.GetSetting($"profile.{slot}.launchExe");
+            if (string.IsNullOrWhiteSpace(exe)) continue;
+            string key = scope + slot;
+            currentKeys.Add(key);
+            int capturedSlot = slot;
+            ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe,
+                () => MkSwitchProfileTo(capturedSlot));
+        }
+        foreach (var staleKey in ProfileLaunchWatcher.Instance.KeysWithPrefix(scope).Except(currentKeys))
+            ProfileLaunchWatcher.Instance.RemoveRegistration(staleKey);
     }
 
     private void MkSelectProfileSlot(int slot)
@@ -216,6 +242,53 @@ public partial class MainWindow
         MkReloadProfile(slot);
     }
 
+    /// <summary>Gear-icon popup for a Makalu profile row (see ProfileGear_Click in
+    /// MainWindow.xaml.cs). Fixed 5 slots, no "last profile" guard — same as
+    /// <see cref="BtnMkDeleteProfile_Click"/>, "delete" just wipes the slot in place.
+    /// Also links an executable whose launch auto-switches to this profile (see
+    /// K2.Core.Services.ProfileLaunchWatcher, registered from <see cref="MkRefreshProfiles"/>).</summary>
+    private void MkShowProfileGear(MkProfileItem pi)
+    {
+        string currentName = _mkStore.GetProfileName(pi.Slot) ?? Loc.Get("profile_n", pi.Slot);
+        string currentExe = _mkStore.GetSetting($"profile.{pi.Slot}.launchExe") ?? "";
+        var dlg = new ProfileSettingsDialog(currentName, currentExe) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+
+        if (dlg.DeleteRequested)
+        {
+            var res = MessageBox.Show(
+                Loc.Get("delete_profile_confirm", currentName),
+                Loc.Get("delete_profile"),
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning);
+            if (res != MessageBoxResult.OK) return;
+            _mkStore.ClearProfile(pi.Slot);
+            _mkStore.SetSetting($"profile.{pi.Slot}.launchExe", "");
+            LogMakalu($"[UI ] Makalu profile {pi.Slot} deleted (gear).");
+            MkRefreshProfiles();
+            MkSelectProfileSlot(pi.Slot);
+            MkReloadProfile(pi.Slot);
+            return;
+        }
+
+        _mkStore.SetProfileName(pi.Slot, dlg.ProfileName);
+        _mkStore.SetSetting($"profile.{pi.Slot}.launchExe", dlg.ExePath);
+        LogMakalu($"[UI ] Makalu profile {pi.Slot} settings updated (gear).");
+        MkRefreshProfiles();
+        MkSelectProfileSlot(pi.Slot);
+    }
+
+    /// <summary>Switches to the given Makalu profile slot outright — mirrors the other
+    /// devices' SwitchProfile(target) but Makalu has no IActionHost/target-string action
+    /// (see the architectural note atop this file), so this is a direct slot setter, used
+    /// only by K2.Core.Services.ProfileLaunchWatcher's launch-detection callback.</summary>
+    private void MkSwitchProfileTo(int slot)
+    {
+        _mkStore.SetCurrentProfile(slot);
+        MkSelectProfileSlot(slot);
+        MkReloadProfile(slot);
+    }
+
     /// <summary>Resets the currently selected profile's button remap, lighting, DPI and
     /// device settings back to K2's defaults and re-applies them to the mouse if
     /// connected (see MakaluRgbSettingsPanel.RestoreDefaults / MakaluDpiRemapPanel.
@@ -294,6 +367,26 @@ public partial class MainWindow
         if (MessageBox.Show(this, sb.ToString(), "Import from Base Camp",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
+
+        // Pre-read every profile's data BEFORE wiping anything: this import is
+        // destructive (replace, not append), so a corrupt/locked Base Camp DB must surface
+        // while the existing K2 profiles are still intact — not after they're gone.
+        try
+        {
+            foreach (var p in allProfiles)
+            {
+                BaseCampDbImporter.ReadMakaluMouseKeyBindings(dbPath, p.ProfileId);
+                BaseCampDbImporter.ReadMakaluMouseLighting(dbPath, p.ProfileId);
+                BaseCampDbImporter.ReadMakaluMouseSettings(dbPath, p.ProfileId);
+            }
+        }
+        catch (Exception ex)
+        {
+            LogMakalu($"[IMP-BC] Pre-read failed, aborting before wipe: {ex.Message}");
+            MessageBox.Show(this, Loc.Get("bc_import_read_failed", ex.Message),
+                "Import from Base Camp", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
 
         // Wipe: replace, don't append. Makalu always has 5 fixed K2-side slots (no
         // firmware profile concept — see the "Profile management" doc comment above).

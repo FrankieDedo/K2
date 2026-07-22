@@ -53,7 +53,11 @@ internal static class BaseCampProcessGuard
                 try
                 {
                     log?.Invoke($"[DpNative] killing Base Camp worker: {p.ProcessName} (pid {p.Id})");
-                    p.Kill(entireProcessTree: true);
+                    // NO tree kill: apps launched from a pad key while Base Camp was in
+                    // control (e.g. a "Run Program" Steam key) are children of the worker
+                    // and must survive it. Every real Base Camp process is matched by name
+                    // in this same loop, so nothing of Base Camp's is left behind.
+                    p.Kill();
                     p.WaitForExit(2000);
                     killed++;
                 }
@@ -94,7 +98,12 @@ internal static class BaseCampProcessGuard
                 try
                 {
                     log?.Invoke($"[AutoStop] killing Base Camp process: {name} (pid {p.Id})");
-                    p.Kill(entireProcessTree: true);
+                    // NO tree kill (confirmed 2026-07-19: it was closing Steam). Apps the
+                    // user launched from a pad key while Base Camp was in control are
+                    // children of these processes; killing the tree took them down too.
+                    // All actual Base Camp processes match Needles by name and are killed
+                    // individually by this loop anyway.
+                    p.Kill();
                     p.WaitForExit(2000);
                     killed++;
                 }

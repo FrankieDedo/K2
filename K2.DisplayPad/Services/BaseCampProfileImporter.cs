@@ -189,7 +189,7 @@ public sealed class BaseCampProfileImporter
             case "Keyboard Shortcuts":
                 return string.IsNullOrEmpty(fv) ? (null,null,ft+" without FunctionValue") : ("keys", fv, null);
 
-            case "OS Commands":   return ("oscmd",  string.IsNullOrEmpty(sft) ? fv : sft, null);
+            case "OS Commands":   return ("oscmd",  ActionTypeHelper.NormalizeOsCommand(string.IsNullOrEmpty(sft) ? fv : sft), null);
             case "Media":         return ("media",  string.IsNullOrEmpty(sft) ? fv : sft, null);
             case "Mouse":         return ("mouse",  string.IsNullOrEmpty(sft) ? fv : sft, null);
             case "Multi Action":  return ("multi",  fv, null); // payload = JSON array

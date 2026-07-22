@@ -88,14 +88,10 @@ public sealed class MacroPadKey : INotifyPropertyChanged
         }
     }
 
-    private string ActionSummary => _actionType switch
-    {
-        "keys"  => _actionValue ?? _actionType!,
-        "exec"  => System.IO.Path.GetFileName(_actionValue ?? _actionType!),
-        "media" => _actionValue ?? _actionType!,
-        "macro" => ActionTypeHelper.MacroSummary(_actionValue),
-        _       => ActionTypeHelper.IsUnrecognized(_actionType) ? Loc.Get("act_unrecognized") : _actionType ?? "",
-    };
+    /// <summary>Mirrors DisplayPadKey.ActionSummary/EverestKey.ActionSummary — every action
+    /// type must resolve to something meaningful (e.g. "oscmd" showing the chosen system
+    /// command name, not the raw tag; user report 2026-07-19).</summary>
+    private string ActionSummary => ActionTypeHelper.Summary(_actionType, _actionValue);
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnChanged([CallerMemberName] string? name = null) =>
