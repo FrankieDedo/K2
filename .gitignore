@@ -3,6 +3,9 @@ bin/
 obj/
 *.user
 
+# --- Cache locale Visual Studio --------------------------------------------
+.vs/
+
 # --- Runtime Python embeddable (scaricato da setup-python-embed) ----------
 # Grande (~25 MB estratto) e ricreabile: NON versionarlo.
 lib/python-embed/

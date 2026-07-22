@@ -53,6 +53,7 @@ internal sealed class CropEditor
     private byte[]? _fileBytes;
     private int _srcW, _srcH;
     private readonly bool _animateGifs;
+    private readonly bool _bakeRoundedCorners;
     private bool _isGif;
     private List<(BitmapSource Frame, int DelayMs)>? _gifFrames;
     private DispatcherTimer? _gifTimer;
@@ -68,6 +69,12 @@ internal sealed class CropEditor
     // "show key outline" overlay's cells + gaps proportionally instead of an even
     // edge-to-edge grid.
     private const double KeyMm = 15, GapMm = 3;
+
+    // Corner radius as a ratio of the (single-key) cell's shorter side — shared by the
+    // live preview clip, the grid-overlay outline, and GetResultPath's baked corner mask,
+    // so all three always agree on how rounded a "key" looks. Widened 2026-07-19 on user
+    // request (0.12 read as too subtle next to the physical key's actual curvature).
+    private const double KeyCornerRadiusRatio = 0.18;
 
     private readonly Image _img = new() { Stretch = Stretch.Fill };
     private readonly Canvas _gridOverlay = new() { IsHitTestVisible = false, Visibility = Visibility.Collapsed };
@@ -104,12 +111,23 @@ internal sealed class CropEditor
     /// in the viewport, and <see cref="GetResultPath"/> emits a <see cref="CroppedGifRef"/>
     /// sidecar for it instead of baking a static PNG. Leave false for hosts with no
     /// per-frame GIF playback to consume that sidecar (see class remarks).</param>
-    public CropEditor(int targetW, int targetH, double maxViewportPx = 260, bool animateGifs = false)
+    /// <param name="bakeRoundedCorners">If true (and the crop target is a single key —
+    /// <see cref="SetKeyGrid"/> left at its 1×1 default), <see cref="GetResultPath"/> bakes
+    /// the same rounded-corner mask as the on-screen preview (<see cref="UpdateViewportClip"/>)
+    /// directly into the output pixels, filling the cut corners black. Needed because the
+    /// physical key screens (DisplayPad tile, Everest numpad display key) are square LCDs
+    /// with no mechanical bezel crop — Base Camp's own rounded-icon look only exists if the
+    /// corner pixels themselves are painted over. Leave false for crop targets that aren't a
+    /// single rounded-bezel key screen (multi-key fullscreen grid, keycap legend images,
+    /// Display Dial's round face).</param>
+    public CropEditor(int targetW, int targetH, double maxViewportPx = 260, bool animateGifs = false,
+        bool bakeRoundedCorners = false)
     {
         _targetW = targetW;
         _targetH = targetH;
         _maxViewportPx = maxViewportPx;
         _animateGifs = animateGifs;
+        _bakeRoundedCorners = bakeRoundedCorners;
 
         _viewport = new Canvas { ClipToBounds = true, Background = Brushes.Black, Cursor = Cursors.SizeAll };
         _viewport.Children.Add(_img);
@@ -187,7 +205,7 @@ internal sealed class CropEditor
     {
         double vw = _viewport.Width, vh = _viewport.Height;
         _viewport.Clip = _gridRows == 1 && _gridCols == 1 && vw > 0 && vh > 0
-            ? new RectangleGeometry(new Rect(0, 0, vw, vh), Math.Min(vw, vh) * 0.12, Math.Min(vw, vh) * 0.12)
+            ? new RectangleGeometry(new Rect(0, 0, vw, vh), Math.Min(vw, vh) * KeyCornerRadiusRatio, Math.Min(vw, vh) * KeyCornerRadiusRatio)
             : null;
     }
 
@@ -222,7 +240,7 @@ internal sealed class CropEditor
         double totalUnitsH = _gridRows * KeyMm + (_gridRows - 1) * GapMm;
         double cellW = vw * KeyMm / totalUnitsW, gapW = vw * GapMm / totalUnitsW;
         double cellH = vh * KeyMm / totalUnitsH, gapH = vh * GapMm / totalUnitsH;
-        double radius = Math.Min(cellW, cellH) * 0.12;
+        double radius = Math.Min(cellW, cellH) * KeyCornerRadiusRatio;
 
         for (int r = 0; r < _gridRows; r++)
         {
@@ -511,11 +529,27 @@ internal sealed class CropEditor
                 rect = new System.Drawing.RectangleF(0, 0, _srcW, _srcH);
         }
 
+        bool roundCorners = _bakeRoundedCorners && _gridRows == 1 && _gridCols == 1;
+
         using var result = new System.Drawing.Bitmap(_targetW, _targetH, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
         using (var g = System.Drawing.Graphics.FromImage(result))
         {
             g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
             g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+
+            if (roundCorners)
+            {
+                // The physical key screen is a square LCD with no mechanical bezel crop —
+                // paint the corners the same key-housing black as key_button.png (matches
+                // MainWindow.xaml's DpKeyButtonStyle) and clip the drawn icon to the same
+                // KeyCornerRadiusRatio rounded rect used by the live preview (UpdateViewportClip).
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                g.Clear(System.Drawing.Color.Black);
+                float radius = (float)(Math.Min(_targetW, _targetH) * KeyCornerRadiusRatio);
+                using var clipPath = RoundedRectPath(0, 0, _targetW, _targetH, radius);
+                g.SetClip(clipPath);
+            }
+
             g.DrawImage(srcBmp, new System.Drawing.Rectangle(0, 0, _targetW, _targetH),
                         rect.X, rect.Y, rect.Width, rect.Height, System.Drawing.GraphicsUnit.Pixel);
         }
@@ -526,12 +560,27 @@ internal sealed class CropEditor
         Directory.CreateDirectory(cacheDir);
         long mtime = 0;
         try { mtime = File.GetLastWriteTimeUtc(_sourcePath).Ticks; } catch { }
-        string key = $"{_sourcePath}|{mtime}|{_targetW}x{_targetH}|" +
+        string key = $"{_sourcePath}|{mtime}|{_targetW}x{_targetH}|{(roundCorners ? "round" : "square")}|" +
                      (noCrop ? "nocrop" : $"{rect.X:F1},{rect.Y:F1},{rect.Width:F1},{rect.Height:F1}");
         string name = Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(key))).ToLowerInvariant() + ".png";
         string outPath = System.IO.Path.Combine(cacheDir, name);
         result.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
         return outPath;
+    }
+
+    /// <summary>Builds a rounded-rectangle path for <see cref="GetResultPath"/>'s corner
+    /// clip — same construction GDI+ needs everywhere a WPF <c>RectangleGeometry</c>'s
+    /// RadiusX/RadiusY would otherwise be used.</summary>
+    private static System.Drawing.Drawing2D.GraphicsPath RoundedRectPath(float x, float y, float w, float h, float radius)
+    {
+        float d = radius * 2;
+        var path = new System.Drawing.Drawing2D.GraphicsPath();
+        path.AddArc(x, y, d, d, 180, 90);
+        path.AddArc(x + w - d, y, d, d, 270, 90);
+        path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
+        path.AddArc(x, y + h - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
     }
 
     /// <summary>GIF equivalent of the static crop-bake above — since a GIF can't be

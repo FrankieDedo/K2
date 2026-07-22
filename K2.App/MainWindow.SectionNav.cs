@@ -105,6 +105,19 @@ public partial class MainWindow
 
         // LED color preview is only useful (and only polled) while looking at RGB & Lighting.
         UpdateEverestLedPreviewActive(panel == PnlSecRgb);
+
+        // Custom Lighting's paint mode/border overlay/wide numpad gap must only be
+        // active while BOTH "RGB & Lighting" is the visible section AND CbEvEffect is
+        // set to "Custom" — re-synced on every section switch (not just derived once in
+        // UpdateEvCapabilities) so leaving the section forces it off regardless of the
+        // stored effect selection, and returning to it with "Custom" still selected
+        // resumes correctly (user feedback 2026-07-22).
+        if (panel == PnlSecRgb)
+            SetCustomPaintModeActive(CbEvEffect.SelectedItem is EvEffectChoice pick && pick.Eff == Services.EverestService.Effect.Custom);
+        else
+            ResetCustomLightingViewState();
+
+        UpdateDockInteractivity();
     }
 
     /// <summary>True while the Everest "Key Binding" section is the active one —
@@ -227,6 +240,9 @@ public partial class MainWindow
 
         // Common actions: Debug group (Refresh)
         PnlEvDebugGroup.Visibility = vis;
+
+        // Display Dial: raw SDK readback (debug-only, see project rule)
+        BtnDialRead.Visibility = vis;
 
         // Toolbar: SDK/DLL info label
         SepEvSdkDbg.Visibility = vis;

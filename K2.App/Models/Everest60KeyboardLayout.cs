@@ -140,6 +140,33 @@ public static class Everest60KeyboardLayout
     }
 
     // ======================================================================
+    // LED index -> Windows Virtual Key code, for the number/symbol/letter keys
+    // only (idx <-> physical key mapping documented in BuildMainBoard above).
+    // Lets MainWindow.Everest60.cs query the SAME KeyLabelMap (AltGr/Shift
+    // corner legends) that Everest Max's board uses via its own MatrixId,
+    // which IS a VK code there (see KeyboardLayout.cs) — Everest 60's own
+    // MatrixId is the LED index instead (see BuildMainBoard's doc comment),
+    // so it needs this separate bridge to reach the same VK-keyed data.
+    // Modifier/whitespace/nav keys (Esc, Tab, Caps, Enter, Shift, Ctrl, Win,
+    // Alt, Space, Fn, arrows, Del, Backspace) have no entry — KeyLabelMap has
+    // no AltGr/Shift legends for them either, so a lookup miss is correct.
+    // ======================================================================
+    internal static readonly IReadOnlyDictionary<int, int> LedIndexToVk = new Dictionary<int, int>
+    {
+        // Row 0: 1-0 - =
+        { 1,49 },{ 2,50 },{ 3,51 },{ 4,52 },{ 5,53 },{ 6,54 },{ 7,55 },{ 8,56 },{ 9,57 },{ 10,48 },
+        { 11,189 },{ 12,187 },
+        // Row 1: Q-P [ ] \
+        { 15,81 },{ 16,87 },{ 17,69 },{ 18,82 },{ 19,84 },{ 20,89 },{ 21,85 },{ 22,73 },{ 23,79 },{ 24,80 },
+        { 25,219 },{ 26,221 },{ 27,220 },
+        // Row 2: A-L ; '
+        { 29,65 },{ 30,83 },{ 31,68 },{ 32,70 },{ 33,71 },{ 34,72 },{ 35,74 },{ 36,75 },{ 37,76 },
+        { 38,186 },{ 39,222 },
+        // Row 3: Z-M , . /
+        { 42,90 },{ 43,88 },{ 44,67 },{ 45,86 },{ 46,66 },{ 47,78 },{ 48,77 },{ 49,188 },{ 50,190 },{ 51,191 },
+    };
+
+    // ======================================================================
     // Locale legend overrides, keyed by LED index (see BuildMainBoard above
     // for the idx <-> physical key mapping). Values ported from Base Camp's
     // locale legend set, same content as EverestKeyboardLayout.IsoLegends

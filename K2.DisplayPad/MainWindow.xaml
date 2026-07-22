@@ -23,6 +23,7 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="OuterBorder"
                                 CornerRadius="8"
+                                ClipToBounds="True"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}">

@@ -22,7 +22,11 @@
                      Brightness lives in MainWindow's shared top-right bar (BrEverest60),
                      not here — same convention as Everest Max/MacroPad/DisplayPad, see
                      MainWindow.SectionNav.cs. MainWindow calls SetBrightness() on change. -->
-                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <!-- Row 1: effect/speed/backlight switch (no Sync — unsupported by this device).
+                     Backlight uses SetBacklightForcedOff (raw "Off" effect resend, no real
+                     firmware on/off toggle on this device — see its doc comment), same
+                     mechanism the auto-off idle timer already uses. -->
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
                     <TextBlock Text="{loc:Get rgb_effect}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <ComboBox x:Name="CbEv60Effect" Width="120" Margin="0,0,12,0"
                               SelectionChanged="CbEv60Effect_SelectionChanged"/>
@@ -33,23 +37,48 @@
                                 ValueChanged="SldEv60Speed_ValueChanged" VerticalAlignment="Center"/>
                         <TextBlock x:Name="LblEv60Speed" Text="50%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
                     </StackPanel>
-                    <StackPanel x:Name="PnlEv60Direction" Orientation="Horizontal" Margin="0,0,12,0">
+                    <TextBlock Text="{loc:Get led_backlight_label}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <CheckBox x:Name="CkEv60Backlight" Style="{StaticResource K2InlineSwitch}"
+                        VerticalAlignment="Center" IsChecked="True" Click="CkEv60Backlight_Click"/>
+                </WrapPanel>
+                <!-- Backlight auto-off — moved here from MainWindow's Settings panel
+                     (user request 2026-07-21), sized like the rest of this panel. -->
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <CheckBox x:Name="CkEv60AutoOffEnable" Content="{loc:Get backlight_auto_off_enable}"
+                      Click="CkEv60AutoOffEnable_Click" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                    <TextBlock Text="{loc:Get backlight_auto_off_seconds}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                    <TextBox x:Name="TxtEv60AutoOffSeconds" Width="70" TextAlignment="Center"
+                     LostFocus="TxtEv60AutoOffSeconds_LostFocus" Text="5" VerticalAlignment="Center"/>
+                    <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                </WrapPanel>
+                <!-- Row 2: direction (only when the effect supports it) -->
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <StackPanel x:Name="PnlEv60Direction" Orientation="Horizontal">
                         <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <Border Style="{StaticResource K2SegmentedGroupBorder}">
                             <UniformGrid x:Name="GridEv60Direction" Rows="1"/>
                         </Border>
                     </StackPanel>
-                    <CheckBox x:Name="CkEv60Rainbow" Content="{loc:Get rgb_rainbow}"
-                              ToolTip="{loc:Get rgb_rainbow_tip}" Click="CkEv60Rainbow_Click"/>
                 </WrapPanel>
+                <!-- Row 3: color mode (Single/Double/Rainbow, one mutually-exclusive
+                     vertical radio group) + swatches. -->
                 <WrapPanel Orientation="Horizontal">
-                    <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                    <Button x:Name="BtnEv60Color1" Width="40" Height="22" Background="#900000"
-                            BorderThickness="2" BorderBrush="#3A3A40" Click="BtnEv60Color_Click" Tag="1"
-                            Margin="0,0,14,0"/>
-                    <StackPanel x:Name="PnlEv60Color2" Orientation="Horizontal">
+                    <StackPanel Orientation="Vertical" Margin="0,0,20,0" VerticalAlignment="Center">
+                        <RadioButton x:Name="RbEv60ColorSingle" Content="{loc:Get rgb_single}" GroupName="Ev60ColorMode"
+                                     Margin="0,0,0,6" Checked="RbEv60ColorMode_Checked" ToolTip="{loc:Get rgb_single_tip}"/>
+                        <RadioButton x:Name="RbEv60ColorDouble" Content="{loc:Get rgb_double}" GroupName="Ev60ColorMode"
+                                     Margin="0,0,0,6" Checked="RbEv60ColorMode_Checked" ToolTip="{loc:Get rgb_double_tip}"/>
+                        <RadioButton x:Name="RbEv60Rainbow" Content="{loc:Get rgb_rainbow}" GroupName="Ev60ColorMode"
+                                     Checked="RbEv60ColorMode_Checked" ToolTip="{loc:Get rgb_rainbow_tip}"/>
+                    </StackPanel>
+                    <StackPanel x:Name="PnlEv60Color1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                        <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <Button x:Name="BtnEv60Color1" Width="30" Height="30" Background="#900000"
+                                BorderThickness="2" BorderBrush="#3A3A40" Click="BtnEv60Color_Click" Tag="1"/>
+                    </StackPanel>
+                    <StackPanel x:Name="PnlEv60Color2" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                        <Button x:Name="BtnEv60Color2" Width="40" Height="22" Background="#1A1A1E"
+                        <Button x:Name="BtnEv60Color2" Width="30" Height="30" Background="#1A1A1E"
                                 BorderThickness="2" BorderBrush="#3A3A40" Click="BtnEv60Color_Click" Tag="2"/>
                     </StackPanel>
                 </WrapPanel>
@@ -62,9 +91,9 @@
                 <Separator Style="{StaticResource K2SideSeparator}" Margin="0,10,0,8"/>
                 <TextBlock Text="{loc:Get ev60_side_ring}" FontWeight="Bold" Margin="0,0,0,8"/>
                 <WrapPanel Orientation="Horizontal">
-                    <Button x:Name="BtnEv60SideColor" Width="40" Height="22" Background="#900000"
+                    <Button x:Name="BtnEv60SideColor" Width="30" Height="30" Background="#900000"
                             BorderThickness="2" BorderBrush="#3A3A40" Click="BtnEv60SideColor_Click"
-                            Margin="0,0,12,0"/>
+                            Margin="0,0,10,0"/>
                     <Button x:Name="BtnEv60SideApply" Content="{loc:Get ev60_side_apply}"
                             Click="BtnEv60SideApply_Click" Padding="8,4"/>
                 </WrapPanel>
@@ -92,7 +121,7 @@
                               Checked="CkEv60CustomPaint_Checked"
                               Unchecked="CkEv60CustomPaint_Checked"/>
                     <TextBlock Text="{loc:Get custom_color}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                    <Button x:Name="BtnEv60CustomBrushColor" Width="40" Height="22"
+                    <Button x:Name="BtnEv60CustomBrushColor" Width="30" Height="30"
                             Background="#900000" BorderThickness="2"
                             BorderBrush="#3A3A40" Click="BtnEv60CustomBrushColor_Click"/>
                 </WrapPanel>

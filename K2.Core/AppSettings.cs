@@ -42,6 +42,7 @@ public static class AppSettings
         public string AppFontFamily { get; set; } = Services.FontCatalog.DefaultKey;
         public bool BcImportPromptShown { get; set; }
         public string? BaseCampDllFolder { get; set; }
+        public List<string> SavedPickerColors { get; set; } = new();
     }
 
     private static Data _data = new();
@@ -317,11 +318,54 @@ public static class AppSettings
         Changed?.Invoke();
     }
 
+    /// <summary>Global custom-color palette shared by every device's color picker
+    /// (<see cref="ColorPickerDialog"/>), newest first. Mirrors Base Camp's own
+    /// <c>Settings.SavedPickerColors</c> (one app-wide palette, not per-device — see
+    /// <c>DATABASE_SCHEMA.sql</c>): a color saved while editing Everest Max lighting is
+    /// immediately available while editing MacroPad/Everest 60/Makalu/DisplayPad too.
+    /// Stored as "#RRGGBB" strings.</summary>
+    public static IReadOnlyList<string> SavedPickerColors
+    {
+        get { EnsureLoaded(); return _data.SavedPickerColors; }
+    }
+
+    private const int MaxSavedPickerColors = 30;
+
+    /// <summary>Adds (or moves to front, if already present) a "#RRGGBB" color in the
+    /// shared palette. Oldest entries beyond <see cref="MaxSavedPickerColors"/> are
+    /// dropped.</summary>
+    public static void AddSavedPickerColor(string hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex)) return;
+        EnsureLoaded();
+        lock (_lock)
+        {
+            _data.SavedPickerColors.RemoveAll(c => string.Equals(c, hex, StringComparison.OrdinalIgnoreCase));
+            _data.SavedPickerColors.Insert(0, hex);
+            while (_data.SavedPickerColors.Count > MaxSavedPickerColors)
+                _data.SavedPickerColors.RemoveAt(_data.SavedPickerColors.Count - 1);
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    public static void RemoveSavedPickerColor(string hex)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.SavedPickerColors.RemoveAll(c => string.Equals(c, hex, StringComparison.OrdinalIgnoreCase)) > 0)
+                Save();
+        }
+        Changed?.Invoke();
+    }
+
     /// <summary>Resets every app-wide preference (tray/autostart/font/log level/native
-    /// engine toggles/auto-stop/kill-worker/recent paths/device nicknames) back to its
-    /// built-in default and persists it. Used by the app-wide "Restore all defaults"
-    /// button in the Settings tab. Some flags (native engine toggles) are only read
-    /// once at startup, so the caller should advise the user to restart K2.</summary>
+    /// engine toggles/auto-stop/kill-worker/recent paths/device nicknames/saved color
+    /// palette) back to its built-in default and persists it. Used by the app-wide
+    /// "Restore all defaults" button in the Settings tab. Some flags (native engine
+    /// toggles) are only read once at startup, so the caller should advise the user to
+    /// restart K2.</summary>
     public static void ResetToDefaults()
     {
         EnsureLoaded();

@@ -365,10 +365,17 @@ public sealed class BaseCampDbImporter
 
             "Profile" => subType switch
             {
-                "Next Profile"     => ("profile", "next"),
-                "Previous Profile" => ("profile", "prev"),
+                "Next Profile" or "Profile Cycle" => ("profile", "next"),
+                "Previous Profile"                => ("profile", "prev"),
                 _ when int.TryParse(subType, out var n) => ("profile", n.ToString()),
-                _ => (null, null)
+                // A named-profile target (SubFunctionType = the destination profile's
+                // NAME, e.g. jump straight to "TEST1") is real Base Camp data (confirmed
+                // via a user XML export, 2026-07-19) but K2's profile-switch executor
+                // (MpSwitchProfile/EvSwitchProfile/Ev60SwitchProfile/DpSwitchProfile) only
+                // resolves "next"/"prev"/a numeric slot — no by-name lookup exists yet.
+                // Left as an explicit unrecognized passthrough (visible warning) rather
+                // than silently dropped, until that lookup is added — see K2/TODO.md.
+                _ => ($"bc:{funcType}", subType)
             },
 
             "Key Shortcut" or "Shortcut Key" or "Keyboard Shortcuts" =>
@@ -376,6 +383,34 @@ public sealed class BaseCampDbImporter
 
             "Multi Key" =>
                 ("keys", funcValue),
+
+            // App-specific shortcut-library categories: Base Camp's FunctionValue is
+            // already the literal keyboard shortcut to send (confirmed via real user XML,
+            // 2026-07-19: e.g. FunctionType="Adobe"/SubFunctionType="Illustrator"/
+            // FunctionValue="Ctrl + Z") — same shape as "Keyboard Shortcuts", just grouped
+            // under an app name instead of a generic label.
+            "Adobe" or "DaVinci" or "Zoom" =>
+                ("keys", funcValue),
+
+            // Real Base Camp XML/DB data uses "Mouse" (not "Mouse Button" as this switch
+            // assumed before 2026-07-19) — confirmed against a user export where every
+            // mouse-button/scroll/forward-backward binding carries FunctionType="Mouse".
+            // The old "Mouse Button" case never matched anything real, so every mouse
+            // action silently fell through to the generic bc: passthrough on import.
+            "Mouse" =>
+                ("mouse", subType?.ToLowerInvariant()),
+
+            "OS Commands" =>
+                ("oscmd", ActionTypeHelper.NormalizeOsCommand(subType ?? funcValue)),
+
+            // Inline per-key action chain (distinct from "Run Macro"'s named Macro Library
+            // reference): FunctionValue is a JSON array of {FunctionType,SubFunctionType,
+            // FunctionValue,ActionDelay,...} steps, already understood end-to-end by K2's
+            // own "multi" action type (ActionExecutor.RunMultiAction/MapSubAction — the
+            // step vocabulary there already covers Media/OS Commands/Mouse/Adobe/DaVinci/
+            // Zoom/Keyboard Shortcuts/Profile, mirroring this same switch).
+            "Multi Action" =>
+                ("multi", funcValue),
 
             // "Run Macro" is the FunctionType real Base Camp data uses for a Macro Library
             // reference (verified in the user's live BaseCamp.db): DisplayPad rows carry the
@@ -448,7 +483,11 @@ public sealed class BaseCampDbImporter
 
         string? matched = macroNames?.FirstOrDefault(
             n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
-        return ("macro", matched);
+        // Unmatched: keep the original Base Camp macro name behind the "***" marker
+        // (ActionTypeHelper.UnresolvedMacroPrefix) instead of discarding it — the UI shows
+        // it with a yellow warning triangle and the name in the summary, so the user knows
+        // WHICH macro to create/assign; the engine never plays a marked value.
+        return ("macro", matched ?? ActionTypeHelper.UnresolvedMacroPrefix + name);
     }
 
     // =========================================================
@@ -578,7 +617,13 @@ public sealed class BaseCampDbImporter
         {
             var (at, av) = TranslateAction(b.FunctionType, b.SubFunctionType, b.FunctionValue, macroNames);
             if (at is null) continue;
-            store.SaveKey(new EverestKeyRecord(slot, b.DLLMatrixIndex, null, at, av));
+            // DLLMatrixIndex is the raw SDK wMatrix code, a different numbering space from
+            // the VK-code matrixId a physical key press resolves to (see MainWindow.Everest.cs's
+            // EvTranslateMatrix) and that manually-created keys are already keyed by — without
+            // this translation, an imported key's KeyMatrix never matches what a live press looks
+            // up, so the action silently never fires (confirmed user report 2026-07-19).
+            int keyMatrix = Models.EverestWMatrixMap.Translate(b.DLLMatrixIndex);
+            store.SaveKey(new EverestKeyRecord(slot, keyMatrix, null, at, av));
             regular++;
         }
 
@@ -756,7 +801,7 @@ public sealed class BaseCampDbImporter
                     "Mute"            => ("media", "mute"),
                     "Mic Mute"        => ("media", "mic_mute"),
                     "Run browser"     => ImportBrowserAction(null),
-                    "Calculator"      => ("oscmd", "calculator"),
+                    "Calculator"      => ("oscmd", "Calculator"),
                     _ => ("none", $"[media] {fv}")
                 };
 
@@ -784,13 +829,13 @@ public sealed class BaseCampDbImporter
             case "OS Commands":
                 return fv switch
                 {
-                    "Run task manager" => ("oscmd", "run task manager"),
+                    "Run task manager" => ("oscmd", "Task Manager"),
                     "Run browser"      => ImportBrowserAction(null),
-                    "Lock computer"    => ("oscmd", "lock computer"),
-                    "Shut down"        => ("oscmd", "shutdown"),
-                    "Sleep"            => ("oscmd", "sleep"),
-                    "Hibernate"        => ("oscmd", "hibernate"),
-                    "Calculator"       => ("oscmd", "calculator"),
+                    "Lock computer"    => ("oscmd", "Lock"),
+                    "Shut down"        => ("oscmd", "Shutdown"),
+                    "Sleep"            => ("oscmd", "Sleep"),
+                    "Hibernate"        => ("oscmd", "Hibernate"),
+                    "Calculator"       => ("oscmd", "Calculator"),
                     _ => (null, null)
                 };
 

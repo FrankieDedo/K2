@@ -103,6 +103,7 @@ public partial class MainWindow : Window
         _hWnd = new WindowInteropHelper(this).Handle;
         HwndSource.FromHwnd(_hWnd)?.AddHook(WndProc);
         App.WriteLog($"[MainWindow] HWND=0x{_hWnd.ToInt64():X}, WndProc hooked");
+        Services.RawKeyboardActivityWatcher.Register(_hWnd);
 
         // Auto-open all drivers after the window is fully rendered
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded,
@@ -340,7 +341,56 @@ public partial class MainWindow : Window
     /// previously-selected profile instead of the one the user right-clicked.</summary>
     private void ProfileItem_PreviewRightClick(object sender, MouseButtonEventArgs e)
     {
-        if (sender is ListBoxItem item) item.IsSelected = true;
+        if (sender is not ListBoxItem item) return;
+        // Never select the "+ New profile" row from a right-click: selecting it CREATES
+        // (and activates, with a hardware repaint) a new profile via the list's
+        // SelectionChanged handler — a mere right-click must not have that side effect.
+        // The context menu is suppressed too (ProfileItem_ContextMenuOpening below).
+        if (IsNewProfileRow(item.DataContext)) return;
+        item.IsSelected = true;
+    }
+
+    /// <summary>Companion to <see cref="ProfileItem_PreviewRightClick"/>: since the "+ New
+    /// profile" row is deliberately not selected on right-click, the shared ContextMenu
+    /// (which acts on SelectedItem) would act on the wrong row — suppress it entirely.</summary>
+    private void ProfileItem_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (sender is ListBoxItem item && IsNewProfileRow(item.DataContext))
+            e.Handled = true;
+    }
+
+    /// <summary>True for the "+ New profile" placeholder row of any device's profile list
+    /// (Everest 60/Makalu have fixed slots and no such row — their item records simply
+    /// never match here).</summary>
+    private static bool IsNewProfileRow(object? dataContext) => dataContext switch
+    {
+        DpProfileItem dp => dp.IsNew,
+        EvProfileItem ev => ev.IsNew,
+        MpProfileItem mp => mp.IsNew,
+        _ => false,
+    };
+
+    /// <summary>Gear button for any device's profile row (see K2ProfileItemTemplate's doc
+    /// comment in MainWindow.xaml). Wired to PreviewMouseLeftButtonDown rather than Click:
+    /// marking e.Handled here, during the tunnel phase, reliably stops the row underneath
+    /// from also selecting/switching profile — routing through Click instead was fragile
+    /// (relied on the row's selection handler seeing an already-Handled bubble event, which
+    /// didn't reliably happen and left the popup never opening) and is no longer used.
+    /// Routes to the row's own device's XxShowProfileGear (rename/delete/link-launch-exe
+    /// popup) based on the row's item type, since this is one shared DataTemplate used by
+    /// all 5 device profile lists.</summary>
+    private void ProfileGear_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is not FrameworkElement fe) return;
+        switch (fe.DataContext)
+        {
+            case DpProfileItem dp: DpShowProfileGear(dp); break;
+            case EvProfileItem ev: EvShowProfileGear(ev); break;
+            case Ev60ProfileItem ev60: Ev60ShowProfileGear(ev60); break;
+            case MkProfileItem mk: MkShowProfileGear(mk); break;
+            case MpProfileItem mp: MpShowProfileGear(mp); break;
+        }
     }
 
     /// <summary>Shows or hides a static top-level device tab (Everest Max/60, Makalu,
@@ -470,6 +520,23 @@ public partial class MainWindow : Window
     {
         if (msg == MacroPadSdkNative.WM_DEVICE_PLUG || msg == MacroPadSdkNative.WM_FW_PROGRESS)
             _macroPad.HandleWindowMessage(msg, wParam, lParam);
+
+        // Backlight auto-off wake, decoupled from SDKDLL.dll's own (unreliable
+        // after idle, see RawKeyboardActivityWatcher's doc comment) KeyEvent —
+        // real physical keyboard activity via Windows Raw Input.
+        if (Services.RawKeyboardActivityWatcher.IsKeyboardInput(msg, lParam))
+        {
+            _evAutoOffTimer?.RegisterActivity();
+            // Everest 60 (2026-07-21, user report): same symptom as Everest Max's
+            // original bug (see above) — after the auto-off timer's own native
+            // SetEffect(Off) call, HandleEv60Key's SDK KeyEvent (Everest60SdkService)
+            // stops arriving, so physical keys no longer woke the backlight. Ev60's
+            // key-binding execution still goes through the normal SDK KeyEvent path
+            // (HandleEv60Key) — this only decouples the auto-off wake signal from it,
+            // same split as Everest Max above.
+            _ev60AutoOffTimer?.RegisterActivity();
+        }
+
         return IntPtr.Zero;
     }
 
@@ -577,6 +644,16 @@ public partial class MainWindow : Window
         // window to the tray never ends the process — the real close must ask for it.
         Application.Current.Shutdown();
     }
+
+    private void CkSettingsSync_Checked(object sender, RoutedEventArgs e)
+    {
+
+    }
+
+    private void TxtEvAutoOffSeconds_TextChanged(object sender, TextChangedEventArgs e)
+    {
+
+    }
 }
 
 // ---- MacroPad device combo wrapper ----
@@ -593,6 +670,7 @@ public sealed class MpProfileItem(int slot, string label)
     public int Slot { get; } = slot;
     public string Label { get; } = label;
     public bool IsNew => Label.StartsWith("+");
+    public bool IsRealProfile => !IsNew;
     public override string ToString() => Label;
 }
 
@@ -602,6 +680,7 @@ public sealed class EvProfileItem(int slot, string label)
     public int Slot { get; } = slot;
     public string Label { get; } = label;
     public bool IsNew => Label.StartsWith("+");
+    public bool IsRealProfile => !IsNew;
     public override string ToString() => Label;
 }
 

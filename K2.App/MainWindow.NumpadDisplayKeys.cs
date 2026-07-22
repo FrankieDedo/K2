@@ -65,9 +65,21 @@ public partial class MainWindow
 
             var img = new Image
             {
-                Stretch = Stretch.Uniform,
+                Stretch = Stretch.UniformToFill,
+            };
+
+            // Icon clipped to a rounded rect (same technique as DpKeyButtonStyle's 52×52
+            // icon Border in MainWindow.xaml) so the picture's corners follow the physical
+            // display key's curved bezel instead of poking out square underneath it.
+            var iconBorder = new Border
+            {
+                Width = NdkBtnSize - 4,
+                Height = NdkBtnSize - 4,
+                CornerRadius = new CornerRadius(5),
+                ClipToBounds = true,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
+                Child = img,
             };
 
             var label = new TextBlock
@@ -81,7 +93,7 @@ public partial class MainWindow
             };
 
             var grid = new Grid();
-            grid.Children.Add(img);
+            grid.Children.Add(iconBorder);
             grid.Children.Add(label);
 
             var btn = new Button
@@ -181,7 +193,7 @@ public partial class MainWindow
             bi.EndInit();
             bi.Freeze();
 
-            if (_ndkButtons[index].Content is Grid g && g.Children[0] is Image img)
+            if (_ndkButtons[index].Content is Grid g && g.Children[0] is Border { Child: Image img })
             {
                 img.Source = bi;
                 // Hide the "D1" label
@@ -194,7 +206,7 @@ public partial class MainWindow
 
     private void NdkClearThumbnail(int index)
     {
-        if (_ndkButtons[index].Content is Grid g && g.Children[0] is Image img)
+        if (_ndkButtons[index].Content is Grid g && g.Children[0] is Border { Child: Image img })
         {
             img.Source = null;
             if (g.Children[1] is TextBlock tb)
@@ -239,11 +251,15 @@ public partial class MainWindow
             {
                 _ndkImagePaths[keyIndex] = null;
                 NdkClearThumbnail(keyIndex);
+                NdkClearDeviceImage(keyIndex);   // blank the physical key too, not just the UI
             }
         }
 
         SaveNdkKey(keyIndex);
         EvRefreshNdkInKeyList();
+        // Push the (possibly changed) action binding into the firmware so its default
+        // action stops firing on this key — see EvSyncNdkBindingsToFw (MainWindow.Everest.cs).
+        EvSyncNdkBindingsToFw();
         LogEverest($"[NDK] key={keyIndex} <- action={dlg.ActionType ?? "none"}, image {(dlg.ImageChanged ? "changed" : "unchanged")}");
     }
 
@@ -297,6 +313,7 @@ public partial class MainWindow
         NdkRefreshAfterSwap(sourceIndex);
         NdkRefreshAfterSwap(targetIndex);
         EvRefreshNdkInKeyList();
+        EvSyncNdkBindingsToFw();
 
         LogEverest($"[NDK] swapped key={sourceIndex} <-> key={targetIndex}");
     }
@@ -324,6 +341,10 @@ public partial class MainWindow
         {
             NdkClearThumbnail(index);
             SaveNdkKey(index);
+            // The swap left this key EMPTY: restore the physical key's default artwork
+            // and mode too — a local-only clear would leave the pre-swap picture (and a
+            // stale firmware binding) on the device.
+            NdkClearDeviceImage(index);
         }
     }
 
@@ -333,7 +354,7 @@ public partial class MainWindow
     /// <paramref name="keyIndex"/> of the CURRENT Everest profile, persists it, and
     /// refreshes the thumbnail. <see cref="EverestSdkNative.StartPicUpdate"/> is
     /// synchronous and takes ~2s (confirmed via USB capture, K2/_reference/usb_dumps,
-    /// 2026-07-16), so a full-window "please wait" overlay (<see cref="ShowHwBusy"/>) is
+    /// 2026-07-16), so a full-window "please wait" overlay (<see cref="RunHwBusy"/>) is
     /// shown for the duration — mirrors Base Camp, which blocks its own UI the same way
     /// while pushing NDK/Display Dial pictures.
     /// </summary>
@@ -345,17 +366,21 @@ public partial class MainWindow
             return;
         }
 
+        int profile = EvCurrentProfile();
         NdkSetButtonsEnabled(false);
         _ndkUploadBusy = true;
-        ShowHwBusy(Loc.Get("hw_busy_uploading_image"));
         try
         {
-            bool ok = UploadNdkImage(keyIndex, imagePath, EvCurrentProfile());
+            bool ok = RunHwBusy(Loc.Get("hw_busy_uploading_image"),
+                () => UploadNdkImage(keyIndex, imagePath, profile));
             if (ok)
             {
                 _ndkImagePaths[keyIndex] = imagePath;
                 NdkSetThumbnail(keyIndex, imagePath);
                 SaveNdkKey(keyIndex);
+                // Flash now holds a custom picture: clear the "flashOk" reset marker
+                // (see MainWindow.Everest.cs's EvResetEmptyNdkSlots).
+                _evStore.SetSetting($"ndk.{profile}.{keyIndex}.flashOk", "");
 
                 // Update SetDisplayKeyPic to show the new image
                 NdkRefreshDevicePicSlots();
@@ -363,7 +388,6 @@ public partial class MainWindow
         }
         finally
         {
-            HideHwBusy();
             NdkSetButtonsEnabled(true);
             // The firmware reports the numpad/dock as unplugged (byNumpadPlug/byMMDockPlug
             // == 0) while it's busy writing the new NDK picture to flash — UpdateKeyboardLayout
@@ -389,14 +413,24 @@ public partial class MainWindow
     /// Shared by <see cref="NdkApplyImage"/> (single-key edit, current profile) and
     /// <see cref="EvUploadNdkImages"/> (re-sync on fresh device connect, see
     /// MainWindow.Everest.cs). Does not touch <see cref="_ndkImagePaths"/>/UI state; the
-    /// caller decides what to do with the result.
+    /// caller decides what to do with the result. Runs off the UI thread (see
+    /// <see cref="RunHwBusy"/>), so logging goes through <see cref="LogEverestSafe"/>.
     /// </summary>
     private bool UploadNdkImage(int keyIndex, string imagePath, int profile)
     {
         bool ok = _everest.UploadNumpadImage(imagePath, keyIndex, picSlot: (byte)profile);
-        LogEverest($"[NDK] Upload profile={profile} key={keyIndex} -> {(ok ? "OK" : "FAIL")}");
+        // Remember when the flash was last written: StartPicUpdate returns instantly but
+        // the firmware keeps writing for several seconds, silently dropping commands it
+        // acks in that window — EvResetEmptyNdkSlots (MainWindow.Everest.cs) uses this to
+        // avoid trusting (and caching) reset outcomes issued too close to an upload.
+        if (ok) System.Threading.Interlocked.Exchange(ref _evNdkFlashWriteTicks, DateTime.UtcNow.Ticks);
+        LogEverestSafe($"[NDK] Upload profile={profile} key={keyIndex} -> {(ok ? "OK" : "FAIL")}");
         return ok;
     }
+
+    /// <summary>UTC ticks of the last successful NDK picture flash write — written from
+    /// RunHwBusy's background thread, hence Interlocked (see <see cref="UploadNdkImage"/>).</summary>
+    private long _evNdkFlashWriteTicks;
 
     /// <summary>Set while <see cref="NdkApplyImage"/> is writing a picture to the device —
     /// <see cref="UpdateKeyboardLayout"/> (MainWindow.Layout.cs) skips its poll-driven
@@ -439,6 +473,22 @@ public partial class MainWindow
         sender is MenuItem mi && mi.Parent is ContextMenu cm
             && cm.PlacementTarget is Button { Tag: int idx } ? idx : -1;
 
+    // ─────────────────────── Physical press → execution ───────────────────────
+
+    /// <summary>Wired from InitEverestModule to EverestService.NumpadButtonEvent — the 4
+    /// display buttons (D1-D4) are decoded straight off the native HID wire (wire byte 42,
+    /// see EverestHidNative.Pad.DecodeNumpadButtons), giving an already-resolved 0-3 button
+    /// index with no matrixId translation needed. An earlier attempt routed this through the
+    /// SDKDLL KEY_CALLBACK/wMatrix path (matrixId capture, mirroring the dock/crown slots)
+    /// but that event never fires: AppSettings.EverestNativeEngine is hardcoded true, so
+    /// EverestService.Open() always takes the native-HID branch and never calls
+    /// SetKeyCallBack at all (confirmed by user report 2026-07-19: capture never triggered).</summary>
+    private void OnEverestNumpadButton(object? sender, (int Button, bool Pressed) e)
+    {
+        if (!e.Pressed) return;
+        Dispatcher.BeginInvoke(() => HandleNumpadDisplayKeyPress(e.Button));
+    }
+
     /// <summary>Removing the action also clears the key's picture — same behavior as
     /// the unified config dialog's "Remove action" button.</summary>
     private void NdkMnuRemoveAction_Click(object sender, RoutedEventArgs e)
@@ -458,7 +508,45 @@ public partial class MainWindow
         NdkClearThumbnail(idx);
         SaveNdkKey(idx);
         EvRefreshNdkInKeyList();
+        NdkClearDeviceImage(idx);
         LogEverest($"[NDK] key={idx} action removed");
+    }
+
+    /// <summary>Blanks display key <paramref name="idx"/> on the PHYSICAL device (solid
+    /// black — see EverestService.ClearNumpadImage for why not the factory artwork) so a
+    /// removed icon doesn't stay visible on the keyboard forever (user report 2026-07-19).
+    /// Same busy-overlay/flag dance as <see cref="NdkApplyImage"/> — this is a flash write
+    /// like any other picture upload.</summary>
+    private void NdkClearDeviceImage(int idx)
+    {
+        if (_everest is null || !_everest.IsOpen) return;
+
+        int profile = EvCurrentProfile();
+        NdkSetButtonsEnabled(false);
+        _ndkUploadBusy = true;
+        try
+        {
+            bool ok = RunHwBusy(Loc.Get("hw_busy_uploading_image"),
+                () => _everest.ClearNumpadImage(idx, (byte)profile));
+            // Successful reset = flash back to factory artwork for this key: remember it
+            // so EvResetEmptyNdkSlots (MainWindow.Everest.cs) doesn't redo it on the next
+            // profile switch. Only cache the marker outside the post-upload busy window,
+            // where an acked reset may have been silently dropped (see that method's
+            // calm-window comment).
+            long last = System.Threading.Interlocked.Read(ref _evNdkFlashWriteTicks);
+            bool calm = (DateTime.UtcNow - new DateTime(last, DateTimeKind.Utc)) > TimeSpan.FromSeconds(15);
+            if (ok && calm) _evStore.SetSetting($"ndk.{profile}.{idx}.flashOk", "1");
+            // The reset's 14 20 FF framing also puts the key back in DEFAULT mode,
+            // wiping any firmware action binding: forget what we last wrote so a future
+            // re-assign rewrites it (see EvSyncNdkBindingsToFw).
+            if (ok) _evStore.SetSetting($"ndk.{profile}.{idx}.fwBind", "");
+        }
+        finally
+        {
+            NdkSetButtonsEnabled(true);
+            _ndkUploadBusy = false;
+            UpdateKeyboardLayout();
+        }
     }
 
     // ─────────────────────── Display key action execution ───────────────────────

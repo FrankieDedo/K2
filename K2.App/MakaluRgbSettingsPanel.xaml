@@ -1,7 +1,8 @@
 <UserControl x:Class="K2.App.MakaluRgbSettingsPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core">
+             xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+             xmlns:themes="clr-namespace:K2.Core.Themes;assembly=K2.Core">
     <!-- RGB + Settings section content for the Makalu tab, its own
          UserControl — DIRECT child of MainWindow.xaml alongside
          MakaluDpiRemapPanel (not nested inside another custom control, see
@@ -41,9 +42,11 @@
                         <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="70">
                             <UniformGrid Rows="1">
                                 <RadioButton x:Name="RbMkDirLeft" Content="←" GroupName="MkDirection"
-                                             Style="{StaticResource K2SegmentedButton}" Checked="RbMkDirection_Checked"/>
+                                             Style="{StaticResource K2SegmentedButton}" Checked="RbMkDirection_Checked"
+                                             themes:K2Segment.CornerRadius="6,0,0,6"/>
                                 <RadioButton x:Name="RbMkDirRight" Content="→" GroupName="MkDirection"
-                                             Style="{StaticResource K2SegmentedButton}" Checked="RbMkDirection_Checked"/>
+                                             Style="{StaticResource K2SegmentedButton}" Checked="RbMkDirection_Checked"
+                                             themes:K2Segment.CornerRadius="0,6,6,0"/>
                             </UniformGrid>
                         </Border>
                     </StackPanel>
@@ -53,12 +56,12 @@
                      MainWindow.SectionNav.cs. MainWindow calls SetBrightness() on change. -->
                 <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
                     <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                    <Button x:Name="BtnMkColor1" Width="40" Height="22" Background="#900000"
+                    <Button x:Name="BtnMkColor1" Width="30" Height="30" Background="#900000"
                             BorderThickness="2" BorderBrush="#3A3A40" Click="BtnMkColor_Click" Tag="1"
-                            Margin="0,0,14,0"/>
+                            Margin="0,0,10,0"/>
                     <StackPanel x:Name="PnlMkColor2" Orientation="Horizontal">
                         <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                        <Button x:Name="BtnMkColor2" Width="40" Height="22" Background="#1A1A1E"
+                        <Button x:Name="BtnMkColor2" Width="30" Height="30" Background="#1A1A1E"
                                 BorderThickness="2" BorderBrush="#3A3A40" Click="BtnMkColor_Click" Tag="2"/>
                     </StackPanel>
                 </WrapPanel>
@@ -101,9 +104,11 @@
                     <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="120">
                         <UniformGrid Rows="1">
                             <RadioButton x:Name="RbMkAngleOff" Content="{loc:Get makalu_setting_off}" GroupName="MkAngle"
-                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkAngle_Checked"/>
+                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkAngle_Checked"
+                                         themes:K2Segment.CornerRadius="6,0,0,6"/>
                             <RadioButton x:Name="RbMkAngleOn" Content="{loc:Get makalu_setting_on}" GroupName="MkAngle"
-                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkAngle_Checked"/>
+                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkAngle_Checked"
+                                         themes:K2Segment.CornerRadius="0,6,6,0"/>
                         </UniformGrid>
                     </Border>
                     <TextBlock x:Name="LblMkAngleStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}" Margin="8,0,0,0"/>
@@ -113,9 +118,11 @@
                     <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="120">
                         <UniformGrid Rows="1">
                             <RadioButton x:Name="RbMkLiftLow" Content="{loc:Get makalu_setting_liftoff_low}" GroupName="MkLift"
-                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkLift_Checked"/>
+                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkLift_Checked"
+                                         themes:K2Segment.CornerRadius="6,0,0,6"/>
                             <RadioButton x:Name="RbMkLiftHigh" Content="{loc:Get makalu_setting_liftoff_high}" GroupName="MkLift"
-                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkLift_Checked"/>
+                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkLift_Checked"
+                                         themes:K2Segment.CornerRadius="0,6,6,0"/>
                         </UniformGrid>
                     </Border>
                     <TextBlock x:Name="LblMkLiftStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}" Margin="8,0,0,0"/>

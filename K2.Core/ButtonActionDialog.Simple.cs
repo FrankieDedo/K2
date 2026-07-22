@@ -35,6 +35,7 @@ public partial class ButtonActionDialog
         new("Volume Up",       "media_vol_up"),
         new("Volume Down",     "media_vol_down"),
         new("Mute",            "media_mute"),
+        new("Shuffle",         "media_shuffle"),
     };
 
     private static readonly ComboOption[] MouseOptions =
@@ -102,6 +103,13 @@ public partial class ButtonActionDialog
             foreach (var opt in OptionsFor(tag))
                 CbComboValue.Items.Add(new ComboBoxItem { Content = Loc.Get(opt.LocKey), Tag = opt.Value });
         }
+
+        // An unresolved imported macro reference ("***Name", see ActionTypeHelper.
+        // UnresolvedMacroPrefix) matches by its preserved original name: if the user has
+        // created a same-named macro since the import, opening the dialog pre-selects it,
+        // and saving resolves the reference for good.
+        if (tag == "macro")
+            selectValue = ActionTypeHelper.StripUnresolvedMacroPrefix(selectValue);
 
         var match = CbComboValue.Items.OfType<ComboBoxItem>()
             .FirstOrDefault(i => string.Equals((string?)i.Tag, selectValue, System.StringComparison.OrdinalIgnoreCase));

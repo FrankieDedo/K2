@@ -1,0 +1,206 @@
+<Window x:Class="K2.Core.ColorPickerDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core"
+        Title="{loc:Get colorpicker_title}"
+        Width="420" SizeToContent="Height"
+        MinWidth="420"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Style="{DynamicResource K2WindowStyle}">
+    <Window.Resources>
+        <loc:HexToColorConverter x:Key="HexToColorConv"/>
+
+        <!-- Flat color-square button: no default WPF chrome (focus rectangle,
+             gray hover) so the swatch's own color reads cleanly. -->
+        <Style x:Key="SwatchButtonStyle" TargetType="Button">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{StaticResource K2BorderStrongBrush}"
+                                BorderThickness="1" CornerRadius="3"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- header -->
+            <RowDefinition Height="10"/>
+            <RowDefinition Height="Auto"/>  <!-- SV square / hue bar / preview+rgb -->
+            <RowDefinition Height="14"/>
+            <RowDefinition Height="Auto"/>  <!-- saved colors -->
+            <RowDefinition Height="14"/>
+            <RowDefinition Height="Auto"/>  <!-- buttons -->
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="{loc:Get colorpicker_title}" FontSize="16" FontWeight="Bold"/>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Saturation/Value square: bottom = pure hue, middle layer = white->transparent
+                 (saturation), top layer = transparent->black (value/brightness). -->
+            <Border Grid.Column="0" Width="220" Height="220"
+                    BorderBrush="{StaticResource K2BorderStrongBrush}" BorderThickness="1">
+                <Canvas x:Name="SvSquare" Width="220" Height="220" ClipToBounds="True"
+                        MouseLeftButtonDown="SvSquare_MouseLeftButtonDown"
+                        MouseMove="SvSquare_MouseMove"
+                        MouseLeftButtonUp="SvSquare_MouseLeftButtonUp">
+                    <Rectangle x:Name="RectHueBase" Width="220" Height="220" Fill="Red"/>
+                    <Rectangle Width="220" Height="220">
+                        <Rectangle.Fill>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="#FFFFFFFF" Offset="0"/>
+                                <GradientStop Color="#00FFFFFF" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
+                    <Rectangle Width="220" Height="220">
+                        <Rectangle.Fill>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Color="#00000000" Offset="0"/>
+                                <GradientStop Color="#FF000000" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
+                    <Ellipse x:Name="SvThumb" Width="12" Height="12"
+                             Stroke="White" StrokeThickness="2" IsHitTestVisible="False"/>
+                </Canvas>
+            </Border>
+
+            <!-- Hue strip -->
+            <Border Grid.Column="1" Width="26" Height="220" Margin="10,0,0,0"
+                    BorderBrush="{StaticResource K2BorderStrongBrush}" BorderThickness="1">
+                <Canvas x:Name="HueBar" Width="26" Height="220" ClipToBounds="True"
+                        MouseLeftButtonDown="HueBar_MouseLeftButtonDown"
+                        MouseMove="HueBar_MouseMove"
+                        MouseLeftButtonUp="HueBar_MouseLeftButtonUp">
+                    <Rectangle Width="26" Height="220">
+                        <Rectangle.Fill>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Color="#FFFF0000" Offset="0"/>
+                                <GradientStop Color="#FFFFFF00" Offset="0.1667"/>
+                                <GradientStop Color="#FF00FF00" Offset="0.3333"/>
+                                <GradientStop Color="#FF00FFFF" Offset="0.5"/>
+                                <GradientStop Color="#FF0000FF" Offset="0.6667"/>
+                                <GradientStop Color="#FFFF00FF" Offset="0.8333"/>
+                                <GradientStop Color="#FFFF0000" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
+                    <Rectangle x:Name="HueThumb" Width="26" Height="4"
+                               Fill="Transparent" Stroke="White" StrokeThickness="2"
+                               IsHitTestVisible="False"/>
+                </Canvas>
+            </Border>
+
+            <!-- Preview + numeric RGB/hex -->
+            <StackPanel Grid.Column="2" Width="150" Margin="14,0,0,0">
+                <TextBlock Text="{loc:Get colorpicker_preview}" Foreground="{StaticResource K2TextMutedBrush}"
+                           FontSize="11" Margin="0,0,0,4"/>
+                <Border x:Name="BdrPreview" Height="48" CornerRadius="4"
+                        BorderBrush="{StaticResource K2BorderStrongBrush}" BorderThickness="1" Margin="0,0,0,14"/>
+
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="R" VerticalAlignment="Center"
+                               Foreground="{StaticResource K2TextMutedBrush}"/>
+                    <TextBox x:Name="TxtR" Grid.Column="1" MaxLength="3" TextChanged="RgbBox_TextChanged"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="G" VerticalAlignment="Center"
+                               Foreground="{StaticResource K2TextMutedBrush}"/>
+                    <TextBox x:Name="TxtG" Grid.Column="1" MaxLength="3" TextChanged="RgbBox_TextChanged"/>
+                </Grid>
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="B" VerticalAlignment="Center"
+                               Foreground="{StaticResource K2TextMutedBrush}"/>
+                    <TextBox x:Name="TxtB" Grid.Column="1" MaxLength="3" TextChanged="RgbBox_TextChanged"/>
+                </Grid>
+
+                <TextBlock Text="{loc:Get colorpicker_hex}" Foreground="{StaticResource K2TextMutedBrush}"
+                           FontSize="11" Margin="0,0,0,4"/>
+                <TextBox x:Name="TxtHex" FontFamily="Consolas" MaxLength="7" TextChanged="HexBox_TextChanged"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Saved colors palette (global, shared across every device) -->
+        <Grid Grid.Row="4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{loc:Get colorpicker_saved}"
+                           Foreground="{StaticResource K2TextMutedBrush}" FontSize="11"
+                           VerticalAlignment="Center"/>
+                <Button Grid.Column="1" Content="{loc:Get colorpicker_add}" Padding="8,2"
+                        Click="BtnAddSaved_Click"/>
+            </Grid>
+            <ScrollViewer Grid.Row="1" MaxHeight="96" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0">
+                <ItemsControl x:Name="IcSaved">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid x:Name="SwatchRoot" Width="24" Height="24" Margin="3">
+                                <Button Style="{StaticResource SwatchButtonStyle}" Tag="{Binding}"
+                                        Cursor="Hand" ToolTip="{Binding}" Click="SavedSwatch_Click">
+                                    <Button.Background>
+                                        <SolidColorBrush Color="{Binding Converter={StaticResource HexToColorConv}}"/>
+                                    </Button.Background>
+                                </Button>
+                                <Button x:Name="BtnRemoveSaved" Width="14" Height="14" Padding="0"
+                                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                                        Margin="0,-6,-6,0"
+                                        FontFamily="Segoe MDL2 Assets" FontSize="8" Content="&#xE711;"
+                                        Background="#22222A" Foreground="White" BorderThickness="0"
+                                        Cursor="Hand" Visibility="Collapsed" Tag="{Binding}"
+                                        ToolTip="{loc:Get colorpicker_remove}"
+                                        Click="BtnRemoveSaved_Click"/>
+                            </Grid>
+                            <DataTemplate.Triggers>
+                                <Trigger SourceName="SwatchRoot" Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="BtnRemoveSaved" Property="Visibility" Value="Visible"/>
+                                </Trigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="{loc:Get cancel}" Width="90" Padding="6,2" Click="BtnCancel_Click"/>
+            <Button Content="{loc:Get ok}" Width="90" Padding="6,2" Margin="8,0,0,0"
+                    IsDefault="True" Click="BtnOk_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

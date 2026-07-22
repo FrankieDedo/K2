@@ -65,6 +65,15 @@ public static class ActionExecutor
 
     public static void SendMediaKey(string key, Action<string> log)
     {
+        // Shuffle has no standard VK code, so it goes through the Spotify SMTC
+        // session instead of keybd_event (see SpotifyMediaService).
+        if (string.Equals(key?.Trim(), "shuffle", StringComparison.OrdinalIgnoreCase))
+        {
+            _ = Services.SpotifyMediaService.Instance.ToggleShuffleAsync();
+            log("[EXEC] media -> shuffle (Spotify)");
+            return;
+        }
+
         // Virtual-Key codes (winuser.h)
         const byte VK_MEDIA_NEXT_TRACK = 0xB0;
         const byte VK_MEDIA_PREV_TRACK = 0xB1;
@@ -174,7 +183,7 @@ public static class ActionExecutor
             case "Zoom":
             case "Keyboard Shortcuts":
                 return ("keys", s.FunctionValue, null);
-            case "OS Commands":      return ("oscmd", string.IsNullOrEmpty(s.SubFunctionType) ? s.FunctionValue : s.SubFunctionType, null);
+            case "OS Commands":      return ("oscmd", ActionTypeHelper.NormalizeOsCommand(string.IsNullOrEmpty(s.SubFunctionType) ? s.FunctionValue : s.SubFunctionType), null);
             case "Media":            return ("media", string.IsNullOrEmpty(s.SubFunctionType) ? s.FunctionValue : s.SubFunctionType, null);
             case "Mouse":            return ("mouse", string.IsNullOrEmpty(s.SubFunctionType) ? s.FunctionValue : s.SubFunctionType, null);
             case "Profile":          return ("profile", s.FunctionValue, null);

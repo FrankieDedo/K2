@@ -28,7 +28,7 @@
         <WrapPanel Grid.Row="2" Orientation="Horizontal">
             <CheckBox x:Name="CkOverrideColor" Content="{loc:Get keycap_customize_override_color}"
                       VerticalAlignment="Center" Margin="0,0,10,0" Click="CkOverrideColor_Click"/>
-            <Button x:Name="BtnColorSwatch" Width="32" Height="20"
+            <Button x:Name="BtnColorSwatch" Width="30" Height="30"
                     Background="#404040" BorderThickness="2" BorderBrush="#3A3A40"
                     Click="BtnColorSwatch_Click"/>
         </WrapPanel>

@@ -66,7 +66,17 @@ namespace K2.App;
 public partial class MainWindow
 {
     // ── Flag to prevent re-entry during value loading ──
-    private bool _dialLoading;
+    // Defaults to true, not false: TxtDialScreenSaver/TxtDialTurnOff's
+    // TextChanged (and the other handlers guarded by this flag) can fire
+    // synchronously during InitializeComponent() itself — before
+    // InitDisplayDialPanel() has run and before later-declared fields like
+    // CbDialScreenSaverFunction are assigned — same root cause and same fix
+    // as Everest60RgbPanel._ev60Suppress's doc comment. Confirmed crashing
+    // 2026-07-21: SaveDialSettings() -> CbDialScreenSaverFunction.SelectedIndex
+    // on a still-null field, a NullReferenceException during XAML load that a
+    // separately-diagnosed VEH interaction (App.xaml.cs) turned into the app
+    // not starting at all instead of a recoverable error dialog.
+    private bool _dialLoading = true;
 
     /// <summary>
     /// Ticks the Media Dock clock every second (<c>EverestService.UpdateClock</c>) —
@@ -464,10 +474,7 @@ public partial class MainWindow
         // StartPicUpdate (the SDK's picture-upload export) is synchronous and takes ~2s —
         // same blocking contract as the Everest numpad display keys, see NdkApplyImage's
         // doc comment (MainWindow.NumpadDisplayKeys.cs).
-        ShowHwBusy(Loc.Get("hw_busy_uploading_image"));
-        bool ok;
-        try { ok = _everest.UploadMMDockScreensaver(picked); }
-        finally { HideHwBusy(); }
+        bool ok = RunHwBusy(Loc.Get("hw_busy_uploading_image"), () => _everest.UploadMMDockScreensaver(picked));
         LogEverest($"[DIAL] UploadMMDockScreensaver -> {ok}");
     }
 

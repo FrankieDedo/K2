@@ -1,3 +1,4 @@
+using System;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -134,6 +135,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
             OnChanged(nameof(HasAction));
             OnChanged(nameof(HasImageNoAction));
             OnChanged(nameof(HasUnresolvedAction));
+            OnChanged(nameof(HasUnresolvedNamedAction));
             OnChanged(nameof(Display));
             OnChanged(nameof(ListDisplay));
         }
@@ -149,6 +151,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
             _actionValue = value;
             OnChanged();
             OnChanged(nameof(HasUnresolvedAction));
+            OnChanged(nameof(HasUnresolvedNamedAction));
             OnChanged(nameof(Display));
             OnChanged(nameof(ListDisplay));
         }
@@ -161,6 +164,14 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
     /// same warning triangle as <see cref="HasImageNoAction"/> so the user notices it needs
     /// a macro picked manually.</summary>
     public bool HasUnresolvedAction => ActionTypeHelper.IsMacroMissingTarget(_actionType, _actionValue);
+
+    /// <summary>True for the subset of <see cref="HasUnresolvedAction"/> where the original
+    /// Base Camp macro name was preserved behind the "***" marker — the warning triangle
+    /// turns yellow instead of red (the reference isn't lost, it just needs a same-named
+    /// macro in the library; see ActionTypeHelper.UnresolvedMacroPrefix).</summary>
+    public bool HasUnresolvedNamedAction =>
+        string.Equals(_actionType, "macro", StringComparison.Ordinal)
+        && ActionTypeHelper.IsUnresolvedMacroValue(_actionValue);
 
     /// <summary>Label shown on the overlay button.</summary>
     public string Display
@@ -201,13 +212,9 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
 
     private string ActionSummary => _actionType switch
     {
-        "keys"      => _actionValue ?? "",
-        "url"       => "URL",
-        "exec"      => Path.GetFileName(_actionValue ?? ""),
         "dp_folder" => "Folder",
         "dp_back"   => "Back",
-        "macro"     => ActionTypeHelper.MacroSummary(_actionValue),
-        _           => ActionTypeHelper.IsUnrecognized(_actionType) ? Loc.Get("act_unrecognized") : _actionType ?? "",
+        _           => ActionTypeHelper.Summary(_actionType, _actionValue),
     };
 
     /// <summary>Refreshes display-related bindings after a DebugMode change.</summary>

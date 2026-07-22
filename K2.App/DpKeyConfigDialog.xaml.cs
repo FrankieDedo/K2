@@ -78,7 +78,8 @@ public partial class DpKeyConfigDialog : Window
 
         // Inline crop editor — handles static images AND animated GIFs (animateGifs: true),
         // toggled via Visibility only (never reparented while "live").
-        _cropEditor = new CropEditor(DpHidNative.IconSize, DpHidNative.IconSize, maxViewportPx: 170, animateGifs: true);
+        _cropEditor = new CropEditor(DpHidNative.IconSize, DpHidNative.IconSize, maxViewportPx: 170,
+            animateGifs: true, bakeRoundedCorners: true);
         _cropEditor.ViewportBorder.LayoutTransform = _previewRotate;
         _cropEditor.SetKeyGrid(1, 1);   // single-key rounded-corner outline hint
 
@@ -309,7 +310,7 @@ public partial class DpKeyConfigDialog : Window
             "mouse"   => $"Mouse: {val}",
             "text"    => $"Text: {val}",
             "command" => $"Command: {val}",
-            "macro"   => $"Macro: {val}",
+            "macro"   => ActionTypeHelper.MacroSummary(val),
             "pyscript"=> "Python script",
             _         => ActionTypeHelper.IsUnrecognized(ActionType) ? Loc.Get("act_unrecognized") : $"{ActionType}: {val}",
         };

@@ -32,7 +32,8 @@ public partial class MainWindow
         if (TabEverest.Visibility == Visibility.Visible)
             _homeTiles.Add(new HomeDeviceTile(
                 TabEverest.Header as string ?? Loc.Get("tab_everest"),
-                HomeImage(EvHomeImageFile()), TabEverest));
+                HomeImage(EvHomeImageFile()), TabEverest,
+                imageWidth: 330, imageHeight: 225)); // enlarged artwork per user request
 
         if (TabEverest60.Visibility == Visibility.Visible)
             _homeTiles.Add(new HomeDeviceTile(

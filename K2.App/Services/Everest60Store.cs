@@ -301,7 +301,8 @@ ON CONFLICT(Profile, LedIndex) DO UPDATE SET
 public sealed record Ev60LightingRecord(
     int Effect, int Color1, int Color2, int SpeedPct, int DirIndex, bool Rainbow,
     double Brightness, int SideColor, double CustomBrightness,
-    string ActiveMode, Dictionary<int, int> CustomKeyColors);
+    string ActiveMode, Dictionary<int, int> CustomKeyColors,
+    bool ColorDouble = false);
 
 public sealed record Ev60KeyRecord(
     int     Profile,

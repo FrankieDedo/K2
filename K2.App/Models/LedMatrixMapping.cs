@@ -8,7 +8,29 @@ namespace K2.App.Models;
 /// (columns KeyId → DLLMatrixIndex).
 ///
 /// The GetColorData array has 171 elements for Everest (KEYBOARD_COLOR)
-/// and 126 for MacroPad (MACROPAD_COLOR).
+/// and 126 for MacroPad (MACROPAD_COLOR). For Everest the 171 = 126 main-key
+/// slots (indices 0-125) + 45 side-ring LEDs.
+///
+/// **Cross-confirmed 2026-07-18 against the Everest Max firmware itself**
+/// (Mountain_Everest_52.24.19, LED index table at file offset 0x046F5D;
+/// see Firmware/Everest/extracted/NOTES_52.24.19_handlers_led.md). Three
+/// independent sources agree on the layout, so this table is no longer
+/// "DB-derived, unverified":
+///   1. this table (from BaseCamp.db),
+///   2. BaseCampLinux's ZONE_LEDS (§11.1, its own reverse engineering),
+///   3. the firmware's own LED index table.
+/// The invariant they all share: **index = column * 9 + row** (columns are
+/// 9 apart, rows 1 apart). <see cref="EverestNumpad"/>'s 17 indices match
+/// BaseCampLinux's ZONE_LEDS["numpad"] exactly, with no overlap against
+/// <see cref="EverestKeyboard"/>.
+///
+/// **Known gap (needs hardware):** the two tables together cover 105 of the
+/// 126 main-key slots. Uncovered: 8, 17, 25, 26, 32, 35, 44, 50, 53, 59, 62,
+/// 71, 80, 89, 98, 107, 112, 116, 118, 119, 125. Most are probably physically
+/// absent positions, but **119 does appear in BaseCampLinux's "qwerty" zone**,
+/// i.e. it is a real LED — so at least one key may be left unlit here. To
+/// resolve: drive all 126 indices on a physical Everest Max and observe which
+/// keys respond. Do not guess these by layout intuition.
 /// </summary>
 internal static class LedMatrixMapping
 {
