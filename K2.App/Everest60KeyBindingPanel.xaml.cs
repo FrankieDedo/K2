@@ -30,6 +30,22 @@ public partial class Everest60KeyBindingPanel : UserControl
     private Action<string> _log = _ => { };
     private IActionHost? _actionHost;
 
+    /// <summary>Device-side push for a numpad key's binding, set once from
+    /// MainWindow.Everest60.cs via <see cref="SetNumpadDevicePush"/> — kept as
+    /// injected delegates (same style as <see cref="Ev60ActionHost"/>'s
+    /// constructor) rather than a direct <c>Everest60Service</c> reference, so
+    /// this panel stays a plain list/dialog owner. See
+    /// <see cref="Everest60Protocol.NumpadKeyBinding"/> for the protocol and
+    /// why the write doesn't need to carry real meaning to Base Camp.</summary>
+    private Action<int, string>? _writeNumpadBinding;
+    private Action<int>? _unassignNumpadBinding;
+
+    internal void SetNumpadDevicePush(Action<int, string> writeBinding, Action<int> unassignBinding)
+    {
+        _writeNumpadBinding = writeBinding;
+        _unassignNumpadBinding = unassignBinding;
+    }
+
     /// <summary>Profile persistence — set once from Init, same pattern as
     /// Everest60RgbPanel._ev60Store/_ev60Slot.</summary>
     private Everest60Store? _ev60Store;
@@ -53,6 +69,15 @@ public partial class Everest60KeyBindingPanel : UserControl
     /// (see MainWindow.Everest60.cs's _ev60LayoutType), no hex/raw-index fallback.</summary>
     private string BoardLabelForLed(int ledIndex)
     {
+        if (ledIndex >= Everest60Protocol.NumpadLedIndexBase)
+        {
+            int numpadIndex = ledIndex - Everest60Protocol.NumpadLedIndexBase;
+            var numpad = Everest60KeyboardLayout.Numpad;
+            if (numpadIndex >= 0 && numpadIndex < numpad.Length)
+                return string.IsNullOrEmpty(numpad[numpadIndex].Label) ? $"Numpad {numpadIndex}" : numpad[numpadIndex].Label;
+            return $"Numpad {numpadIndex}";
+        }
+
         var layout = _ev60Layout?.Invoke() ?? KeyboardLayoutType.AnsiUs;
         foreach (var kd in Everest60KeyboardLayout.GetMainBoard(layout))
             if (kd.MatrixId == ledIndex) return string.IsNullOrEmpty(kd.Label) ? $"Key {ledIndex}" : kd.Label;
@@ -116,6 +141,50 @@ public partial class Everest60KeyBindingPanel : UserControl
         PersistOrDiscardKey(key);
     }
 
+    /// <summary>Called by MainWindow when a key on the 17-key numpad accessory
+    /// overlay is clicked while the Key Binding section is active — same
+    /// flow as <see cref="SelectKey"/>, but stored at
+    /// <c>Everest60Protocol.NumpadLedIndexBase + numpadIndex</c> so it can't
+    /// collide with a main-board LedIndex in the same store table.
+    /// <para><b>Fase 1 only</b> (2026-07-22): the chosen action is persisted
+    /// to the profile like any other key, but nothing is written to the
+    /// device yet and no physical press will execute it — that needs the
+    /// device-side remap write + a press-detection poller, still pending
+    /// verification of the real event protocol (see the plan/CHANGELOG).</para>
+    /// </summary>
+    internal void SelectNumpadKey(int numpadIndex, string label)
+    {
+        int ledIndex = Everest60Protocol.NumpadLedIndexBase + numpadIndex;
+        bool isNewKey = !_byLed.ContainsKey(ledIndex);
+        if (!_byLed.TryGetValue(ledIndex, out var key))
+        {
+            key = new Ev60Key(ledIndex, numpadIndex) { Label = label };
+            _keys.Add(key);
+            _byLed[ledIndex] = key;
+            _log($"[KeyBind] new numpad key idx={numpadIndex} added via overlay click");
+        }
+
+        LvEv60Keys.SelectedItem = key;
+
+        var dlg = new ButtonActionDialog(ledIndex, key.ActionType, key.ActionValue, _actionHost)
+                  { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() != true)
+        {
+            if (isNewKey && key.ActionType is null)
+            {
+                _keys.Remove(key);
+                _byLed.Remove(ledIndex);
+            }
+            return;
+        }
+
+        key.ActionType  = string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none"
+                          ? null : dlg.ActionType;
+        key.ActionValue = key.ActionType is null ? null : dlg.ActionValue;
+
+        PersistOrDiscardKey(key);
+    }
+
     private void UpdateListButtons()
     {
         bool hasSelection = LvEv60Keys.SelectedItem is not null;
@@ -147,11 +216,18 @@ public partial class Everest60KeyBindingPanel : UserControl
         _byLed.Remove(key.LedIndex);
         _ev60Store?.RemoveKey(CurrentSlot, key.LedIndex);
         _log($"[KeyBind] key led={key.LedIndex} removed");
+        if (key.NumpadIndex is int npi)
+            _unassignNumpadBinding?.Invoke(Everest60RemapData.NumpadDllKeyId[npi]);
     }
 
     /// <summary>Persists a key's current action, or — if it has no action assigned —
     /// discards it entirely (list + DB) instead of keeping an empty entry. Mirrors
-    /// MainWindow.Everest.cs's EvPersistOrDiscardKey.</summary>
+    /// MainWindow.Everest.cs's EvPersistOrDiscardKey. For a numpad key
+    /// (<see cref="Ev60Key.NumpadIndex"/> set) this ALSO pushes the binding to
+    /// the physical device (write on save, unassign on empty) — see
+    /// <see cref="SetNumpadDevicePush"/>/<c>Everest60Protocol.NumpadKeyBinding</c>.
+    /// The main board never needs this: its bindings execute purely in K2
+    /// software off the SDK's existing key callback.</summary>
     private void PersistOrDiscardKey(Ev60Key key)
     {
         if (key.ActionType is null)
@@ -160,11 +236,15 @@ public partial class Everest60KeyBindingPanel : UserControl
             _byLed.Remove(key.LedIndex);
             _ev60Store?.RemoveKey(CurrentSlot, key.LedIndex);
             _log($"[KeyBind] key led={key.LedIndex} emptied, removed");
+            if (key.NumpadIndex is int npi1)
+                _unassignNumpadBinding?.Invoke(Everest60RemapData.NumpadDllKeyId[npi1]);
         }
         else
         {
             _ev60Store?.SaveKey(new Ev60KeyRecord(CurrentSlot, key.LedIndex, key.Label, key.ActionType, key.ActionValue));
             _log($"[KeyBind] key led={key.LedIndex} <- type={key.ActionType}");
+            if (key.NumpadIndex is int npi2)
+                _writeNumpadBinding?.Invoke(Everest60RemapData.NumpadDllKeyId[npi2], key.Label);
         }
     }
 
@@ -191,7 +271,10 @@ public partial class Everest60KeyBindingPanel : UserControl
 
         foreach (var r in _ev60Store.LoadProfile(slot))
         {
-            var k = new Ev60Key(r.LedIndex)
+            int? numpadIndex = r.LedIndex >= Everest60Protocol.NumpadLedIndexBase
+                              ? r.LedIndex - Everest60Protocol.NumpadLedIndexBase
+                              : null;
+            var k = new Ev60Key(r.LedIndex, numpadIndex)
             {
                 Label       = string.IsNullOrEmpty(r.Label) ? BoardLabelForLed(r.LedIndex) : r.Label,
                 ActionType  = r.ActionType,

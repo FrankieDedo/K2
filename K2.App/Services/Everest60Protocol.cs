@@ -92,6 +92,14 @@ internal static class Everest60Protocol
         125, 122, 124,
     };
 
+    /// <summary>Offset added to a numpad key's 0-16 <c>KeyDef.NumpadIndex</c>
+    /// to get the <c>LedIndex</c> value used as Everest60Store's Keys-table
+    /// identity, keeping it disjoint from the main board's real LED indices
+    /// (0-63) — the two boards share the same (Profile, LedIndex) primary key
+    /// with no separate discriminator column. Key Binding persistence only;
+    /// unrelated to any hardware address.</summary>
+    public const int NumpadLedIndexBase = 1000;
+
     /// <summary>Every hardware LED address accounted for by <see cref="LedIndex"/>/
     /// <see cref="SideLedIndex"/>/<see cref="NumpadLedIndex"/> — used to spot
     /// non-zero colors at UNKNOWN addresses in a <c>GetColorData2</c> readback
@@ -307,14 +315,225 @@ internal static class Everest60Protocol
     {
         var req = MakeBuf(0x20);
         BitConverter.GetBytes(1).CopyTo(req, 5);
-        var resp = Everest60HidNative.SendFeature(h, req, delayMs: 15);
-        if (resp is null || resp.Length != Everest60HidNative.ReportSize || resp[1] != 0x20)
+        var resp = Everest60HidNative.SendFeature(h, req, delayMs: 15, log: log);
+        // Diagnostic (2026-07-22, see Everest60Service.WithDevice's doc comment):
+        // distinguish WHY a caller sees "not present" — SendFeature giving up
+        // (null), a well-formed reply for the wrong command (retries all
+        // landed on stale/interleaved traffic — echo mismatch), vs a
+        // genuinely all-zero data region. All three currently collapse to
+        // the same bool/null from here, which was hiding which one is
+        // actually happening on real hardware.
+        if (resp is null)
         {
-            log?.Invoke("[Ev60] ReadNumpadPresent: request failed");
+            log?.Invoke("[Ev60] ReadNumpadPresent: SendFeature returned null (no response at all)");
+            return null;
+        }
+        if (resp.Length != Everest60HidNative.ReportSize)
+        {
+            log?.Invoke($"[Ev60] ReadNumpadPresent: unexpected response length {resp.Length}");
+            return null;
+        }
+        if (resp[1] != 0x20)
+        {
+            log?.Invoke($"[Ev60] ReadNumpadPresent: echo mismatch, got cmd=0x{resp[1]:X2} instead of 0x20 " +
+                        "(another poller's response landed here — contention, not this call failing outright)");
             return null;
         }
         for (int i = 9; i < 61; i++) // wire bytes [8..59]: data region, excludes the constant trailer
-            if (resp[i] != 0) return true;
+            if (resp[i] != 0)
+            {
+                log?.Invoke("[Ev60] ReadNumpadPresent: present (non-zero data region)");
+                return true;
+            }
+        log?.Invoke("[Ev60] ReadNumpadPresent: not present (data region genuinely all-zero)");
         return false;
+    }
+
+    /// <summary>Sentinel value for "no action"/disabled — confirmed
+    /// 2026-07-22 via a 4th capture (<c>ev60_del.pcapng</c>, Base Camp itself
+    /// removing a numpad binding) to be plain <c>255</c> (one byte,
+    /// zero-padded to an int32), not <c>0xFFFFFFFF</c> as first misread from
+    /// the raw hex (three "ff 00 00 00" int32 fields in an early query
+    /// response — each one is 255, not 0xFFFFFFFF). Same value as
+    /// <see cref="Everest60RemapData.DisabledKeyId"/>, the main board's own
+    /// "reset/disable" sentinel for <c>ChangeKey</c>/<c>ChangeFnKey</c> — one
+    /// shared convention across both protocols, not a coincidence.</summary>
+    public const int NumpadUnassignedMarker = 255;
+
+    /// <summary>Fixed action-type value K2 writes for any bound numpad key —
+    /// arbitrary from K2's point of view (see class doc below).</summary>
+    public const int NumpadBoundMarker = 1;
+
+    /// <summary>
+    /// Numpad Key Binding protocol (query/write/commit/event-poll) —
+    /// reverse-engineered 2026-07-22 from three real Base Camp USB captures
+    /// (<c>_reference/usb_dumps/ev60_keyconf.pcapng</c>,
+    /// <c>ev60_press.pcapng</c>; see CHANGELOG for the full trace), same
+    /// feature-report channel/magic as the rest of this class — no new
+    /// interface or transport needed.
+    ///
+    /// <para><b>Identity</b>: the "index" every one of these commands takes
+    /// is the numpad key's <b>DLLKeyId</b> (same catalog as
+    /// <see cref="Everest60RemapData.KeyCatalog"/>/<c>ChangeKey</c> for the
+    /// main 64 keys, extracted for the numpad via a fresh decompile of
+    /// <c>Everest60Operations.GetEverest60KeyBindings_English</c> — see
+    /// <see cref="Everest60RemapData.NumpadDllKeyId"/>), NOT a LED index or
+    /// the 0-16 <c>KeyDef.NumpadIndex</c>/array position. Confirmed against
+    /// two independent captures: assigning "7" wrote idx=0x5B=91=DLLKeyId("Numpad 7");
+    /// assigning "4" queried idx=0x5C=92=DLLKeyId("Numpad 4") — exact match,
+    /// not coincidence.
+    /// </para>
+    ///
+    /// <para><b>Write (<see cref="WriteKeyActionType"/>/<see cref="WriteKeyActionParam"/>/
+    /// <see cref="CommitKeyBinding"/>)</b>: captured verbatim assigning
+    /// "Open Folder ...\Braccio robotico" to Numpad 7 — cmd 0x2A writes
+    /// (dllKeyId, actionTypeValue) as two int32 LE fields; cmd 0x2B writes
+    /// the action's string parameter (the real folder path was transmitted
+    /// in clear, chunked ≤56 bytes/packet with a 4-byte LE length prefix);
+    /// cmd 0x2C commits. <b>K2 does not need to replicate Base Camp's real
+    /// action-type numbering</b> (that capture's value 0x3E for "Open
+    /// Folder" is Base Camp's own vocabulary) — K2 executes its OWN
+    /// K2Action via <c>Ev60ActionHost</c>/<c>ButtonActionEngine</c>
+    /// regardless of what this firmware-side value would have meant to Base
+    /// Camp, so <see cref="NumpadBoundMarker"/> (an arbitrary non-sentinel
+    /// constant) is used for every K2-assigned key. A second capture also
+    /// showed a cmd 0x29 with a different 2-int32 shape for a different
+    /// action type (Run Program) — confirms the write command family varies
+    /// by Base Camp's own action type, which is exactly why K2 doesn't try
+    /// to mirror it: cmd 0x2A/0x2B/0x2C is the one fully end-to-end
+    /// confirmed sequence (verified it silences the key's raw HID output),
+    /// so K2 always uses that one path regardless of the K2Action assigned.
+    /// </para>
+    ///
+    /// <para><b>Unassign (<see cref="UnassignKey"/>)</b>: confirmed 2026-07-22
+    /// via a 4th capture (<c>ev60_del.pcapng</c>, Base Camp itself removing a
+    /// numpad binding after a prior real-hardware test showed K2's original
+    /// guess — writing <see cref="NumpadUnassignedMarker"/> via cmd 0x2A —
+    /// did NOT restore the literal keystroke). The capture showed no
+    /// distinct write command at all for the removal: the only relevant
+    /// traffic was a cmd 0x22 call (dllKeyId, value=255), and the boot-
+    /// keyboard HID report for the physical key reappeared shortly after.
+    /// So the real mechanism is cmd 0x22 acting as a combined query/reset
+    /// (255 = <see cref="Everest60RemapData.DisabledKeyId"/>, the SAME
+    /// sentinel already used by the main board's <c>ChangeKey</c>), not a
+    /// cmd 0x2A write — see <see cref="UnassignKey"/>'s own doc comment.
+    /// </para>
+    ///
+    /// <para><b>Physical-press detection (<see cref="QueryNumpadKeyEvent"/>,
+    /// cmd 0x08)</b>: NOT the same as <c>Effect.Yeti = 0x08</c> above (that's
+    /// an unrelated enum value in a completely different command's payload,
+    /// pure coincidence of numbering) — cmd 0x08 is Base Camp's own
+    /// continuous background status poll (never sent by K2 before this),
+    /// whose response happens to carry the last numpad key event inline:
+    /// wire response bytes [4]=0x02 (constant), [5]=an incrementing event
+    /// counter, [6]=the DLLKeyId of the affected key, [7]=1 (pressed) / 0
+    /// (released). Verified across two independent, isolated physical
+    /// presses (Base Camp's own remap dialog fully closed, ~20s of idle
+    /// around them): the counter/dllKeyId/pressed fields are exactly what
+    /// changes, precisely twice, with zero false positives during idle —
+    /// this is NOT the same as the also-present cmd 0x07→0x2D exchange
+    /// (which turned out to be Base Camp's own housekeeping/list-refresh,
+    /// unreliable as a press signal on its own).
+    /// </para>
+    /// </summary>
+    public static class NumpadKeyBinding
+    {
+        /// <summary>Queries a numpad key's current binding (cmd 0x22) —
+        /// diagnostic/logging only, K2 doesn't need the result to decide what
+        /// to write. Returns the raw int32 action-type value, or
+        /// <see cref="NumpadUnassignedMarker"/> if unbound / on failure.</summary>
+        public static int QueryKeyBinding(SafeFileHandle h, int dllKeyId, Action<string>? log = null)
+        {
+            var req = MakeBuf(0x22);
+            BitConverter.GetBytes(dllKeyId).CopyTo(req, 5);
+            var resp = Everest60HidNative.SendFeature(h, req, delayMs: 15, log: log);
+            if (resp is null || resp[1] != 0x22)
+            {
+                log?.Invoke($"[Ev60] NumpadKeyBinding.QueryKeyBinding: dllKeyId={dllKeyId} failed");
+                return NumpadUnassignedMarker;
+            }
+            return BitConverter.ToInt32(resp, 9);
+        }
+
+        /// <summary>Marks a numpad key as bound (cmd 0x2A: dllKeyId at byte
+        /// 5, value at byte 9) — see class doc for why <paramref name="value"/>
+        /// doesn't need to mean anything to Base Camp.</summary>
+        public static void WriteKeyActionType(SafeFileHandle h, int dllKeyId, int value, Action<string>? log = null)
+        {
+            var req = MakeBuf(0x2A);
+            BitConverter.GetBytes(dllKeyId).CopyTo(req, 5);
+            BitConverter.GetBytes(value).CopyTo(req, 9);
+            var resp = Everest60HidNative.SendFeature(h, req, log: log);
+            log?.Invoke($"[Ev60] NumpadKeyBinding.WriteKeyActionType: dllKeyId={dllKeyId} value={value} " +
+                        $"-> {(resp is { Length: > 1 } && resp[1] == 0x2A ? "ack" : "no-ack")}");
+        }
+
+        /// <summary>Writes the action's string parameter (cmd 0x2B), chunked
+        /// ≤56 bytes/packet with a 4-byte LE length prefix per packet — see
+        /// class doc for the one detail (a stray extra byte in the capture's
+        /// first, multi-chunk-needing packet) left unresolved since K2's own
+        /// placeholder text is short enough to normally need a single
+        /// chunk.</summary>
+        public static void WriteKeyActionParam(SafeFileHandle h, string text, Action<string>? log = null)
+        {
+            const int maxChunk = 56;
+            byte[] bytes = System.Text.Encoding.UTF8.GetBytes(text ?? "");
+            int off = 0;
+            do
+            {
+                int len = Math.Min(maxChunk, bytes.Length - off);
+                var req = MakeBuf(0x2B);
+                BitConverter.GetBytes(len).CopyTo(req, 5);
+                if (len > 0) Array.Copy(bytes, off, req, 9, len);
+                Everest60HidNative.SendFeature(h, req, log: log);
+                off += len;
+            } while (off < bytes.Length);
+            log?.Invoke($"[Ev60] NumpadKeyBinding.WriteKeyActionParam: \"{text}\" ({bytes.Length} bytes)");
+        }
+
+        /// <summary>Commits a binding written via <see cref="WriteKeyActionType"/>/
+        /// <see cref="WriteKeyActionParam"/> (cmd 0x2C, no payload).</summary>
+        public static void CommitKeyBinding(SafeFileHandle h, Action<string>? log = null)
+        {
+            var resp = Everest60HidNative.SendFeature(h, MakeBuf(0x2C), log: log);
+            log?.Invoke($"[Ev60] NumpadKeyBinding.CommitKeyBinding -> {(resp is { Length: > 1 } && resp[1] == 0x2C ? "ack" : "no-ack")}");
+        }
+
+        /// <summary>Restores a numpad key to its unassigned (literal
+        /// keystroke) state — confirmed 2026-07-22 via a 4th capture
+        /// (Base Camp itself removing a numpad binding): despite going
+        /// through Base Camp's "remove" UI, no distinct write command ever
+        /// appeared on the wire — the only relevant traffic was cmd 0x22
+        /// (the SAME shape as <see cref="QueryKeyBinding"/>) with
+        /// <see cref="NumpadUnassignedMarker"/> (255) as its value, and the
+        /// physical key's raw HID boot-keyboard report reappeared moments
+        /// later. So cmd 0x22 is a combined query/reset, not a pure read:
+        /// harmless on an already-unassigned key (255 stays 255), and it
+        /// clears an assigned one. No commit needed — none was seen either.
+        /// </summary>
+        public static void UnassignKey(SafeFileHandle h, int dllKeyId, Action<string>? log = null)
+        {
+            var req = MakeBuf(0x22);
+            BitConverter.GetBytes(dllKeyId).CopyTo(req, 5);
+            BitConverter.GetBytes(NumpadUnassignedMarker).CopyTo(req, 9);
+            var resp = Everest60HidNative.SendFeature(h, req, log: log);
+            log?.Invoke($"[Ev60] NumpadKeyBinding.UnassignKey: dllKeyId={dllKeyId} " +
+                        $"-> {(resp is { Length: > 1 } && resp[1] == 0x22 ? "ack" : "no-ack")}");
+        }
+
+        /// <summary>Polls for a numpad key press/release event (cmd 0x08, no
+        /// request payload). Returns (counter, dllKeyId, pressed) from the
+        /// response, or null on failure — see class doc for the byte layout
+        /// and how it was verified.</summary>
+        public static (int Counter, int DllKeyId, bool Pressed)? QueryNumpadKeyEvent(SafeFileHandle h, Action<string>? log = null)
+        {
+            var resp = Everest60HidNative.SendFeature(h, MakeBuf(0x08), delayMs: 5);
+            if (resp is null || resp[1] != 0x08)
+            {
+                log?.Invoke("[Ev60] NumpadKeyBinding.QueryNumpadKeyEvent: request failed");
+                return null;
+            }
+            return (Counter: resp[6], DllKeyId: resp[7], Pressed: resp[8] == 1);
+        }
     }
 }

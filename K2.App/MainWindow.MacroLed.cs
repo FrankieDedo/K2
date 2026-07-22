@@ -18,8 +18,11 @@ namespace K2.App;
 /// (<see cref="CurrentDeviceId"/>): every native MacroPad command takes the
 /// slot id as last parameter.
 ///
-/// Panel state is persisted globally in Settings (keys <c>macroled.*</c>)
-/// and reapplied when the driver opens.
+/// Panel state is persisted in Settings — shared across profiles (keys
+/// <c>macroled.*</c>) when "sync across profiles" is on, or per-profile
+/// (<c>macroled.p{N}.*</c>) when off, mirroring Everest 60/Makalu (see
+/// MacroLedPrefix, user request 2026-07-22) — and reapplied when the driver
+/// opens or the active profile changes.
 /// </summary>
 public partial class MainWindow
 {
@@ -203,25 +206,47 @@ public partial class MainWindow
         _macroLedInitialized = true;
     }
 
-    /// <summary>Restores the panel from <c>macroled.*</c> keys (global state).</summary>
+    /// <summary>
+    /// Key namespace for the LED effect settings: shared (<c>"macroled."</c>)
+    /// when "sync across profiles" is on, or profile-scoped
+    /// (<c>"macroled.p{N}."</c>) when off — synced means one shared effect for
+    /// every profile by definition, so only the un-synced case needs
+    /// per-profile storage (mirrors Everest 60/Makalu, user request 2026-07-22).
+    /// </summary>
+    private string MacroLedPrefix() =>
+        CkMacroSync.IsChecked == true ? "macroled." : $"macroled.p{CurrentProfile()}.";
+
+    /// <summary>Restores the panel from Settings (see <see cref="MacroLedPrefix"/>):
+    /// falls back once to the legacy always-global <c>macroled.*</c> keys for a
+    /// profile that has no per-profile value yet (existing installs). <c>macroled.sync</c>
+    /// itself and the auto-off timer are always global device settings.</summary>
     private void LoadMacroLedFromStore()
     {
-        if (IntSetting("macroled.effect") is int eIdx)
+        if (IntSetting("macroled.sync") is int sy) CkMacroSync.IsChecked = sy != 0;
+
+        string p = MacroLedPrefix();
+        const string gp = "macroled.";
+
+        if ((IntSetting(p + "effect") ?? IntSetting(gp + "effect")) is int eIdx)
             for (int i = 0; i < MacroEffectList.Length; i++)
                 if ((byte)MacroEffectList[i].Eff == eIdx) { CbMacroEffect.SelectedIndex = i; break; }
-        if (IntSetting("macroled.speed")      is int sp && sp is >= 0 and <= 100) SldMacroSpeed.Value = sp;
+        if ((IntSetting(p + "speed") ?? IntSetting(gp + "speed")) is int sp && sp is >= 0 and <= 100)
+            SldMacroSpeed.Value = sp;
         // Direction is set by UpdateMpCapabilities (depends on effect);
         // here we only restore the saved index, applied later if valid.
-        if (IntSetting("macroled.direction")  is int dr && dr >= 0) _macroSavedDirIndex = dr;
-        if (IntSetting("macroled.brightness") is int br && br is >= 0 and <= 100) SldMacroBrightness.Value = br;
+        if ((IntSetting(p + "direction") ?? IntSetting(gp + "direction")) is int dr && dr >= 0)
+            _macroSavedDirIndex = dr;
+        if ((IntSetting(p + "brightness") ?? IntSetting(gp + "brightness")) is int br && br is >= 0 and <= 100)
+            SldMacroBrightness.Value = br;
         // Rainbow/Double are mutually exclusive (one radio group) — Rainbow wins
         // if both were somehow persisted true (shouldn't happen going forward).
-        if (IntSetting("macroled.rainbow") is int rb && rb != 0) RbMacroRainbow.IsChecked = true;
-        else if (IntSetting("macroled.colorDouble") is int cd && cd != 0) RbMacroColorDouble.IsChecked = true;
-        if (IntSetting("macroled.color1")     is int c1) _macroColor1 = c1 & 0xFFFFFF;
-        if (IntSetting("macroled.color2")     is int c2) _macroColor2 = c2 & 0xFFFFFF;
-        if (IntSetting("macroled.color3")     is int c3) _macroColor3 = c3 & 0xFFFFFF;
-        if (IntSetting("macroled.sync")       is int sy) CkMacroSync.IsChecked = sy != 0;
+        if ((IntSetting(p + "rainbow") ?? IntSetting(gp + "rainbow")) is int rb && rb != 0)
+            RbMacroRainbow.IsChecked = true;
+        else if ((IntSetting(p + "colorDouble") ?? IntSetting(gp + "colorDouble")) is int cd && cd != 0)
+            RbMacroColorDouble.IsChecked = true;
+        if ((IntSetting(p + "color1") ?? IntSetting(gp + "color1")) is int c1) _macroColor1 = c1 & 0xFFFFFF;
+        if ((IntSetting(p + "color2") ?? IntSetting(gp + "color2")) is int c2) _macroColor2 = c2 & 0xFFFFFF;
+        if ((IntSetting(p + "color3") ?? IntSetting(gp + "color3")) is int c3) _macroColor3 = c3 & 0xFFFFFF;
 
         CkMacroAutoOffEnable.IsChecked = IntSetting("macroled.autoOffEnable") == 1;
         TxtMacroAutoOffSeconds.Text    = (IntSetting("macroled.autoOffSeconds") ?? 60).ToString();
@@ -270,21 +295,49 @@ public partial class MainWindow
     private int? IntSetting(string key) =>
         int.TryParse(_store.GetSetting(key), out int v) ? v : null;
 
-    /// <summary>Saves the current panel payload to Settings.</summary>
+    /// <summary>Saves the current panel payload to Settings, under the shared or
+    /// profile-scoped namespace given by <see cref="MacroLedPrefix"/>.
+    /// <c>macroled.sync</c> itself is always the global device flag.</summary>
     private void SaveMacroLedToStore()
     {
         if (!_macroLedInitialized || _macroLedSuppress) return;
         if (CbMacroEffect.SelectedItem is not MacroEffectChoice pick) return;
-        _store.SetSetting("macroled.effect",     ((int)(byte)pick.Eff).ToString());
-        _store.SetSetting("macroled.speed",      ((int)SldMacroSpeed.Value).ToString());
-        _store.SetSetting("macroled.direction",  _macroDirIndex.ToString());
-        _store.SetSetting("macroled.brightness", ((int)SldMacroBrightness.Value).ToString());
-        _store.SetSetting("macroled.rainbow",    RbMacroRainbow.IsChecked == true ? "1" : "0");
-        _store.SetSetting("macroled.colorDouble", RbMacroColorDouble.IsChecked == true ? "1" : "0");
-        _store.SetSetting("macroled.color1",     _macroColor1.ToString());
-        _store.SetSetting("macroled.color2",     _macroColor2.ToString());
-        _store.SetSetting("macroled.color3",     _macroColor3.ToString());
-        _store.SetSetting("macroled.sync",       CkMacroSync.IsChecked == true ? "1" : "0");
+        string p = MacroLedPrefix();
+        _store.SetSetting(p + "effect",     ((int)(byte)pick.Eff).ToString());
+        _store.SetSetting(p + "speed",      ((int)SldMacroSpeed.Value).ToString());
+        _store.SetSetting(p + "direction",  _macroDirIndex.ToString());
+        _store.SetSetting(p + "brightness", ((int)SldMacroBrightness.Value).ToString());
+        _store.SetSetting(p + "rainbow",    RbMacroRainbow.IsChecked == true ? "1" : "0");
+        _store.SetSetting(p + "colorDouble", RbMacroColorDouble.IsChecked == true ? "1" : "0");
+        _store.SetSetting(p + "color1",     _macroColor1.ToString());
+        _store.SetSetting(p + "color2",     _macroColor2.ToString());
+        _store.SetSetting(p + "color3",     _macroColor3.ToString());
+        _store.SetSetting("macroled.sync", CkMacroSync.IsChecked == true ? "1" : "0");
+    }
+
+    /// <summary>
+    /// Re-loads the LED panel for the profile that just became active and resends
+    /// the effect (targets that profile explicitly via SetEffect's own
+    /// <c>profile</c> parameter — see ApplyCurrentMacroEffect), so each profile
+    /// keeps its own remembered lighting when "sync across profiles" is off
+    /// (no-op in practice when synced: same shared keys, same values). Mirrors
+    /// Everest Max's ReloadEverestRgbForProfileSwitch. User request 2026-07-22.
+    /// </summary>
+    private void ReloadMacroLedForProfileSwitch()
+    {
+        if (!_macroLedInitialized) return;
+        bool prev = _macroLedSuppress;
+        _macroLedSuppress = true;
+        try
+        {
+            LoadMacroLedFromStore();
+            UpdateMpCapabilities();
+            LblMacroBrightness.Text = $"{(int)SldMacroBrightness.Value}%";
+            ApplyColorButton(BtnMacroColor1, _macroColor1);
+            ApplyColorButton(BtnMacroColor2, _macroColor2);
+        }
+        finally { _macroLedSuppress = prev; }
+        ApplyCurrentMacroEffect();
     }
 
     // WPF does NOT raise SelectionChanged when re-clicking the already selected item,

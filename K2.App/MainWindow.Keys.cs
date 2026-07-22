@@ -697,7 +697,7 @@ public partial class MainWindow
     private void ReloadCurrentProfile()
     {
         foreach (var k in _keys) { k.ActionType = null; k.ActionValue = null; }
-        if (CurrentDeviceId() is not int id) { RefreshMpMappedKeys(); return; }
+        if (CurrentDeviceId() is not int id) { RefreshMpMappedKeys(); ReloadMacroLedForProfileSwitch(); return; }
         int profile = CurrentProfile();
         var rows = _store.LoadProfile(id, profile);
         foreach (var r in rows)
@@ -708,6 +708,8 @@ public partial class MainWindow
         }
         RefreshMpMappedKeys();
         Log($"[DB  ] loaded {rows.Count} actions for device={id} profile={profile}");
+
+        ReloadMacroLedForProfileSwitch();
     }
 
     // ============================================================

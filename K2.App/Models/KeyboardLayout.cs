@@ -13,7 +13,10 @@ public readonly record struct KeyDef(
     double X,         // left position in the Canvas
     double Y,         // top position in the Canvas
     double W,         // width
-    double H          // height
+    double H,         // height
+    int    NumpadIndex = -1  // Everest 60 numpad accessory key index (0-16,
+                              // same order as Everest60Protocol.NumpadLedIndex);
+                              // -1 for every other key on every other board
 );
 
 /// <summary>Physical keyboard layout type. Mirrors Base Camp's selectable set

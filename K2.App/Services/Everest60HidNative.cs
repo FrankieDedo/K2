@@ -139,7 +139,7 @@ internal static class Everest60HidNative
     /// 1ms between them — pass a smaller value for read-only polling loops
     /// where 50ms×N would be too slow.
     /// </summary>
-    public static byte[]? SendFeature(SafeFileHandle h, byte[] report65, int retries = 3, int delayMs = 50)
+    public static byte[]? SendFeature(SafeFileHandle h, byte[] report65, int retries = 3, int delayMs = 50, Action<string>? log = null)
     {
         if (report65.Length != ReportSize)
             throw new ArgumentException($"report must be {ReportSize} bytes", nameof(report65));
@@ -149,6 +149,7 @@ internal static class Everest60HidNative
         {
             if (!HidD_SetFeature(h, report65, report65.Length))
             {
+                log?.Invoke($"[Ev60-HID] SendFeature cmd=0x{cmd:X2}: HidD_SetFeature failed, attempt {attempt + 1}/{retries}");
                 Thread.Sleep(delayMs);
                 continue;
             }
@@ -159,9 +160,21 @@ internal static class Everest60HidNative
             {
                 last = resp;
                 if (resp.Length >= 2 && resp[1] == cmd) return resp;
+                // Diagnostic (2026-07-22): a well-formed response for a DIFFERENT
+                // command landed here — either genuine device-side retry/lag, or
+                // (see Everest60Service.WithDevice's doc comment) another session
+                // touching the same physical device outside this call's control
+                // (the vendor SDK's own Everest360_USB.dll handle, not covered by
+                // K2's own _hidLock since it never goes through this class at all).
+                log?.Invoke($"[Ev60-HID] SendFeature cmd=0x{cmd:X2}: got echo 0x{(resp.Length >= 2 ? resp[1] : (byte)0):X2} instead, attempt {attempt + 1}/{retries}");
+            }
+            else
+            {
+                log?.Invoke($"[Ev60-HID] SendFeature cmd=0x{cmd:X2}: HidD_GetFeature failed, attempt {attempt + 1}/{retries}");
             }
             Thread.Sleep(delayMs);
         }
+        if (last is null) log?.Invoke($"[Ev60-HID] SendFeature cmd=0x{cmd:X2}: gave up after {retries} attempts, no response at all");
         return last;
     }
 

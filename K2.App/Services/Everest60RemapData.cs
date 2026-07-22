@@ -75,6 +75,28 @@ internal static class Everest60RemapData
         58, 59, 60, 61, 62, 154, 79, 84, 89,
     };
 
+    /// <summary>Numpad accessory's 17 keys → DLLKeyId, same index order as
+    /// <c>Everest60KeyboardLayout.Numpad</c>/<c>KeyDef.NumpadIndex</c>/
+    /// <c>Everest60Protocol.NumpadLedIndex</c> (Num,/,*,-, 7,8,9,+, 4,5,6,
+    /// 1,2,3,Enter, 0,.). Extracted 2026-07-22 by re-decompiling
+    /// <c>Everest60Operations.GetEverest60KeyBindings_English</c> (same
+    /// method as <see cref="KeyCatalog"/> above, whose doc comment originally
+    /// dismissed these ~52 extra catalog entries as "not needed — this
+    /// device has none of those keys", an assumption superseded once the
+    /// accessory numpad's own Key Binding protocol was found via USBPcap —
+    /// see CHANGELOG). Verified against two independent captures assigning a
+    /// real numpad key: "Numpad 7"'s DLLKeyId (91=0x5B) and "Numpad 4"'s
+    /// (92=0x5C) both matched the wire value exactly, not inferred.</summary>
+    public static readonly int[] NumpadDllKeyId =
+    {
+        90, 95, 100, 105,   // Num Lock, /, *, -
+        91, 96, 101, 106,   // 7, 8, 9, +
+        92, 97, 102,        // 4, 5, 6
+        93, 98, 103,        // 1, 2, 3
+        108,                // Enter
+        99, 104,            // 0, .
+    };
+
     /// <summary>Modifier bitmask values for ChangeShortcutKey.</summary>
     public const int ModCtrl = 1;
     public const int ModShift = 2;
