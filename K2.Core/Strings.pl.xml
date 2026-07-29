@@ -1,20 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Polska lokalizacja dla K2.
+  Skopiuj do tego samego folderu co plik .exe jako Strings.pl.xml.
+  Zostanie wczytany automatycznie, gdy językiem interfejsu jest "pl",
+  albo po ustawieniu K2_LANG=pl, albo z menu Język w aplikacji.
+-->
 <strings>
+  <!-- ═══════════════════════════════════════════════════════════════
+       WSPÓLNE / OGÓLNE
+       ═══════════════════════════════════════════════════════════════ -->
   <string name="app_title">K2</string>
+  <string name="tab_home">Start</string>
+  <string name="home_no_device">Nie podłączono żadnego urządzenia</string>
+  <string name="home_heading">Podłączone urządzenia</string>
+  <string name="app_already_running">Inna instancja K2 jest już uruchomiona.</string>
   <string name="driver_not_opened">Sterownik nie jest otwarty.</string>
   <string name="open_driver">Otwórz sterownik</string>
   <string name="close_driver">Zamknij sterownik</string>
   <string name="refresh">Odśwież</string>
   <string name="refresh_devices">Odśwież urządzenia</string>
+  <string name="debug_group">Debugowanie</string>
   <string name="profile">Profil</string>
   <string name="device">Urządzenie</string>
   <string name="positioning">Pozycjonowanie</string>
+  <string name="backlight_auto_off_group">Automatyczne wyłączanie podświetlenia</string>
+  <string name="backlight_auto_off_enable">Wyłącz podświetlenie przy bezczynności</string>
+  <string name="backlight_auto_off_seconds">Po</string>
+  <string name="keyboard_language_layout">Ustawienia języka</string>
   <string name="pos_horizontal">Poziomo ({0}°)</string>
   <string name="pos_vertical">Pionowo ({0}°)</string>
   <string name="brightness">Jasność:</string>
   <string name="save">Zapisz</string>
   <string name="cancel">Anuluj</string>
   <string name="ok">OK</string>
+  <string name="colorpicker_title">Wybierz kolor</string>
+  <string name="colorpicker_preview">Podgląd</string>
+  <string name="colorpicker_hex">Hex</string>
+  <string name="colorpicker_saved">Zapisane kolory</string>
+  <string name="colorpicker_add">+ Dodaj</string>
+  <string name="colorpicker_remove">Usuń z zapisanych kolorów</string>
+  <string name="browse">Przeglądaj…</string>
+  <string name="crop_hint">Przeciągnij, aby zmienić pozycję, przewiń lub użyj suwaka, aby powiększyć.</string>
+  <string name="crop_title">Przytnij obraz ({0}×{1})</string>
+  <string name="crop_no_crop">Wstaw bez zmian (bez przycinania/powiększania)</string>
+  <string name="crop_show_grid">Pokaż zarys klawisza</string>
   <string name="error">Błąd</string>
   <string name="copy">Kopiuj</string>
   <string name="open_log">Otwórz dziennik…</string>
@@ -30,23 +59,159 @@
   <string name="new_profile">+ Nowy profil</string>
   <string name="profile_n">Profil {0}</string>
   <string name="select_device_first">Najpierw wybierz urządzenie.</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       DIALOG KONFIGURACJI AKCJI PRZYCISKU (K2.Core)
+       ═══════════════════════════════════════════════════════════════ -->
   <string name="dlg_title">Konfiguruj akcję przycisku</string>
   <string name="dlg_button_label">Przycisk #?</string>
   <string name="dlg_action_type">Typ akcji:</string>
   <string name="dlg_value">Wartość:</string>
   <string name="act_none">Brak</string>
+  <string name="act_disable">Klawisz wyłączony</string>
   <string name="act_url">Otwórz URL</string>
   <string name="act_exec">Otwórz program / plik</string>
   <string name="act_folder">Otwórz folder</string>
+  <string name="act_page">Strona</string>
+  <string name="page_pick_label">Strona:</string>
+  <string name="page_name_label">Nazwa strony:</string>
+  <string name="page_new_option">— Nowa strona —</string>
   <string name="act_browser">Otwórz przeglądarkę</string>
   <string name="act_profile">Zmień profil</string>
   <string name="act_oscmd">Polecenie systemowe</string>
   <string name="act_media">Klawisz multimedialny</string>
   <string name="act_mouse">Akcja myszy</string>
-  <string name="act_keys">Klawisze (Ctrl+Shift+A)</string>
+  <string name="act_keys">Kombinacja klawiszy</string>
+  <string name="act_hotkeyswitch">Przełącznik skrótów</string>
+  <string name="hotkey_shortcut_a">Skrót A</string>
+  <string name="hotkey_shortcut_b">Skrót B</string>
+  <string name="hotkey_hint">Każde naciśnięcie przełącza między dwoma powyższymi skrótami.</string>
+  <string name="act_multi">Akcja wieloetapowa</string>
+  <string name="multi_steps_label">Kroki:</string>
+  <string name="multi_add_step">Dodaj krok</string>
+  <string name="multi_delay_ms">Opóźnienie (ms)</string>
+  <string name="act_multi_summary">{0} kroków</string>
+  <string name="act_adobe">Adobe</string>
+  <string name="act_davinci">DaVinci Resolve</string>
+  <string name="act_zoom">Zoom</string>
+  <string name="act_obs">OBS Studio</string>
+  <string name="act_twitch">Twitch</string>
+  <string name="act_spotify">Spotify</string>
+  <string name="act_youtube">YouTube</string>
+  <string name="appshortcut_app_label">Aplikacja:</string>
+  <string name="appshortcut_action_label">Czynność:</string>
+  <string name="appshortcut_custom">Niestandardowe…</string>
+  <string name="obs_settings_title">Ustawienia OBS Studio</string>
+  <string name="obs_host_label">Host:</string>
+  <string name="obs_port_label">Port:</string>
+  <string name="obs_password_label">Hasło:</string>
+  <string name="obs_test_connection">Testuj połączenie</string>
+  <string name="obs_connected">Połączono</string>
+  <string name="obs_not_connected">Brak połączenia</string>
+  <string name="obs_settings_button">Ustawienia OBS…</string>
+  <string name="obs_arg_hint">Nazwa sceny/profilu/źródła/przejścia, lub liczba (czas trwania w ms, głośność w dB)</string>
+  <string name="obs_cmd_start_streaming">Rozpocznij streaming</string>
+  <string name="obs_cmd_stop_streaming">Zatrzymaj streaming</string>
+  <string name="obs_cmd_start_recording">Rozpocznij nagrywanie</string>
+  <string name="obs_cmd_stop_recording">Zatrzymaj nagrywanie</string>
+  <string name="obs_cmd_pause_recording">Wstrzymaj nagrywanie</string>
+  <string name="obs_cmd_resume_recording">Wznów nagrywanie</string>
+  <string name="obs_cmd_next_profile">Następny profil</string>
+  <string name="obs_cmd_previous_profile">Poprzedni profil</string>
+  <string name="obs_cmd_set_current_profile">Ustaw profil</string>
+  <string name="obs_cmd_next_scene">Następna scena</string>
+  <string name="obs_cmd_previous_scene">Poprzednia scena</string>
+  <string name="obs_cmd_set_current_scene">Ustaw scenę</string>
+  <string name="obs_cmd_set_current_source">Przełącz źródło</string>
+  <string name="obs_cmd_next_transition">Następne przejście</string>
+  <string name="obs_cmd_previous_transition">Poprzednie przejście</string>
+  <string name="obs_cmd_set_transition_duration">Ustaw czas trwania przejścia</string>
+  <string name="obs_cmd_set_current_transition">Ustaw przejście</string>
+  <string name="obs_cmd_mic_volume_up">Głośność mikrofonu +</string>
+  <string name="obs_cmd_mic_volume_down">Głośność mikrofonu -</string>
+  <string name="obs_cmd_mute_mic">Wycisz mikrofon</string>
+  <string name="obs_cmd_unmute_mic">Wyłącz wyciszenie mikrofonu</string>
+  <string name="obs_cmd_set_mic_volume">Ustaw głośność mikrofonu</string>
+  <string name="obs_cmd_desktop_volume_up">Głośność systemu +</string>
+  <string name="obs_cmd_desktop_volume_down">Głośność systemu -</string>
+  <string name="obs_cmd_mute_desktop">Wycisz dźwięk systemu</string>
+  <string name="obs_cmd_unmute_desktop">Wyłącz wyciszenie dźwięku systemu</string>
+  <string name="obs_cmd_set_desktop_volume">Ustaw głośność systemu</string>
+  <string name="obs_cmd_enable_studio_mode">Włącz tryb studyjny</string>
+  <string name="obs_cmd_disable_studio_mode">Wyłącz tryb studyjny</string>
+  <string name="obs_cmd_start_replay_buffer">Uruchom bufor powtórek</string>
+  <string name="obs_cmd_stop_replay_buffer">Zatrzymaj bufor powtórek</string>
+  <string name="obs_cmd_save_replay_buffer">Zapisz bufor powtórek</string>
+  <string name="obs_cmd_next_media">Następny plik multimedialny</string>
+  <string name="obs_cmd_previous_media">Poprzedni plik multimedialny</string>
+  <string name="obs_cmd_play_media">Odtwórz multimedia</string>
+  <string name="obs_cmd_pause_media">Wstrzymaj multimedia</string>
+  <string name="obs_cmd_stop_media">Zatrzymaj multimedia</string>
+  <string name="obs_cmd_open_projector">Otwórz projektor</string>
+  <string name="twitch_settings_title">Ustawienia Twitch</string>
+  <string name="twitch_hint">Zarejestruj własną aplikację na dev.twitch.tv z adresem przekierowania OAuth "http://localhost:17563/callback", a następnie wklej tutaj Client ID/Secret.</string>
+  <string name="twitch_setup_guide">1. Przejdź na dev.twitch.tv/console/apps i kliknij "Register Your Application".
+2. OAuth Redirect URL: http://localhost:17563/callback
+3. Kategoria: dowolna (np. "Application Integration").
+4. Zapisz, skopiuj Client ID, a następnie kliknij "New Secret", aby uzyskać Client Secret.</string>
+  <string name="twitch_client_id_label">Client ID:</string>
+  <string name="twitch_client_secret_label">Client Secret:</string>
+  <string name="twitch_connect">Połącz</string>
+  <string name="twitch_connecting">Łączenie…</string>
+  <string name="twitch_disconnect">Rozłącz</string>
+  <string name="twitch_connected_as">Połączono jako</string>
+  <string name="twitch_settings_button">Ustawienia Twitch…</string>
+  <string name="twitch_cmd_chat_message">Wyślij wiadomość na czacie</string>
+  <string name="twitch_cmd_clear_chat">Wyczyść czat</string>
+  <string name="twitch_cmd_emote_only">Przełącz czat tylko z emotkami</string>
+  <string name="twitch_cmd_followers_only">Ustaw czat tylko dla obserwujących</string>
+  <string name="twitch_cmd_slow_mode">Ustaw tryb spowolniony</string>
+  <string name="twitch_cmd_subscribers_only">Przełącz czat tylko dla subskrybentów</string>
+  <string name="twitch_cmd_play_ad">Uruchom reklamę</string>
+  <string name="twitch_cmd_stream_title">Ustaw tytuł streamu</string>
+  <string name="twitch_cmd_stream_marker">Utwórz znacznik streamu</string>
+  <string name="twitch_cmd_create_clip">Utwórz klip</string>
+  <string name="twitch_cmd_open_last_clip">Otwórz ostatni klip</string>
+  <string name="spotify_settings_title">Ustawienia Spotify</string>
+  <string name="spotify_hint">Zarejestruj własną aplikację na developer.spotify.com/dashboard z Redirect URI "http://127.0.0.1:17564/callback", a następnie wklej tutaj Client ID/Secret.</string>
+  <string name="spotify_setup_guide">1. Przejdź na developer.spotify.com/dashboard i kliknij "Create app".
+2. Redirect URI: http://127.0.0.1:17564/callback
+3. Which API/SDKs are you planning to use: Web API.
+4. Zapisz, następnie skopiuj Client ID i kliknij "View client secret", aby uzyskać Client Secret.</string>
+  <string name="spotify_client_id_label">Client ID:</string>
+  <string name="spotify_client_secret_label">Client Secret:</string>
+  <string name="spotify_connected_as">Połączono jako</string>
+  <string name="spotify_settings_button">Ustawienia Spotify…</string>
+  <string name="spotify_cmd_play_pause">Odtwórz/Pauza</string>
+  <string name="spotify_cmd_next">Następny utwór</string>
+  <string name="spotify_cmd_previous">Poprzedni utwór</string>
+  <string name="spotify_cmd_like_toggle">Polub/Cofnij polubienie utworu</string>
+  <string name="spotify_cmd_shuffle_toggle">Przełącz odtwarzanie losowe</string>
+  <string name="spotify_cmd_repeat_cycle">Zmień tryb powtarzania</string>
+  <string name="spotify_cmd_mute_toggle">Wycisz/Wyłącz wyciszenie</string>
+  <string name="spotify_cmd_volume_up">Zwiększ głośność</string>
+  <string name="spotify_cmd_volume_down">Zmniejsz głośność</string>
+  <string name="spotify_cmd_volume_set">Ustaw głośność</string>
+  <string name="spotify_cmd_save_playlist">Zapisz utwór na playliście</string>
+  <string name="spotify_cmd_remove_playlist">Usuń utwór z playlisty</string>
+  <string name="youtube_settings_title">Ustawienia YouTube</string>
+  <string name="youtube_hint">Utwórz klienta OAuth dla aplikacji klasycznej na console.cloud.google.com z włączonym YouTube Data API v3, a następnie wklej tutaj Client ID/Secret.</string>
+  <string name="youtube_setup_guide">1. Przejdź na console.cloud.google.com, utwórz/wybierz projekt, a następnie włącz "YouTube Data API v3" (APIs &amp; Services -&gt; Library).
+2. Otwórz "Google Auth Platform" -&gt; Branding: ustaw App name + adres e-mail wsparcia (przy pierwszym uruchomieniu pojawi się kreator "Get Started").
+3. Karta Audience: User type "External", a następnie dodaj swoje konto Google w sekcji "Test users".
+4. Karta Clients -&gt; Create Client -&gt; Application type: Desktop app -&gt; Create. Skopiuj od razu Client ID/Secret — sekret jest pokazywany tylko raz.
+5. Przy pierwszym logowaniu zobaczysz "Google hasn't verified this app" (normalne, wrażliwy zakres uprawnień) — kliknij Advanced -&gt; Go to your app (unsafe). W statusie Testing logowanie może wymagać powtarzania co ~7 dni; "Publish app" w sekcji Audience rozwiązuje ten problem.</string>
+  <string name="youtube_client_id_label">Client ID:</string>
+  <string name="youtube_client_secret_label">Client Secret:</string>
+  <string name="youtube_settings_button">Ustawienia YouTube…</string>
+  <string name="youtube_chat_message_label">Wiadomość na czacie na żywo:</string>
   <string name="act_command">Polecenie powłoki</string>
   <string name="act_text">Wklej tekst</string>
+  <string name="act_macro">Odtwórz makro</string>
+  <string name="act_macro_unresolved">Odtwórz makro (nieprzypisane)</string>
+  <string name="act_googlehome">Google Home</string>
   <string name="act_pyscript">Skrypt Python</string>
+  <string name="act_unrecognized">Nierozpoznane</string>
   <string name="py_file">Plik .py</string>
   <string name="py_inline">Kod wbudowany</string>
   <string name="py_browse">Przeglądaj…</string>
@@ -79,6 +244,7 @@
   <string name="media_vol_up">Volume up</string>
   <string name="media_vol_down">Volume down</string>
   <string name="media_mute">Mute</string>
+  <string name="media_shuffle">Odtwarzanie losowe</string>
   <string name="mouse_left">Left button</string>
   <string name="mouse_right">Right button</string>
   <string name="mouse_middle">Middle button</string>
@@ -91,6 +257,107 @@
   <string name="keys_modifiers_label">Modifiers:</string>
   <string name="keys_key_label">Key:</string>
   <string name="keys_win_hint">The Windows key can be selected but is not sent by the current keystroke backend (SendKeys) — it is silently ignored.</string>
+  <string name="gh_manage">Zarządzaj urządzeniami Google Home…</string>
+  <string name="gh_summary_missing">Google Home (usunięto powiązanie)</string>
+  <string name="gh_setup_title">Urządzenia Google Home</string>
+  <string name="gh_capture_name_prompt">Nazwij to powiązanie…</string>
+  <string name="gh_bindings_header">Zapisane powiązania</string>
+  <string name="gh_no_bindings">Nie znaleziono jeszcze żadnych urządzeń — zaloguj się powyżej, aby zaimportować je automatycznie.</string>
+  <string name="gh_rename">Zmień nazwę</string>
+  <string name="gh_delete">Usuń</string>
+  <string name="gh_login_hint">Zaloguj się powyżej — każde urządzenie zostanie zaimportowane automatycznie po zalogowaniu.</string>
+  <string name="gh_status_connected">Połączono</string>
+  <string name="gh_status_disconnected">Rozłączono — zaloguj się powyżej, aby połączyć ponownie</string>
+  <string name="gh_force_refresh">Wymuś odświeżenie</string>
+  <string name="gh_disconnect">Rozłącz</string>
+  <string name="gh_advanced_hint">Tryb debugowania jest włączony (Ustawienia) — po lewej stronie widoczne są zaawansowane narzędzia nagrywania Foyer.</string>
+  <string name="gh_record_start">Nagraj akcję</string>
+  <string name="gh_record_alt">Nagraj przeciwną akcję</string>
+  <string name="gh_record_hint">Zaloguj się powyżej, następnie kliknij Nagraj akcję i wykonaj akcję na stronie (włącz, przyciemnij, zmień kolor…): K2 przechwytuje polecenie wysyłane przez Google Home i odtwarza je po naciśnięciu klawisza. "Nagraj przeciwną akcję" dodaje akcję odwrotną do wybranego powiązania, dzięki czemu jeden klawisz przełącza między nimi.</string>
+  <string name="gh_record_armed">Nagrywanie — wykonaj teraz akcję na stronie.</string>
+  <string name="gh_record_alt_armed">Nagrywanie przeciwnej akcji — wykonaj ją teraz na stronie.</string>
+  <string name="close">Zamknij</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       ZAKŁADKA USTAWIENIA OGÓLNE
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="tab_settings">Ustawienia</string>
+  <string name="tab_macro">Makro</string>
+  <string name="settings_debug_mode">Tryb debugowania</string>
+  <string name="settings_debug_mode_hint">Włącza narzędzia debugowania (otwieranie/zamykanie sterownika, sterowanie AP, dziennik zdarzeń) dla każdego urządzenia.</string>
+  <string name="settings_log_level">Rejestrowanie</string>
+  <string name="log_off">Wyłączone</string>
+  <string name="log_normal">Normalne</string>
+  <string name="log_verbose">Szczegółowe</string>
+  <string name="settings_dp_native">DisplayPad: natywny silnik USB (eksperymentalny)</string>
+  <string name="settings_dp_native_hint">Steruje DisplayPad bezpośrednio przez USB zamiast SDK Mountain: potwierdzone transfery (bez uszkodzenia ikon), brak procesu satelitarnego. Trwałość profili na urządzeniu nie jest dostępna; obrazy są przesyłane ponownie z bazy danych K2. Zaczyna działać po ponownym uruchomieniu K2.</string>
+  <string name="settings_ev_native">Everest Max: natywny silnik USB (eksperymentalny, częściowy)</string>
+  <string name="settings_ev_native_hint">Steruje połączeniem Everest Max i 4 przyciskami wyświetlacza numpada bezpośrednio przez USB zamiast SDKDLL.dll — usuwa chroniczną awarię wątku timera tej biblioteki DLL w zakresie, który obsługuje. Efekty RGB, ikony numpada, Media Dock i zdarzenia pełnego przypisania klawiatury nadal używają SDKDLL.dll (jeszcze nie przeniesione). Zaczyna działać po ponownym uruchomieniu K2.</string>
+  <string name="settings_auto_stop_bc">Automatycznie zatrzymuj Base Camp przy starcie</string>
+  <string name="settings_auto_stop_bc_hint">Za każdym razem, gdy K2 się uruchamia, zatrzymuje usługę Windows Base Camp i zamyka wszystkie procesy Base Camp (GUI, usługa, workery, monitor Makalu) nadal działające lub ponownie uruchomione przez autostart Windows — dzięki temu K2 całkowicie zastępuje Base Camp zamiast działać razem z nim. Wyłącz tę opcję, jeśli nadal chcesz używać Base Camp razem z K2.</string>
+  <string name="settings_kill_bc_worker">Zakończ proces DisplayPad Base Camp</string>
+  <string name="settings_kill_bc_worker_hint">MountainDisplayPadWorker działa w tle i zapisuje na DisplayPad jednocześnie z K2, uszkadzając ikony. Po włączeniu K2 automatycznie go kończy (i utrzymuje zamknięty podczas działania).</string>
+  <string name="settings_bc_autostart">Uruchamiaj usługi Base Camp wraz z Windows</string>
+  <string name="settings_bc_autostart_hint">Włącza/wyłącza wpisy autostartu Base Camp w Windows (ten sam mechanizm co karta Uruchamianie w Menedżerze zadań — odwracalne). Wpisy w HKLM mogą wymagać uruchomienia K2 jako administrator.</string>
+  <string name="settings_bc_autostart_none">Nie znaleziono wpisu autostartu Base Camp w rejestrze.</string>
+  <string name="settings_bc_autostart_done">Autostart Base Camp: zaktualizowano {0} wpisów.</string>
+  <string name="settings_restart_bc_on_close">Uruchom ponownie Base Camp po zamknięciu K2</string>
+  <string name="settings_restart_bc_on_close_hint">Po zamknięciu K2 ponownie uruchamiane są procesy Base Camp, które zostały automatycznie zatrzymane (GUI, workery, monitor Makalu, usługa Windows) — dzięki temu Base Camp wraca do stanu sprzed uruchomienia K2. MountainDisplayPadWorker jest zawsze uruchamiany ponownie po cichu, bez okna. Domyślnie wyłączone: większość osób, które włączają automatyczne zatrzymywanie, chce, aby Base Camp pozostał zatrzymany po zamknięciu K2.</string>
+  <string name="settings_export_log_btn">Eksportuj dziennik…</string>
+  <string name="settings_export_log_hint">Kopiuje bieżący dziennik K2.App (oraz dziennik awarii, jeśli istnieje) do wybranego folderu — przydatne przy zgłaszaniu problemu.</string>
+  <string name="settings_export_log_done">Dziennik wyeksportowano do {0}</string>
+  <!-- Okno importu z Base Camp -->
+  <string name="settings_bc_import_group">Import z Base Camp</string>
+  <string name="settings_bc_import_btn">Importuj z Base Camp…</string>
+  <string name="settings_bc_import_hint">Wyszukuje istniejącą instalację Base Camp i proponuje zaimportowanie jej profili i ustawień dla każdego urządzenia K2 (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). Wyświetlane automatycznie przy pierwszym uruchomieniu K2 — użyj tego przycisku, aby uruchomić import ponownie w dowolnym momencie.</string>
+  <string name="bc_import_prompt_title">Importuj z Base Camp</string>
+  <string name="bc_import_prompt_text">Na tym komputerze wykryto instalację Base Camp. Czy chcesz zaimportować jej istniejące profile i ustawienia do K2? Dla każdego podłączonego urządzenia będzie można sprawdzić, co zostało znalezione, zanim cokolwiek zostanie zaimportowane.</string>
+  <!-- Wybór folderu DLL Base Camp -->
+  <string name="settings_bc_dll_group">Folder DLL Base Camp</string>
+  <string name="settings_bc_dll_hint">MacroPad, Everest Max i Everest 60 korzystają z kilku natywnych bibliotek DLL, które są wewnętrznymi komponentami Base Camp i NIE są rozpowszechniane razem z K2 (MacroPadSDK.dll, SDKDLL.dll, Everest360_USB.dll). Użyj wykrytej instalacji Base Camp albo wskaż K2 folder zawierający te DLL.</string>
+  <string name="settings_bc_dll_radio_auto">Użyj instalacji Base Camp znalezionej na tym komputerze:</string>
+  <string name="settings_bc_dll_radio_auto_notfound">Nie wykryto automatycznie żadnej instalacji Base Camp.</string>
+  <string name="settings_bc_dll_radio_manual">Wskaż folder ręcznie:</string>
+  <string name="settings_bc_dll_browse">Przeglądaj…</string>
+  <string name="settings_bc_dll_none">Nie ustawiono folderu.</string>
+  <string name="settings_bc_dll_found">znaleziono</string>
+  <string name="settings_bc_dll_missing">brak</string>
+  <!-- Sprawdzanie aktualizacji -->
+  <string name="settings_update_group">Aktualizacje</string>
+  <string name="settings_update_current_version">Wersja K2 {0}</string>
+  <string name="settings_update_check_btn">Sprawdź aktualizacje</string>
+  <string name="settings_update_checking">Sprawdzanie aktualizacji…</string>
+  <string name="settings_update_uptodate">K2 jest aktualne.</string>
+  <string name="settings_update_check_failed">Nie udało się sprawdzić aktualizacji: {0}</string>
+  <string name="settings_update_available">Dostępna jest nowa wersja: {0}</string>
+  <string name="settings_update_install_btn">Pobierz i zainstaluj</string>
+  <string name="settings_update_zip_btn">Pobierz ZIP…</string>
+  <string name="settings_update_view_release_btn">Zobacz informacje o wydaniu</string>
+  <string name="settings_update_downloading">Pobieranie…</string>
+  <string name="settings_update_install_confirm">Pobrać wersję {0} i uruchomić instalator? K2 zostanie zamknięte, gdy tylko instalator się uruchomi, aby umożliwić aktualizację.</string>
+  <string name="settings_update_zip_done">Zapisano w {0}</string>
+  <!-- Przywracanie domyślnych -->
+  <string name="settings_danger_zone">Strefa zagrożenia</string>
+  <string name="restore_defaults">Przywróć domyślne</string>
+  <string name="restore_defaults_profile_confirm">Przywrócić profil '{0}' do domyślnych ustawień K2 na tym urządzeniu (przypisania klawiszy, podświetlenie i ustawienia, tam gdzie ma to zastosowanie)? Tej operacji nie można cofnąć.</string>
+  <string name="restore_defaults_app">Przywróć wszystkie domyślne</string>
+  <string name="restore_defaults_app_hint">Przywraca wszystkie powyższe preferencje aplikacji ORAZ usuwa każdy zapisany profil, przypisanie klawiszy, ustawienie podświetlenia i makro dla każdego urządzenia (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). Tej operacji nie można cofnąć.</string>
+  <string name="restore_defaults_app_confirm">To przywraca WSZYSTKIE preferencje aplikacji i USUWA każdy zapisany profil, przypisanie klawiszy, ustawienie podświetlenia i makro dla każdego urządzenia (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). Tej operacji nie można cofnąć. Kontynuować?</string>
+  <string name="restore_defaults_app_done">Wszystkie ustawienia aplikacji i profile urządzeń zostały przywrócone do wartości domyślnych.</string>
+  <string name="settings_general">Opcje ogólne</string>
+  <string name="settings_close_to_tray">Zamykaj do zasobnika systemowego zamiast wychodzić</string>
+  <string name="settings_k2_autostart">Uruchamiaj K2 wraz z Windows</string>
+  <string name="settings_k2_autostart_hint">K2 wymaga teraz uprawnień administratora (do sterowania BaseCampService). Windows nie podnosi automatycznie uprawnień aplikacji uruchamianych z klucza rejestru Run przy logowaniu, więc sam ten wpis może nie uruchomić K2 po cichu — jeśli tak się stanie, użyj Harmonogramu zadań (zadanie ustawione na "Uruchom z najwyższymi uprawnieniami" przy logowaniu).</string>
+  <string name="settings_start_min_tray">Uruchamiaj od razu zminimalizowane do zasobnika</string>
+  <string name="settings_start_min_tray_hint">K2 uruchamia się z aktywnymi sterownikami, ale z oknem ukrytym w zasobniku systemowym — otwórz je w dowolnym momencie z ikony w zasobniku.</string>
+  <string name="settings_font_family">Czcionka</string>
+  <string name="settings_font_family_hint">Natychmiast zmienia czcionkę interfejsu w całej aplikacji, bez potrzeby ponownego uruchamiania.</string>
+  <string name="tray_show">Pokaż K2</string>
+  <string name="tray_exit">Zamknij</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       ZAKŁADKA EVEREST MAX
+       ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_everest">Everest</string>
   <string name="tab_everest_max">Everest Max</string>
   <string name="tab_everest_core">Everest Core</string>
@@ -99,6 +366,13 @@
   <string name="ev_driver_opened">Sterownik Everest otwarty.</string>
   <string name="ev_driver_open_failed">Nie udało się otworzyć sterownika Everest.</string>
   <string name="ev_driver_closed">Sterownik Everest zamknięty.</string>
+  <string name="loading_drivers">Inicjowanie sterowników…</string>
+  <string name="hw_busy_uploading_image">Przesyłanie obrazu do urządzenia, proszę czekać…</string>
+  <string name="hw_busy_importing_profile">Importowanie profilu, proszę czekać…</string>
+  <string name="hw_busy_importing_profiles">Importowanie profili, proszę czekać…</string>
+  <string name="ev_crash_recovering">Sterownik uległ awarii — próba automatycznego odzyskania za 3 s…</string>
+  <string name="ev_crash_recovered">Sterownik odzyskany — podgląd LED uruchomiony ponownie.</string>
+  <string name="ev_crash_recovery_failed">Odzyskanie sterownika nie powiodło się — uruchom ponownie K2.App.</string>
   <string name="ev_cancel_mapping">Anuluj przypisanie</string>
   <string name="ev_mapping_step">Przypisanie [{0}/{1}]: naciśnij fizyczny klawisz «{2}»…</string>
   <string name="ev_mapping_done">Przypisanie zakończone: zapisano {0} klawiszy.</string>
@@ -106,24 +380,131 @@
   <string name="ev_configure">Konfiguruj</string>
   <string name="ev_remove">Usuń</string>
   <string name="ev_sdk_log">Dziennik SDK</string>
+
+  <!-- Podświetlenie RGB -->
   <string name="rgb_lighting">Podświetlenie</string>
   <string name="rgb_effect">Efekt:</string>
   <string name="rgb_speed">Prędkość:</string>
   <string name="rgb_direction">Kierunek:</string>
   <string name="rgb_rainbow">Tęcza</string>
   <string name="rgb_rainbow_tip">Kolory tęczy (ignoruje selektory kolorów).</string>
+  <string name="rgb_single">Kolor pojedynczy</string>
+  <string name="rgb_single_tip">Użyj jednego jednolitego koloru dla efektu.</string>
+  <string name="rgb_double">Kolor podwójny</string>
+  <string name="rgb_double_tip">Użyj dwóch kolorów dla efektu (nieobsługiwane przez wszystkie efekty).</string>
   <string name="rgb_sync_profiles">Synchronizuj profile</string>
   <string name="rgb_primary">Podstawowy:</string>
   <string name="rgb_secondary">Drugorzędny:</string>
   <string name="rgb_tertiary">Trzeciorzędny:</string>
   <string name="rgb_save">Zapisz</string>
   <string name="rgb_save_tip">Sprawia, że zastosowany efekt jest trwały (przeżywa odłączenie/restart).</string>
+
+  <!-- Podświetlenie niestandardowe -->
   <string name="custom_lighting">Niestandardowe podświetlenie (per klawisz)</string>
   <string name="custom_paint_hint">Włącz tryb malowania, wybierz kolor i klikaj klawisze na klawiaturze, aby je pokolorować.</string>
   <string name="custom_paint_mode">Tryb malowania</string>
+  <string name="custom_paint_effect">Zastosowany efekt:</string>
+  <string name="apply">Zastosuj</string>
   <string name="custom_color">Kolor:</string>
   <string name="custom_fill_all">Wypełnij wszystko</string>
+  <string name="custom_read_tooltip">Wczytuje ponownie ostatnio zapisane kolory (nie jest to odczyt na żywo z urządzenia — niewiarygodny na tym sprzęcie).</string>
   <string name="custom_clear">Wyczyść</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       ZAKŁADKA EVEREST 60 (tylko podświetlenie raw-HID — zobacz Everest60HidNative)
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="tab_everest60">Everest 60</string>
+  <string name="ev60_hint">Sterowanie podświetleniem przez raw-HID (bez DLL producenta). Przypisywanie klawiszy nie jest jeszcze dostępne — protokół remapowania firmware Everest 60 nie został jeszcze odtworzony.</string>
+  <string name="ev60_status_connected">Połączono: {0}</string>
+  <string name="ev60_status_disconnected">Nie połączono</string>
+  <string name="ev60_refresh">Odśwież</string>
+  <string name="ev60_key_lighting">Niestandardowe podświetlenie (per klawisz)</string>
+  <string name="ev60_key_lighting_hint">Wybierz kolor i klikaj klawisze (główna klawiatura lub numpad), lub kwadraciki na obwodowym pierścieniu, aby je pokolorować, następnie kliknij "Zastosuj".</string>
+  <string name="ev60_numpad_decorative_tip">Wyłącznie dekoracyjne — brak znanego protokołu podświetlenia/remapowania dla tego akcesorium.</string>
+  <string name="ev60_key_binding">Key Binding</string>
+  <string name="ev60_key_binding_hint">Kliknij klawisz na klawiaturze powyżej, aby go wybrać, następnie wybierz, co ma robić.</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       ZAKŁADKA MAKALU (mysz — raw-HID, brak SDK producenta — zobacz MakaluHidNative)
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="tab_makalu">Makalu</string>
+  <string name="makalu_hint">Sterowanie przez raw-HID (dla tej myszy nie istnieje żadna DLL producenta). Protokół przeniesiony z projektu społecznościowego BaseCampLinux.</string>
+  <string name="makalu_status_connected">Połączono: {0}</string>
+  <string name="makalu_status_disconnected">Nie połączono</string>
+  <string name="makalu_refresh">Odśwież</string>
+  <string name="makalu_apply">Zastosuj</string>
+  <string name="makalu_failed">Niepowodzenie</string>
+  <string name="makalu_close">Zamknij</string>
+  <string name="makalu_log">Dziennik</string>
+
+  <string name="makalu_custom_hint">Wybierz kolor, następnie kliknij diodę LED (lub przeciągnij prostokąt nad kilkoma) na obrazie myszy, aby ją pokolorować.</string>
+
+  <string name="makalu_dpi_title">DPI</string>
+  <string name="makalu_dpi_prev">Poprzedni poziom</string>
+  <string name="makalu_dpi_next">Następny poziom</string>
+  <string name="makalu_dpi_add">Dodaj poziom DPI</string>
+  <string name="makalu_dpi_remove_level">Usuń poziom</string>
+
+  <string name="makalu_remap_title">Przypisywanie przycisków</string>
+  <string name="makalu_remap_configure_title">{0} — Konfiguruj</string>
+  <string name="makalu_remap_category">Kategoria:</string>
+  <string name="makalu_remap_function">Funkcja:</string>
+  <string name="makalu_remap_sniper_dpi">DPI Sniper:</string>
+  <string name="makalu_remap_applied">Zastosowano</string>
+  <string name="makalu_remap_reverted">Przywrócono</string>
+  <string name="makalu_remap_keep_btn">Zachowaj</string>
+  <string name="makalu_remap_revert_btn">Przywróć</string>
+  <string name="makalu_remap_keep_text">Lewy przycisk przypisano ponownie. Zachować tę zmianę? Automatyczne przywrócenie za {0}s…</string>
+  <string name="makalu_remap_cat_mouse">Mysz</string>
+  <string name="makalu_remap_cat_dpi">DPI</string>
+  <string name="makalu_remap_cat_scroll">Przewijanie</string>
+  <string name="makalu_remap_cat_sniper">Sniper</string>
+  <string name="makalu_remap_cat_profile">Profil</string>
+  <string name="makalu_remap_cat_lighting">Podświetlenie</string>
+  <string name="makalu_remap_fn_left">Kliknięcie lewym przyciskiem</string>
+  <string name="makalu_remap_fn_right">Kliknięcie prawym przyciskiem</string>
+  <string name="makalu_remap_fn_middle">Kliknięcie środkowym przyciskiem</string>
+  <string name="makalu_remap_fn_back">Wstecz</string>
+  <string name="makalu_remap_fn_forward">Dalej</string>
+  <string name="makalu_remap_fn_dpi_plus">DPI +</string>
+  <string name="makalu_remap_fn_dpi_minus">DPI -</string>
+  <string name="makalu_remap_fn_scroll_up">Przewijanie w górę</string>
+  <string name="makalu_remap_fn_scroll_down">Przewijanie w dół</string>
+  <string name="makalu_remap_fn_disabled">Wyłączone</string>
+  <string name="makalu_remap_fn_sniper">Sniper</string>
+  <string name="makalu_remap_fn_profile_next">Następny profil</string>
+  <string name="makalu_remap_fn_profile_prev">Poprzedni profil</string>
+  <string name="makalu_remap_fn_brightness_cycle">Cykl jasności</string>
+  <string name="makalu_remap_fn_effect_cycle">Cykl efektów</string>
+  <string name="makalu_remap_btn_left">Lewy przycisk</string>
+  <string name="makalu_remap_btn_right">Prawy przycisk</string>
+  <string name="makalu_remap_btn_middle">Środkowy przycisk</string>
+  <string name="makalu_remap_btn_back">Przycisk Wstecz</string>
+  <string name="makalu_remap_btn_forward">Przycisk Dalej</string>
+  <string name="makalu_remap_btn_dpi">Przycisk DPI</string>
+  <string name="makalu_remap_btn_5">Przycisk 5</string>
+  <string name="makalu_remap_btn_6">Przycisk 6</string>
+
+  <string name="makalu_settings_title">Ustawienia urządzenia</string>
+  <string name="makalu_setting_poll">Częstotliwość odpytywania:</string>
+  <string name="makalu_setting_debounce">Odpowiedź przycisków:</string>
+  <string name="makalu_setting_angle">Angle snapping:</string>
+  <string name="makalu_setting_on">Wł.</string>
+  <string name="makalu_setting_off">Wył.</string>
+  <string name="makalu_setting_liftoff">Odległość lift-off:</string>
+  <string name="makalu_setting_liftoff_low">Niska</string>
+  <string name="makalu_setting_liftoff_high">Wysoka</string>
+  <string name="makalu_setting_liftoff_custom">Niestandardowa</string>
+
+  <!-- Niestandardowa kalibracja powierzchni LOD (lift-off) Makalu -->
+  <string name="makalu_lod_title">Niestandardowa kalibracja powierzchni</string>
+  <string name="makalu_lod_hint">Niektóre powierzchnie mogą skorzystać z niestandardowej kalibracji. Aby rozpocząć kalibrację, kliknij Start, a następnie kliknij i przytrzymaj ikonę poniżej, poruszając myszą w oknie, aż pasek postępu się wypełni.</string>
+  <string name="makalu_lod_start">Start</string>
+  <string name="makalu_lod_reset">Reset</string>
+  <string name="makalu_lod_done">Gotowe</string>
+  <string name="makalu_lod_progress">POSTĘP</string>
+
+  <!-- Display Dial -->
   <string name="display_dial">Pokrętło wyświetlacza</string>
   <string name="dial_pages_visible">Widoczne strony pokrętła:</string>
   <string name="dial_clock">Zegar</string>
@@ -134,21 +515,92 @@
   <string name="dial_pcinfo">Info PC</string>
   <string name="dial_apm">APM</string>
   <string name="dial_custom">Niestandardowy</string>
+  <string name="dial_image">Obraz</string>
+  <string name="dial_timer">Minutnik</string>
+  <string name="dial_stopwatch">Stoper</string>
+  <string name="dial_pcinfo_cpu">Info PC - CPU</string>
+  <string name="dial_pcinfo_gpu">Info PC - GPU</string>
+  <string name="dial_pcinfo_hdd">Info PC - HDD</string>
+  <string name="dial_pcinfo_internet">Info PC - Internet</string>
+  <string name="dial_pcinfo_ram">Info PC - RAM</string>
+  <string name="dial_load_image">Wczytaj obraz</string>
+  <string name="dial_load_image_title">Wybierz obraz wygaszacza ekranu (240×204 px)</string>
+  <string name="dial_clock_section">Typ zegara</string>
   <string name="dial_clock_label">Zegar:</string>
+  <string name="dial_clock_style_label">Styl:</string>
+  <string name="dial_clock_digital">Cyfrowy</string>
+  <string name="dial_clock_analog">Analogowy</string>
+  <string name="dial_screensaver_section">Wygaszacz ekranu</string>
   <string name="dial_screensaver">Wygaszacz ekranu (sek.):</string>
+  <string name="dial_screensaver_enable_tip">Jeśli wyłączone, pokrętło wyświetlacza nigdy nie przyciemnia się ani nie przełącza na wygaszacz ekranu.</string>
+  <string name="dial_screensaver_function_label">Pokazuje:</string>
   <string name="dial_autooff">Automatyczne wyłączenie (sek.):</string>
+  <string name="dial_turnoff_enable_tip">Jeśli wyłączone, pokrętło wyświetlacza pozostaje włączone bez ograniczeń czasowych.</string>
   <string name="dial_menu_color">Kolor menu:</string>
+  <string name="reset_display_dial">Przywróć Display Dial</string>
+  <string name="unit_seconds">s</string>
   <string name="dial_cannot_read">Nie można odczytać ExtendInfo z urządzenia.</string>
+
+  <!-- Przypisania klawiszy (zmapowane klawisze + narzędzie przechwytywania HW dla doku/korony/klawiszy wyświetlacza) -->
+  <string name="ev_key_binding">Przypisania klawiszy</string>
+  <string name="key_binding_hint">Kliknij klawisz na urządzeniu powyżej, aby skonfigurować jego akcję.</string>
   <string name="dock_capture_hw">Przechwyć klawisz HW…</string>
   <string name="dock_cancel_capture">Anuluj przechwytywanie</string>
   <string name="dock_press_hw">Naciśnij klawisz HW (dok, klawisz wyświetlacza, korona)…</string>
   <string name="dock_press_for">Naciśnij klawisz dla "{0}"…</string>
   <string name="dock_action_none">brak</string>
   <string name="dock_capture_matrix">Przechwyć matrixId…</string>
+  <string name="ev_display_key_label">Klawisz wyświetlacza {0}</string>
+  <string name="ev_display_key_icon_only">(ikona)</string>
   <string name="dock_configure_action">Konfiguruj akcję…</string>
   <string name="dock_remove_action">Usuń akcję</string>
+
+  <!-- Ustawienia (sekcja paska bocznego Everest: układ klawiatury) -->
+  <string name="ev_settings">Ustawienia</string>
+  <string name="ev_layout">Układ</string>
+  <string name="settings_sync_profiles">Synchronizuj między profilami</string>
+  <string name="settings_game_mode">Tryb gry</string>
+  <string name="settings_game_mode_tip">Tryb gry wyłącza niektóre kombinacje klawiszy, aby uniknąć przypadkowego przerwania rozgrywki.</string>
+  <string name="settings_disable_shift_tab">Wyłącz Shift + Tab</string>
+  <string name="settings_disable_alt_f4">Wyłącz Alt + F4</string>
+  <string name="settings_disable_win_key">Wyłącz klawisz Windows</string>
+  <string name="settings_disable_alt_tab">Wyłącz Alt + Tab</string>
+  <string name="settings_indicator_leds">Diody wskaźnikowe LED</string>
+  <string name="settings_enable_core_led">Włącz diody wskaźnikowe Core</string>
+  <string name="settings_keyboard_color">Kolor klawiatury</string>
+  <string name="color_silver">Srebrny</string>
+  <string name="color_black">Czarny</string>
+  <string name="settings_keycap_group">Wygląd klawiszy</string>
+  <string name="settings_keycap_color">Kolor klawisza</string>
+  <string name="settings_keycap_black">Czarny</string>
+  <string name="settings_keycap_white">Biały</string>
+  <string name="settings_keycap_custom">Niestandardowy</string>
+  <string name="settings_keycap_text_color">Kolor tekstu</string>
+  <string name="settings_keycap_style">Typ klawisza</string>
+  <string name="settings_keycap_style_normal">Normalny (poświata wokół klawisza)</string>
+  <string name="settings_keycap_style_pudding">Pudding (kolorowa obwódka, środek w kolorze klawisza)</string>
+  <string name="settings_keycap_style_reverse_pudding">Odwrócony pudding (obwódka w kolorze klawisza, kolorowy środek)</string>
+  <string name="settings_keycap_translucent_legend">Półprzezroczyste oznaczenia (oznaczenie podąża za bieżącym kolorem LED)</string>
+  <string name="settings_keycap_hint">Wyłącznie kosmetyczne — zmienia sposób, w jaki podgląd na ekranie tutaj w K2 dopasowuje kolory LED do klawiszy, nie wpływa na efekt RGB wysyłany do klawiatury.</string>
+  <string name="settings_keycap_edit_individual">Edytuj pojedyncze klawisze</string>
+  <string name="settings_keycap_edit_individual_hint">Gdy włączone, kliknij klawisz na klawiaturze powyżej, aby dostosować jego kolor lub obraz, albo przeciągnij prostokąt zaznaczenia nad kilkoma klawiszami, aby dostosować je wszystkie naraz.</string>
+  <string name="settings_keycap_edit_multi_label">{0} klawiszy</string>
+  <string name="keycap_customize_title">Dostosuj klawisz — {0}</string>
+  <string name="keycap_customize_override_color">Zastąp kolor klawisza</string>
+  <string name="keycap_customize_custom_image">Niestandardowy obraz…</string>
+  <string name="keycap_customize_clear_image">Usuń obraz</string>
+  <string name="keycap_customize_use_mountain_logo">Użyj logo Mountain (stałe)</string>
+  <string name="keycap_customize_clear_all">Usuń wszystkie personalizacje</string>
+  <string name="keycap_customize_close">Zamknij</string>
+  <string name="settings_factory_reset">Przywróć ustawienia fabryczne</string>
+  <string name="settings_factory_reset_confirm">To przywraca Tryb gry, diody wskaźnikowe i efekty podświetlenia klawiatury do ustawień fabrycznych. Kontynuować?</string>
+
+  <!-- Makro klawiatury -->
   <string name="keyboard_macro">Makro klawiatury</string>
+  <string name="macro_library">Biblioteka makr</string>
   <string name="macro_new">Nowe</string>
+  <string name="macro_duplicate">Duplikuj</string>
+  <string name="macro_duplicate_name">{0} (kopia)</string>
   <string name="macro_delete">Usuń</string>
   <string name="macro_record">Nagrywaj</string>
   <string name="macro_record_stop">■ Stop</string>
@@ -163,7 +615,21 @@
   <string name="macro_playback_repeat">Powtórz N razy</string>
   <string name="macro_playback_held">Podczas przytrzymania</string>
   <string name="macro_playback_toggle">Przełącz</string>
+  <string name="macro_repeat_short">Powtórz</string>
+  <string name="macro_times_suffix">razy</string>
   <string name="macro_record_mouse">Nagraj mysz</string>
+  <string name="macro_record_mouse_movement">Nagraj ruch myszy</string>
+  <string name="macro_record_keyboard">Nagraj klawiaturę</string>
+  <string name="macro_section_devices">Urządzenia</string>
+  <string name="macro_section_inputs">Wejścia</string>
+  <string name="macro_section_assigned">Przypisane do</string>
+  <string name="macro_assigned_help">Każdy klawisz, na dowolnym urządzeniu, aktualnie skonfigurowany do odtwarzania tego makra.</string>
+  <string name="macro_not_assigned">Jeszcze nieprzypisane do żadnego klawisza.</string>
+  <string name="macro_show_press_release">Pokaż naciśnięcie/zwolnienie</string>
+  <string name="macro_start_recording">Rozpocznij nagrywanie</string>
+  <string name="macro_move_up">Przesuń w górę</string>
+  <string name="macro_move_down">Przesuń w dół</string>
+  <string name="macro_delete_input">Usuń</string>
   <string name="macro_actions_count">{0} akcji</string>
   <string name="macro_import_bc">Importuj z Base Camp</string>
   <string name="macro_select_first">Wybierz lub utwórz makro przed nagrywaniem.</string>
@@ -172,6 +638,8 @@
   <string name="macro_import_confirm">Importować {0} makr z BaseCamp.db?</string>
   <string name="macro_imported">Zaimportowano {0} makr.</string>
   <string name="macro_import_error">Błąd importu: {0}</string>
+
+  <!-- Rejestrator USB -->
   <string name="usb_recorder">Rejestrator USB</string>
   <string name="usb_interface">Interfejs:</string>
   <string name="usb_label">Etykieta:</string>
@@ -183,19 +651,32 @@
   <string name="usb_results">Wyniki przechwytywania</string>
   <string name="usb_save_report">Zapisz raport</string>
   <string name="usb_open_folder">Otwórz folder</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       ZAKŁADKA MACROPAD
+       ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_macropad">MacroPad</string>
   <string name="mp_connected_devices">Podłączone urządzenia MacroPad</string>
   <string name="mp_event_log">Dziennik zdarzeń</string>
   <string name="mp_cancel_mapping">Anuluj przypisanie</string>
+
+  <!-- Podświetlenie LED MacroPad -->
   <string name="led_sync_profiles">Synchronizuj między profilami</string>
   <string name="led_backlight_off">Podświetlenie WYŁ</string>
   <string name="led_backlight_on">Podświetlenie WŁ</string>
+  <string name="led_backlight_label">Podświetlenie:</string>
   <string name="led_save_flash_tip">Sprawia, że zastosowany efekt jest trwały (przeżywa odłączenie/restart).</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       ZAKŁADKA DISPLAYPAD
+       ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_displaypad">DisplayPad</string>
   <string name="dp_open_driver">Otwórz sterownik</string>
   <string name="dp_driver_opened">Sterownik DisplayPad otwarty.</string>
   <string name="dp_driver_open_failed">Nie udało się otworzyć sterownika DisplayPad.</string>
   <string name="dp_driver_closed">Sterownik DisplayPad zamknięty.</string>
+  <string name="dp_rotate_icons_ccw">Obróć ikony ↺</string>
+  <string name="dp_rotate_icons_cw">Obróć ikony ↻</string>
   <string name="dp_reset_keys">Resetuj klawisze</string>
   <string name="dp_import_xml">Importuj XML…</string>
   <string name="dp_import_bc">Importuj z Base Camp</string>
@@ -208,9 +689,34 @@
   <string name="dp_mapping_done">Przypisanie DisplayPad zakończone.</string>
   <string name="dp_imported_xml">Profil '{0}' zaimportowany do slotu {1}.</string>
   <string name="dp_choose_image">Wybierz obraz dla klawisza #{0}</string>
+  <string name="dp_key_button_label">Przycisk {0}</string>
+  <string name="dp_load_image">Wczytaj obraz…</string>
+  <string name="dp_rotate_image">Obróć obraz:</string>
+  <string name="dp_action_section">Akcja</string>
   <string name="dp_configure_action">Konfiguruj akcję…</string>
   <string name="dp_remove_action">Usuń akcję</string>
+  <string name="dp_change_image">Zmień obraz…</string>
   <string name="dp_remove_image">Usuń obraz</string>
+  <string name="dp_create_folder">Utwórz stronę folderu…</string>
+  <string name="dp_create_folder_title">Utwórz stronę folderu</string>
+  <string name="dp_create_folder_prompt">Nazwa folderu:</string>
+  <string name="dp_set_back">Ustaw jako przycisk Wstecz</string>
+  <string name="dp_pages">Strony</string>
+  <string name="dp_no_pages">Nie utworzono jeszcze żadnych stron folderu.</string>
+  <string name="dp_delete_page">Usuń</string>
+  <string name="dp_delete_page_title">Usuń stronę</string>
+  <string name="dp_delete_page_confirm">Usunąć stronę "{0}"? Każdy klawisz, który ją otwiera, przestanie działać.</string>
+  <string name="dp_add_text">Dodaj tekst…</string>
+  <string name="txt_dialog_title">Wstaw tekst</string>
+  <string name="txt_label">Tekst:</string>
+  <string name="txt_font_label">Czcionka:</string>
+  <string name="txt_font_size_auto">Automatyczny rozmiar</string>
+  <string name="txt_bg_solid">Tło w jednolitym kolorze</string>
+  <string name="txt_bg_image">Na wczytanym obrazie</string>
+  <string name="txt_bg_color">Tło:</string>
+  <string name="txt_color">Tekst:</string>
+  <string name="txt_position_label">Pozycja:</string>
+  <string name="txt_generate_failed">Nie udało się wygenerować obrazu tekstu.</string>
   <string name="dp_open_bc_profile">Otwórz profil BaseCamp</string>
   <string name="dp_filter_bc_xml">Profil BaseCamp (*.xml)|*.xml|Wszystkie pliki|*.*</string>
   <string name="dp_bc_db_not_found">Nie znaleziono BaseCamp.db. Ustaw K2_BASECAMP_DB lub zainstaluj Base Camp.</string>
@@ -218,54 +724,8 @@
   <string name="dp_no_matching_devices">Żadne podłączone urządzenie nie odpowiada profilom w bazie.</string>
   <string name="dp_import_confirm">Importować {0} profili do {1} urządzeń?</string>
   <string name="dp_imported">Zaimportowano {0} profili ({1} klawiszy) z Base Camp.</string>
-  <string name="dpw_title">K2 — Konsola DisplayPad</string>
-  <string name="dpw_open_driver">Otwórz sterownik</string>
-  <string name="dpw_refresh_devices">Odśwież urządzenia</string>
-  <string name="dpw_close_driver">Zamknij sterownik</string>
-  <string name="err_title">K2 — Błąd</string>
-  <string name="err_message">Wystąpił błąd</string>
-  <string name="imp_title">Importuj profil BaseCamp</string>
-  <string name="imp_header">Importuj profil BaseCamp</string>
-  <string name="imp_slot">Slot profilu K2 (1..5):</string>
-  <string name="imp_switch_now">Przełącz na ten slot natychmiast po imporcie</string>
-  <string name="unhandled_error_ui">Nieobsłużony błąd (UI)</string>
-  <string name="unhandled_error_domain">Nieobsłużony błąd (domena)</string>
-  <string name="veh_no_return">Frame-walk: nie znaleziono adresu powrotu poza SDKDLL.dll</string>
-  <string name="profile_switch_unsupported">profil: zmiana profilu nie jest jeszcze obsługiwana na MacroPad</string>
-  <string name="browse">Przeglądaj…</string>
-  <string name="crop_hint">Przeciągnij, aby zmienić pozycję, przewiń lub użyj suwaka, aby powiększyć.</string>
-  <string name="crop_title">Przytnij obraz ({0}×{1})</string>
-  <string name="crop_no_crop">Wstaw bez zmian (bez przycinania/powiększania)</string>
-  <string name="crop_show_grid">Pokaż zarys klawisza</string>
-  <string name="tab_settings">Ustawienia</string>
-  <string name="settings_debug_mode">Tryb debugowania</string>
-  <string name="settings_debug_mode_hint">Włącza narzędzia debugowania (otwieranie/zamykanie sterownika, sterowanie AP, dziennik zdarzeń) dla każdego urządzenia.</string>
-  <string name="settings_log_level">Rejestrowanie</string>
-  <string name="log_off">Wyłączone</string>
-  <string name="log_normal">Normalne</string>
-  <string name="log_verbose">Szczegółowe</string>
-  <string name="settings_dp_native">DisplayPad: natywny silnik USB (eksperymentalny)</string>
-  <string name="settings_dp_native_hint">Steruje DisplayPad bezpośrednio przez USB zamiast SDK Mountain: potwierdzone transfery (bez uszkodzenia ikon), brak procesu satelitarnego. Trwałość profili na urządzeniu nie jest dostępna; obrazy są przesyłane ponownie z bazy danych K2. Zaczyna działać po ponownym uruchomieniu K2.</string>
-  <string name="settings_ev_native">Everest Max: natywny silnik USB (eksperymentalny, częściowy)</string>
-  <string name="settings_ev_native_hint">Steruje połączeniem Everest Max i 4 przyciskami wyświetlacza numpada bezpośrednio przez USB zamiast SDKDLL.dll — usuwa chroniczną awarię wątku timera tej biblioteki DLL w zakresie, który obsługuje. Efekty RGB, ikony numpada, Media Dock i zdarzenia pełnego przypisania klawiatury nadal używają SDKDLL.dll (jeszcze nie przeniesione). Zaczyna działać po ponownym uruchomieniu K2.</string>
-  <string name="settings_kill_bc_worker">Zakończ proces DisplayPad Base Camp</string>
-  <string name="settings_kill_bc_worker_hint">MountainDisplayPadWorker działa w tle i zapisuje na DisplayPad jednocześnie z K2, uszkadzając ikony. Po włączeniu K2 automatycznie go kończy (i utrzymuje zamknięty podczas działania).</string>
-  <string name="settings_bc_autostart">Uruchamiaj usługi Base Camp wraz z Windows</string>
-  <string name="settings_bc_autostart_hint">Włącza/wyłącza wpisy autostartu Base Camp w Windows (ten sam mechanizm co karta Uruchamianie w Menedżerze zadań — odwracalne). Wpisy w HKLM mogą wymagać uruchomienia K2 jako administrator.</string>
-  <string name="settings_bc_autostart_none">Nie znaleziono wpisu autostartu Base Camp w rejestrze.</string>
-  <string name="settings_bc_autostart_done">Autostart Base Camp: zaktualizowano {0} wpisów.</string>
-  <string name="loading_drivers">Inicjowanie sterowników…</string>
-  <string name="ev_crash_recovering">Sterownik uległ awarii — próba automatycznego odzyskania za 3 s…</string>
-  <string name="ev_crash_recovered">Sterownik odzyskany — podgląd LED uruchomiony ponownie.</string>
-  <string name="ev_crash_recovery_failed">Odzyskanie sterownika nie powiodło się — uruchom ponownie K2.App.</string>
-  <string name="ev_key_binding">Przypisania klawiszy</string>
-  <string name="dp_rotate_icons_ccw">Obróć ikony ↺</string>
-  <string name="dp_rotate_icons_cw">Obróć ikony ↻</string>
-  <string name="dp_load_image">Wczytaj obraz…</string>
-  <string name="dp_rotate_image">Obróć obraz:</string>
-  <string name="dp_action_section">Akcja</string>
-  <string name="dp_change_image">Zmień obraz…</string>
   <string name="import_bc">Importuj z Base Camp</string>
+  <!-- Eksport -->
   <string name="export">Eksportuj</string>
   <string name="dp_export_bc">Eksportuj (Base Camp)…</string>
   <string name="dp_export_k2">Eksportuj (K2)…</string>
@@ -274,30 +734,101 @@
   <string name="dp_exported_bc">Wyeksportowano '{0}' jako XML Base Camp: zapisano {1} akcji, pominięto {2} (brak odpowiednika w Base Camp).</string>
   <string name="dp_exported_k2">Wyeksportowano '{0}' jako XML K2: zapisano {1} akcji.</string>
   <string name="dp_export_no_profile">Najpierw wybierz profil.</string>
+  <string name="export_profiles_btn">Eksportuj profile…</string>
+  <string name="export_profiles_title">Eksportuj profile</string>
+  <string name="export_profiles_pick">Wybierz profile do eksportu:</string>
+  <string name="export_format_section">Format:</string>
+  <string name="export_format_bc">Base Camp</string>
+  <string name="export_format_k2">K2</string>
+  <string name="export_select_at_least_one">Wybierz co najmniej jeden profil.</string>
+  <string name="export_pick_folder">Wybierz folder dla wyeksportowanych profili</string>
+  <!-- Wygaszacz ekranu (obraz pełnoekranowy, wyświetlany zawsze lub po N sekundach bezczynności) -->
   <string name="dp_fullscreen_group">Pełny ekran</string>
   <string name="dp_fullscreen_set">Ustaw obraz pełnoekranowy…</string>
   <string name="dp_fullscreen_clear">Usuń pełny ekran</string>
   <string name="dp_fullscreen_dialog_title">Obraz pełnoekranowy</string>
   <string name="dp_fullscreen_prompt">Wybierz obraz lub GIF do wyświetlenia na wszystkich 12 klawiszach tej strony:</string>
+  <string name="dp_screensaver_delay_enable">Włącz obraz pełnoekranowy po</string>
+  <string name="dp_screensaver_delay_hint">Gdy włączone, obraz pojawia się dopiero po tylu sekundach bez naciśnięcia klawisza, a pierwsze naciśnięcie przywraca ikony profilu przed wykonaniem akcji tego klawisza. Gdy wyłączone, obraz pozostaje na panelu przez cały czas wyświetlania tej strony.</string>
   <string name="dp_fullscreen_rotation">Obrót</string>
   <string name="dp_fullscreen_rotation_hint">Obraca cały obraz przed dopasowaniem go do panelu. Podgląd powyżej nie odzwierciedla tego wyboru — jest on stosowany, gdy obraz jest wyświetlany na urządzeniu.</string>
   <string name="dp_fullscreen_current">Bieżący: {0}</string>
   <string name="dp_fullscreen_none_set">Nie wybrano obrazu.</string>
   <string name="dp_fullscreen_set_ok">Ustawiono obraz pełnoekranowy dla tej strony.</string>
   <string name="dp_fullscreen_cleared">Usunięto obraz pełnoekranowy — przywrócono ikony poszczególnych klawiszy.</string>
+  <string name="dp_live_test">Test panelu na żywo</string>
+  <string name="dp_live_test_icon">Test ikony na żywo (1. klawisz)</string>
+  <!-- Zmiana nazwy urządzenia -->
   <string name="rename_device">Zmień nazwę urządzenia</string>
   <string name="rename_device_title">Zmień nazwę urządzenia</string>
   <string name="rename_device_prompt">Wpisz nazwę dla tego urządzenia:</string>
+  <string name="profile_not_available_tip">Jeszcze niedostępne dla tego urządzenia — nie zaimplementowano przechowywania profili.</string>
+  <!-- Zmiana nazwy / usuwanie profilu -->
   <string name="rename_profile">Zmień nazwę profilu</string>
   <string name="rename_profile_title">Zmień nazwę profilu</string>
   <string name="rename_profile_prompt">Wpisz nazwę dla tego profilu:</string>
   <string name="delete_profile">Usuń profil</string>
   <string name="delete_profile_confirm">Usunąć profil '{0}'? Wszystkie przypisania klawiszy w tym profilu zostaną usunięte.</string>
   <string name="delete_profile_last">Nie można usunąć ostatniego profilu.</string>
+  <string name="import_no_free_slot">Wszystkie 5 slotów profili jest już zajętych — usuń lub zwolnij jeden przed zaimportowaniem "{0}".</string>
+  <string name="import_some_skipped_no_slot">Pominięto {0} profil(e/i): brak wolnego slotu (wszystkie 5 jest zajętych).</string>
+  <!-- Wybór nowego profilu (DisplayPad) -->
+  <string name="new_profile_dialog_title">Nowy profil</string>
+  <string name="new_profile_generic">Profil ogólny</string>
+  <string name="new_profile_dedicated">Profil dedykowany</string>
+  <string name="new_profile_dedicated_hint">Wybierz, dla jakiej aplikacji/funkcji jest ten profil:</string>
+  <string name="new_profile_create_btn">Utwórz</string>
+  <!-- Wyskakujące okno ustawień profilu (ikona koła zębatego, wszystkie urządzenia) -->
+  <string name="profile_settings_title">Ustawienia profilu</string>
+  <string name="profile_settings_name_label">Nazwa</string>
+  <string name="profile_settings_exe_label">Uruchamiany plik wykonywalny</string>
+  <string name="profile_settings_exe_hint">Gdy ten program się uruchomi, K2 automatycznie przełączy się na ten profil.</string>
+  <string name="profile_settings_clear">Wyczyść</string>
+  <!-- Wybór urządzenia Base Camp (wyświetlany, gdy baza danych ma profile dla więcej niż jednego fizycznego urządzenia tego samego typu) -->
+  <string name="bc_pick_device_title">Wybierz urządzenie Base Camp</string>
+  <string name="bc_pick_device_text">Base Camp ma profile dla więcej niż jednego urządzenia. Wybierz, które zaimportować do "{0}":</string>
+  <string name="bc_pick_device_none">Wybierz urządzenie, z którego chcesz importować.</string>
+  <string name="bc_pick_device_label">Urządzenie #{0} — {1} profil(e/i): {2}</string>
+  <string name="bc_import_will_wipe">To USUNIE wszystkie istniejące profile K2 na "{0}" przed importem.</string>
+  <string name="bc_import_read_failed">Nie udało się odczytać bazy danych Base Camp ({0}). Nic nie zostało zaimportowane, a istniejące profile K2 pozostały nietknięte.</string>
+  <!-- Import Everest -->
   <string name="ev_no_profiles_in_bc">Nie znaleziono profili Everest w bazie danych Base Camp.</string>
   <string name="ev_imported_bc">Zaimportowano {0} profili Everest ({1} klawiszy) z Base Camp.</string>
+  <!-- Import MacroPad -->
   <string name="mp_no_profiles_in_bc">Nie znaleziono profili MacroPad w bazie danych Base Camp.</string>
   <string name="mp_imported_bc">Zaimportowano {0} profili MacroPad ({1} klawiszy) z Base Camp.</string>
+  <!-- Import Makalu -->
+  <string name="mk_no_profiles_in_bc">Nie znaleziono profili Makalu w bazie danych Base Camp.</string>
+  <string name="mk_imported_bc">Zaimportowano {0} profili Makalu ({1} przypisanych przycisków) z Base Camp.</string>
+  <!-- Import Everest 60 -->
+  <string name="ev60_no_profiles_in_bc">Nie znaleziono profili Everest 60 w bazie danych Base Camp.</string>
+  <string name="ev60_imported_bc">Zaimportowano {0} profili Everest 60 ({1} klawiszy) z Base Camp.</string>
+  <!-- Nawigacja folderów DisplayPad -->
   <string name="dp_back">Wstecz</string>
-  <string name="debug_group">Debugowanie</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       DISPLAYPAD SAMODZIELNY (K2.DisplayPad)
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="dpw_title">K2 — Konsola DisplayPad</string>
+  <string name="dpw_open_driver">Otwórz sterownik</string>
+  <string name="dpw_refresh_devices">Odśwież urządzenia</string>
+  <string name="dpw_close_driver">Zamknij sterownik</string>
+
+  <!-- Okno błędu -->
+  <string name="err_title">K2 — Błąd</string>
+  <string name="err_message">Wystąpił błąd</string>
+
+  <!-- Okno importu profilu -->
+  <string name="imp_title">Importuj profil BaseCamp</string>
+  <string name="imp_header">Importuj profil BaseCamp</string>
+  <string name="imp_slot">Slot profilu K2 (1..5):</string>
+  <string name="imp_switch_now">Przełącz na ten slot natychmiast po imporcie</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       OGÓLNE KOMUNIKATY BŁĘDÓW
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="unhandled_error_ui">Nieobsłużony błąd (UI)</string>
+  <string name="unhandled_error_domain">Nieobsłużony błąd (domena)</string>
+  <string name="veh_no_return">Frame-walk: nie znaleziono adresu powrotu poza SDKDLL.dll</string>
+  <string name="profile_switch_unsupported">profil: zmiana profilu nie jest jeszcze obsługiwana na MacroPad</string>
 </strings>

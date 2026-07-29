@@ -46,10 +46,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="BorderBrush" Value="#900000"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource K2AccentBrush}"/>
                             </Trigger>
                             <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
-                                <Setter TargetName="OuterBorder" Property="Background" Value="#900000"/>
+                                <Setter TargetName="OuterBorder" Property="Background" Value="{DynamicResource K2AccentBrush}"/>
                                 <Setter TargetName="OuterBorder" Property="BorderBrush" Value="#FFFFFF"/>
                             </DataTrigger>
                         </ControlTemplate.Triggers>
@@ -162,7 +162,8 @@
             </Grid.RowDefinitions>
 
             <GroupBox Grid.Row="0" Header="Device collegati">
-                <ListView x:Name="LvDevices" Height="140">
+                <ListView x:Name="LvDevices" Height="140"
+                          ItemContainerStyle="{StaticResource K2GridViewListViewItem}">
                     <ListView.View>
                         <GridView>
                             <GridViewColumn Header="ID"          Width="50"  DisplayMemberBinding="{Binding Id}"/>

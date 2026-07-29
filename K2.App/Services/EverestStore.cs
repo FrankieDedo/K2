@@ -36,8 +36,9 @@ public sealed class EverestStore : IDisposable
 
     private void EnsureSchema()
     {
-        using var cmd = _conn.CreateCommand();
-        cmd.CommandText = @"
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = @"
 CREATE TABLE IF NOT EXISTS Keys (
     Profile     INTEGER NOT NULL,
     KeyMatrix   INTEGER NOT NULL,
@@ -53,22 +54,81 @@ CREATE TABLE IF NOT EXISTS Settings (
 );
 
 CREATE TABLE IF NOT EXISTS KeycapOverrides (
-    KeyId     INTEGER PRIMARY KEY,
+    Profile   INTEGER NOT NULL,
+    KeyId     INTEGER NOT NULL,
     ColorHex  TEXT,
-    ImagePath TEXT
+    ImagePath TEXT,
+    PRIMARY KEY (Profile, KeyId)
 );";
-        cmd.ExecuteNonQuery();
+            cmd.ExecuteNonQuery();
+        }
+        MigrateKeycapOverridesToPerProfile();
+    }
+
+    /// <summary>
+    /// One-time migration (2026-07-25): KeycapOverrides used to be keyed by KeyId only
+    /// (one row per key, shared by every profile). Detects the old single-column PK via
+    /// PRAGMA table_info and, if found, copies every existing override into all 5 fixed
+    /// profile slots (see EverestSdkNative.FW_NUM_PROFILE) — so nobody loses their per-key
+    /// customization on upgrade, every profile just starts from what was there before and
+    /// can diverge from there — then replaces the table with the new (Profile, KeyId)
+    /// composite key. No-ops on every call after the first (column already present).
+    /// </summary>
+    private void MigrateKeycapOverridesToPerProfile()
+    {
+        bool hasProfileColumn = false;
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA table_info(KeycapOverrides)";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                if (string.Equals(r.GetString(1), "Profile", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasProfileColumn = true;
+                    break;
+                }
+            }
+        }
+        if (hasProfileColumn) return;
+
+        using var tx = _conn.BeginTransaction();
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+            cmd.CommandText = "ALTER TABLE KeycapOverrides RENAME TO KeycapOverrides_old";
+            cmd.ExecuteNonQuery();
+        }
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+            cmd.CommandText = @"
+CREATE TABLE KeycapOverrides (
+    Profile   INTEGER NOT NULL,
+    KeyId     INTEGER NOT NULL,
+    ColorHex  TEXT,
+    ImagePath TEXT,
+    PRIMARY KEY (Profile, KeyId)
+);
+INSERT INTO KeycapOverrides (Profile, KeyId, ColorHex, ImagePath)
+SELECT p.value, o.KeyId, o.ColorHex, o.ImagePath
+FROM KeycapOverrides_old o, (SELECT 1 AS value UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5) p;
+DROP TABLE KeycapOverrides_old;";
+            cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
     }
 
     // ---------- per-key appearance overrides (color / custom image, incl. Esc Mountain logo) ----------
-    // Global/device-wide like the rest of Keycap Appearance (not per-profile) — see
-    // MainWindow.KeycapAppearance.cs. KeyId = LED index (same identity as _evKeyVisuals).
+    // Per-profile (2026-07-25, migrated from device-wide) — see MainWindow.KeycapAppearance.cs.
+    // KeyId = LED index (same identity as _evKeyVisuals).
 
-    public Dictionary<int, KeycapOverrideRecord> LoadAllKeycapOverrides()
+    public Dictionary<int, KeycapOverrideRecord> LoadAllKeycapOverrides(int profile)
     {
         var result = new Dictionary<int, KeycapOverrideRecord>();
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "SELECT KeyId, ColorHex, ImagePath FROM KeycapOverrides";
+        cmd.CommandText = "SELECT KeyId, ColorHex, ImagePath FROM KeycapOverrides WHERE Profile=$p";
+        cmd.Parameters.AddWithValue("$p", profile);
         using var r = cmd.ExecuteReader();
         while (r.Read())
         {
@@ -78,22 +138,24 @@ CREATE TABLE IF NOT EXISTS KeycapOverrides (
         return result;
     }
 
-    public void SetKeycapOverride(int keyId, string? colorHex, string? imagePath)
+    public void SetKeycapOverride(int profile, int keyId, string? colorHex, string? imagePath)
     {
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = @"
-INSERT INTO KeycapOverrides(KeyId, ColorHex, ImagePath) VALUES ($k, $c, $i)
-ON CONFLICT(KeyId) DO UPDATE SET ColorHex=excluded.ColorHex, ImagePath=excluded.ImagePath";
+INSERT INTO KeycapOverrides(Profile, KeyId, ColorHex, ImagePath) VALUES ($p, $k, $c, $i)
+ON CONFLICT(Profile, KeyId) DO UPDATE SET ColorHex=excluded.ColorHex, ImagePath=excluded.ImagePath";
+        cmd.Parameters.AddWithValue("$p", profile);
         cmd.Parameters.AddWithValue("$k", keyId);
         cmd.Parameters.AddWithValue("$c", (object?)colorHex ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$i", (object?)imagePath ?? DBNull.Value);
         cmd.ExecuteNonQuery();
     }
 
-    public void ClearKeycapOverride(int keyId)
+    public void ClearKeycapOverride(int profile, int keyId)
     {
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM KeycapOverrides WHERE KeyId=$k";
+        cmd.CommandText = "DELETE FROM KeycapOverrides WHERE Profile=$p AND KeyId=$k";
+        cmd.Parameters.AddWithValue("$p", profile);
         cmd.Parameters.AddWithValue("$k", keyId);
         cmd.ExecuteNonQuery();
     }
@@ -226,8 +288,11 @@ ON CONFLICT(Profile, KeyMatrix) DO UPDATE SET
 
     /// <summary>Deletes only this profile's key bindings — unlike <see cref="ClearProfile"/>,
     /// keeps the profile's name. Used by "Restore defaults" (resets content, not identity).
-    /// RGB lighting/keycap appearance are device-wide (not per-profile) for the Everest Max,
-    /// so they are untouched here — see the architectural note in _PROJECT_MAP.md.</summary>
+    /// RGB lighting/Settings/Display Dial/keycap appearance are per-profile (2026-07-22/25)
+    /// but intentionally untouched here too, same as <see cref="ClearProfile"/> — an orphaned
+    /// <c>rgb.p{N}.*</c>/<c>settings.p{N}.*</c>/<c>dial.p{N}.*</c>/KeycapOverrides row for a
+    /// cleared slot is inert until that slot is reused, at which point it's just a starting
+    /// point the user can change (same trade-off already accepted for RGB).</summary>
     public void ResetProfileToDefaults(int profile)
     {
         using var cmd = _conn.CreateCommand();

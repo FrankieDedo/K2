@@ -158,14 +158,16 @@ internal static class LedMatrixMapping
         { 192, 1 },    // \ — col 0, row 1 (matrixId 1)
 
         // --- Navigation cluster ---
-        // K2 uses numpad VKs for nav keys (the SDK does not distinguish).
-        // Mapped here to the physical LED positions of the NAV cluster.
-        { 96, 96 },    // Ins  (K2 VK=96=Num0, physical nav LED Ins=96)
-        { 103, 105 },  // Home (K2 VK=103=Num7, physical nav LED Home=105)
-        { 105, 115 },  // PgUp (K2 VK=105=Num9, physical nav LED PgUp=115)
-        { 110, 88 },   // Del  (K2 VK=110=Num., physical nav LED Del=88)
-        { 97, 97 },    // End  (K2 VK=97=Num1, physical nav LED End=97)
-        { 99, 106 },   // PgDn (K2 VK=99=Num3, physical nav LED PgDn=106)
+        // Dedicated VK_INSERT/HOME/PRIOR/DELETE/END/NEXT (45/36/33/46/35/34) since
+        // 2026-07-27 — see KeyboardLayout.cs's doc comment on why these no longer
+        // reuse the numpad's own VKs. Target LED indices (the actual physical LED
+        // positions) are unchanged.
+        { 45, 96 },    // Ins
+        { 36, 105 },   // Home
+        { 33, 115 },   // PgUp
+        { 46, 88 },    // Del
+        { 35, 97 },    // End
+        { 34, 106 },   // PgDn
     };
 
     // ==================================================================

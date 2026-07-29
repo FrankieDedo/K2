@@ -36,6 +36,16 @@ public partial class MainWindow
     /// <summary>Action associated with each display key (type, value).</summary>
     private readonly (string? Type, string? Value)[] _ndkActions = new (string?, string?)[NdkCount];
 
+    /// <summary>Resting border accent (teal) — also the "un-pressed" target for
+    /// <see cref="NdkHighlightButton"/>.</summary>
+    private static readonly SolidColorBrush s_ndkBorderBrush = new(Color.FromRgb(0x5B, 0xBE, 0xC3));
+
+    /// <summary>Press-flash border color — same red as the regular keyboard's press
+    /// highlight (MainWindow.Everest.cs's EvHighlightKeyboardButton). Only the frame
+    /// glows (border + a soft outer shadow), never the Background: these buttons show
+    /// the user's own uploaded picture, which a background fill would obscure.</summary>
+    private static readonly SolidColorBrush s_ndkPressBorderBrush = new(Color.FromRgb(0x90, 0x00, 0x00));
+
     // ---- Drag & drop (swap two display keys' action + image) ----
     private const string NdkDragFormat = "K2.NdkIndex";
     private Point _ndkDragStartPoint;
@@ -57,7 +67,6 @@ public partial class MainWindow
         const double gap = 2;
 
         var bgBrush = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2E));
-        var borderBrush = new SolidColorBrush(Color.FromRgb(0x5B, 0xBE, 0xC3)); // teal accent
 
         for (int i = 0; i < NdkCount; i++)
         {
@@ -71,12 +80,16 @@ public partial class MainWindow
             // Icon clipped to a rounded rect (same technique as DpKeyButtonStyle's 52×52
             // icon Border in MainWindow.xaml) so the picture's corners follow the physical
             // display key's curved bezel instead of poking out square underneath it.
+            // NOTE: ClipToBounds only clips to the plain rectangular bounds, NOT to
+            // CornerRadius (that only shapes a Border's own Background/BorderBrush painting,
+            // never its children) — an explicit Clip geometry is what actually rounds the
+            // Image underneath.
+            double ndkIconSize = NdkBtnSize - 4;
             var iconBorder = new Border
             {
-                Width = NdkBtnSize - 4,
-                Height = NdkBtnSize - 4,
-                CornerRadius = new CornerRadius(5),
-                ClipToBounds = true,
+                Width = ndkIconSize,
+                Height = ndkIconSize,
+                Clip = new RectangleGeometry(new Rect(0, 0, ndkIconSize, ndkIconSize), 5, 5),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
                 Child = img,
@@ -102,7 +115,7 @@ public partial class MainWindow
                 Height = NdkBtnSize,
                 Content = grid,
                 Background = bgBrush,
-                BorderBrush = borderBrush,
+                BorderBrush = s_ndkBorderBrush,
                 BorderThickness = new Thickness(1),
                 Padding = new Thickness(2),
                 Cursor = Cursors.Hand,
@@ -349,6 +362,30 @@ public partial class MainWindow
     }
 
     /// <summary>
+    /// Retries a single NDK hardware write (picture upload or reset) up to
+    /// <paramref name="maxAttempts"/> times, <paramref name="delayMs"/> apart — the
+    /// firmware rejects a new StartPicUpdate/reset for several seconds after the
+    /// previous one (see <see cref="UploadNdkImage"/>). Originally only the bulk push
+    /// (<see cref="EvUploadNdkImages"/>) retried; a single manual edit
+    /// (<see cref="NdkApplyImage"/>/<see cref="NdkClearDeviceImage"/>) assumed "human
+    /// actions are naturally paced" and never did, which silently failed with no
+    /// error shown whenever the user touched more than one display key in a short
+    /// session, or edited one right after an import/reconnect that was still busy
+    /// pushing pictures (user report 2026-07-29: "carica icona, sulla tastiera non
+    /// carica" / "remove image, non rimuove nulla").
+    /// </summary>
+    private static bool RetryNdkWrite(Func<bool> attempt, int maxAttempts = 10, int delayMs = 2000)
+    {
+        bool ok = false;
+        for (int i = 0; i < maxAttempts && !ok; i++)
+        {
+            if (i > 0) System.Threading.Thread.Sleep(delayMs);
+            ok = attempt();
+        }
+        return ok;
+    }
+
+    /// <summary>
     /// Uploads <paramref name="imagePath"/> (already 72×72 — either user-cropped or
     /// auto-generated, both via <see cref="NdkKeyConfigDialog"/>) to display key
     /// <paramref name="keyIndex"/> of the CURRENT Everest profile, persists it, and
@@ -356,7 +393,8 @@ public partial class MainWindow
     /// synchronous and takes ~2s (confirmed via USB capture, K2/_reference/usb_dumps,
     /// 2026-07-16), so a full-window "please wait" overlay (<see cref="RunHwBusy"/>) is
     /// shown for the duration — mirrors Base Camp, which blocks its own UI the same way
-    /// while pushing NDK/Display Dial pictures.
+    /// while pushing NDK/Display Dial pictures. Retried via <see cref="RetryNdkWrite"/>:
+    /// see that method's doc comment for why a single attempt isn't reliable.
     /// </summary>
     private void NdkApplyImage(int keyIndex, string imagePath)
     {
@@ -372,7 +410,7 @@ public partial class MainWindow
         try
         {
             bool ok = RunHwBusy(Loc.Get("hw_busy_uploading_image"),
-                () => UploadNdkImage(keyIndex, imagePath, profile));
+                () => RetryNdkWrite(() => UploadNdkImage(keyIndex, imagePath, profile)));
             if (ok)
             {
                 _ndkImagePaths[keyIndex] = imagePath;
@@ -485,8 +523,45 @@ public partial class MainWindow
     /// SetKeyCallBack at all (confirmed by user report 2026-07-19: capture never triggered).</summary>
     private void OnEverestNumpadButton(object? sender, (int Button, bool Pressed) e)
     {
-        if (!e.Pressed) return;
-        Dispatcher.BeginInvoke(() => HandleNumpadDisplayKeyPress(e.Button));
+        Dispatcher.BeginInvoke(() =>
+        {
+            NdkHighlightButton(e.Button, e.Pressed);
+            if (e.Pressed) HandleNumpadDisplayKeyPress(e.Button);
+        });
+    }
+
+    /// <summary>Physical-press highlight for a display key — user request 2026-07-27,
+    /// mirroring the regular keyboard's press flash but as a glowing FRAME only (border +
+    /// outer glow), never the Background: unlike a plain keyboard key, D1-D4 show the
+    /// user's own uploaded picture, and filling Background would cover it. Safe to touch
+    /// BorderBrush/Effect directly (real local values, no SetCurrentValue dance needed):
+    /// nothing else in the NDK system (keycap appearance, LED preview) ever writes to
+    /// these buttons' Border/Effect properties, so there's no MacroPad-style "stuck"
+    /// hazard here.</summary>
+    private void NdkHighlightButton(int keyIndex, bool pressed)
+    {
+        if (keyIndex < 0 || keyIndex >= NdkCount) return;
+        var btn = _ndkButtons[keyIndex];
+        if (btn is null) return;
+
+        if (pressed)
+        {
+            btn.BorderBrush = s_ndkPressBorderBrush;
+            btn.BorderThickness = new Thickness(2);
+            btn.Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = Color.FromRgb(0x90, 0x00, 0x00),
+                BlurRadius = 10,
+                ShadowDepth = 0,
+                Opacity = 0.9,
+            };
+        }
+        else
+        {
+            btn.BorderBrush = s_ndkBorderBrush;
+            btn.BorderThickness = new Thickness(1);
+            btn.Effect = null;
+        }
     }
 
     /// <summary>Removing the action also clears the key's picture — same behavior as
@@ -527,7 +602,7 @@ public partial class MainWindow
         try
         {
             bool ok = RunHwBusy(Loc.Get("hw_busy_uploading_image"),
-                () => _everest.ClearNumpadImage(idx, (byte)profile));
+                () => RetryNdkWrite(() => _everest.ClearNumpadImage(idx, (byte)profile)));
             // Successful reset = flash back to factory artwork for this key: remember it
             // so EvResetEmptyNdkSlots (MainWindow.Everest.cs) doesn't redo it on the next
             // profile switch. Only cache the marker outside the post-upload busy window,

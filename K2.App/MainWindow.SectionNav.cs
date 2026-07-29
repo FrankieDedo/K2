@@ -59,6 +59,7 @@
 
 using System.Windows;
 using System.Windows.Controls;
+using K2.App.Services;
 
 namespace K2.App;
 
@@ -160,6 +161,15 @@ public partial class MainWindow
         // LED color preview is only useful (and only polled) while looking at LED Lighting —
         // mirrors ShowEvSection/UpdateEverestLedPreviewActive.
         UpdateMpLedPreviewActive(panel == PnlMpSecLed);
+
+        // Custom Lighting's paint mode must only be active while BOTH "LED Lighting" is the
+        // visible section AND CbMacroEffect is set to "Custom" — re-synced on every section
+        // switch (mirrors ShowEvSection/SetCustomPaintModeActive), so leaving the section
+        // forces it off regardless of the stored effect selection.
+        if (panel == PnlMpSecLed)
+            SetMpCustomPaintModeActive(CbMacroEffect.SelectedItem is MacroEffectChoice pick && pick.Eff == MacroPadService.Effect.Custom);
+        else
+            SetMpCustomPaintModeActive(false);
     }
 
     /// <summary>True while the MacroPad "Key Binding" section is the active one —

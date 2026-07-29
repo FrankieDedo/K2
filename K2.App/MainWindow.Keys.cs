@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -287,22 +287,35 @@ public partial class MainWindow
         MpRefreshProfiles(id);
     }
 
-    /// <summary>Resets the currently selected profile's key actions back to K2's defaults
-    /// (empty grid). LED lighting is device-wide (not per-profile) for the MacroPad, so
-    /// it is untouched — same reasoning as the Everest Max's restore defaults.</summary>
+    /// <summary>Wipes EVERY profile of the selected MacroPad unit back to K2's defaults:
+    /// other profiles are deleted outright (mirrors BtnMpDeleteProfile_Click), the current
+    /// one keeps its name but has its key actions cleared and its LED lighting reset to
+    /// the factory values (<see cref="MpResetLedToDefaults"/>) — LED lighting became
+    /// per-profile 2026-07-22 (see MacroLedPrefix), so "restore defaults" needs to touch
+    /// it too, unlike when this button was last documented as lighting being device-wide.
+    /// User request 2026-07-29.</summary>
     private void BtnMpRestoreDefaults_Click(object sender, RoutedEventArgs e)
     {
         if (CurrentDeviceId() is not int id) return;
-        int slot = CurrentProfile();
-        string profileName = _store.GetProfileName(id, slot) ?? Loc.Get("profile_n", slot);
         var res = MessageBox.Show(
-            Loc.Get("restore_defaults_profile_confirm", profileName),
+            Loc.Get("restore_defaults_device_confirm", Loc.Get("tab_macropad")),
             Loc.Get("restore_defaults"),
             MessageBoxButton.OKCancel,
             MessageBoxImage.Warning);
         if (res != MessageBoxResult.OK) return;
-        _store.ClearProfile(id, slot);
-        Log($"[UI ] MacroPad profile {slot} restored to defaults.");
+
+        int current = CurrentProfile();
+        foreach (var slot in _store.GetExistingProfiles(id))
+            if (slot != current)
+            {
+                _store.ClearProfile(id, slot);
+                _store.SetSetting($"profile.{id}.{slot}.name", "");
+                _store.SetSetting($"profile.{id}.{slot}.launchExe", "");
+            }
+
+        _store.ClearProfile(id, current);
+        MpResetLedToDefaults();
+        Log($"[UI ] MacroPad device {id} restored to factory defaults (all profiles, lighting and key bindings).");
         MpRefreshProfiles(id);
         ReloadCurrentProfile();
     }
@@ -444,6 +457,11 @@ public partial class MainWindow
             OpenMpKeycapCustomizeDialog(key.Index, key.KeyLabel);
             return;
         }
+
+        // Custom lighting paint mode (LED Lighting section, "Custom" effect selected):
+        // color the key and consume the click — see MainWindow.MpCustomLighting.cs.
+        if (TryMpCustomPaint(key.Index))
+            return;
 
         ConfigureAction(key);
     }
@@ -697,7 +715,13 @@ public partial class MainWindow
     private void ReloadCurrentProfile()
     {
         foreach (var k in _keys) { k.ActionType = null; k.ActionValue = null; }
-        if (CurrentDeviceId() is not int id) { RefreshMpMappedKeys(); ReloadMacroLedForProfileSwitch(); return; }
+        if (CurrentDeviceId() is not int id)
+        {
+            RefreshMpMappedKeys();
+            ReloadMacroLedForProfileSwitch();
+            InitMpSettingsPanel();
+            return;
+        }
         int profile = CurrentProfile();
         var rows = _store.LoadProfile(id, profile);
         foreach (var r in rows)
@@ -710,6 +734,7 @@ public partial class MainWindow
         Log($"[DB  ] loaded {rows.Count} actions for device={id} profile={profile}");
 
         ReloadMacroLedForProfileSwitch();
+        InitMpSettingsPanel(); // re-loads Keycap Appearance for this slot — user request 2026-07-25
     }
 
     // ============================================================
@@ -774,7 +799,14 @@ public partial class MainWindow
         if (_matrixToIndex.TryGetValue(matrix, out int hi) && hi >= 0 && hi < _keys.Length)
         {
             _keys[hi].IsHighlighted = e.Pressed;
-            if (e.Pressed) TryExecuteAction(_keys[hi]);
+            if (e.Pressed)
+                TryExecuteAction(_keys[hi]);
+            else
+                // Picks up whatever keycap-appearance write may have landed (and been
+                // skipped) while this key's IsHighlighted trigger was active — see
+                // ApplyMacroKeycapAppearanceToAllKeys's doc comment for the "stuck gray
+                // after a tap" bug this closes.
+                ApplyMacroKeycapAppearanceToKey(hi);
         }
     }
 
@@ -806,10 +838,21 @@ public partial class MainWindow
             string profileName = root.Element("ProfileName")?.Value
                                  ?? Path.GetFileNameWithoutExtension(dlg.FileName);
 
-            var bindings = root.Descendants("MakaluKeyBindings").ToList();
+            // Real Base Camp XML carries MacroPad key bindings under the SAME
+            // EverestKeyBindings/KeyboardBinding wrapper Everest Max uses (confirmed
+            // 2026-07-26 against a real BaseCamp.db + a real BC XML export — the
+            // MacroPad's 12 keys share Everest Max's EverestKeyBidings DB table,
+            // KeyId 170-179/220/221 = M1-M12, same scheme DisplayPad uses). The old
+            // flat <MakaluKeyBindings> shape (K2's own pre-2026-07-26 export format,
+            // never real Base Camp data) is kept as a fallback so previously-exported
+            // K2 XML files still import.
+            var bindings = root.Descendants("KeyboardBinding").ToList();
+            bool legacyShape = bindings.Count == 0;
+            if (legacyShape)
+                bindings = root.Descendants("MakaluKeyBindings").ToList();
             if (bindings.Count == 0)
             {
-                Log("[IMP-XML] No MakaluKeyBindings found in XML.");
+                Log("[IMP-XML] No KeyboardBinding/MakaluKeyBindings found in XML.");
                 return;
             }
 
@@ -823,6 +866,14 @@ public partial class MainWindow
             }
 
             _store.ClearProfile(id, slot);
+
+            // Register the name BEFORE translating any binding — same fix already made
+            // for Everest Max/Everest 60: MacroPadStore.GetExistingProfiles only sees a
+            // slot that has at least one Keys row, so a profile whose bindings all fail
+            // to translate (or that carries lighting only) silently disappeared after
+            // import — and even a successful import kept the default "Profile N" name.
+            _store.SetProfileName(id, slot, profileName);
+
             int imported = 0;
 
             // Existing K2 macro names, so "Run Macro" bindings resolve against the
@@ -834,26 +885,47 @@ public partial class MainWindow
 
             foreach (var b in bindings)
             {
-                if (!int.TryParse(b.Element("KeyId")?.Value, out int keyId) || keyId < 1 || keyId > 12) continue;
-                int keyIndex = keyId - 1;
+                if (!int.TryParse(b.Element("KeyId")?.Value, out int keyId)) continue;
 
-                string? funcType    = b.Element("FunctionType")?.Value;
-                string? funcValue   = b.Element("FunctionValue")?.Value;
-                string? funcEntered = b.Element("FunctionEnteredValue")?.Value;
+                string? funcType  = b.Element("FunctionType")?.Value;
+                string? funcValue = b.Element("FunctionValue")?.Value;
 
+                int keyIndex;
                 string? actionType, actionValue;
-                if (funcType == "K2Action")
+                if (legacyShape)
                 {
-                    // Sentinel written by MpProfileExporter.ExportK2: FunctionEnteredValue/
-                    // FunctionValue carry the literal K2 ActionType/ActionValue (the
-                    // MakaluKeyBindings schema has no SubFunctionType, so
-                    // FunctionEnteredValue is reused for lossless round-tripping).
-                    actionType  = funcEntered;
-                    actionValue = string.IsNullOrEmpty(funcValue) ? null : funcValue;
+                    // Old K2-only flat shape: KeyId is 1-12 directly, FunctionEnteredValue
+                    // carries the literal ActionType when FunctionType="K2Action" (no
+                    // SubFunctionType column in that schema).
+                    if (keyId < 1 || keyId > 12) continue;
+                    keyIndex = keyId - 1;
+                    string? funcEntered = b.Element("FunctionEnteredValue")?.Value;
+                    if (funcType == "K2Action")
+                    {
+                        actionType  = funcEntered;
+                        actionValue = string.IsNullOrEmpty(funcValue) ? null : funcValue;
+                    }
+                    else
+                    {
+                        (actionType, actionValue) = BaseCampDbImporter.TranslateMakaluAction(funcType, funcValue, macroNames);
+                    }
                 }
                 else
                 {
-                    (actionType, actionValue) = BaseCampDbImporter.TranslateMakaluAction(funcType, funcValue, macroNames);
+                    // Real Base Camp shape (and K2's own current export, MpProfileExporter.
+                    // ExportK2): KeyId is 170-179/220/221 = M1-M12, same as DisplayPad.
+                    if (!BaseCampDbImporter.KeyIdToIndex.TryGetValue(keyId, out keyIndex)) continue;
+                    if (funcType == "K2Action")
+                    {
+                        actionType  = b.Element("SubFunctionType")?.Value;
+                        actionValue = string.IsNullOrEmpty(funcValue) ? null : funcValue;
+                    }
+                    else
+                    {
+                        string? subType = b.Element("SubFunctionType")?.Value;
+                        string? customUrl = b.Element("CustomURL")?.Value;
+                        (actionType, actionValue) = BaseCampDbImporter.TranslateAction(funcType, subType, funcValue, macroNames, customUrl);
+                    }
                 }
 
                 if (actionType is null) continue;
@@ -861,10 +933,61 @@ public partial class MainWindow
                 imported++;
             }
 
+            // Lighting (EverestLightings/Lighting — shared with Everest Max, see
+            // BaseCampDbImporter.ApplyLightingToStore's doc comment).
+            var lightingRows = new List<BaseCampDbImporter.BcLightingRow>();
+            BaseCampDbImporter.BcCustomLighting? importedCustom = null;
+            foreach (var lt in root.Descendants("Lighting"))
+            {
+                string? name = lt.Element("EffIndex")?.Value;
+                int speed = int.TryParse(lt.Element("Speed")?.Value, out var sp) ? sp : 50;
+                int brightness = int.TryParse(lt.Element("Brightness")?.Value, out var br) ? br : 100;
+                int direction = int.TryParse(lt.Element("Direction")?.Value, out var di) ? di : 0;
+                bool active = string.Equals(lt.Element("IsActive")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+                byte effByte = BaseCampDbImporter.ResolveLightingEffectByte(name, null);
+                int c1 = BaseCampDbImporter.ParseBcColor(lt.Element("Color1")?.Value, 0x900000);
+                int c2 = BaseCampDbImporter.ParseBcColor(lt.Element("Color2")?.Value, 0);
+                int c3 = BaseCampDbImporter.ParseBcColor(lt.Element("Color3")?.Value, 0);
+                lightingRows.Add(new BaseCampDbImporter.BcLightingRow(effByte, speed, brightness, direction, c1, c2, c3, active));
+
+                // Per-key paint state of the Custom effect (12 M-keys) — same payload
+                // shape as Everest Max's, and gated on IsActive for the same reason
+                // (Base Camp's XML exporter synthesizes a default all-black board when
+                // the profile has no saved paint — see the matching comment in
+                // MainWindow.Everest.cs's BtnEvImportXml_Click).
+                if (effByte == (byte)MacroPadSdkNative.EffectIndex.Custom && active)
+                {
+                    importedCustom = BaseCampDbImporter.ParseKeyboardCustomLighting(
+                        lt.Element("CustomLightings")?.Value, BaseCampDbImporter.MacroPadKeyCount);
+                    if (importedCustom is not null)
+                    {
+                        BaseCampDbImporter.ApplyCustomLightingToStore(_store.SetSetting,
+                            $"macroled.p{slot}.custom.keyColors", $"macroled.p{slot}.custom.keyEffects", importedCustom);
+                        Log($"[IMP-XML] custom lighting: {importedCustom.Colors.Count} painted key(s), " +
+                            $"{importedCustom.Effects.Count} dynamic-effect key(s)");
+                    }
+                }
+            }
+            if (lightingRows.Count > 0)
+                BaseCampDbImporter.ApplyLightingToStore(_store.SetSetting, $"macroled.p{slot}.", lightingRows);
+
+            // After the effect rows (they set macroled.p{slot}.effect from IsActive): a
+            // really painted board wins — see BaseCampDbImporter.LooksPainted.
+            if (importedCustom is not null
+                && BaseCampDbImporter.LooksPainted(importedCustom, BaseCampDbImporter.MacroPadKeyCount))
+            {
+                _store.SetSetting($"macroled.p{slot}.effect",
+                    ((int)MacroPadSdkNative.EffectIndex.Custom).ToString());
+            }
+
             _store.SetCurrentProfile(id, slot);
             MpRefreshProfiles(id);
             MpSelectProfileSlot(slot);
             ReloadCurrentProfile();
+
+            // Replay the effect-dropdown pick so the imported lighting reaches the pad
+            // and the preview right away — see MpReapplySelectedEffect.
+            MpReapplySelectedEffect();
 
             Log($"[IMP-XML] '{profileName}' -> device {id} slot {slot}: {imported} keys");
             LblStatus.Text = Loc.Get("dp_imported_xml", profileName, slot);
@@ -975,7 +1098,7 @@ public partial class MainWindow
         try
         {
             foreach (var p in profiles)
-                BaseCampDbImporter.ReadMakaluBindings(dbPath, p.ProfileId);
+                BaseCampDbImporter.ReadMacroPadKeyBindings(dbPath, p.ProfileId);
         }
         catch (Exception ex)
         {
@@ -1027,6 +1150,9 @@ public partial class MainWindow
         MpRefreshProfiles(k2DeviceId);
         if (slotToShow > 0) MpSelectProfileSlot(slotToShow);
         ReloadCurrentProfile();
+
+        // Same post-import apply as the XML path — see MpReapplySelectedEffect.
+        MpReapplySelectedEffect();
 
         Log($"[IMP-BC] Done: {totalKeys} keys across {profiles.Count} profiles");
         LblStatus.Text = Loc.Get("mp_imported_bc", profiles.Count, totalKeys);
@@ -1100,8 +1226,18 @@ public partial class MainWindow
             next = n;
         else
         {
-            Log($"[EXEC] profile: target \"{t}\" not resolved for MacroPad");
-            return;
+            // Named-profile target — see MainWindow.Everest.cs's EvSwitchProfile for the
+            // rationale (Base Camp XML/DB can carry a destination profile NAME instead of
+            // Next/Previous/a slot number).
+            int? byName = null;
+            foreach (var s in existing)
+                if (string.Equals(_store.GetProfileName(devId, s), t, StringComparison.OrdinalIgnoreCase)) { byName = s; break; }
+            if (byName is int found) next = found;
+            else
+            {
+                Log($"[EXEC] profile: target \"{t}\" not resolved for MacroPad");
+                return;
+            }
         }
         if (next == cur) return;
 

@@ -19,12 +19,6 @@
         <Grid x:Name="SecRgb" Visibility="Collapsed">
             <StackPanel>
                 <DockPanel Margin="0,0,0,8">
-                    <!-- Hidden for now (2026-07-14, user request: hide LED painting/ring
-                         sections on every device with a Lighting section). Opens the
-                         per-LED "ring" painting window (MakaluCustomRgbWindow). -->
-                    <Button DockPanel.Dock="Right" x:Name="BtnMkCustomOpen" Content="{loc:Get makalu_custom_open}"
-                            Click="BtnMkCustomOpen_Click" Padding="8,3" HorizontalAlignment="Right"
-                            Visibility="Collapsed"/>
                     <TextBlock Text="{loc:Get rgb_lighting}" FontWeight="Bold" VerticalAlignment="Center"/>
                 </DockPanel>
                 <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
@@ -54,17 +48,52 @@
                 <!-- Brightness lives in MainWindow's shared top-right bar (BrMakalu), not
                      here — same convention as Everest Max/MacroPad/DisplayPad, see
                      MainWindow.SectionNav.cs. MainWindow calls SetBrightness() on change. -->
-                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-                    <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                    <Button x:Name="BtnMkColor1" Width="30" Height="30" Background="#900000"
-                            BorderThickness="2" BorderBrush="#3A3A40" Click="BtnMkColor_Click" Tag="1"
-                            Margin="0,0,10,0"/>
+                <WrapPanel x:Name="PnlMkNormalColors" Orientation="Horizontal" Margin="0,0,0,6">
+                    <!-- Single/Rainbow color mode — Breathing only (2026-07-27: folds the old
+                         separate "RGB Breathing" combo entry into Breathing itself, picked via
+                         this radio instead of its own effect, same "one effect + a color-mode
+                         choice" pattern Everest 60/Everest Max/MacroPad already use). Hidden
+                         for every other effect (Static/Rainbow/Responsive/Yeti), which keep the
+                         plain always-on swatch(es) below. -->
+                    <StackPanel x:Name="PnlMkColorMode" Orientation="Vertical" Margin="0,0,16,0"
+                                VerticalAlignment="Center" Visibility="Collapsed">
+                        <RadioButton x:Name="RbMkColorSingle" Content="{loc:Get rgb_single}" GroupName="MkColorMode"
+                                     Margin="0,0,0,4" Checked="RbMkColorMode_Checked" ToolTip="{loc:Get rgb_single_tip}"/>
+                        <RadioButton x:Name="RbMkColorRainbow" Content="{loc:Get rgb_rainbow}" GroupName="MkColorMode"
+                                     Checked="RbMkColorMode_Checked" ToolTip="{loc:Get rgb_rainbow_tip}"/>
+                    </StackPanel>
+                    <StackPanel x:Name="PnlMkColor1" Orientation="Horizontal" Margin="0,0,10,0">
+                        <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <Button x:Name="BtnMkColor1" Width="30" Height="30" Background="#900000"
+                                BorderThickness="2" BorderBrush="#3A3A40" Click="BtnMkColor_Click" Tag="1"/>
+                    </StackPanel>
                     <StackPanel x:Name="PnlMkColor2" Orientation="Horizontal">
                         <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                         <Button x:Name="BtnMkColor2" Width="30" Height="30" Background="#1A1A1E"
                                 BorderThickness="2" BorderBrush="#3A3A40" Click="BtnMkColor_Click" Tag="2"/>
                     </StackPanel>
                 </WrapPanel>
+
+                <!-- Custom (per-LED) lighting — the 8 clickable LED squares themselves live
+                     on the device image next to the ring (MainWindow.xaml's
+                     CvsMkCustomSquares / MainWindow.Makalu.cs), each with a leader line to
+                     its physical LED's ring sector, matching Base Camp's own reference photo
+                     (2026-07-27, user request). This panel only keeps the brush-color picker:
+                     click a square (or drag a rectangle over several, multi-select) to paint
+                     it/them with whatever color is set here — plain click-to-paint, not a
+                     select-then-apply flow. No per-LED effect dropdown: the wire protocol
+                     (MakaluProtocol.SetLightingCustom) only ever carries one flat Static
+                     color per LED, no effect code slot at all. -->
+                <StackPanel x:Name="PnlMkCustomLighting" Visibility="Collapsed" Margin="0,0,0,6">
+                    <TextBlock Text="{loc:Get makalu_custom_hint}" TextWrapping="Wrap" FontStyle="Italic" FontSize="11"
+                               Foreground="{StaticResource K2TextMutedBrush}" Margin="0,0,0,8"/>
+                    <WrapPanel Orientation="Horizontal">
+                        <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <Button x:Name="BtnMkCustomPrimary" Width="30" Height="30" Background="#900000"
+                                BorderThickness="2" BorderBrush="#3A3A40" Click="BtnMkCustomPrimary_Click"/>
+                    </WrapPanel>
+                </StackPanel>
+
                 <TextBlock x:Name="LblMkRgbStatus" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
             </StackPanel>
         </Grid>
@@ -83,49 +112,39 @@
 
             <StackPanel Grid.Column="0">
                 <TextBlock Text="{loc:Get makalu_settings_title}" FontWeight="Bold" Margin="0,0,0,14"/>
+                <!-- No Apply buttons (2026-07-29, user request): every slider applies live
+                     on ValueChanged instead (see MkApplyPolling/MkApplyDebounce/etc in the
+                     code-behind, now called directly from each Slider's handler). -->
                 <WrapPanel Orientation="Horizontal" Margin="0,0,0,16">
                     <TextBlock Text="{loc:Get makalu_setting_poll}" VerticalAlignment="Center" Width="130"/>
                     <Slider x:Name="SldMkPolling" Minimum="0" Maximum="3" Width="120" TickFrequency="1" IsSnapToTickEnabled="True"
                             ValueChanged="SldMkPolling_ValueChanged" VerticalAlignment="Center"/>
                     <TextBlock x:Name="LblMkPollingVal" Text="1000 Hz" Width="56" VerticalAlignment="Center" Margin="6,0,0,0"/>
-                    <Button x:Name="BtnMkPollingApply" Content="{loc:Get makalu_apply}" Click="BtnMkPollingApply_Click" Padding="8,3" Margin="6,0,6,0"/>
-                    <TextBlock x:Name="LblMkPollingStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                    <TextBlock x:Name="LblMkPollingStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}" Margin="8,0,0,0"/>
                 </WrapPanel>
                 <WrapPanel Orientation="Horizontal" Margin="0,0,0,16">
                     <TextBlock Text="{loc:Get makalu_setting_debounce}" VerticalAlignment="Center" Width="130"/>
                     <Slider x:Name="SldMkDebounce" Minimum="0" Maximum="5" Width="120" TickFrequency="1" IsSnapToTickEnabled="True"
                             ValueChanged="SldMkDebounce_ValueChanged" VerticalAlignment="Center"/>
                     <TextBlock x:Name="LblMkDebounceVal" Text="2 ms" Width="44" VerticalAlignment="Center" Margin="6,0,0,0"/>
-                    <Button x:Name="BtnMkDebounceApply" Content="{loc:Get makalu_apply}" Click="BtnMkDebounceApply_Click" Padding="8,3" Margin="6,0,6,0"/>
-                    <TextBlock x:Name="LblMkDebounceStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                    <TextBlock x:Name="LblMkDebounceStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}" Margin="8,0,0,0"/>
                 </WrapPanel>
+                <!-- Sensitivity/Click Speed (2026-07-29): Windows OS-level mouse settings,
+                     not firmware — see MakaluOsMouseSettings' doc comment. Same 0-11 scale
+                     Base Camp's own DB uses. -->
                 <WrapPanel Orientation="Horizontal" Margin="0,0,0,16">
-                    <TextBlock Text="{loc:Get makalu_setting_angle}" VerticalAlignment="Center" Width="130"/>
-                    <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="120">
-                        <UniformGrid Rows="1">
-                            <RadioButton x:Name="RbMkAngleOff" Content="{loc:Get makalu_setting_off}" GroupName="MkAngle"
-                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkAngle_Checked"
-                                         themes:K2Segment.CornerRadius="6,0,0,6"/>
-                            <RadioButton x:Name="RbMkAngleOn" Content="{loc:Get makalu_setting_on}" GroupName="MkAngle"
-                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkAngle_Checked"
-                                         themes:K2Segment.CornerRadius="0,6,6,0"/>
-                        </UniformGrid>
-                    </Border>
-                    <TextBlock x:Name="LblMkAngleStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}" Margin="8,0,0,0"/>
+                    <TextBlock Text="{loc:Get makalu_setting_sensitivity}" VerticalAlignment="Center" Width="130"/>
+                    <Slider x:Name="SldMkSensitivity" Minimum="0" Maximum="11" Width="120" TickFrequency="1" IsSnapToTickEnabled="True"
+                            ValueChanged="SldMkSensitivity_ValueChanged" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="LblMkSensitivityVal" Text="10" Width="24" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                    <TextBlock x:Name="LblMkSensitivityStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}" Margin="8,0,0,0"/>
                 </WrapPanel>
                 <WrapPanel Orientation="Horizontal">
-                    <TextBlock Text="{loc:Get makalu_setting_liftoff}" VerticalAlignment="Center" Width="130"/>
-                    <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="120">
-                        <UniformGrid Rows="1">
-                            <RadioButton x:Name="RbMkLiftLow" Content="{loc:Get makalu_setting_liftoff_low}" GroupName="MkLift"
-                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkLift_Checked"
-                                         themes:K2Segment.CornerRadius="6,0,0,6"/>
-                            <RadioButton x:Name="RbMkLiftHigh" Content="{loc:Get makalu_setting_liftoff_high}" GroupName="MkLift"
-                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkLift_Checked"
-                                         themes:K2Segment.CornerRadius="0,6,6,0"/>
-                        </UniformGrid>
-                    </Border>
-                    <TextBlock x:Name="LblMkLiftStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}" Margin="8,0,0,0"/>
+                    <TextBlock Text="{loc:Get makalu_setting_clickspeed}" VerticalAlignment="Center" Width="130"/>
+                    <Slider x:Name="SldMkClickSpeed" Minimum="0" Maximum="11" Width="120" TickFrequency="1" IsSnapToTickEnabled="True"
+                            ValueChanged="SldMkClickSpeed_ValueChanged" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="LblMkClickSpeedVal" Text="0" Width="24" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                    <TextBlock x:Name="LblMkClickSpeedStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}" Margin="8,0,0,0"/>
                 </WrapPanel>
             </StackPanel>
 
@@ -153,17 +172,48 @@
                         <StackPanel x:Name="PnlMkDpiLevels" Orientation="Horizontal"/>
                     </ScrollViewer>
                 </DockPanel>
-                <DockPanel Margin="0,0,0,12">
+                <!-- Apply/Refresh buttons removed (2026-07-29, user request): the slider/
+                     textbox apply live (MkApplyDpi, called from SldMkDpi_ValueChanged and
+                     TxtMkDpi_KeyDown/LostFocus), and the device is re-read automatically on
+                     connect/model-detection (UpdateDeviceInfo -> MkDpiRefreshFromDevice). -->
+                <DockPanel Margin="0,0,0,10">
                     <TextBox x:Name="TxtMkDpi" DockPanel.Dock="Right" Width="70" Margin="8,0,0,0" TextAlignment="Center"
                              KeyDown="TxtMkDpi_KeyDown" LostFocus="TxtMkDpi_LostFocus" Height="25" Padding="3,2,3,0"/>
                     <Slider x:Name="SldMkDpi" Minimum="50" Maximum="19000"
                             TickFrequency="50" ValueChanged="SldMkDpi_ValueChanged" VerticalAlignment="Center"/>
                 </DockPanel>
-                <WrapPanel Orientation="Horizontal">
-                    <Button x:Name="BtnMkDpiApply" Content="{loc:Get makalu_apply}" Click="BtnMkDpiApply_Click" Padding="8,4" Margin="0,0,6,0"/>
-                    <Button x:Name="BtnMkDpiRefresh" Content="{loc:Get makalu_refresh}" Click="BtnMkDpiRefresh_Click" Padding="8,4"/>
+                <TextBlock x:Name="LblMkDpiStatus" Margin="0,0,0,14" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,16">
+                    <TextBlock Text="{loc:Get makalu_setting_angle}" VerticalAlignment="Center" Width="130"/>
+                    <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="120">
+                        <UniformGrid Rows="1">
+                            <RadioButton x:Name="RbMkAngleOff" Content="{loc:Get makalu_setting_off}" GroupName="MkAngle"
+                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkAngle_Checked"
+                                         themes:K2Segment.CornerRadius="6,0,0,6"/>
+                            <RadioButton x:Name="RbMkAngleOn" Content="{loc:Get makalu_setting_on}" GroupName="MkAngle"
+                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkAngle_Checked"
+                                         themes:K2Segment.CornerRadius="0,6,6,0"/>
+                        </UniformGrid>
+                    </Border>
+                    <TextBlock x:Name="LblMkAngleStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}" Margin="8,0,0,0"/>
                 </WrapPanel>
-                <TextBlock x:Name="LblMkDpiStatus" Margin="0,8,0,0" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                <WrapPanel Orientation="Horizontal">
+                    <TextBlock Text="{loc:Get makalu_setting_liftoff}" VerticalAlignment="Center" Width="130"/>
+                    <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="225">
+                        <UniformGrid Rows="1">
+                            <RadioButton x:Name="RbMkLiftLow" Content="{loc:Get makalu_setting_liftoff_low}" GroupName="MkLift"
+                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkLift_Checked"
+                                         themes:K2Segment.CornerRadius="6,0,0,6"/>
+                            <RadioButton x:Name="RbMkLiftHigh" Content="{loc:Get makalu_setting_liftoff_high}" GroupName="MkLift"
+                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkLift_Checked"/>
+                            <RadioButton x:Name="RbMkLiftCustom" Content="{loc:Get makalu_setting_liftoff_custom}" GroupName="MkLift"
+                                         Style="{StaticResource K2SegmentedButton}" Checked="RbMkLiftCustom_Checked"
+                                         themes:K2Segment.CornerRadius="0,6,6,0"/>
+                        </UniformGrid>
+                    </Border>
+                    <TextBlock x:Name="LblMkLiftStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}" Margin="8,0,0,0"/>
+                </WrapPanel>
             </StackPanel>
         </Grid>
     </Grid>

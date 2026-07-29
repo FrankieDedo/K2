@@ -220,6 +220,11 @@ ON CONFLICT(Profile, ButtonIndex) DO UPDATE SET FunctionName=excluded.FunctionNa
         SetSetting($"profile.{slot}.dpi", "");
         SetSetting($"profile.{slot}.settings", "");
         SetSetting($"profile.{slot}.name", "");
+        // Clear the "exists" marker too, so the slot disappears from the profile list
+        // (see GetExistingProfiles) until reused — mirrors EverestStore.ClearProfile,
+        // needed now that MainWindow.Makalu.cs's list only shows configured slots
+        // (2026-07-29) instead of always showing all 5.
+        SetSetting($"profile.{slot}.exists", "");
     }
 
     /// <summary>Deletes only this profile's button remap — unlike <see cref="ClearProfile"/>,
@@ -245,5 +250,20 @@ public sealed record MakaluLightingRecord(
 
 public sealed record MakaluDpiRecord(int[] Levels, int Active);
 
+/// <summary>LiftOffHigh is only meaningful when LiftOffCustom is false (kept for
+/// back-compat with settings saved before "Custom" existed). SurfaceA/B are the
+/// 2 opaque calibration bytes from MakaluService.LodGetCalibration, re-sent via
+/// LodSetSurface on profile reload/reconnect instead of re-running the whole
+/// calibration flow. Sensitivity/ClickSpeed (2026-07-29) use the SAME 0-11 scale
+/// Base Camp's own DB stores (confirmed via decompiled BaseCamp.Data.MakaluSetting's
+/// constructor defaults, Sensitivity=10/ClickSpeed=0) — these are Windows OS-level
+/// mouse settings, NOT firmware HID (confirmed via decompile: Base Camp's own
+/// SystemParametersInfo/SPI_SETMOUSESPEED/SPI_SETDOUBLECLICKTIME strings sit right
+/// next to "Sensitivity"/"ClickSpeed" in BaseCamp.UI.exe — see MakaluOsMouseSettings
+/// for where K2 applies them), so unlike every other field here they carry no risk
+/// to the physical device if the exact 0-11→OS-value curve turns out to not match
+/// Base Camp's own (unverified — see MakaluOsMouseSettings' doc comment).</summary>
 public sealed record MakaluDeviceSettingsRecord(
-    int PollingHz, int DebounceMs, bool AngleSnapping, bool LiftOffHigh);
+    int PollingHz, int DebounceMs, bool AngleSnapping, bool LiftOffHigh,
+    bool LiftOffCustom = false, byte? SurfaceA = null, byte? SurfaceB = null,
+    int Sensitivity = 10, int ClickSpeed = 0);

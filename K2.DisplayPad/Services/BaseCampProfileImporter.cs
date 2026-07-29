@@ -83,7 +83,8 @@ public sealed class BaseCampProfileImporter
                 b.Element("FunctionType")?.Value,
                 b.Element("SubFunctionType")?.Value,
                 b.Element("FunctionValue")?.Value,
-                b.Element("FunctionEnteredValue")?.Value);
+                b.Element("FunctionEnteredValue")?.Value,
+                b.Element("CustomURL")?.Value);
 
             // 3) PERSISTENT upload into the FW profile (SetIconPic). If it fails,
             // fall back to the live upload (SetIconPacket) so at least the user
@@ -168,7 +169,7 @@ public sealed class BaseCampProfileImporter
     /// in real profiles (including named macro lookup via MacroLibrary).</summary>
     public (string? Type, string? Value, string? UnmappedReason) MapActionExt(
         string? functionType, string? subFunctionType,
-        string? functionValue, string? functionEnteredValue)
+        string? functionValue, string? functionEnteredValue, string? customUrl = null)
     {
         var ft  = (functionType ?? "").Trim();
         var sft = (subFunctionType ?? "").Trim();
@@ -179,7 +180,15 @@ public sealed class BaseCampProfileImporter
         {
             case "Run Program":   return string.IsNullOrEmpty(fv) ? (null,null,"Run Program without FunctionValue") : ImportExecOrBrowserAction(fv);
             case "Open Folder":   return string.IsNullOrEmpty(fv) ? (null,null,"Open Folder without FunctionValue") : ("folder",fv, null);
-            case "Run browser":   return ImportBrowserAction(fv is "" or "Run browser" ? null : fv);
+            // Real Base Camp always writes FunctionValue="Run browser" verbatim; a per-key
+            // destination URL lives in the sibling CustomURL element instead (confirmed
+            // against decompiled BC source + schema — see BaseCampDbImporter.TranslateAction's
+            // matching comment). When set, the key maps to K2's "url" (Apri URL) action
+            // instead of "browser" (Apri browser) with an empty destination.
+            case "Run browser":
+                return !string.IsNullOrWhiteSpace(customUrl)
+                    ? ("url", customUrl.Trim(), null)
+                    : ImportBrowserAction(fv is "" or "Run browser" ? null : fv);
             case "Profile":       return ("profile", string.IsNullOrEmpty(fv) ? sft : fv, null);
             case "Adobe":
             case "DaVinci":
@@ -188,11 +197,16 @@ public sealed class BaseCampProfileImporter
                 return string.IsNullOrEmpty(fv) ? (null,null,ft+" without FunctionValue") : ("keys", fv, null);
 
             case "OS Commands":   return ("oscmd",  ActionTypeHelper.NormalizeOsCommand(string.IsNullOrEmpty(sft) ? fv : sft), null);
-            case "Media":         return ("media",  string.IsNullOrEmpty(sft) ? fv : sft, null);
+            case "Media":         return ("media",  ActionTypeHelper.NormalizeMediaKey(string.IsNullOrEmpty(sft) ? fv : sft), null);
             case "Mouse":         return ("mouse",  string.IsNullOrEmpty(sft) ? fv : sft, null);
             case "Multi Action":  return ("multi",  fv, null); // payload = JSON array
             case "Create Folder": return ("createfolder", fv, null);
             case "Back":          return ("back",   "", null);
+
+            // Explicitly disabled key — K2.Core's own "disable" action (shared engine),
+            // kept as a real binding instead of being reported as unhandled.
+            case "Disable":
+            case "Disabled":      return ("disable", "", null);
 
             // Dynamic displays on the button: for now we save the record with type
             // pcinfo/clock and the SubFunctionType:color payload, but on press

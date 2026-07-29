@@ -1,0 +1,58 @@
+<Window x:Class="K2.App.MakaluRemapConfigDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+        Width="360" SizeToContent="Height"
+        MinWidth="320"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Style="{DynamicResource K2WindowStyle}">
+    <!-- Opened from MakaluDpiRemapPanel's "Configure" button (list row) or
+         directly from a device-image hotspot click (MkHotspotClicked ->
+         SelectRemapButton) — the button-remap analogue of ButtonActionDialog
+         for the other devices, but with Makalu's own small firmware
+         vocabulary (MakaluRemapData) instead of the full K2Action catalog,
+         since Makalu buttons are remapped in firmware, not via
+         IActionHost/ButtonActionEngine (see MainWindow.Makalu.cs's
+         architectural note). -->
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- header -->
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="Auto"/>  <!-- category -->
+            <RowDefinition Height="8"/>
+            <RowDefinition Height="Auto"/>  <!-- function -->
+            <RowDefinition Height="Auto"/>  <!-- sniper DPI -->
+            <RowDefinition Height="14"/>
+            <RowDefinition Height="Auto"/>  <!-- OK/Cancel -->
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="LblHeader" Grid.Row="0" FontSize="16" FontWeight="Bold"/>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal">
+            <TextBlock Text="{loc:Get makalu_remap_category}" VerticalAlignment="Center" Width="80"/>
+            <ComboBox x:Name="CbCategory" Width="220" SelectionChanged="CbCategory_SelectionChanged"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBlock Text="{loc:Get makalu_remap_function}" VerticalAlignment="Center" Width="80"/>
+            <ComboBox x:Name="CbFunction" Width="220"/>
+        </StackPanel>
+
+        <WrapPanel x:Name="PnlSniper" Grid.Row="5" Orientation="Horizontal" Margin="0,0,0,10" Visibility="Collapsed">
+            <TextBlock Text="{loc:Get makalu_remap_sniper_dpi}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <Slider x:Name="SldSniperDpi" Minimum="50" Maximum="19000" Width="160"
+                    ValueChanged="SldSniperDpi_ValueChanged" VerticalAlignment="Center"/>
+            <TextBox x:Name="TxtSniperDpi" Width="70" Height="25" Margin="8,0,0,0" TextAlignment="Center"
+                     KeyDown="TxtSniperDpi_KeyDown" LostFocus="TxtSniperDpi_LostFocus"/>
+        </WrapPanel>
+
+        <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="{loc:Get ok}" IsDefault="True" MinWidth="72"
+                    Style="{StaticResource K2IconAccentButton}"
+                    Click="BtnOk_Click" Margin="0,0,8,0"/>
+            <Button Content="{loc:Get cancel}" IsCancel="True" MinWidth="72"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,20 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  K2 ローカライズ文字列（日本語）。
+    UI言語が "ja" のとき、または環境変数 K2_LANG=ja を設定したときに読み込まれます。
+    Strings.xml（英語、正規ソース）の値をもとに翻訳したものです。
+    アプリは実行ファイルと同じフォルダーの Strings.{lang}.xml を探し、
+    見つからない場合は埋め込みの既定言語（英語）にフォールバックします。
+-->
 <strings>
+  <!-- ═══════════════════════════════════════════════════════════════
+       共通 / 共有
+       ═══════════════════════════════════════════════════════════════ -->
   <string name="app_title">K2</string>
+  <string name="tab_home">ホーム</string>
+  <string name="home_no_device">デバイスが接続されていません</string>
+  <string name="home_heading">接続中のデバイス</string>
+  <string name="app_already_running">K2 は既に別のインスタンスが実行中です。</string>
   <string name="driver_not_opened">ドライバーが開いていません。</string>
   <string name="open_driver">ドライバーを開く</string>
   <string name="close_driver">ドライバーを閉じる</string>
   <string name="refresh">更新</string>
   <string name="refresh_devices">デバイスを更新</string>
+  <string name="debug_group">デバッグ</string>
   <string name="profile">プロファイル</string>
   <string name="device">デバイス</string>
   <string name="positioning">設置方向</string>
+  <string name="backlight_auto_off_group">バックライト自動オフ</string>
+  <string name="backlight_auto_off_enable">アイドル時にバックライトを消灯</string>
+  <string name="backlight_auto_off_seconds">経過後</string>
+  <string name="keyboard_language_layout">言語設定</string>
   <string name="pos_horizontal">水平 ({0}°)</string>
   <string name="pos_vertical">垂直 ({0}°)</string>
   <string name="brightness">輝度:</string>
   <string name="save">保存</string>
   <string name="cancel">キャンセル</string>
   <string name="ok">OK</string>
+  <string name="colorpicker_title">色を選択</string>
+  <string name="colorpicker_preview">プレビュー</string>
+  <string name="colorpicker_hex">16進数</string>
+  <string name="colorpicker_saved">保存済みの色</string>
+  <string name="colorpicker_add">+ 追加</string>
+  <string name="colorpicker_remove">保存済みの色から削除</string>
+  <string name="browse">参照…</string>
+  <string name="crop_hint">ドラッグして位置を調整し、スクロールまたはスライダーでズームします。</string>
+  <string name="crop_title">画像を切り抜き ({0}×{1})</string>
+  <string name="crop_no_crop">そのまま挿入（切り抜き/ズームなし）</string>
+  <string name="crop_show_grid">キーの輪郭を表示</string>
   <string name="error">エラー</string>
   <string name="copy">コピー</string>
   <string name="open_log">ログを開く…</string>
@@ -30,23 +60,158 @@
   <string name="new_profile">+ 新規プロファイル</string>
   <string name="profile_n">プロファイル {0}</string>
   <string name="select_device_first">最初にデバイスを選択してください。</string>
+  <!-- ═══════════════════════════════════════════════════════════════
+       ボタンアクション設定ダイアログ (K2.Core)
+       ═══════════════════════════════════════════════════════════════ -->
   <string name="dlg_title">ボタンアクションの設定</string>
   <string name="dlg_button_label">ボタン #?</string>
   <string name="dlg_action_type">アクションの種類:</string>
   <string name="dlg_value">値:</string>
   <string name="act_none">なし</string>
+  <string name="act_disable">無効化されたキー</string>
   <string name="act_url">URLを開く</string>
   <string name="act_exec">プログラム / ファイルを開く</string>
   <string name="act_folder">フォルダーを開く</string>
+  <string name="act_page">ページ</string>
+  <string name="page_pick_label">ページ:</string>
+  <string name="page_name_label">ページ名:</string>
+  <string name="page_new_option">— 新規ページ —</string>
   <string name="act_browser">ブラウザーを開く</string>
   <string name="act_profile">プロファイルを切り替える</string>
   <string name="act_oscmd">システムコマンド</string>
   <string name="act_media">メディアキー</string>
   <string name="act_mouse">マウスアクション</string>
-  <string name="act_keys">キー (Ctrl+Shift+A)</string>
+  <string name="act_keys">キーの組み合わせ</string>
+  <string name="act_hotkeyswitch">ホットキー切替</string>
+  <string name="hotkey_shortcut_a">ショートカット A</string>
+  <string name="hotkey_shortcut_b">ショートカット B</string>
+  <string name="hotkey_hint">押すたびに上記の2つのショートカットが交互に送信されます。</string>
+  <string name="act_multi">マルチアクション</string>
+  <string name="multi_steps_label">手順:</string>
+  <string name="multi_add_step">手順を追加</string>
+  <string name="multi_delay_ms">遅延（ミリ秒）</string>
+  <string name="act_multi_summary">{0} 手順</string>
+  <string name="act_adobe">Adobe</string>
+  <string name="act_davinci">DaVinci Resolve</string>
+  <string name="act_zoom">Zoom</string>
+  <string name="act_obs">OBS Studio</string>
+  <string name="act_twitch">Twitch</string>
+  <string name="act_spotify">Spotify</string>
+  <string name="act_youtube">YouTube</string>
+  <string name="appshortcut_app_label">アプリケーション:</string>
+  <string name="appshortcut_action_label">アクション:</string>
+  <string name="appshortcut_custom">カスタム…</string>
+  <string name="obs_settings_title">OBS Studio設定</string>
+  <string name="obs_host_label">ホスト:</string>
+  <string name="obs_port_label">ポート:</string>
+  <string name="obs_password_label">パスワード:</string>
+  <string name="obs_test_connection">接続をテスト</string>
+  <string name="obs_connected">接続済み</string>
+  <string name="obs_not_connected">未接続</string>
+  <string name="obs_settings_button">OBS設定…</string>
+  <string name="obs_arg_hint">シーン/プロファイル/ソース/トランジション名、または数値（ミリ秒の長さ、dBの音量）</string>
+  <string name="obs_cmd_start_streaming">配信を開始</string>
+  <string name="obs_cmd_stop_streaming">配信を停止</string>
+  <string name="obs_cmd_start_recording">録画を開始</string>
+  <string name="obs_cmd_stop_recording">録画を停止</string>
+  <string name="obs_cmd_pause_recording">録画を一時停止</string>
+  <string name="obs_cmd_resume_recording">録画を再開</string>
+  <string name="obs_cmd_next_profile">次のプロファイル</string>
+  <string name="obs_cmd_previous_profile">前のプロファイル</string>
+  <string name="obs_cmd_set_current_profile">プロファイルを設定</string>
+  <string name="obs_cmd_next_scene">次のシーン</string>
+  <string name="obs_cmd_previous_scene">前のシーン</string>
+  <string name="obs_cmd_set_current_scene">シーンを設定</string>
+  <string name="obs_cmd_set_current_source">ソースの切り替え</string>
+  <string name="obs_cmd_next_transition">次のトランジション</string>
+  <string name="obs_cmd_previous_transition">前のトランジション</string>
+  <string name="obs_cmd_set_transition_duration">トランジション時間を設定</string>
+  <string name="obs_cmd_set_current_transition">トランジションを設定</string>
+  <string name="obs_cmd_mic_volume_up">マイク音量 +</string>
+  <string name="obs_cmd_mic_volume_down">マイク音量 -</string>
+  <string name="obs_cmd_mute_mic">マイクをミュート</string>
+  <string name="obs_cmd_unmute_mic">マイクのミュートを解除</string>
+  <string name="obs_cmd_set_mic_volume">マイク音量を設定</string>
+  <string name="obs_cmd_desktop_volume_up">デスクトップ音量 +</string>
+  <string name="obs_cmd_desktop_volume_down">デスクトップ音量 -</string>
+  <string name="obs_cmd_mute_desktop">デスクトップ音声をミュート</string>
+  <string name="obs_cmd_unmute_desktop">デスクトップ音声のミュートを解除</string>
+  <string name="obs_cmd_set_desktop_volume">デスクトップ音量を設定</string>
+  <string name="obs_cmd_enable_studio_mode">スタジオモードを有効化</string>
+  <string name="obs_cmd_disable_studio_mode">スタジオモードを無効化</string>
+  <string name="obs_cmd_start_replay_buffer">リプレイバッファを開始</string>
+  <string name="obs_cmd_stop_replay_buffer">リプレイバッファを停止</string>
+  <string name="obs_cmd_save_replay_buffer">リプレイバッファを保存</string>
+  <string name="obs_cmd_next_media">次のメディア</string>
+  <string name="obs_cmd_previous_media">前のメディア</string>
+  <string name="obs_cmd_play_media">メディアを再生</string>
+  <string name="obs_cmd_pause_media">メディアを一時停止</string>
+  <string name="obs_cmd_stop_media">メディアを停止</string>
+  <string name="obs_cmd_open_projector">プロジェクターを開く</string>
+  <string name="twitch_settings_title">Twitch設定</string>
+  <string name="twitch_hint">dev.twitch.tvで独自のアプリを登録し、OAuthリダイレクトURLを"http://localhost:17563/callback"に設定した上で、Client ID/Secretをここに貼り付けてください。</string>
+  <string name="twitch_setup_guide">1. dev.twitch.tv/console/apps にアクセスし、「Register Your Application」をクリックします。
+2. OAuth Redirect URL: http://localhost:17563/callback
+3. カテゴリ: 任意（例:「Application Integration」）。
+4. 保存して Client ID をコピーし、Client Secret は「New Secret」をクリックして取得します。</string>
+  <string name="twitch_client_id_label">Client ID:</string>
+  <string name="twitch_client_secret_label">Client Secret:</string>
+  <string name="twitch_connect">接続</string>
+  <string name="twitch_connecting">接続中…</string>
+  <string name="twitch_disconnect">切断</string>
+  <string name="twitch_connected_as">接続済みアカウント</string>
+  <string name="twitch_settings_button">Twitch設定…</string>
+  <string name="twitch_cmd_chat_message">チャットメッセージを送信</string>
+  <string name="twitch_cmd_clear_chat">チャットをクリア</string>
+  <string name="twitch_cmd_emote_only">絵文字のみチャットの切り替え</string>
+  <string name="twitch_cmd_followers_only">フォロワー限定チャットを設定</string>
+  <string name="twitch_cmd_slow_mode">スローモードを設定</string>
+  <string name="twitch_cmd_subscribers_only">登録者限定チャットの切り替え</string>
+  <string name="twitch_cmd_play_ad">広告を再生</string>
+  <string name="twitch_cmd_stream_title">配信タイトルを設定</string>
+  <string name="twitch_cmd_stream_marker">配信マーカーを作成</string>
+  <string name="twitch_cmd_create_clip">クリップを作成</string>
+  <string name="twitch_cmd_open_last_clip">最新のクリップを開く</string>
+  <string name="spotify_settings_title">Spotify 設定</string>
+  <string name="spotify_hint">developer.spotify.com/dashboard で独自のアプリを登録し、Redirect URI を "http://127.0.0.1:17564/callback" に設定した上で、Client ID/Secret をここに貼り付けてください。</string>
+  <string name="spotify_setup_guide">1. developer.spotify.com/dashboard にアクセスし、「Create app」をクリックします。
+2. Redirect URI: http://127.0.0.1:17564/callback
+3. Which API/SDKs are you planning to use: Web API。
+4. 保存して Client ID をコピーし、Client Secret は「View client secret」をクリックして取得します。</string>
+  <string name="spotify_client_id_label">Client ID:</string>
+  <string name="spotify_client_secret_label">Client Secret:</string>
+  <string name="spotify_connected_as">接続済みアカウント</string>
+  <string name="spotify_settings_button">Spotify 設定…</string>
+  <string name="spotify_cmd_play_pause">再生/一時停止</string>
+  <string name="spotify_cmd_next">次のトラック</string>
+  <string name="spotify_cmd_previous">前のトラック</string>
+  <string name="spotify_cmd_like_toggle">トラックにいいねする/取り消す</string>
+  <string name="spotify_cmd_shuffle_toggle">シャッフルの切り替え</string>
+  <string name="spotify_cmd_repeat_cycle">リピートモードを切り替え</string>
+  <string name="spotify_cmd_mute_toggle">ミュート/ミュート解除</string>
+  <string name="spotify_cmd_volume_up">音量を上げる</string>
+  <string name="spotify_cmd_volume_down">音量を下げる</string>
+  <string name="spotify_cmd_volume_set">音量を設定</string>
+  <string name="spotify_cmd_save_playlist">トラックをプレイリストに保存</string>
+  <string name="spotify_cmd_remove_playlist">トラックをプレイリストから削除</string>
+  <string name="youtube_settings_title">YouTube設定</string>
+  <string name="youtube_hint">console.cloud.google.comでYouTube Data API v3を有効にしたデスクトップアプリ用OAuthクライアントを作成し、Client ID/Secretをここに貼り付けてください。</string>
+  <string name="youtube_setup_guide">1. console.cloud.google.com にアクセスし、プロジェクトを作成/選択したら「YouTube Data API v3」を有効にします（APIs &amp; Services -&gt; Library）。
+2. 「Google Auth Platform」-&gt; Branding を開き、App name とサポート用メールアドレスを設定します（初回は「Get Started」ウィザードが表示されます）。
+3. Audience タブ: User type を「External」にし、「Test users」に自分の Google アカウントを追加します。
+4. Clients タブ -&gt; Create Client -&gt; Application type: Desktop app -&gt; Create。Client ID/Secret は今すぐコピーしてください — secret は一度しか表示されません。
+5. 初回サインイン時に「Google hasn't verified this app」と表示されますが（想定内、機密スコープのため）、Advanced -&gt; Go to your app (unsafe) をクリックします。Testing ステータスの間はサインインが約7日ごとに必要になる場合があります。Audience で「Publish app」を行うとこれを回避できます。</string>
+  <string name="youtube_client_id_label">Client ID:</string>
+  <string name="youtube_client_secret_label">Client Secret:</string>
+  <string name="youtube_settings_button">YouTube設定…</string>
+  <string name="youtube_chat_message_label">ライブチャットメッセージ:</string>
   <string name="act_command">シェルコマンド</string>
   <string name="act_text">テキストを貼り付ける</string>
+  <string name="act_macro">マクロを再生</string>
+  <string name="act_macro_unresolved">マクロを再生（未割り当て）</string>
+  <string name="act_googlehome">Google Home</string>
   <string name="act_pyscript">Python スクリプト</string>
+  <string name="act_unrecognized">認識されません</string>
   <string name="py_file">ファイル .py</string>
   <string name="py_inline">インラインコード</string>
   <string name="py_browse">参照…</string>
@@ -79,6 +244,7 @@
   <string name="media_vol_up">Volume up</string>
   <string name="media_vol_down">Volume down</string>
   <string name="media_mute">Mute</string>
+  <string name="media_shuffle">シャッフル</string>
   <string name="mouse_left">Left button</string>
   <string name="mouse_right">Right button</string>
   <string name="mouse_middle">Middle button</string>
@@ -91,6 +257,105 @@
   <string name="keys_modifiers_label">Modifiers:</string>
   <string name="keys_key_label">Key:</string>
   <string name="keys_win_hint">The Windows key can be selected but is not sent by the current keystroke backend (SendKeys) — it is silently ignored.</string>
+  <string name="gh_manage">Google Home デバイスを管理…</string>
+  <string name="gh_summary_missing">Google Home（割り当て解除済み）</string>
+  <string name="gh_setup_title">Google Home デバイス</string>
+  <string name="gh_capture_name_prompt">この割り当てに名前を付ける…</string>
+  <string name="gh_bindings_header">保存済みの割り当て</string>
+  <string name="gh_no_bindings">まだデバイスが見つかっていません — 上でサインインすると自動的にインポートされます。</string>
+  <string name="gh_rename">名前を変更</string>
+  <string name="gh_delete">削除</string>
+  <string name="gh_login_hint">上でサインインしてください — ログインすると全デバイスが自動的にインポートされます。</string>
+  <string name="gh_status_connected">接続済み</string>
+  <string name="gh_status_disconnected">未接続 — 上でサインインして再接続してください</string>
+  <string name="gh_force_refresh">強制更新</string>
+  <string name="gh_disconnect">切断</string>
+  <string name="gh_advanced_hint">デバッグモードが有効です（設定）— 左側に Foyer 用の高度な記録ツールが表示されます。</string>
+  <string name="gh_record_start">アクションを記録</string>
+  <string name="gh_record_alt">逆のアクションを記録</string>
+  <string name="gh_record_hint">上でサインインしてから「アクションを記録」をクリックし、ページ上でアクションを実行してください（オンにする、暗くする、色を変えるなど）。K2 が Google Home の送信するコマンドをキャプチャし、キー押下時に再生します。「逆のアクションを記録」を使うと、選択した割り当てに逆のアクションが追加され、1つのキーで2つの状態を交互に切り替えられます。</string>
+  <string name="gh_record_armed">記録中 — ページ上でアクションを実行してください。</string>
+  <string name="gh_record_alt_armed">逆のアクションを記録中 — ページ上で実行してください。</string>
+  <string name="close">閉じる</string>
+  <!-- ═══════════════════════════════════════════════════════════════
+       一般設定タブ
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="tab_settings">設定</string>
+  <string name="tab_macro">マクロ</string>
+  <string name="settings_debug_mode">デバッグモード</string>
+  <string name="settings_debug_mode_hint">すべてのデバイスでデバッグツール（ドライバーの開閉、APコントロール、イベントログ）を有効にします。</string>
+  <string name="settings_log_level">ログ</string>
+  <string name="log_off">オフ</string>
+  <string name="log_normal">通常</string>
+  <string name="log_verbose">詳細</string>
+  <string name="settings_dp_native">DisplayPad: ネイティブ USB エンジン（実験的）</string>
+  <string name="settings_dp_native_hint">Mountain SDK の代わりに DisplayPad を USB 経由で直接制御します: 転送が確認され（アイコン破損なし）、サテライトプロセスもありません。デバイス上でのプロファイル永続化は利用できません。画像は K2 データベースから再アップロードされます。K2 の再起動後に有効になります。</string>
+  <string name="settings_ev_native">Everest Max: ネイティブ USB エンジン（実験的、一部対応）</string>
+  <string name="settings_ev_native_hint">Everest Max の接続とテンキーの 4 つのディスプレイボタンを、SDKDLL.dll の代わりに USB 経由で直接制御します — その対象範囲において、この DLL の慢性的なタイマースレッドのクラッシュを解消します。RGB エフェクト、テンキーのアイコン、Media Dock、フルキーボードの再割り当てイベントは、現時点ではまだ SDKDLL.dll を使用しています（未移植）。K2 の再起動後に有効になります。</string>
+  <string name="settings_auto_stop_bc">起動時に Base Camp を自動的に停止</string>
+  <string name="settings_auto_stop_bc_hint">K2 が起動するたびに、Base Camp の Windows サービスを停止し、実行中または Windows の自動起動で再起動された Base Camp のすべてのプロセス（GUI、サービス、ワーカー、Makalu モニター）を終了します — これにより K2 が Base Camp を完全に置き換え、両方が同時に動作することを防ぎます。K2 と一緒に Base Camp も使い続けたい場合は、この設定を無効にしてください。</string>
+  <string name="settings_kill_bc_worker">Base Camp の DisplayPad ワーカーを終了</string>
+  <string name="settings_kill_bc_worker_hint">MountainDisplayPadWorker はバックグラウンドで動作し、K2 と同時に DisplayPad に書き込みを行うため、アイコンが破損します。有効にすると、K2 が自動的にこれを終了します（実行中は終了した状態を維持します）。</string>
+  <string name="settings_bc_autostart">Windows 起動時に Base Camp のサービスを開始</string>
+  <string name="settings_bc_autostart_hint">Base Camp の Windows 自動起動エントリを有効/無効にします（タスクマネージャーのスタートアップタブと同じ仕組み — 元に戻せます）。HKLM 内のエントリは K2 を管理者として実行する必要がある場合があります。</string>
+  <string name="settings_bc_autostart_none">レジストリに Base Camp の自動起動エントリが見つかりませんでした。</string>
+  <string name="settings_bc_autostart_done">Base Camp の自動起動: {0} 件のエントリを更新しました。</string>
+  <string name="settings_restart_bc_on_close">K2 終了時に Base Camp を再起動</string>
+  <string name="settings_restart_bc_on_close_hint">K2 終了時に、自動停止した Base Camp のプロセス（GUI、ワーカー、Makalu モニター、Windows サービス）を再起動し、K2 起動前の状態に戻します。MountainDisplayPadWorker は常にウィンドウなしでサイレントに再起動されます。既定では無効です — 自動停止を有効にしている人の多くは、K2 終了後も Base Camp を停止したままにしたいためです。</string>
+  <string name="settings_export_log_btn">ログをエクスポート…</string>
+  <string name="settings_export_log_hint">現在の K2.App のログ（存在する場合はクラッシュログも）を指定したフォルダーにコピーします — 問題を報告する際の共有に便利です。</string>
+  <string name="settings_export_log_done">ログを {0} にエクスポートしました</string>
+  <!-- Base Camp インポートプロンプト -->
+  <string name="settings_bc_import_group">Base Camp インポート</string>
+  <string name="settings_bc_import_btn">Base Camp からインポート…</string>
+  <string name="settings_bc_import_hint">既存の Base Camp インストールを検索し、すべての K2 デバイス（Everest Max、Everest 60、Makalu、MacroPad、DisplayPad）のプロファイルと設定のインポートを提案します。K2 の初回起動時に自動的に表示されます — このボタンでいつでも再実行できます。</string>
+  <string name="bc_import_prompt_title">Base Camp からインポート</string>
+  <string name="bc_import_prompt_text">このPCで Base Camp のインストールが検出されました。既存のプロファイルと設定を K2 にインポートしますか？ インポートを実行する前に、接続されている各デバイスで見つかった内容を確認できます。</string>
+  <!-- Base Camp DLL フォルダー選択 -->
+  <string name="settings_bc_dll_group">Base Camp DLL フォルダー</string>
+  <string name="settings_bc_dll_hint">MacroPad、Everest Max、Everest 60 は、Base Camp の内部コンポーネントであるいくつかのネイティブ DLL（MacroPadSDK.dll、SDKDLL.dll、Everest360_USB.dll）に依存していますが、これらは K2 には同梱されていません。検出された Base Camp のインストールを使用するか、DLL が含まれるフォルダーを K2 に指定してください。</string>
+  <string name="settings_bc_dll_radio_auto">このPCで見つかった Base Camp のインストールを使用:</string>
+  <string name="settings_bc_dll_radio_auto_notfound">Base Camp のインストールは自動検出されませんでした。</string>
+  <string name="settings_bc_dll_radio_manual">フォルダーを手動で指定:</string>
+  <string name="settings_bc_dll_browse">参照…</string>
+  <string name="settings_bc_dll_none">フォルダーが設定されていません。</string>
+  <string name="settings_bc_dll_found">見つかりました</string>
+  <string name="settings_bc_dll_missing">見つかりません</string>
+  <!-- アップデートチェッカー -->
+  <string name="settings_update_group">アップデート</string>
+  <string name="settings_update_current_version">K2 バージョン {0}</string>
+  <string name="settings_update_check_btn">アップデートを確認</string>
+  <string name="settings_update_checking">アップデートを確認しています…</string>
+  <string name="settings_update_uptodate">K2 は最新の状態です。</string>
+  <string name="settings_update_check_failed">アップデートを確認できませんでした: {0}</string>
+  <string name="settings_update_available">新しいバージョンが利用可能です: {0}</string>
+  <string name="settings_update_install_btn">ダウンロードしてインストール</string>
+  <string name="settings_update_zip_btn">ZIP をダウンロード…</string>
+  <string name="settings_update_view_release_btn">リリースノートを見る</string>
+  <string name="settings_update_downloading">ダウンロード中…</string>
+  <string name="settings_update_install_confirm">バージョン {0} をダウンロードしてインストーラーを実行しますか？ アップデートのため、インストーラーが起動すると同時に K2 は終了します。</string>
+  <string name="settings_update_zip_done">{0} に保存しました</string>
+  <!-- デフォルトに戻す -->
+  <string name="settings_danger_zone">危険な操作</string>
+  <string name="restore_defaults">デフォルトに戻す</string>
+  <string name="restore_defaults_profile_confirm">プロファイル '{0}' をこのデバイス上で K2 の初期状態に戻しますか（該当する場合、キー割り当て、ライティング、設定を含みます）？ この操作は元に戻せません。</string>
+  <string name="restore_defaults_app">すべてをデフォルトに戻す</string>
+  <string name="restore_defaults_app_hint">上記のすべてのアプリ設定をリセットし、さらにすべてのデバイス（Everest Max、Everest 60、Makalu、MacroPad、DisplayPad）の保存済みプロファイル、キー割り当て、ライティング設定、マクロをすべて消去します。この操作は元に戻せません。</string>
+  <string name="restore_defaults_app_confirm">これによりアプリの全設定がリセットされ、すべてのデバイス（Everest Max、Everest 60、Makalu、MacroPad、DisplayPad）の保存済みプロファイル、キー割り当て、ライティング設定、マクロがすべて消去されます。この操作は元に戻せません。続行しますか？</string>
+  <string name="restore_defaults_app_done">すべてのアプリ設定とデバイスプロファイルがデフォルトに戻されました。</string>
+  <string name="settings_general">一般オプション</string>
+  <string name="settings_close_to_tray">終了せずにトレイに閉じる</string>
+  <string name="settings_k2_autostart">Windows 起動時に K2 を開始</string>
+  <string name="settings_k2_autostart_hint">K2 は現在、管理者権限を必要とします（BaseCampService の制御のため）。Windows はログオン時に Run レジストリキーから起動するアプリを自動昇格しないため、この設定だけでは K2 がサイレントに起動できないことがあります — その場合はタスクスケジューラを使用してください（ログオン時に「最上位の特権で実行」を設定したタスク）。</string>
+  <string name="settings_start_min_tray">トレイに最小化した状態で起動</string>
+  <string name="settings_start_min_tray_hint">K2 はドライバーを有効にした状態で起動しますが、ウィンドウはトレイに隠れています — トレイアイコンからいつでも開けます。</string>
+  <string name="settings_font_family">フォント</string>
+  <string name="settings_font_family_hint">アプリ全体の UI フォントを即座に変更します。再起動は不要です。</string>
+  <string name="tray_show">K2 を表示</string>
+  <string name="tray_exit">終了</string>
+  <!-- ═══════════════════════════════════════════════════════════════
+       Everest Max タブ
+       ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_everest">Everest</string>
   <string name="tab_everest_max">Everest Max</string>
   <string name="tab_everest_core">Everest Core</string>
@@ -99,6 +364,13 @@
   <string name="ev_driver_opened">Everest ドライバーが開きました。</string>
   <string name="ev_driver_open_failed">Everest ドライバーを開くのに失敗しました。</string>
   <string name="ev_driver_closed">Everest ドライバーが閉じました。</string>
+  <string name="loading_drivers">ドライバーを初期化しています…</string>
+  <string name="hw_busy_uploading_image">デバイスに画像をアップロードしています。しばらくお待ちください…</string>
+  <string name="hw_busy_importing_profile">プロファイルをインポートしています。しばらくお待ちください…</string>
+  <string name="hw_busy_importing_profiles">プロファイルをインポートしています。しばらくお待ちください…</string>
+  <string name="ev_crash_recovering">ドライバーがクラッシュしました — 3 秒後に自動回復を試みます…</string>
+  <string name="ev_crash_recovered">ドライバーが回復しました — LED プレビューを再起動しました。</string>
+  <string name="ev_crash_recovery_failed">ドライバーの回復に失敗しました — K2.App を再起動してください。</string>
   <string name="ev_cancel_mapping">マッピングをキャンセル</string>
   <string name="ev_mapping_step">マッピング [{0}/{1}]: 物理キー «{2}» を押してください…</string>
   <string name="ev_mapping_done">マッピング完了: {0} キーを保存しました。</string>
@@ -106,24 +378,121 @@
   <string name="ev_configure">設定</string>
   <string name="ev_remove">削除</string>
   <string name="ev_sdk_log">SDK ログ</string>
+  <!-- RGB ライティング -->
   <string name="rgb_lighting">ライティング</string>
   <string name="rgb_effect">エフェクト:</string>
   <string name="rgb_speed">速度:</string>
   <string name="rgb_direction">方向:</string>
   <string name="rgb_rainbow">レインボー</string>
   <string name="rgb_rainbow_tip">レインボーカラー（カラーピッカーを無視）。</string>
+  <string name="rgb_single">単色</string>
+  <string name="rgb_single_tip">エフェクトに単色を使用します。</string>
+  <string name="rgb_double">2色</string>
+  <string name="rgb_double_tip">エフェクトに2色を使用します（すべてのエフェクトに対応しているわけではありません）。</string>
   <string name="rgb_sync_profiles">プロファイルを同期</string>
   <string name="rgb_primary">プライマリ:</string>
   <string name="rgb_secondary">セカンダリ:</string>
   <string name="rgb_tertiary">ターシャリ:</string>
   <string name="rgb_save">保存</string>
   <string name="rgb_save_tip">適用したエフェクトを永続化します（抜き差し/再起動後も維持）。</string>
+  <!-- カスタムライティング -->
   <string name="custom_lighting">カスタムライティング（キーごと）</string>
   <string name="custom_paint_hint">ペイントモードを有効にして色を選び、キーボードのキーをクリックして色を付けてください。</string>
   <string name="custom_paint_mode">ペイントモード</string>
+  <string name="custom_paint_effect">適用するエフェクト:</string>
+  <string name="apply">適用</string>
   <string name="custom_color">色:</string>
   <string name="custom_fill_all">すべて塗りつぶす</string>
+  <string name="custom_read_tooltip">最後に保存した色を再読み込みします（デバイスからのライブ読み込みではありません — このハードウェアでは信頼性がありません）。</string>
   <string name="custom_clear">クリア</string>
+  <!-- ═══════════════════════════════════════════════════════════════
+       Everest 60 タブ（raw-HID ライティングのみ — Everest60HidNative を参照）
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="tab_everest60">Everest 60</string>
+  <string name="ev60_hint">Raw-HID によるライティング制御（ベンダー DLL なし）。キーの再割り当てはまだ利用できません — Everest 60 のファームウェアの再割り当てプロトコルはまだ解析されていません。</string>
+  <string name="ev60_status_connected">接続済み: {0}</string>
+  <string name="ev60_status_disconnected">未接続</string>
+  <string name="ev60_refresh">更新</string>
+  <string name="ev60_key_lighting">カスタムライティング（キーごと）</string>
+  <string name="ev60_key_lighting_hint">色を選び、キー（メインボードまたはテンキー）またはボーダーリングのマスをクリックして色を付けてから、「適用」をクリックしてください。</string>
+  <string name="ev60_numpad_decorative_tip">装飾のみです — このアクセサリーのライティング/再割り当てプロトコルは判明していません。</string>
+  <string name="ev60_key_binding">キーバインディング</string>
+  <string name="ev60_key_binding_hint">上のキーボードでキーをクリックして選択し、実行する動作を選んでください。</string>
+  <!-- ═══════════════════════════════════════════════════════════════
+       Makalu タブ（マウス — raw-HID、ベンダー SDK なし — MakaluHidNative を参照）
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="tab_makalu">Makalu</string>
+  <string name="makalu_hint">Raw-HID による制御です（このマウス用のベンダー DLL は存在しません）。プロトコルはコミュニティプロジェクト BaseCampLinux から移植しています。</string>
+  <string name="makalu_status_connected">接続済み: {0}</string>
+  <string name="makalu_status_disconnected">未接続</string>
+  <string name="makalu_refresh">更新</string>
+  <string name="makalu_apply">適用</string>
+  <string name="makalu_failed">失敗しました</string>
+  <string name="makalu_close">閉じる</string>
+  <string name="makalu_log">ログ</string>
+  <string name="makalu_custom_hint">色を選び、マウス画像上の LED をクリック（または複数の LED をドラッグして範囲選択）して色を付けてください。</string>
+  <string name="makalu_dpi_title">DPI</string>
+  <string name="makalu_dpi_prev">前のレベル</string>
+  <string name="makalu_dpi_next">次のレベル</string>
+  <string name="makalu_dpi_add">DPI レベルを追加</string>
+  <string name="makalu_dpi_remove_level">レベルを削除</string>
+  <string name="makalu_remap_title">ボタンの再割り当て</string>
+  <string name="makalu_remap_configure_title">{0} — 設定</string>
+  <string name="makalu_remap_category">カテゴリ:</string>
+  <string name="makalu_remap_function">機能:</string>
+  <string name="makalu_remap_sniper_dpi">スナイパー DPI:</string>
+  <string name="makalu_remap_applied">適用しました</string>
+  <string name="makalu_remap_reverted">元に戻しました</string>
+  <string name="makalu_remap_keep_btn">維持</string>
+  <string name="makalu_remap_revert_btn">元に戻す</string>
+  <string name="makalu_remap_keep_text">左ボタンを再割り当てしました。この変更を維持しますか？ {0} 秒後に自動的に元に戻ります…</string>
+  <string name="makalu_remap_cat_mouse">マウス</string>
+  <string name="makalu_remap_cat_dpi">DPI</string>
+  <string name="makalu_remap_cat_scroll">スクロール</string>
+  <string name="makalu_remap_cat_sniper">スナイパー</string>
+  <string name="makalu_remap_cat_profile">プロファイル</string>
+  <string name="makalu_remap_cat_lighting">ライティング</string>
+  <string name="makalu_remap_fn_left">左クリック</string>
+  <string name="makalu_remap_fn_right">右クリック</string>
+  <string name="makalu_remap_fn_middle">中クリック</string>
+  <string name="makalu_remap_fn_back">戻る</string>
+  <string name="makalu_remap_fn_forward">進む</string>
+  <string name="makalu_remap_fn_dpi_plus">DPI +</string>
+  <string name="makalu_remap_fn_dpi_minus">DPI -</string>
+  <string name="makalu_remap_fn_scroll_up">上スクロール</string>
+  <string name="makalu_remap_fn_scroll_down">下スクロール</string>
+  <string name="makalu_remap_fn_disabled">無効</string>
+  <string name="makalu_remap_fn_sniper">スナイパー</string>
+  <string name="makalu_remap_fn_profile_next">次のプロファイル</string>
+  <string name="makalu_remap_fn_profile_prev">前のプロファイル</string>
+  <string name="makalu_remap_fn_brightness_cycle">輝度を切り替え</string>
+  <string name="makalu_remap_fn_effect_cycle">エフェクトを切り替え</string>
+  <string name="makalu_remap_btn_left">左ボタン</string>
+  <string name="makalu_remap_btn_right">右ボタン</string>
+  <string name="makalu_remap_btn_middle">中央ボタン</string>
+  <string name="makalu_remap_btn_back">戻るボタン</string>
+  <string name="makalu_remap_btn_forward">進むボタン</string>
+  <string name="makalu_remap_btn_dpi">DPI ボタン</string>
+  <string name="makalu_remap_btn_5">ボタン 5</string>
+  <string name="makalu_remap_btn_6">ボタン 6</string>
+  <string name="makalu_settings_title">デバイス設定</string>
+  <string name="makalu_setting_poll">ポーリングレート:</string>
+  <string name="makalu_setting_debounce">ボタンの反応:</string>
+  <string name="makalu_setting_angle">アングルスナッピング:</string>
+  <string name="makalu_setting_on">オン</string>
+  <string name="makalu_setting_off">オフ</string>
+  <string name="makalu_setting_liftoff">リフトオフ距離:</string>
+  <string name="makalu_setting_liftoff_low">低</string>
+  <string name="makalu_setting_liftoff_high">高</string>
+  <string name="makalu_setting_liftoff_custom">カスタム</string>
+  <!-- Makalu カスタムサーフェスキャリブレーション（LOD/リフトオフ） -->
+  <string name="makalu_lod_title">カスタムサーフェスキャリブレーション</string>
+  <string name="makalu_lod_hint">一部のマウスパッド表面ではカスタムキャリブレーションが効果的です。キャリブレーションを開始するには「Start」をクリックし、下のアイコンをクリックして押したままマウスをウィンドウ内で動かし、プログレスバーが満たされるまで続けてください。</string>
+  <string name="makalu_lod_start">Start</string>
+  <string name="makalu_lod_reset">リセット</string>
+  <string name="makalu_lod_done">完了</string>
+  <string name="makalu_lod_progress">進行状況</string>
+  <!-- ディスプレイダイヤル -->
   <string name="display_dial">ディスプレイダイヤル</string>
   <string name="dial_pages_visible">表示するダイヤルページ:</string>
   <string name="dial_clock">時計</string>
@@ -134,21 +503,89 @@
   <string name="dial_pcinfo">PC 情報</string>
   <string name="dial_apm">APM</string>
   <string name="dial_custom">カスタム</string>
+  <string name="dial_image">画像</string>
+  <string name="dial_timer">タイマー</string>
+  <string name="dial_stopwatch">ストップウォッチ</string>
+  <string name="dial_pcinfo_cpu">PC 情報 - CPU</string>
+  <string name="dial_pcinfo_gpu">PC 情報 - GPU</string>
+  <string name="dial_pcinfo_hdd">PC 情報 - HDD</string>
+  <string name="dial_pcinfo_internet">PC 情報 - インターネット</string>
+  <string name="dial_pcinfo_ram">PC 情報 - RAM</string>
+  <string name="dial_load_image">画像を読み込む</string>
+  <string name="dial_load_image_title">スクリーンセーバー画像を選択 (240×204 px)</string>
+  <string name="dial_clock_section">時計の種類</string>
   <string name="dial_clock_label">時計:</string>
+  <string name="dial_clock_style_label">スタイル:</string>
+  <string name="dial_clock_digital">デジタル</string>
+  <string name="dial_clock_analog">アナログ</string>
+  <string name="dial_screensaver_section">スクリーンセーバー</string>
   <string name="dial_screensaver">スクリーンセーバー（秒）:</string>
+  <string name="dial_screensaver_enable_tip">無効にすると、ディスプレイダイヤルは減光やスクリーンセーバーへの切り替えを行いません。</string>
+  <string name="dial_screensaver_function_label">表示内容:</string>
   <string name="dial_autooff">自動オフ（秒）:</string>
+  <string name="dial_turnoff_enable_tip">無効にすると、ディスプレイダイヤルは常にオンのままになります。</string>
   <string name="dial_menu_color">メニューカラー:</string>
+  <string name="reset_display_dial">ディスプレイダイヤルをリセット</string>
+  <string name="unit_seconds">秒</string>
   <string name="dial_cannot_read">デバイスから ExtendInfo を読み込めません。</string>
+  <!-- キーバインディング（マッピング済みキー + ドック/クラウン/ディスプレイキー用 HW キャプチャユーティリティ） -->
+  <string name="ev_key_binding">キーバインディング</string>
+  <string name="key_binding_hint">上のデバイスでキーをクリックして、その動作を設定してください。</string>
   <string name="dock_capture_hw">HW キーをキャプチャ…</string>
   <string name="dock_cancel_capture">キャプチャをキャンセル</string>
   <string name="dock_press_hw">HW キーを押してください（ドック、ディスプレイキー、クラウン）…</string>
   <string name="dock_press_for">"{0}" のキーを押してください…</string>
   <string name="dock_action_none">なし</string>
   <string name="dock_capture_matrix">matrixId をキャプチャ…</string>
+  <string name="ev_display_key_label">ディスプレイキー {0}</string>
+  <string name="ev_display_key_icon_only">(アイコン)</string>
   <string name="dock_configure_action">アクションを設定…</string>
   <string name="dock_remove_action">アクションを削除</string>
+  <!-- 設定（Everest サイドバーセクション: キーボードレイアウト） -->
+  <string name="ev_settings">設定</string>
+  <string name="ev_layout">レイアウト</string>
+  <string name="settings_sync_profiles">プロファイル間で同期</string>
+  <string name="settings_game_mode">ゲームモード</string>
+  <string name="settings_game_mode_tip">ゲームモードは、プレイ中の誤操作を防ぐために特定のキーの組み合わせを無効にします。</string>
+  <string name="settings_disable_shift_tab">Shift + Tab を無効化</string>
+  <string name="settings_disable_alt_f4">Alt + F4 を無効化</string>
+  <string name="settings_disable_win_key">Windows キーを無効化</string>
+  <string name="settings_disable_alt_tab">Alt + Tab を無効化</string>
+  <string name="settings_indicator_leds">インジケーター LED</string>
+  <string name="settings_enable_core_led">Core インジケーター LED を有効化</string>
+  <string name="settings_keyboard_color">キーボードカラー</string>
+  <string name="color_silver">シルバー</string>
+  <string name="color_black">ブラック</string>
+  <string name="settings_keycap_group">キーキャップの外観</string>
+  <string name="settings_keycap_color">キーキャップの色</string>
+  <string name="settings_keycap_black">ブラック</string>
+  <string name="settings_keycap_white">ホワイト</string>
+  <string name="settings_keycap_custom">カスタム</string>
+  <string name="settings_keycap_text_color">文字色</string>
+  <string name="settings_keycap_style">キーキャップの種類</string>
+  <string name="settings_keycap_style_normal">ノーマル（キー周囲にハロー）</string>
+  <string name="settings_keycap_style_pudding">プディング（縁が色付き、中央はキーキャップの色）</string>
+  <string name="settings_keycap_style_reverse_pudding">リバースプディング（縁はキーキャップの色、中央が色付き）</string>
+  <string name="settings_keycap_translucent_legend">半透明レジェンド（レジェンドが LED の色にリアルタイムで追従）</string>
+  <string name="settings_keycap_hint">見た目のみの設定です — K2 の画面プレビューで LED の色をキーキャップにどう反映するかを変更するだけで、キーボードに送信される RGB エフェクトには影響しません。</string>
+  <string name="settings_keycap_edit_individual">個別のキーキャップを編集</string>
+  <string name="settings_keycap_edit_individual_hint">有効にすると、上のキーボードでキーをクリックして色や画像をカスタマイズできます。複数のキーをまとめてカスタマイズするには、選択ボックスをドラッグしてください。</string>
+  <string name="settings_keycap_edit_multi_label">{0} キー</string>
+  <string name="keycap_customize_title">キーキャップをカスタマイズ — {0}</string>
+  <string name="keycap_customize_override_color">キーキャップの色を上書き</string>
+  <string name="keycap_customize_custom_image">カスタム画像…</string>
+  <string name="keycap_customize_clear_image">画像をクリア</string>
+  <string name="keycap_customize_use_mountain_logo">Mountain ロゴを使用（固定）</string>
+  <string name="keycap_customize_clear_all">上書きをクリア</string>
+  <string name="keycap_customize_close">閉じる</string>
+  <string name="settings_factory_reset">工場出荷時の設定に戻す</string>
+  <string name="settings_factory_reset_confirm">キーボードのゲームモード、インジケーター LED、ライティングエフェクトを工場出荷時の設定に戻します。続行しますか？</string>
+  <!-- キーボードマクロ -->
   <string name="keyboard_macro">キーボードマクロ</string>
+  <string name="macro_library">マクロライブラリ</string>
   <string name="macro_new">新規</string>
+  <string name="macro_duplicate">複製</string>
+  <string name="macro_duplicate_name">{0}（コピー）</string>
   <string name="macro_delete">削除</string>
   <string name="macro_record">記録</string>
   <string name="macro_record_stop">■ 停止</string>
@@ -163,7 +600,21 @@
   <string name="macro_playback_repeat">N 回繰り返す</string>
   <string name="macro_playback_held">押し続ける間</string>
   <string name="macro_playback_toggle">トグル</string>
+  <string name="macro_repeat_short">繰り返す</string>
+  <string name="macro_times_suffix">回</string>
   <string name="macro_record_mouse">マウスを記録</string>
+  <string name="macro_record_mouse_movement">マウスの動きを記録</string>
+  <string name="macro_record_keyboard">キーボードを記録</string>
+  <string name="macro_section_devices">デバイス</string>
+  <string name="macro_section_inputs">入力</string>
+  <string name="macro_section_assigned">割り当て先</string>
+  <string name="macro_assigned_help">現在このマクロの再生に設定されている、すべてのデバイスの全キー。</string>
+  <string name="macro_not_assigned">まだどのキーにも割り当てられていません。</string>
+  <string name="macro_show_press_release">押下/解放を表示</string>
+  <string name="macro_start_recording">記録を開始</string>
+  <string name="macro_move_up">上へ移動</string>
+  <string name="macro_move_down">下へ移動</string>
+  <string name="macro_delete_input">削除</string>
   <string name="macro_actions_count">{0} アクション</string>
   <string name="macro_import_bc">Base Camp からインポート</string>
   <string name="macro_select_first">記録する前にマクロを選択または作成してください。</string>
@@ -172,6 +623,7 @@
   <string name="macro_import_confirm">BaseCamp.db から {0} 個のマクロをインポートしますか？</string>
   <string name="macro_imported">{0} 個のマクロをインポートしました。</string>
   <string name="macro_import_error">インポートエラー: {0}</string>
+  <!-- USB レコーダー -->
   <string name="usb_recorder">USB レコーダー</string>
   <string name="usb_interface">インターフェース:</string>
   <string name="usb_label">ラベル:</string>
@@ -183,19 +635,29 @@
   <string name="usb_results">キャプチャ結果</string>
   <string name="usb_save_report">レポートを保存</string>
   <string name="usb_open_folder">フォルダーを開く</string>
+  <!-- ═══════════════════════════════════════════════════════════════
+       MacroPad タブ
+       ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_macropad">MacroPad</string>
   <string name="mp_connected_devices">接続中の MacroPad デバイス</string>
   <string name="mp_event_log">イベントログ</string>
   <string name="mp_cancel_mapping">マッピングをキャンセル</string>
+  <!-- MacroPad LED ライティング -->
   <string name="led_sync_profiles">プロファイル間で同期</string>
   <string name="led_backlight_off">バックライト OFF</string>
   <string name="led_backlight_on">バックライト ON</string>
+  <string name="led_backlight_label">バックライト:</string>
   <string name="led_save_flash_tip">適用したエフェクトを永続化します（抜き差し/再起動後も維持）。</string>
+  <!-- ═══════════════════════════════════════════════════════════════
+       DisplayPad タブ
+       ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_displaypad">DisplayPad</string>
   <string name="dp_open_driver">ドライバーを開く</string>
   <string name="dp_driver_opened">DisplayPad ドライバーが開きました。</string>
   <string name="dp_driver_open_failed">DisplayPad ドライバーを開くのに失敗しました。</string>
   <string name="dp_driver_closed">DisplayPad ドライバーが閉じました。</string>
+  <string name="dp_rotate_icons_ccw">アイコンを回転 ↺</string>
+  <string name="dp_rotate_icons_cw">アイコンを回転 ↻</string>
   <string name="dp_reset_keys">キーをリセット</string>
   <string name="dp_import_xml">XML をインポート…</string>
   <string name="dp_import_bc">Base Camp からインポート</string>
@@ -208,9 +670,34 @@
   <string name="dp_mapping_done">DisplayPad マッピングが完了しました。</string>
   <string name="dp_imported_xml">プロファイル '{0}' をスロット {1} にインポートしました。</string>
   <string name="dp_choose_image">キー #{0} の画像を選択</string>
+  <string name="dp_key_button_label">ボタン {0}</string>
+  <string name="dp_load_image">画像を読み込む…</string>
+  <string name="dp_rotate_image">画像を回転:</string>
+  <string name="dp_action_section">アクション</string>
   <string name="dp_configure_action">アクションを設定…</string>
   <string name="dp_remove_action">アクションを削除</string>
+  <string name="dp_change_image">画像を変更…</string>
   <string name="dp_remove_image">画像を削除</string>
+  <string name="dp_create_folder">フォルダーページを作成…</string>
+  <string name="dp_create_folder_title">フォルダーページを作成</string>
+  <string name="dp_create_folder_prompt">フォルダー名:</string>
+  <string name="dp_set_back">戻るボタンとして設定</string>
+  <string name="dp_pages">ページ</string>
+  <string name="dp_no_pages">まだフォルダーページが作成されていません。</string>
+  <string name="dp_delete_page">削除</string>
+  <string name="dp_delete_page_title">ページを削除</string>
+  <string name="dp_delete_page_confirm">ページ "{0}" を削除しますか？ このページを開くキーは機能しなくなります。</string>
+  <string name="dp_add_text">テキストを追加…</string>
+  <string name="txt_dialog_title">テキストを挿入</string>
+  <string name="txt_label">テキスト:</string>
+  <string name="txt_font_label">フォント:</string>
+  <string name="txt_font_size_auto">サイズを自動調整</string>
+  <string name="txt_bg_solid">単色の背景</string>
+  <string name="txt_bg_image">読み込んだ画像の上に重ねる</string>
+  <string name="txt_bg_color">背景:</string>
+  <string name="txt_color">テキスト:</string>
+  <string name="txt_position_label">位置:</string>
+  <string name="txt_generate_failed">テキスト画像を生成できませんでした。</string>
   <string name="dp_open_bc_profile">BaseCamp プロファイルを開く</string>
   <string name="dp_filter_bc_xml">BaseCamp プロファイル (*.xml)|*.xml|すべてのファイル|*.*</string>
   <string name="dp_bc_db_not_found">BaseCamp.db が見つかりません。K2_BASECAMP_DB を設定するか Base Camp をインストールしてください。</string>
@@ -218,54 +705,8 @@
   <string name="dp_no_matching_devices">データベースのプロファイルに一致する接続済みデバイスがありません。</string>
   <string name="dp_import_confirm">{1} 台のデバイスに {0} 個のプロファイルをインポートしますか？</string>
   <string name="dp_imported">Base Camp から {0} 個のプロファイル（{1} キー）をインポートしました。</string>
-  <string name="dpw_title">K2 — DisplayPad コンソール</string>
-  <string name="dpw_open_driver">ドライバーを開く</string>
-  <string name="dpw_refresh_devices">デバイスを更新</string>
-  <string name="dpw_close_driver">ドライバーを閉じる</string>
-  <string name="err_title">K2 — エラー</string>
-  <string name="err_message">エラーが発生しました</string>
-  <string name="imp_title">BaseCamp プロファイルのインポート</string>
-  <string name="imp_header">BaseCamp プロファイルのインポート</string>
-  <string name="imp_slot">K2 プロファイルスロット (1..5):</string>
-  <string name="imp_switch_now">インポート後すぐにこのスロットに切り替える</string>
-  <string name="unhandled_error_ui">未処理のエラー (UI)</string>
-  <string name="unhandled_error_domain">未処理のエラー (ドメイン)</string>
-  <string name="veh_no_return">Frame-walk: SDKDLL.dll 外の戻りアドレスが見つかりませんでした</string>
-  <string name="profile_switch_unsupported">プロファイル: MacroPad でのプロファイル切り替えはまだ未対応です</string>
-  <string name="browse">参照…</string>
-  <string name="crop_hint">ドラッグして位置を調整し、スクロールまたはスライダーでズームします。</string>
-  <string name="crop_title">画像を切り抜き ({0}×{1})</string>
-  <string name="crop_no_crop">そのまま挿入（切り抜き/ズームなし）</string>
-  <string name="crop_show_grid">キーの輪郭を表示</string>
-  <string name="tab_settings">設定</string>
-  <string name="settings_debug_mode">デバッグモード</string>
-  <string name="settings_debug_mode_hint">すべてのデバイスでデバッグツール（ドライバーの開閉、APコントロール、イベントログ）を有効にします。</string>
-  <string name="settings_log_level">ログ</string>
-  <string name="log_off">オフ</string>
-  <string name="log_normal">通常</string>
-  <string name="log_verbose">詳細</string>
-  <string name="settings_dp_native">DisplayPad: ネイティブ USB エンジン（実験的）</string>
-  <string name="settings_dp_native_hint">Mountain SDK の代わりに DisplayPad を USB 経由で直接制御します: 転送が確認され（アイコン破損なし）、サテライトプロセスもありません。デバイス上でのプロファイル永続化は利用できません。画像は K2 データベースから再アップロードされます。K2 の再起動後に有効になります。</string>
-  <string name="settings_ev_native">Everest Max: ネイティブ USB エンジン（実験的、一部対応）</string>
-  <string name="settings_ev_native_hint">Everest Max の接続とテンキーの 4 つのディスプレイボタンを、SDKDLL.dll の代わりに USB 経由で直接制御します — その対象範囲において、この DLL の慢性的なタイマースレッドのクラッシュを解消します。RGB エフェクト、テンキーのアイコン、Media Dock、フルキーボードの再割り当てイベントは、現時点ではまだ SDKDLL.dll を使用しています（未移植）。K2 の再起動後に有効になります。</string>
-  <string name="settings_kill_bc_worker">Base Camp の DisplayPad ワーカーを終了</string>
-  <string name="settings_kill_bc_worker_hint">MountainDisplayPadWorker はバックグラウンドで動作し、K2 と同時に DisplayPad に書き込みを行うため、アイコンが破損します。有効にすると、K2 が自動的にこれを終了します（実行中は終了した状態を維持します）。</string>
-  <string name="settings_bc_autostart">Windows 起動時に Base Camp のサービスを開始</string>
-  <string name="settings_bc_autostart_hint">Base Camp の Windows 自動起動エントリを有効/無効にします（タスクマネージャーのスタートアップタブと同じ仕組み — 元に戻せます）。HKLM 内のエントリは K2 を管理者として実行する必要がある場合があります。</string>
-  <string name="settings_bc_autostart_none">レジストリに Base Camp の自動起動エントリが見つかりませんでした。</string>
-  <string name="settings_bc_autostart_done">Base Camp の自動起動: {0} 件のエントリを更新しました。</string>
-  <string name="loading_drivers">ドライバーを初期化しています…</string>
-  <string name="ev_crash_recovering">ドライバーがクラッシュしました — 3 秒後に自動回復を試みます…</string>
-  <string name="ev_crash_recovered">ドライバーが回復しました — LED プレビューを再起動しました。</string>
-  <string name="ev_crash_recovery_failed">ドライバーの回復に失敗しました — K2.App を再起動してください。</string>
-  <string name="ev_key_binding">キーバインディング</string>
-  <string name="dp_rotate_icons_ccw">アイコンを回転 ↺</string>
-  <string name="dp_rotate_icons_cw">アイコンを回転 ↻</string>
-  <string name="dp_load_image">画像を読み込む…</string>
-  <string name="dp_rotate_image">画像を回転:</string>
-  <string name="dp_action_section">アクション</string>
-  <string name="dp_change_image">画像を変更…</string>
   <string name="import_bc">Base Camp からインポート</string>
+  <!-- エクスポート -->
   <string name="export">エクスポート</string>
   <string name="dp_export_bc">エクスポート (Base Camp)…</string>
   <string name="dp_export_k2">エクスポート (K2)…</string>
@@ -274,30 +715,97 @@
   <string name="dp_exported_bc">'{0}' を Base Camp XML としてエクスポートしました: {1} 件のアクションを書き込み、{2} 件をスキップ（Base Camp に相当するものなし）。</string>
   <string name="dp_exported_k2">'{0}' を K2 XML としてエクスポートしました: {1} 件のアクションを書き込みました。</string>
   <string name="dp_export_no_profile">先にプロファイルを選択してください。</string>
+  <string name="export_profiles_btn">プロファイルをエクスポート…</string>
+  <string name="export_profiles_title">プロファイルのエクスポート</string>
+  <string name="export_profiles_pick">エクスポートするプロファイルを選択:</string>
+  <string name="export_format_section">形式:</string>
+  <string name="export_format_bc">Base Camp</string>
+  <string name="export_format_k2">K2</string>
+  <string name="export_select_at_least_one">少なくとも1つのプロファイルを選択してください。</string>
+  <string name="export_pick_folder">エクスポートするプロファイルの保存先フォルダーを選択</string>
+  <!-- スクリーンセーバー（フルスクリーン画像、常時表示またはアイドルN秒後に表示） -->
   <string name="dp_fullscreen_group">フルスクリーン</string>
   <string name="dp_fullscreen_set">フルスクリーン画像を設定…</string>
   <string name="dp_fullscreen_clear">フルスクリーンを解除</string>
   <string name="dp_fullscreen_dialog_title">フルスクリーン画像</string>
   <string name="dp_fullscreen_prompt">このページの 12 キーすべてに表示する画像または GIF を選択してください:</string>
+  <string name="dp_screensaver_delay_enable">次の時間が経過後にスクリーンセーバーを表示</string>
+  <string name="dp_screensaver_delay_hint">有効にすると、指定した秒数キーが押されない場合にのみ画像が表示され、最初のキー押下でそのキーのアクションが実行される前にプロファイルのアイコンが復元されます。無効にすると、このページが表示されている間は常に画像がパネルに表示されたままになります。</string>
   <string name="dp_fullscreen_rotation">回転</string>
   <string name="dp_fullscreen_rotation_hint">パネルに合わせる前に画像全体を回転します。上記のプレビューにはこの選択が反映されません — デバイスに画像が表示される際に適用されます。</string>
   <string name="dp_fullscreen_current">現在: {0}</string>
   <string name="dp_fullscreen_none_set">画像が選択されていません。</string>
   <string name="dp_fullscreen_set_ok">このページにフルスクリーン画像を設定しました。</string>
   <string name="dp_fullscreen_cleared">フルスクリーン画像を削除しました — キーごとのアイコンが復元されました。</string>
+  <string name="dp_live_test">パネルのライブテスト</string>
+  <string name="dp_live_test_icon">アイコンのライブテスト（1番目のキー）</string>
+  <!-- デバイス名を変更 -->
   <string name="rename_device">デバイス名を変更</string>
   <string name="rename_device_title">デバイス名を変更</string>
   <string name="rename_device_prompt">このデバイスの名前を入力してください:</string>
+  <string name="profile_not_available_tip">このデバイスではまだ利用できません — プロファイルの保存機能が未実装です。</string>
+  <!-- プロファイル名の変更・削除 -->
   <string name="rename_profile">プロファイル名を変更</string>
   <string name="rename_profile_title">プロファイル名を変更</string>
   <string name="rename_profile_prompt">このプロファイルの名前を入力してください:</string>
   <string name="delete_profile">プロファイルを削除</string>
   <string name="delete_profile_confirm">プロファイル '{0}' を削除しますか？このプロファイル内のすべてのキー割り当てが削除されます。</string>
   <string name="delete_profile_last">最後のプロファイルは削除できません。</string>
+  <string name="import_no_free_slot">5つのプロファイルスロットはすべて使用中です — "{0}" をインポートする前に、いずれかを削除または解放してください。</string>
+  <string name="import_some_skipped_no_slot">{0} 件のプロファイルをスキップしました: 空きスロットがありません（5つすべて使用中）。</string>
+  <!-- 新規プロファイル選択（DisplayPad） -->
+  <string name="new_profile_dialog_title">新規プロファイル</string>
+  <string name="new_profile_generic">汎用プロファイル</string>
+  <string name="new_profile_dedicated">専用プロファイル</string>
+  <string name="new_profile_dedicated_hint">このプロファイルの対象アプリ/機能を選択してください:</string>
+  <string name="new_profile_create_btn">作成</string>
+  <!-- プロファイル設定ポップアップ（歯車アイコン、全デバイス共通） -->
+  <string name="profile_settings_title">プロファイル設定</string>
+  <string name="profile_settings_name_label">名前</string>
+  <string name="profile_settings_exe_label">起動実行ファイル</string>
+  <string name="profile_settings_exe_hint">このプログラムが起動すると、K2 は自動的にこのプロファイルに切り替わります。</string>
+  <string name="profile_settings_clear">クリア</string>
+  <!-- Base Camp デバイス選択（DBに同種の物理デバイスが複数ある場合に表示） -->
+  <string name="bc_pick_device_title">Base Camp デバイスを選択</string>
+  <string name="bc_pick_device_text">Base Camp には複数のデバイスのプロファイルがあります。"{0}" にインポートするデバイスを選択してください:</string>
+  <string name="bc_pick_device_none">インポート元のデバイスを選択してください。</string>
+  <string name="bc_pick_device_label">デバイス #{0} — {1} 件のプロファイル: {2}</string>
+  <string name="bc_import_will_wipe">インポートの前に、"{0}" 上の既存の K2 プロファイルはすべて削除されます。</string>
+  <string name="bc_import_read_failed">Base Camp のデータベースを読み込めませんでした（{0}）。何もインポートされておらず、既存の K2 プロファイルはそのまま残っています。</string>
+  <!-- Everest インポート -->
   <string name="ev_no_profiles_in_bc">Base Camp データベースに Everest プロファイルが見つかりません。</string>
   <string name="ev_imported_bc">Base Camp から {0} 個の Everest プロファイル（{1} キー）をインポートしました。</string>
+  <!-- MacroPad インポート -->
   <string name="mp_no_profiles_in_bc">Base Camp データベースに MacroPad プロファイルが見つかりません。</string>
   <string name="mp_imported_bc">Base Camp から {0} 個の MacroPad プロファイル（{1} キー）をインポートしました。</string>
+  <!-- Makalu インポート -->
+  <string name="mk_no_profiles_in_bc">Base Camp データベースに Makalu プロファイルが見つかりません。</string>
+  <string name="mk_imported_bc">Base Camp から {0} 個の Makalu プロファイル（{1} 個の再割り当てボタン）をインポートしました。</string>
+  <!-- Everest 60 インポート -->
+  <string name="ev60_no_profiles_in_bc">Base Camp データベースに Everest 60 プロファイルが見つかりません。</string>
+  <string name="ev60_imported_bc">Base Camp から {0} 個の Everest 60 プロファイル（{1} キー）をインポートしました。</string>
+  <!-- DisplayPad フォルダーナビゲーション -->
   <string name="dp_back">戻る</string>
-  <string name="debug_group">デバッグ</string>
+  <!-- ═══════════════════════════════════════════════════════════════
+       DisplayPad スタンドアロン (K2.DisplayPad)
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="dpw_title">K2 — DisplayPad コンソール</string>
+  <string name="dpw_open_driver">ドライバーを開く</string>
+  <string name="dpw_refresh_devices">デバイスを更新</string>
+  <string name="dpw_close_driver">ドライバーを閉じる</string>
+  <!-- エラーダイアログ -->
+  <string name="err_title">K2 — エラー</string>
+  <string name="err_message">エラーが発生しました</string>
+  <!-- プロファイルインポートダイアログ -->
+  <string name="imp_title">BaseCamp プロファイルのインポート</string>
+  <string name="imp_header">BaseCamp プロファイルのインポート</string>
+  <string name="imp_slot">K2 プロファイルスロット (1..5):</string>
+  <string name="imp_switch_now">インポート後すぐにこのスロットに切り替える</string>
+  <!-- ═══════════════════════════════════════════════════════════════
+       一般エラーメッセージ
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="unhandled_error_ui">未処理のエラー (UI)</string>
+  <string name="unhandled_error_domain">未処理のエラー (ドメイン)</string>
+  <string name="veh_no_return">Frame-walk: SDKDLL.dll 外の戻りアドレスが見つかりませんでした</string>
+  <string name="profile_switch_unsupported">プロファイル: MacroPad でのプロファイル切り替えはまだ未対応です</string>
 </strings>

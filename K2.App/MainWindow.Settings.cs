@@ -7,7 +7,10 @@
 // tab and controls logging verbosity across the app (see AppSettings.LogLevel —
 // key-press logs and the LED-poll diagnostic log only fire at Verbose).
 
+using System;
+using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using K2.App.Services;
@@ -18,6 +21,131 @@ namespace K2.App;
 
 public partial class MainWindow
 {
+    private UpdateCheckResult? _lastUpdateCheck;
+
+    /// <summary>Shows the running version and kicks off a silent background check —
+    /// called once from InitAppSettingsPanel. "Silent" means no status text/dialog on
+    /// failure or "up to date", so a normal launch with no update available is a no-op
+    /// the user never notices; only the manual button (BtnAppCheckUpdate_Click) and an
+    /// actual update being found produce visible feedback.</summary>
+    private void InitUpdatesPanel()
+    {
+        var v = UpdateChecker.CurrentVersion;
+        TxtAppCurrentVersion.Text = Loc.Get("settings_update_current_version", $"{v.Major}.{v.Minor}.{v.Build}");
+        _ = RunUpdateCheckAsync(silent: true);
+    }
+
+    private void BtnAppCheckUpdate_Click(object sender, RoutedEventArgs e) => _ = RunUpdateCheckAsync(silent: false);
+
+    private async Task RunUpdateCheckAsync(bool silent)
+    {
+        if (!silent)
+        {
+            BtnAppCheckUpdate.IsEnabled = false;
+            TxtAppUpdateStatus.Text = Loc.Get("settings_update_checking");
+        }
+
+        var result = await UpdateChecker.CheckAsync();
+        _lastUpdateCheck = result;
+
+        if (!result.Success)
+        {
+            if (!silent)
+                TxtAppUpdateStatus.Text = Loc.Get("settings_update_check_failed", result.Error ?? "?");
+            BtnAppCheckUpdate.IsEnabled = true;
+            return;
+        }
+
+        if (result.UpdateAvailable)
+        {
+            TxtAppUpdateStatus.Text = Loc.Get("settings_update_available", result.LatestVersion ?? "?");
+            TxtAppUpdateNotes.Text = result.ReleaseNotes ?? "";
+            PnlAppUpdateAvailable.Visibility = Visibility.Visible;
+
+            bool installed = InstallDetector.IsInstalled();
+            BtnAppUpdateInstall.Visibility = installed && result.InstallerAsset is not null ? Visibility.Visible : Visibility.Collapsed;
+            BtnAppUpdateZip.Visibility = !installed && result.PortableZipAsset is not null ? Visibility.Visible : Visibility.Collapsed;
+        }
+        else
+        {
+            if (!silent) TxtAppUpdateStatus.Text = Loc.Get("settings_update_uptodate");
+            PnlAppUpdateAvailable.Visibility = Visibility.Collapsed;
+        }
+
+        BtnAppCheckUpdate.IsEnabled = true;
+    }
+
+    /// <summary>Installed copies (Inno Setup): download the installer and launch it,
+    /// then close K2 the same way the tray's "Exit" does (<c>_reallyClosing</c> lets
+    /// MainWindow_Closing's close-to-tray redirect proceed to a real close instead of
+    /// hiding the window) — the installer needs K2.App.exe unlocked to overwrite it.</summary>
+    private async void BtnAppUpdateInstall_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lastUpdateCheck?.InstallerAsset is not { } asset) return;
+
+        var confirm = MessageBox.Show(this,
+            Loc.Get("settings_update_install_confirm", _lastUpdateCheck.LatestVersion ?? "?"),
+            Loc.Get("settings_update_group"), MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        try
+        {
+            BtnAppUpdateInstall.IsEnabled = false;
+            TxtAppUpdateStatus.Text = Loc.Get("settings_update_downloading");
+            string path = await UpdateInstaller.DownloadInstallerAsync(asset, null);
+
+            UpdateInstaller.LaunchInstaller(path);
+            _reallyClosing = true;
+            Close();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, Loc.Get("settings_update_group"), MessageBoxButton.OK, MessageBoxImage.Error);
+            BtnAppUpdateInstall.IsEnabled = true;
+        }
+    }
+
+    /// <summary>Portable copies (no installer to hand off to): just download the ZIP
+    /// wherever the user chooses to save it — K2 stays open, nothing is applied
+    /// automatically (the user swaps the folder contents themselves, same as a fresh
+    /// portable extract).</summary>
+    private async void BtnAppUpdateZip_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lastUpdateCheck?.PortableZipAsset is not { } asset) return;
+
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            FileName = asset.Name,
+            Filter = "ZIP archive|*.zip",
+            InitialDirectory = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
+        };
+        if (dlg.ShowDialog(this) != true) return;
+
+        try
+        {
+            BtnAppUpdateZip.IsEnabled = false;
+            TxtAppUpdateStatus.Text = Loc.Get("settings_update_downloading");
+            await UpdateInstaller.DownloadAsync(asset, dlg.FileName, null);
+            TxtAppUpdateStatus.Text = Loc.Get("settings_update_zip_done", dlg.FileName);
+            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{dlg.FileName}\"") { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, Loc.Get("settings_update_group"), MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            BtnAppUpdateZip.IsEnabled = true;
+        }
+    }
+
+    private void BtnAppUpdateViewRelease_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lastUpdateCheck?.ReleaseUrl is not { } url) return;
+        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+    }
+
     /// <summary>Called once from the constructor (via Window.Loaded) — offers to import
     /// existing Base Camp profiles/settings the very first time K2 runs. Silently does
     /// nothing (no popup) if Base Camp isn't installed, so a user who never had it
@@ -171,6 +299,9 @@ public partial class MainWindow
         CkK2Autostart.IsChecked = Services.K2AutostartService.IsEnabled();
 
         InitAppFontCombo();
+        InitAppAccentCombo();
+        InitIconGalleryStyleRadios();
+        InitUpdatesPanel();
 
         ApplyDebugModeToAllDevices(debug);
     }
@@ -205,6 +336,72 @@ public partial class MainWindow
         AppSettings.SetAppFontFamily(key);
         FontCatalog.Apply(key);
     }
+
+    /// <summary>Populates the Accent color combo with <see cref="AccentCatalog.Options"/>
+    /// ("K2 Red" / "Mountain Blue") and selects the persisted choice (default K2 Red).
+    /// The accent is already applied at process startup (see App.OnStartup); this only
+    /// drives the UI.</summary>
+    private void InitAppAccentCombo()
+    {
+        CmbAppAccentColor.Items.Clear();
+        foreach (var opt in AccentCatalog.Options)
+            CmbAppAccentColor.Items.Add(new ComboBoxItem { Content = Loc.Get(AccentDisplayNameKey(opt.Key)), Tag = opt.Key });
+
+        string current = AppSettings.AccentTheme;
+        CmbAppAccentColor.SelectedIndex = 0;
+        for (int i = 0; i < CmbAppAccentColor.Items.Count; i++)
+        {
+            if ((string)((ComboBoxItem)CmbAppAccentColor.Items[i]).Tag == current)
+            {
+                CmbAppAccentColor.SelectedIndex = i;
+                break;
+            }
+        }
+    }
+
+    /// <summary>Persists the chosen accent color theme and applies it live to every K2
+    /// window (see AccentCatalog.Apply / K2Theme.xaml's K2AccentBrush family of
+    /// DynamicResources).</summary>
+    private void CmbAppAccentColor_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (CmbAppAccentColor.SelectedItem is not ComboBoxItem item) return;
+        string key = (string)item.Tag;
+        AppSettings.SetAccentTheme(key);
+        AccentCatalog.Apply(key);
+    }
+
+    /// <summary>Selects the persisted "Icon style" radio (default "color"). Deliberately set
+    /// here in code rather than via XAML <c>IsChecked="True"</c> — a XAML-default-triggered
+    /// <c>Checked</c> event firing synchronously during <c>InitializeComponent()</c>, before a
+    /// later-declared element is wired up, is the exact WPF gotcha that caused a real crash in
+    /// this same feature earlier the same day (see CHANGELOG.md 2026-07-29) — so every radio
+    /// pair in this codebase now gets its initial selection from code-behind, after construction
+    /// has fully finished, never from the XAML markup itself.</summary>
+    private void InitIconGalleryStyleRadios()
+    {
+        bool black = AppSettings.IconGalleryStyle == "black";
+        RbIconStyleBlack.IsChecked = black;
+        RbIconStyleColor.IsChecked = !black;
+    }
+
+    /// <summary>Persists the chosen icon style — read by <c>K2.App.Services.IconGalleryDefaults</c>
+    /// the next time a "Default icon" auto-generation runs. Not retroactive: icons already
+    /// generated under the previous style stay as they are, same as every other auto-generated
+    /// icon in this app (see <c>IconImageGenerator.AccentColor</c>'s equivalent note).</summary>
+    private void IconGalleryStyle_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender != RbIconStyleBlack && sender != RbIconStyleColor) return;
+        AppSettings.SetIconGalleryStyle(RbIconStyleBlack.IsChecked == true ? "black" : "color");
+    }
+
+    /// <summary>Maps an <see cref="AccentCatalog.AccentOption.Key"/> to its loc string
+    /// key ("K2 Red" / "Mountain Blue" are translatable labels, unlike FontCatalog's
+    /// font family names, which are proper nouns and shown as-is).</summary>
+    private static string AccentDisplayNameKey(string key) => key switch
+    {
+        "MountainBlue" => "settings_accent_mountainblue",
+        _               => "settings_accent_k2red",
+    };
 
     private void CkCloseToTray_Click(object sender, RoutedEventArgs e)
     {

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -182,6 +183,14 @@ internal static class EverestHidNative
         private readonly SemaphoreSlim _respSignal = new(0);
         private byte _prevNumpadBits;
 
+        /// <summary>Caps how many "rx" lines <see cref="ReaderLoop"/> writes at Verbose.
+        /// The device streams unsolicited telemetry (report ids 02-0A, ~10/sec) on this
+        /// same raw-HID channel regardless of app activity — logging every one of them
+        /// produced 30k+ lines in a 6-minute session (2026-07-28 freeze report) and,
+        /// combined with WriteLog's per-call file open/close, starved every other thread
+        /// waiting on the shared log lock. A handful of samples is enough for protocol work.</summary>
+        private int _rxLogCount;
+
         /// <summary>(buttonIndex 0-3 = D1-D4, pressed). See class remarks: the full
         /// 171-key matrix is NOT covered yet — only the 4 numpad display buttons.</summary>
         public event Action<int, bool>? NumpadButtonChanged;
@@ -333,6 +342,62 @@ internal static class EverestHidNative
         /// concept of, callers pass a synthetic type-01 payload — the point is flipping
         /// the key to custom mode, execution stays in K2 either way.
         /// </summary>
+        /// <summary>Per-key firmware output mode: what the physical key emits, before
+        /// any host-side action runs. See <see cref="WriteKeyOutputMode"/>.</summary>
+        internal enum KeyOutputMode : byte
+        {
+            /// <summary>Key emits nothing at all — Base Camp's "Disable".</summary>
+            Disabled = 0x00,
+            /// <summary>Factory function restored.</summary>
+            Default = 0xFF,
+        }
+
+        /// <summary>
+        /// Sets a key's firmware output mode: <c>12 08 00 01</c> as a prologue (the same
+        /// one <see cref="WriteDisplayKeyBinding"/> already sends), then
+        /// <c>14 20 &lt;DLLKeyId&gt; 00 &lt;mode&gt;</c> twice — Base Camp repeats it, and
+        /// so do we.
+        ///
+        /// <para>Reverse-engineered 2026-07-27 from three USBPcap captures of Base Camp
+        /// (<c>_reference/usb_dumps/evmax_disable.pcapng</c> disabling the key "2",
+        /// <c>evmax_calc.pcapng</c> binding the calculator to "3", <c>evmax_def.pcapng</c>
+        /// putting both back to Default), each cross-checked against the
+        /// <c>EverestKeyBidings</c> row Base Camp wrote at that instant. The two keys have
+        /// DLLKeyId 3 and 4 and DLLMatrixIndex 19 and 28, and the byte on the wire tracks
+        /// the DLLKeyId — hence <see cref="K2.App.Models.EverestWMatrixMap.MatrixIdToDllKeyId"/>
+        /// to get there from K2's own key identity.</para>
+        ///
+        /// <para><b>The last byte is a TARGET KEY CODE, not a mode</b> — i.e. this is the
+        /// Everest Max's "remap this key to emit that one". Established the hard way on
+        /// 2026-07-27: the value 0xC3 was first read as "claimed by the host application",
+        /// because Base Camp sends it exactly when binding an action to a key, and K2
+        /// started writing it to every bound key. Result on hardware: EVERY bound key, no
+        /// matter what K2 action it carried, also opened the Calculator — with Base Camp
+        /// not even running and K2's log showing a single, unrelated execution. 0xC3=195
+        /// is simply the Calculator key's own code (the same catalog puts the media keys
+        /// at 180-184), and the capture that showed it came from Base Camp binding
+        /// <i>OS Commands / Calculator</i>: BC had remapped the key to the hardware
+        /// Calculator key, not "claimed" anything.</para>
+        ///
+        /// <para>So only the two codes whose effect is unambiguous are exposed
+        /// (<see cref="KeyOutputMode"/>): 0x00, which makes the key emit nothing, and
+        /// 0xFF, the reset sentinel shared with the Everest 60. Suppressing a bound key's
+        /// keystroke uses 0x00, exactly as on the Everest 60 — the key press still reaches
+        /// K2 through the vendor NKRO report, so the action runs.</para>
+        ///
+        /// <para>No flash save follows, on either device — a replug restores factory
+        /// behaviour whatever K2 left behind.</para>
+        /// </summary>
+        public bool WriteKeyOutputMode(int dllKeyId, KeyOutputMode mode)
+        {
+            bool ok = SendCmdAcked(Cmd(0x12, 0x08, 0x00, 0x01));
+            var pkt = Cmd(0x14, 0x20, (byte)dllKeyId, 0x00, (byte)mode);
+            ok &= SendCmdAcked(pkt);
+            ok &= SendCmdAcked(pkt);
+            _log($"[EvNative] WriteKeyOutputMode(dllKeyId={dllKeyId}, mode={mode}) -> {ok}");
+            return ok;
+        }
+
         public bool WriteDisplayKeyBinding(int keyIndex, byte type, string payload)
         {
             byte key = (byte)(0xAA + keyIndex);
@@ -472,6 +537,40 @@ internal static class EverestHidNative
             return resp is not null;
         }
 
+        /// <summary>Same drain-the-whole-response-burst reasoning as
+        /// <see cref="SwitchZoneToCustom"/>, for the dynamic-effects zone (0x03) whose
+        /// switch packet has a different byte[4] (0x01, not 0x02) — see
+        /// <see cref="EverestSideLedProtocol.BuildEffectZoneSwitchPacket"/>.</summary>
+        private bool SwitchToEffectsZone()
+        {
+            var resp = SendCommand(
+                EverestSideLedProtocol.BuildEffectZoneSwitchPacket(),
+                r => r.Length >= 5 && r[0] == 0x11 && r[1] == 0x01 && r[3] == EverestSideLedProtocol.ZoneEffects && r[4] == 0x00,
+                1200);
+            _log($"[EvNative] SwitchToEffectsZone -> {resp is not null}");
+            return resp is not null;
+        }
+
+        /// <summary>
+        /// Sends the per-region dynamic-effect assignment: switches to the effects zone,
+        /// sends one parameter packet per distinct effect in use (Wave/Breathing/
+        /// Reactive/...), then the 3-page LED→effect-code bitmap
+        /// (<see cref="EverestSideLedProtocol.BuildEffectRegionPackets"/>) that tells the
+        /// firmware which LEDs each effect governs. Call after <see cref="SendKeycapColors"/>
+        /// in the same apply — LEDs with a nonzero entry in <paramref name="ledEffectCode"/>
+        /// override whatever static color <see cref="SendKeycapColors"/> gave them.
+        /// </summary>
+        public bool SendCustomEffectRegions(byte[] ledEffectCode, IReadOnlyList<byte[]> effectParamPackets)
+        {
+            bool ok = SwitchToEffectsZone();
+            foreach (var pkt in effectParamPackets)
+                ok &= SendCmdAcked(pkt);
+            foreach (var pkt in EverestSideLedProtocol.BuildEffectRegionPackets(ledEffectCode))
+                ok &= SendCmdAcked(pkt);
+            _log($"[EvNative] SendCustomEffectRegions ({effectParamPackets.Count} effect(s)) -> {ok}");
+            return ok;
+        }
+
         /// <summary>
         /// Sends the 45 border ("side") LED colors — <see cref="EverestSideLedProtocol"/>,
         /// NOT covered by SDKDLL.dll's Custom-mode struct (that one only ever carried the
@@ -534,15 +633,69 @@ internal static class EverestHidNative
                     continue;
                 }
                 // wire data = buf[1..read] (Windows report-ID prefix stripped)
-                if (buf[1] == 0x01 && read >= 44)
-                    DecodeNumpadButtons(buf);
+                if (buf[1] == 0x01)
+                {
+                    DecodeKeyBitmap(buf, read);
+                    if (read >= 44) DecodeNumpadButtons(buf);
+                }
 
                 var wire = new byte[read - 1];
                 Buffer.BlockCopy(buf, 1, wire, 0, wire.Length);
-                if (K2.Core.AppSettings.LogLevel == K2.Core.K2LogLevel.Verbose)
+                if (K2.Core.AppSettings.LogLevel == K2.Core.K2LogLevel.Verbose && _rxLogCount < 40)
+                {
                     _log($"[EvNative] rx {Convert.ToHexString(wire, 0, Math.Min(12, wire.Length))}");
+                    if (++_rxLogCount == 40)
+                        _log("[EvNative] rx logging capped at 40 lines for this session (device streams continuously)");
+                }
                 _resp.Enqueue(wire);
                 _respSignal.Release();
+            }
+        }
+
+        /// <summary>(HID usage id, pressed) for an ordinary keyboard key — see
+        /// <see cref="DecodeKeyBitmap"/>.</summary>
+        public event Action<int, bool>? KeyUsageChanged;
+
+        /// <summary>Previous state of the NKRO bitmap, for edge detection.</summary>
+        private readonly byte[] _prevKeyBits = new byte[KeyBitmapBytes];
+
+        /// <summary>
+        /// Bytes 1..29 of report 0x01 carry the standard HID Keyboard/Keypad usage page
+        /// (0x00-0xE7 = 232 bits). The vendor bits for D1-D4 sit further out at byte 42
+        /// (<see cref="BtnMap"/>) and are deliberately outside this range.
+        /// </summary>
+        private const int KeyBitmapBytes = 29;
+
+        /// <summary>
+        /// Decodes report 0x01 as an NKRO key bitmap and raises
+        /// <see cref="KeyUsageChanged"/> on each edge. Bit N (LSB first, starting at wire
+        /// byte 1) is HID usage N of the Keyboard/Keypad page — established 2026-07-27
+        /// from a real-hardware log of five known presses, all five exact: Esc landed on
+        /// bit 41 = 0x29, A on 4 = 0x04, Space on 44 = 0x2C, "3" on 32 = 0x20, Enter on
+        /// 40 = 0x28. It is NOT the DLLKeyId/DLLMatrixIndex space the rest of this
+        /// codebase uses — which is also why the D1-D4 bits, adjacent in one byte, can't
+        /// be part of it.
+        ///
+        /// <para>This is the only route to ordinary key presses while K2 drives the
+        /// keyboard with its own USB engine: in that mode the vendor SDK isn't attached,
+        /// so <c>SetKeyCallBack</c> never fires and every non-display key silently did
+        /// nothing (user report 2026-07-27, "the mapped key just types normally").</para>
+        /// </summary>
+        private void DecodeKeyBitmap(byte[] winBuf, int read)
+        {
+            for (int i = 0; i < KeyBitmapBytes; i++)
+            {
+                // +1: Windows report-ID prefix byte.
+                byte now = (i + 1 + 1) < read ? winBuf[i + 1 + 1] : (byte)0;
+                byte changed = (byte)(now ^ _prevKeyBits[i]);
+                if (changed == 0) continue;
+                _prevKeyBits[i] = now;
+
+                for (int bit = 0; bit < 8; bit++)
+                {
+                    if ((changed & (1 << bit)) == 0) continue;
+                    KeyUsageChanged?.Invoke(i * 8 + bit, (now & (1 << bit)) != 0);
+                }
             }
         }
 

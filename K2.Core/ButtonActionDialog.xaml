@@ -54,6 +54,7 @@
         <ComboBox  Grid.Row="2" x:Name="CbType"
                    SelectionChanged="CbType_SelectionChanged">
             <ComboBoxItem Content="{loc:Get act_none}"                  Tag="none"/>
+            <ComboBoxItem Content="{loc:Get act_disable}"           Tag="disable"/>
             <ComboBoxItem Content="{loc:Get act_url}"              Tag="url"/>
             <ComboBoxItem Content="{loc:Get act_exec}"   Tag="exec"/>
             <ComboBoxItem Content="{loc:Get act_folder}"           Tag="folder"/>
@@ -64,9 +65,19 @@
             <ComboBoxItem Content="{loc:Get act_media}"             Tag="media"/>
             <ComboBoxItem Content="{loc:Get act_mouse}"          Tag="mouse"/>
             <ComboBoxItem Content="{loc:Get act_keys}"   Tag="keys"/>
+            <ComboBoxItem Content="{loc:Get act_hotkeyswitch}"     Tag="hotkeyswitch"/>
+            <ComboBoxItem Content="{loc:Get act_multi}"            Tag="multi"/>
             <ComboBoxItem Content="{loc:Get act_command}"         Tag="command"/>
             <ComboBoxItem Content="{loc:Get act_text}"            Tag="text"/>
             <ComboBoxItem Content="{loc:Get act_macro}"            Tag="macro"/>
+            <ComboBoxItem Content="{loc:Get act_googlehome}"       Tag="googlehome"/>
+            <ComboBoxItem Content="{loc:Get act_adobe}"            Tag="adobe"/>
+            <ComboBoxItem Content="{loc:Get act_davinci}"          Tag="davinci"/>
+            <ComboBoxItem Content="{loc:Get act_zoom}"             Tag="zoom"/>
+            <ComboBoxItem Content="{loc:Get act_obs}"              Tag="obs"/>
+            <ComboBoxItem Content="{loc:Get act_twitch}"           Tag="twitch"/>
+            <ComboBoxItem Content="{loc:Get act_spotify}"          Tag="spotify"/>
+            <ComboBoxItem Content="{loc:Get act_youtube}"          Tag="youtube"/>
             <ComboBoxItem Content="{loc:Get act_pyscript}"         Tag="pyscript"/>
         </ComboBox>
 
@@ -109,7 +120,7 @@
                             VerticalAlignment="Center" Background="#22222A" CornerRadius="4">
                         <Image x:Name="ImgExecIcon" Width="24" Height="24" Stretch="Uniform"/>
                     </Border>
-                    <TextBox x:Name="TxtExecPath" Grid.Column="1"
+                    <TextBox x:Name="TxtExecPath" Grid.Column="1" Height="25"
                              VerticalContentAlignment="Center"
                              FontFamily="Consolas"
                              TextChanged="TxtExecPath_TextChanged"/>
@@ -176,7 +187,7 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBox x:Name="TxtFolderPath" Grid.Column="0"
+                    <TextBox x:Name="TxtFolderPath" Grid.Column="0" Height="25"
                              VerticalContentAlignment="Center"
                              FontFamily="Consolas"/>
                     <Button  x:Name="BtnFolderBrowse" Grid.Column="1"
@@ -241,7 +252,7 @@
                            SelectionChanged="CbPage_SelectionChanged"/>
 
                 <TextBlock Grid.Row="2" Text="{loc:Get page_name_label}" Margin="0,0,0,4"/>
-                <TextBox   x:Name="TxtPageName" Grid.Row="3" VerticalContentAlignment="Center"/>
+                <TextBox   x:Name="TxtPageName" Grid.Row="3" Height="25" VerticalContentAlignment="Center"/>
             </Grid>
 
             <!-- Open browser panel -->
@@ -265,7 +276,7 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBox x:Name="TxtBrowserOtherPath" Grid.Column="0"
+                    <TextBox x:Name="TxtBrowserOtherPath" Grid.Column="0" Height="25"
                              VerticalContentAlignment="Center" FontFamily="Consolas"/>
                     <Button  x:Name="BtnBrowserOtherBrowse" Grid.Column="1"
                              Content="{loc:Get browse}" Padding="10,2" Margin="6,0,0,0"
@@ -273,7 +284,7 @@
                 </Grid>
 
                 <TextBlock Grid.Row="3" Text="{loc:Get browser_url_label}" Margin="0,0,0,4"/>
-                <TextBox   x:Name="TxtBrowserUrl" Grid.Row="4" VerticalContentAlignment="Center"/>
+                <TextBox   x:Name="TxtBrowserUrl" Grid.Row="4" Height="25" VerticalContentAlignment="Center"/>
             </Grid>
 
             <!-- Switch profile panel -->
@@ -294,15 +305,33 @@
                         Click="BtnProfileAddRow_Click"/>
             </Grid>
 
-            <!-- Simple selector panel (system command / media key / mouse action) -->
+            <!-- Simple selector panel (system command / media key / mouse action / macro / Google Home / OBS) -->
             <Grid x:Name="ComboPanel" Visibility="Collapsed">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <TextBlock x:Name="LblComboPanel" Grid.Row="0" Margin="0,0,0,4"/>
-                <ComboBox  x:Name="CbComboValue" Grid.Row="1"/>
+                <ComboBox  x:Name="CbComboValue" Grid.Row="1" SelectionChanged="CbComboValue_SelectionChanged"/>
+                <TextBox   x:Name="TxtComboArg" Grid.Row="2" Height="25" Margin="0,8,0,0"
+                           Visibility="Collapsed" ToolTip="{loc:Get obs_arg_hint}"/>
+                <ComboBox  x:Name="CbComboArgList" Grid.Row="2" Margin="0,8,0,0" IsEditable="True"
+                           Visibility="Collapsed" ToolTip="{loc:Get obs_arg_hint}"/>
+                <Button    x:Name="BtnGhManage" Grid.Row="3" Margin="0,8,0,0"
+                           Content="{loc:Get gh_manage}" HorizontalAlignment="Left"
+                           Visibility="Collapsed" Click="BtnGhManage_Click"/>
+                <Button    x:Name="BtnObsSettings" Grid.Row="3" Margin="0,8,0,0"
+                           Content="{loc:Get obs_settings_button}" HorizontalAlignment="Left"
+                           Visibility="Collapsed" Click="BtnObsSettings_Click"/>
+                <Button    x:Name="BtnTwitchSettings" Grid.Row="3" Margin="0,8,0,0"
+                           Content="{loc:Get twitch_settings_button}" HorizontalAlignment="Left"
+                           Visibility="Collapsed" Click="BtnTwitchSettings_Click"/>
+                <Button    x:Name="BtnSpotifySettings" Grid.Row="3" Margin="0,8,0,0"
+                           Content="{loc:Get spotify_settings_button}" HorizontalAlignment="Left"
+                           Visibility="Collapsed" Click="BtnSpotifySettings_Click"/>
             </Grid>
 
             <!-- Keys panel -->
@@ -332,6 +361,107 @@
                            Text="{loc:Get keys_win_hint}"/>
             </Grid>
 
+            <!-- Hotkey Switch panel: two shortcuts, alternated on successive presses -->
+            <Grid x:Name="HotkeySwitchPanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="{loc:Get hotkey_shortcut_a}" FontWeight="Bold" Margin="0,0,0,4"/>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,6">
+                    <CheckBox x:Name="ChkHkACtrl"  Content="Ctrl"  Margin="0,0,16,0"/>
+                    <CheckBox x:Name="ChkHkAShift" Content="Shift" Margin="0,0,16,0"/>
+                    <CheckBox x:Name="ChkHkAAlt"   Content="Alt"   Margin="0,0,16,0"/>
+                    <CheckBox x:Name="ChkHkAWin"   Content="Win"/>
+                </StackPanel>
+                <ComboBox  x:Name="CbHkAValue" Grid.Row="2" IsEditable="True" Margin="0,0,0,14"/>
+
+                <TextBlock Grid.Row="3" Text="{loc:Get hotkey_shortcut_b}" FontWeight="Bold" Margin="0,0,0,4"/>
+                <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,0,0,6">
+                    <CheckBox x:Name="ChkHkBCtrl"  Content="Ctrl"  Margin="0,0,16,0"/>
+                    <CheckBox x:Name="ChkHkBShift" Content="Shift" Margin="0,0,16,0"/>
+                    <CheckBox x:Name="ChkHkBAlt"   Content="Alt"   Margin="0,0,16,0"/>
+                    <CheckBox x:Name="ChkHkBWin"   Content="Win"/>
+                </StackPanel>
+                <ComboBox  x:Name="CbHkBValue" Grid.Row="5" IsEditable="True"/>
+
+                <TextBlock Grid.Row="7" Margin="0,8,0,0"
+                           TextWrapping="Wrap" Foreground="#9A9AA2"
+                           Text="{loc:Get hotkey_hint}"/>
+            </Grid>
+
+            <!-- Multi Action panel: an ordered chain of sub-actions, each with its own delay -->
+            <Grid x:Name="MultiPanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="{loc:Get multi_steps_label}" Margin="0,0,0,4"/>
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="PnlMultiSteps"/>
+                </ScrollViewer>
+                <Button x:Name="BtnMultiAddStep" Grid.Row="2" Content="{loc:Get multi_add_step}"
+                        HorizontalAlignment="Left" Padding="10,4" Margin="0,6,0,0"
+                        Click="BtnMultiAddStep_Click"/>
+            </Grid>
+
+            <!-- Adobe / DaVinci Resolve / Zoom shared panel: app-specific shortcut editor.
+                 App/Action combos are a reference aid only (Base Camp has no default shortcut
+                 for Adobe/DaVinci actions) except Zoom, whose picks autofill the shortcut. -->
+            <Grid x:Name="AppShortcutPanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock x:Name="LblAppShortcutApp" Grid.Row="0" Text="{loc:Get appshortcut_app_label}" Margin="0,0,0,4"/>
+                <ComboBox  x:Name="CbAppShortcutApp" Grid.Row="1" Margin="0,0,0,10"
+                           SelectionChanged="CbAppShortcutApp_SelectionChanged"/>
+
+                <TextBlock Grid.Row="2" Text="{loc:Get appshortcut_action_label}" Margin="0,0,0,4"/>
+                <ComboBox  x:Name="CbAppShortcutAction" Grid.Row="3" Margin="0,0,0,14"
+                           SelectionChanged="CbAppShortcutAction_SelectionChanged"/>
+
+                <TextBlock Grid.Row="4" Text="{loc:Get keys_modifiers_label}" Margin="0,0,0,4"/>
+                <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="0,0,0,10">
+                    <CheckBox x:Name="ChkAppCtrl"  Content="Ctrl"  Margin="0,0,16,0"/>
+                    <CheckBox x:Name="ChkAppShift" Content="Shift" Margin="0,0,16,0"/>
+                    <CheckBox x:Name="ChkAppAlt"   Content="Alt"   Margin="0,0,16,0"/>
+                    <CheckBox x:Name="ChkAppWin"   Content="Win"/>
+                </StackPanel>
+                <ComboBox  x:Name="CbAppValue" Grid.Row="6" IsEditable="True"/>
+            </Grid>
+
+            <!-- Youtube panel: just a chat-message textbox (the only real action) + Manage button -->
+            <Grid x:Name="YoutubePanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Text="{loc:Get youtube_chat_message_label}" Margin="0,0,0,4"/>
+                <TextBox   x:Name="TxtYoutubeMessage" Grid.Row="1" Height="25" VerticalContentAlignment="Center" Margin="0,0,0,10"/>
+                <Button    x:Name="BtnYoutubeSettings" Grid.Row="2"
+                           Content="{loc:Get youtube_settings_button}" HorizontalAlignment="Left"
+                           Padding="10,4" Click="BtnYoutubeSettings_Click"/>
+            </Grid>
+
             <!-- Python Script panel -->
             <Grid x:Name="PyPanel" Visibility="Collapsed">
                 <Grid.RowDefinitions>
@@ -358,7 +488,7 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBox x:Name="TxtPath" Grid.Column="0"
+                    <TextBox x:Name="TxtPath" Grid.Column="0" Height="25"
                              VerticalContentAlignment="Center"
                              FontFamily="Consolas"/>
                     <Button  x:Name="BtnBrowse" Grid.Column="1"
@@ -381,7 +511,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{loc:Get py_args}"
                                VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <TextBox   x:Name="TxtArgs" Grid.Column="1"
+                    <TextBox   x:Name="TxtArgs" Grid.Column="1" Height="25"
                                FontFamily="Consolas"
                                VerticalContentAlignment="Center"/>
                 </Grid>
@@ -393,7 +523,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{loc:Get py_timeout}"
                                VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <TextBox   x:Name="TxtTimeout" Grid.Column="1" Width="70"
+                    <TextBox   x:Name="TxtTimeout" Grid.Column="1" Width="70" Height="25"
                                Text="60" VerticalContentAlignment="Center"/>
                 </Grid>
 

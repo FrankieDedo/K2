@@ -36,8 +36,9 @@ public sealed class MacroPadStore : IDisposable
 
     private void EnsureSchema()
     {
-        using var cmd = _conn.CreateCommand();
-        cmd.CommandText = @"
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = @"
 CREATE TABLE IF NOT EXISTS Keys (
     DeviceId    INTEGER NOT NULL,
     Profile     INTEGER NOT NULL,
@@ -53,23 +54,79 @@ CREATE TABLE IF NOT EXISTS Settings (
 );
 
 CREATE TABLE IF NOT EXISTS KeycapOverrides (
-    KeyId     INTEGER PRIMARY KEY,
+    Profile   INTEGER NOT NULL,
+    KeyId     INTEGER NOT NULL,
     ColorHex  TEXT,
-    ImagePath TEXT
+    ImagePath TEXT,
+    PRIMARY KEY (Profile, KeyId)
 );";
-        cmd.ExecuteNonQuery();
+            cmd.ExecuteNonQuery();
+        }
+        MigrateKeycapOverridesToPerProfile();
+    }
+
+    /// <summary>One-time migration (2026-07-25) — see EverestStore.cs's identical method
+    /// for the full rationale. MacroPad uses the same 5 fixed profile slots
+    /// (MacroPadSdkNative.FW_NUM_PROFILE). Note: like the rest of MacroPad's Settings
+    /// section, this is profile-scoped only, not deviceId-scoped — a pre-existing gap
+    /// (settings.keycap_*/macropad.rotation/macroled.* already ignore deviceId too),
+    /// left as-is here rather than conflated with this migration.</summary>
+    private void MigrateKeycapOverridesToPerProfile()
+    {
+        bool hasProfileColumn = false;
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA table_info(KeycapOverrides)";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                if (string.Equals(r.GetString(1), "Profile", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasProfileColumn = true;
+                    break;
+                }
+            }
+        }
+        if (hasProfileColumn) return;
+
+        using var tx = _conn.BeginTransaction();
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+            cmd.CommandText = "ALTER TABLE KeycapOverrides RENAME TO KeycapOverrides_old";
+            cmd.ExecuteNonQuery();
+        }
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+            cmd.CommandText = @"
+CREATE TABLE KeycapOverrides (
+    Profile   INTEGER NOT NULL,
+    KeyId     INTEGER NOT NULL,
+    ColorHex  TEXT,
+    ImagePath TEXT,
+    PRIMARY KEY (Profile, KeyId)
+);
+INSERT INTO KeycapOverrides (Profile, KeyId, ColorHex, ImagePath)
+SELECT p.value, o.KeyId, o.ColorHex, o.ImagePath
+FROM KeycapOverrides_old o, (SELECT 1 AS value UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5) p;
+DROP TABLE KeycapOverrides_old;";
+            cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
     }
 
     // ---------- per-key appearance overrides (color / custom image) ----------
-    // Global (not per-device/profile) like the rest of Keycap Appearance — see
+    // Per-profile (2026-07-25, migrated from device-wide) — see
     // MainWindow.MacroKeycapAppearance.cs. KeyId = physical key index (0..11, same identity
     // as _mpKeyVisuals). No Esc key on the MacroPad, so no Mountain-logo sentinel here.
 
-    public Dictionary<int, KeycapOverrideRecord> LoadAllKeycapOverrides()
+    public Dictionary<int, KeycapOverrideRecord> LoadAllKeycapOverrides(int profile)
     {
         var result = new Dictionary<int, KeycapOverrideRecord>();
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "SELECT KeyId, ColorHex, ImagePath FROM KeycapOverrides";
+        cmd.CommandText = "SELECT KeyId, ColorHex, ImagePath FROM KeycapOverrides WHERE Profile=$p";
+        cmd.Parameters.AddWithValue("$p", profile);
         using var r = cmd.ExecuteReader();
         while (r.Read())
         {
@@ -79,22 +136,24 @@ CREATE TABLE IF NOT EXISTS KeycapOverrides (
         return result;
     }
 
-    public void SetKeycapOverride(int keyId, string? colorHex, string? imagePath)
+    public void SetKeycapOverride(int profile, int keyId, string? colorHex, string? imagePath)
     {
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = @"
-INSERT INTO KeycapOverrides(KeyId, ColorHex, ImagePath) VALUES ($k, $c, $i)
-ON CONFLICT(KeyId) DO UPDATE SET ColorHex=excluded.ColorHex, ImagePath=excluded.ImagePath";
+INSERT INTO KeycapOverrides(Profile, KeyId, ColorHex, ImagePath) VALUES ($p, $k, $c, $i)
+ON CONFLICT(Profile, KeyId) DO UPDATE SET ColorHex=excluded.ColorHex, ImagePath=excluded.ImagePath";
+        cmd.Parameters.AddWithValue("$p", profile);
         cmd.Parameters.AddWithValue("$k", keyId);
         cmd.Parameters.AddWithValue("$c", (object?)colorHex ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$i", (object?)imagePath ?? DBNull.Value);
         cmd.ExecuteNonQuery();
     }
 
-    public void ClearKeycapOverride(int keyId)
+    public void ClearKeycapOverride(int profile, int keyId)
     {
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM KeycapOverrides WHERE KeyId=$k";
+        cmd.CommandText = "DELETE FROM KeycapOverrides WHERE Profile=$p AND KeyId=$k";
+        cmd.Parameters.AddWithValue("$p", profile);
         cmd.Parameters.AddWithValue("$k", keyId);
         cmd.ExecuteNonQuery();
     }

@@ -3,14 +3,20 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Xml.Linq;
+using K2.Core;
 
 namespace K2.App.Services;
 
 /// <summary>
-/// Exports an Everest 60 profile to XML — mirrors <see cref="EvProfileExporter"/>'s
-/// shape (same confirmed <c>Everest60KeyBidings</c>/<c>Everest60Lightings</c> schema,
-/// see BaseCampDbImporter's Everest 60 section). Key Binding (2026-07-14, second pass)
-/// is a K2Action like every other device now, not a raw firmware remap — so the
+/// Exports an Everest 60 profile to XML on the REAL Base Camp schema — CORRECTED
+/// 2026-07-26 against a real BC XML export: the wrapper/item element names are
+/// <c>Everest60KeyBindings</c>/<c>Everest60KeyBinding</c> and
+/// <c>Everest60Lightings</c>/<c>Everest60Lighting</c> (correct spelling, nested
+/// items — a previous session guessed a flat, typo'd <c>Everest60KeyBidings</c>/
+/// single-element <c>Everest60Lightings</c> shape that was never actually
+/// Base-Camp-readable, matching the class-level fix already made for Everest Max's
+/// own exporter, see EvProfileExporter). Key Binding (2026-07-14, second pass) is a
+/// K2Action like every other device now, not a raw firmware remap — so the
 /// FunctionType/SubFunctionType/FunctionValue vocabulary below is the SAME one
 /// <see cref="EvProfileExporter"/> uses for Everest Max (shared by Base Camp across
 /// devices via <c>BaseCampDbImporter.TranslateAction</c>), not the old Mode/Value/
@@ -40,14 +46,25 @@ public static class Ev60ProfileExporter
             new XElement("OrderNo", slot));
 
         // ---- Keys ----
+        var bindingsEl = new XElement("Everest60KeyBindings");
+        root.Add(bindingsEl);
+
         var table = Everest60RemapData.LedIndexToDllKeyIdArray;
+        var numpad = Everest60RemapData.NumpadDllKeyId;
         foreach (var k in store.LoadProfile(slot))
         {
             if (string.IsNullOrEmpty(k.ActionType)) continue;
-            if (k.LedIndex < 0 || k.LedIndex >= table.Length) continue;
-            int dllKeyId = table[k.LedIndex];
 
-            string? functionType = null, subType = null, funcValue = null;
+            // Main board (0-63) or accessory numpad (NumpadLedIndexBase + n) — the
+            // numpad arm was missing, so numpad bindings were silently dropped on export
+            // (the import side gained the matching arm the same session).
+            int npIndex = k.LedIndex - Everest60Protocol.NumpadLedIndexBase;
+            int dllKeyId;
+            if (k.LedIndex >= 0 && k.LedIndex < table.Length) dllKeyId = table[k.LedIndex];
+            else if (npIndex >= 0 && npIndex < numpad.Length) dllKeyId = numpad[npIndex];
+            else continue;
+
+            string? functionType = null, subType = null, funcValue = null, customUrl = null;
             bool isAssigned = false;
 
             if (bcCompatible)
@@ -56,6 +73,7 @@ public static class Ev60ProfileExporter
                 if (mapped is not null)
                 {
                     (functionType, subType, funcValue) = mapped.Value;
+                    customUrl = ExtractCustomUrl(k.ActionType, k.ActionValue);
                     isAssigned = true;
                     exported++;
                 }
@@ -75,7 +93,7 @@ public static class Ev60ProfileExporter
                 exported++;
             }
 
-            root.Add(new XElement("Everest60KeyBidings",
+            bindingsEl.Add(new XElement("Everest60KeyBinding",
                 new XElement("ProfileId", 0),
                 new XElement("KeyId", dllKeyId),
                 new XElement("DLLKeyId", dllKeyId),
@@ -87,38 +105,61 @@ public static class Ev60ProfileExporter
                 new XElement("FunctionValue", funcValue ?? ""),
                 new XElement("FunctionEnteredValue", ""),
                 new XElement("IsSyncAcrossProfiles", "false"),
-                new XElement("CustomURL", "")));
+                new XElement("CustomURL", customUrl ?? "")));
         }
 
         // ---- Lighting ----
         var lighting = store.LoadLighting(slot);
         if (lighting is not null)
         {
-            int effIndex = lighting.ActiveMode == "custom" ? 7 : (Everest60Protocol.Effect)lighting.Effect switch
+            var effEnum = (Everest60Protocol.Effect)lighting.Effect;
+            int effIndex = lighting.ActiveMode == "custom" ? 7 : effEnum switch
             {
                 Everest60Protocol.Effect.Static    => 1,
                 Everest60Protocol.Effect.Wave      => 2,
                 Everest60Protocol.Effect.Tornado   => 3,
                 Everest60Protocol.Effect.Breathing => 4,
                 Everest60Protocol.Effect.Reactive  => 5,
+                // Reachable since the import can now put Custom in Effect itself, not
+                // just in ActiveMode (see BaseCampDbImporter.ReadEverest60LightingRaw).
+                Everest60Protocol.Effect.Custom    => 7,
                 Everest60Protocol.Effect.Yeti      => 8,
                 Everest60Protocol.Effect.Off       => 9,
                 _ => 1,
             };
+            string effName = effIndex switch
+            {
+                1 => "Static", 2 => "ColorWave", 3 => "Tornado", 4 => "Breathing",
+                5 => "Reactive", 6 => "Matrix", 7 => "Custom", 8 => "Yeti", 9 => "OFF", _ => "Static",
+            };
 
             root.Add(new XElement("Everest60Lightings",
-                new XElement("ProfileId", 0),
-                new XElement("EffIndex", effIndex),
-                new XElement("EffectName", ((Everest60Protocol.Effect)lighting.Effect).ToString()),
-                new XElement("Speed", lighting.SpeedPct),
-                new XElement("Brightness", (int)lighting.Brightness),
-                new XElement("Direction", lighting.DirIndex),
-                new XElement("Color1", Hex(lighting.Color1)),
-                new XElement("Color2", Hex(lighting.Color2)),
-                new XElement("Color3", Hex(lighting.SideColor)),
-                new XElement("IsActive", "true"),
-                new XElement("CustomLightings", BuildCustomJson(lighting.CustomKeyColors))));
+                new XElement("Everest60Lighting",
+                    new XElement("ProfileId", 0),
+                    new XElement("EffIndex", effName),
+                    new XElement("EffectName", effName == "OFF" ? "Off" : effEnum.ToString()),
+                    new XElement("Speed", lighting.SpeedPct),
+                    new XElement("Brightness", (int)lighting.Brightness),
+                    new XElement("Direction", lighting.DirIndex),
+                    new XElement("Color1", Hex(lighting.Color1)),
+                    new XElement("Color2", Hex(lighting.Color2)),
+                    new XElement("IsActive", "true"),
+                    new XElement("CustomLightings", BuildCustomJson(lighting)))));
         }
+
+        // ---- Settings (Game Mode/Core LED) ----
+        int mode = int.TryParse(store.GetSetting($"settings.p{slot}.game_mode"), out var m) ? m : 0;
+        bool led = store.GetSetting($"settings.p{slot}.indicator_led") == "1";
+        root.Add(new XElement("Everest60Settings",
+            new XElement("Everest60Setting",
+                new XElement("ProfileId", 0),
+                new XElement("SysncAcrossProfile", "false"),
+                new XElement("DisableShift", (mode & 0x1) != 0 ? "true" : "false"),
+                new XElement("DisableAltF4", (mode & 0x2) != 0 ? "true" : "false"),
+                new XElement("DisableWin", (mode & 0x4) != 0 ? "true" : "false"),
+                new XElement("DisableAltTab", (mode & 0x8) != 0 ? "true" : "false"),
+                new XElement("EnableCoreLED", led ? "true" : "false"),
+                new XElement("modified_at", DateTime.Now.ToString("o")))));
 
         var doc = new XDocument(new XDeclaration("1.0", "utf-8", null), root);
         doc.Save(filePath);
@@ -128,10 +169,50 @@ public static class Ev60ProfileExporter
 
     private static string Hex(int rgb) => $"#{rgb:X6}".ToLowerInvariant();
 
-    private static string BuildCustomJson(Dictionary<int, int> customColors)
+    /// <summary>
+    /// Builds the 192-entry per-LED payload Base Camp expects: one entry per firmware
+    /// LED hardware ADDRESS (<c>KeyCode</c>), not per logical key index — corrected
+    /// 2026-07-26 together with the import side, see
+    /// <c>BaseCampDbImporter.ParseEverest60Custom</c>. Addresses no physical LED uses
+    /// keep Base Camp's own <c>#ffffff</c> filler; physical LEDs the user never painted
+    /// go out black, which is what "unpainted" means on this device.
+    /// </summary>
+    private static string BuildCustomJson(Ev60LightingRecord lighting)
     {
-        var items = customColors.OrderBy(kv => kv.Key)
-            .Select((kv, i) => $"{{\"Ids\":{i + 1},\"KeyCode\":{kv.Key},\"ColorHex\":\"{Hex(kv.Value)}\"}}");
+        var byAddress = new string[Everest60Protocol.ColorEntryCount];
+        for (int i = 0; i < byAddress.Length; i++) byAddress[i] = "#ffffff";
+
+        void Put(int address, int rgb)
+        {
+            if (address >= 0 && address < byAddress.Length) byAddress[address] = Hex(rgb);
+        }
+        void Blank(byte[] addresses)
+        {
+            foreach (var a in addresses) Put(a, 0);
+        }
+
+        Blank(Everest60Protocol.LedIndex);
+        Blank(Everest60Protocol.NumpadLedIndex);
+        Blank(Everest60Protocol.SideLedIndex);
+        Blank(Everest60Protocol.NumpadSideLedIndex);
+
+        foreach (var kv in lighting.CustomKeyColors)
+        {
+            int np = kv.Key - Everest60Protocol.NumpadLedIndexBase;
+            if (kv.Key >= 0 && kv.Key < Everest60Protocol.LedIndex.Length)
+                Put(Everest60Protocol.LedIndex[kv.Key], kv.Value);
+            else if (np >= 0 && np < Everest60Protocol.NumpadLedIndex.Length)
+                Put(Everest60Protocol.NumpadLedIndex[np], kv.Value);
+        }
+        foreach (var kv in lighting.CustomSideColors ?? new Dictionary<int, int>())
+            if (kv.Key >= 0 && kv.Key < Everest60Protocol.SideLedIndex.Length)
+                Put(Everest60Protocol.SideLedIndex[kv.Key], kv.Value);
+        foreach (var kv in lighting.CustomNumpadRingColors ?? new Dictionary<int, int>())
+            if (kv.Key >= 0 && kv.Key < Everest60Protocol.NumpadSideLedIndex.Length)
+                Put(Everest60Protocol.NumpadSideLedIndex[kv.Key], kv.Value);
+
+        var items = byAddress.Select((hex, addr) =>
+            $"{{\"Ids\":{addr + 1},\"KeyCode\":{addr},\"ColorHex\":\"{hex}\"}}");
         return "[" + string.Join(",", items) + "]";
     }
 
@@ -151,8 +232,15 @@ public static class Ev60ProfileExporter
             case "folder":
                 return string.IsNullOrEmpty(v) ? null : ("Open Folder", v, v);
 
+            // Real Base Camp has no "Open URL" FunctionType — a specific destination is
+            // always expressed as FunctionType="Run browser" with the URL in the sibling
+            // CustomURL element (see ExtractCustomUrl / BaseCampDbImporter.TranslateAction's
+            // matching comment), never in FunctionValue.
             case "browser":
                 return ("Run browser", "Run browser", "Run browser");
+
+            case "url":
+                return string.IsNullOrEmpty(v) ? null : ("Run browser", "Run browser", "Run browser");
 
             case "keys":
                 return string.IsNullOrEmpty(v) ? null : ("Keyboard Shortcuts", v, v);
@@ -222,6 +310,28 @@ public static class Ev60ProfileExporter
             case "text":
                 return v.Length == 1 ? ("Default", v, v) : null;
 
+            // Base Camp's own "Disable" function — real exports carry it with the
+            // FunctionValue repeated as the label (confirmed in ev60_test.xml).
+            case "disable":
+                return ("Disable", "Disable", "Disable");
+
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>The URL that goes in the exported binding's sibling <c>CustomURL</c> element
+    /// (see <see cref="MapActionToBc"/>'s "browser"/"url" arms) — real Base Camp never puts it
+    /// in FunctionValue. Null for a "browser" action with no URL set (just launch the browser).</summary>
+    private static string? ExtractCustomUrl(string actionType, string? actionValue)
+    {
+        switch (actionType)
+        {
+            case "url":
+                return string.IsNullOrWhiteSpace(actionValue) ? null : actionValue.Trim();
+            case "browser":
+                string? url = BrowserActionPayload.Parse(actionValue)?.Url;
+                return string.IsNullOrEmpty(url) ? null : url;
             default:
                 return null;
         }

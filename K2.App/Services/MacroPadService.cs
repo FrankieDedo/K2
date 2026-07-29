@@ -321,6 +321,7 @@ public sealed class MacroPadService : IDisposable
         Yeti      = (byte)MacroPadSdkNative.EffectIndex.Yeti,
         Tornado   = (byte)MacroPadSdkNative.EffectIndex.Tornado,
         Matrix    = (byte)MacroPadSdkNative.EffectIndex.Matrix,
+        Custom    = (byte)MacroPadSdkNative.EffectIndex.Custom,
         Off       = (byte)MacroPadSdkNative.EffectIndex.Off,
     }
 
@@ -508,6 +509,160 @@ public sealed class MacroPadService : IDisposable
             sb.Append(src[i].ToString("X2"));
         }
         return sb.ToString();
+    }
+
+    // =======================================================================
+    // Custom (per-key) lighting — SwitchToCustomizeEffect/ChangeCustomizeStatic/
+    // SetCustomizeTable, verified 2026-07-26 via ECMA-335 metadata + IL
+    // decompile of BaseCamp.Service.exe (see MacroPadSdkNative's doc comment
+    // for the full call-sequence rationale, ported here 1:1).
+    // =======================================================================
+
+    /// <summary>Enters/refreshes Custom (per-key) mode at the given brightness (0-100).</summary>
+    public bool SwitchToCustomizeEffect(uint id, int brightness)
+    {
+        try
+        {
+            bool ok = MacroPadSdkNative.SwitchToCustomizeEffect(brightness, id);
+            App.WriteLog($"[MacroPad.SwitchToCustomizeEffect] id={id} brightness={brightness} -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[MacroPad.SwitchToCustomizeEffect] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Writes one flat color per physical key (Custom mode). <paramref name="colors"/>
+    /// must have exactly <see cref="MacroPadSdkNative.FW_NUM_CUSTOM_KEY"/> (12) entries,
+    /// indexed by key — a key governed by a dynamic effect (see
+    /// <see cref="ApplyCustomDynamicEffect"/>) should be passed (0,0,0) here, matching
+    /// Base Camp's own decompiled behavior.
+    /// </summary>
+    public bool SetCustomStaticColors(uint id, IReadOnlyList<(byte r, byte g, byte b)> colors)
+    {
+        var data = new MacroPadSdkNative.CustomStatic
+        {
+            color = new MacroPadSdkNative.FWColor[MacroPadSdkNative.FW_NUM_CUSTOM_KEY]
+        };
+        for (int i = 0; i < data.color.Length; i++)
+            data.color[i] = i < colors.Count
+                ? new MacroPadSdkNative.FWColor(colors[i].r, colors[i].g, colors[i].b)
+                : default;
+        try
+        {
+            bool ok = MacroPadSdkNative.ChangeCustomizeStatic(data, id);
+            App.WriteLog($"[MacroPad.SetCustomStaticColors] id={id} -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[MacroPad.SetCustomStaticColors] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Assigns each physical key to a firmware EffectIndex (Custom mode):
+    /// <paramref name="effIndexPerKey"/>[i]=0 (<see cref="Effect.Static"/>) renders that
+    /// key's color from <see cref="SetCustomStaticColors"/>; any other value renders
+    /// whichever dynamic effect was last programmed with that EffectIndex via
+    /// <see cref="ApplyCustomDynamicEffect"/>. Must have exactly
+    /// <see cref="MacroPadSdkNative.FW_NUM_CUSTOM_KEY"/> (12) entries.
+    /// </summary>
+    public bool SetCustomEffectTable(uint id, IReadOnlyList<byte> effIndexPerKey)
+    {
+        var table = new MacroPadSdkNative.CustomTable
+        {
+            effValue = new byte[MacroPadSdkNative.FW_NUM_CUSTOM_KEY]
+        };
+        for (int i = 0; i < table.effValue.Length; i++)
+            table.effValue[i] = i < effIndexPerKey.Count ? effIndexPerKey[i] : (byte)0;
+        try
+        {
+            bool ok = MacroPadSdkNative.SetCustomizeTable(table, id);
+            App.WriteLog($"[MacroPad.SetCustomEffectTable] id={id} -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[MacroPad.SetCustomEffectTable] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Programs ONE dynamic effect's shared color/speed/direction for Custom mode
+    /// (byAll=1, see <see cref="MacroPadSdkNative.EffData.New"/>/<see cref="MacroPadSdkNative.
+    /// BlockData.New"/>'s <c>isCustom</c> param) — every key whose
+    /// <see cref="SetCustomEffectTable"/> entry names this effect's index renders it.
+    /// Does NOT call SwitchProfile/SaveFlash itself (the Custom-mode apply sequence
+    /// batches those once around the whole 12-key state, unlike the plain preset path
+    /// in <see cref="SetEffect"/>) — matches the decompiled
+    /// <c>MacroPadDLLHelper.SetAllEffectInHWforCustom</c>/<c>SetCustomLighting</c>.
+    /// </summary>
+    public bool ApplyCustomDynamicEffect(uint id, Effect effect,
+                                         (byte r, byte g, byte b) primary,
+                                         (byte r, byte g, byte b)? secondary,
+                                         int brightness, bool randomColor,
+                                         byte speedByte, int directionByte)
+    {
+        MacroPadSdkNative.FWColor C((byte, byte, byte) c) => new(c.Item1, c.Item2, c.Item3);
+        var bright = QuantizeBrightness(brightness);
+
+        if (effect == Effect.Wave || effect == Effect.Tornado)
+        {
+            byte dirB = (byte)(directionByte >= 0 ? directionByte : 0);
+            MacroPadSdkNative.FWColor? c2b = secondary is { } s ? C(s) : null;
+            var block = MacroPadSdkNative.BlockData.New(
+                eff: (MacroPadSdkNative.EffectIndex)effect, direction: dirB, speed: speedByte,
+                lightness: (byte)bright, c1: C(primary), c2: c2b, rainbow: randomColor, isCustom: true);
+            try
+            {
+                bool ok = MacroPadSdkNative.ChangeBlockEffect(block, id);
+                App.WriteLog($"[MacroPad.ApplyCustomDynamicEffect] BLOCK id={id} eff={effect} -> {ok}");
+                return ok;
+            }
+            catch (Exception ex)
+            {
+                App.WriteLog("[MacroPad.ApplyCustomDynamicEffect] ChangeBlockEffect threw: " + ex);
+                return false;
+            }
+        }
+
+        var data = MacroPadSdkNative.EffData.New(
+            eff: (MacroPadSdkNative.EffectIndex)effect, c1: C(primary),
+            c2: secondary is { } s2 ? C(s2) : null,
+            speed: speedByte, bright: bright, randomColor: randomColor, isCustom: true);
+        try
+        {
+            bool ok = MacroPadSdkNative.ChangeEffect(data, id);
+            App.WriteLog($"[MacroPad.ApplyCustomDynamicEffect] id={id} eff={effect} -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[MacroPad.ApplyCustomDynamicEffect] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Resets Custom mode to firmware defaults: every key -> white, effect table
+    /// all-zero (Static), SaveFlash(6/ALL_PROFILE) — replicates the decompiled
+    /// <c>MacroPadDLLHelper.MacroPadResetCustomMode</c> byte-for-byte (white, not black).
+    /// </summary>
+    public bool ResetCustomMode(uint id)
+    {
+        var white = new (byte, byte, byte)[MacroPadSdkNative.FW_NUM_CUSTOM_KEY];
+        for (int i = 0; i < white.Length; i++) white[i] = (0xFF, 0xFF, 0xFF);
+        bool ok1 = SetCustomStaticColors(id, white);
+        bool ok2 = SetCustomEffectTable(id, new byte[MacroPadSdkNative.FW_NUM_CUSTOM_KEY]);
+        bool ok3 = SaveFlash(id, 6);
+        App.WriteLog($"[MacroPad.ResetCustomMode] id={id} -> colors={ok1} table={ok2} flash={ok3}");
+        return ok1 && ok2 && ok3;
     }
 
     /// <summary>Resets the slot's effects to the firmware default.</summary>

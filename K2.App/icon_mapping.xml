@@ -1,0 +1,641 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  K2 - action -> default icon mapping.
+
+  Decides which Base Camp icon is used by the "Default icon" button and by
+  the auto-generated icon whenever you assign/change an action. Feel free
+  to edit this file: K2 re-reads it on the next launch (or the next time
+  "Default icon" is used, if a "Reload" button is ever added).
+
+  If the file is missing, unreadable or empty, K2 falls back to a small
+  built-in mapping (see IconMappingConfig.Default() in
+  K2.App/Services/IconMappingConfig.cs) covering only mouse/macro/multi/
+  hotkeyswitch/youtube - never a blocking problem, worst case "Default
+  icon" just stops resolving the other types until the file is restored.
+
+  Icons live under Assets/IconGallery/<style>/<category>/<file>, where:
+  - <style> is "black" or "color" (chosen in Settings > Default icon
+    style) - the folders are the ones under Assets/IconGallery/black/ and
+    Assets/IconGallery/color/.
+  - <category> is a subfolder inside black/ and color/: davinci, default,
+    illustrator, obs, pc_info, photoshop, premiere, spotify, twitch,
+    youtube, zoom.
+
+  ONE ROW PER ICON FILE (502 rows below, one per file actually present
+  under Assets/IconGallery/black|color/) - this is a full catalog, not
+  just the ones K2 can auto-apply:
+
+    <icon style="black|color" category="..." file="..."
+          actionType="..." value="..."/>
+
+  - style/category/file identify the physical image (must match a real
+    path under Assets/IconGallery/).
+  - actionType is one of the action-type tags listed in the legend at the
+    bottom of this file (empty = no known K2 action for this icon yet).
+  - value is either:
+      - empty: this icon applies to EVERY action of that actionType,
+        regardless of value (e.g. mouse, macro, multi, hotkeyswitch,
+        youtube - types where there's nothing meaningful in the action's
+        own value to distinguish one icon from another).
+      - the EXACT value K2 stores for that action (for "cmd~arg"-style
+        types - obs/twitch/spotify - only the "cmd" part before "~" is
+        compared; for adobe/davinci/zoom, the whole value - the real
+        default keyboard shortcut, since AppShortcutCatalog now carries a
+        verified default per action for all four app pickers, not just
+        Zoom - see AppShortcutCatalog.cs).
+      - "ref:..." - NOT a real stored value, left in place for the small
+        number of Illustrator/Photoshop/Premiere/DaVinci actions with no
+        fixed vendor default (empty shortcut in AppShortcutCatalog) or
+        whose default shortcut collides with another action under the
+        SAME actionType ("adobe" is shared by Illustrator/Photoshop/
+        Premiere Pro - e.g. Illustrator's Undo and Premiere's Undo are
+        both Ctrl+Z; only Illustrator's row was given the real value, so
+        Premiere's stays "ref:" rather than silently resolving to
+        Illustrator's icon). K2 will NEVER match a real ActionValue
+        against a "ref:" row (no real value ever starts with "ref:").
+
+  Rows with actionType="" are catalogued but inert: decorative Base Camp
+  art (generic icon packs, PC Info/Clock widgets that were never ported
+  as real K2 actions, etc.) with no current K2 action to attach to. Use
+  the legend below to fill in actionType (and value, if applicable)
+  yourself for any of these you want to wire up manually - K2 will start
+  using your edit the next time it resolves that action type.
+-->
+<iconMappings>
+
+  <!-- default — generic/decorative icon pack, plus the 4 fixed identities (mouse/macro/multi/hotkeyswitch) (112 icons) -->
+  <icon style="black" category="default" file="BLACK Icon update-01.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-02.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-03.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-04.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-05.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-06.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-07.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-08.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-09.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-10.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-11.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-12.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-13.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-14.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-15.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-16.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-17.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-18.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-19.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-20.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-21.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-22.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-23.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-24.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-25.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-26.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-27.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-28.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-29.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-30.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-31.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-32.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-33.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-34.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-35.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-36.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-37.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-38.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-39.png"/>
+  <icon style="black" category="default" file="BLACK Icon update-40.png"/>
+  <icon style="black" category="default" file="hotkey1.png" actionType="hotkeyswitch"/>
+  <icon style="black" category="default" file="hotkey2.png"/>
+  <icon style="black" category="default" file="Icon_CPUID.jpg"/>
+  <icon style="black" category="default" file="Icon_CSGO.jpg"/>
+  <icon style="black" category="default" file="Icon_Discord.jpg"/>
+  <icon style="black" category="default" file="Icon_DOTA.jpg"/>
+  <icon style="black" category="default" file="Icon_Facebook.jpg"/>
+  <icon style="black" category="default" file="Icon_Fingerprint.jpg"/>
+  <icon style="black" category="default" file="Icon_Firefox.jpg"/>
+  <icon style="black" category="default" file="Icon_Instagram.jpg"/>
+  <icon style="black" category="default" file="Icon_LOL.jpg"/>
+  <icon style="black" category="default" file="Icon_Macro.jpg" actionType="macro"/>
+  <icon style="black" category="default" file="Icon_Mouse.jpg" actionType="mouse"/>
+  <icon style="black" category="default" file="Icon_PCMark.jpg"/>
+  <icon style="black" category="default" file="Icon_Steam.jpg"/>
+  <icon style="black" category="default" file="Icon_Twitter.jpg"/>
+  <icon style="black" category="default" file="Icon_Yeti.jpg"/>
+  <icon style="black" category="default" file="Icon_YouTube.jpg"/>
+  <icon style="black" category="default" file="Multi_Action black-01.png" actionType="multi"/>
+  <icon style="black" category="default" file="white arrow Black and Blue styled icons-01.jpg"/>
+  <icon style="black" category="default" file="white arrow-01.jpg"/>
+  <icon style="black" category="default" file="white folder Black and Blue styled icons-02.jpg"/>
+  <icon style="color" category="default" file="10_SINGLE COLOUR BLUE Icon update-05.png"/>
+  <icon style="color" category="default" file="11_SINGLE COLOUR BLUE Icon update-06.png"/>
+  <icon style="color" category="default" file="12_SINGLE COLOUR BLUE Icon update-07.png"/>
+  <icon style="color" category="default" file="13_SINGLE COLOUR BLUE Icon update-08.png"/>
+  <icon style="color" category="default" file="14_SINGLE COLOUR BLUE Icon update-09.png"/>
+  <icon style="color" category="default" file="15_SINGLE COLOUR BLUE Icon update-10.png"/>
+  <icon style="color" category="default" file="16_SINGLE COLOUR BLUE Icon update-11.png"/>
+  <icon style="color" category="default" file="17_SINGLE COLOUR BLUE Icon update-12.png"/>
+  <icon style="color" category="default" file="18_SINGLE COLOUR BLUE Icon update-13.png"/>
+  <icon style="color" category="default" file="19_SINGLE COLOUR BLUE Icon update-14.png"/>
+  <icon style="color" category="default" file="1_calc.png"/>
+  <icon style="color" category="default" file="20_SINGLE COLOUR BLUE Icon update-15.png"/>
+  <icon style="color" category="default" file="21_SINGLE COLOUR BLUE Icon update-16.png"/>
+  <icon style="color" category="default" file="22_SINGLE COLOUR BLUE Icon update-17.png"/>
+  <icon style="color" category="default" file="23_SINGLE COLOUR BLUE Icon update-18.png"/>
+  <icon style="color" category="default" file="24_SINGLE COLOUR BLUE Icon update-19.png"/>
+  <icon style="color" category="default" file="25_SINGLE COLOUR BLUE Icon update-20.png"/>
+  <icon style="color" category="default" file="26_SINGLE COLOUR BLUE Icon update-21.png"/>
+  <icon style="color" category="default" file="27_SINGLE COLOUR BLUE Icon update-22.png"/>
+  <icon style="color" category="default" file="28_SINGLE COLOUR BLUE Icon update-23.png"/>
+  <icon style="color" category="default" file="29_SINGLE COLOUR BLUE Icon update-24.png"/>
+  <icon style="color" category="default" file="2_dlogo.png"/>
+  <icon style="color" category="default" file="30_SINGLE COLOUR BLUE Icon update-25.png"/>
+  <icon style="color" category="default" file="31_SINGLE COLOUR BLUE Icon update-26.png"/>
+  <icon style="color" category="default" file="32_.png"/>
+  <icon style="color" category="default" file="33_SINGLE COLOUR BLUE Icon update-28.png"/>
+  <icon style="color" category="default" file="34_SINGLE COLOUR BLUE Icon update-29.png"/>
+  <icon style="color" category="default" file="35_SINGLE COLOUR BLUE Icon update-30.png"/>
+  <icon style="color" category="default" file="36_.png"/>
+  <icon style="color" category="default" file="37_SINGLE COLOUR BLUE Icon update-32.png"/>
+  <icon style="color" category="default" file="38_SINGLE COLOUR BLUE Icon update-33.png"/>
+  <icon style="color" category="default" file="39_SINGLE COLOUR BLUE Icon update-34.png"/>
+  <icon style="color" category="default" file="3_electic.png"/>
+  <icon style="color" category="default" file="40_SINGLE COLOUR BLUE Icon update-35.png"/>
+  <icon style="color" category="default" file="42_SINGLE COLOUR BLUE Icon update-37.png"/>
+  <icon style="color" category="default" file="43_SINGLE COLOUR BLUE Icon update-36.png"/>
+  <icon style="color" category="default" file="44_SINGLE COLOUR BLUE Icon update-38.png"/>
+  <icon style="color" category="default" file="45_SINGLE COLOUR BLUE Icon update-39.png"/>
+  <icon style="color" category="default" file="46_SINGLE COLOUR BLUE Icon update-40.png"/>
+  <icon style="color" category="default" file="47_Hotkey Switch ON solid-01.png" actionType="hotkeyswitch"/>
+  <icon style="color" category="default" file="48_Hotkey Switch OFF solid-01.png"/>
+  <icon style="color" category="default" file="49_Multi Action solid-01.png" actionType="multi"/>
+  <icon style="color" category="default" file="4_explorer.png"/>
+  <icon style="color" category="default" file="5_mic-off.png"/>
+  <icon style="color" category="default" file="6_sleep.png"/>
+  <icon style="color" category="default" file="7Blue styled icons-01.jpg"/>
+  <icon style="color" category="default" file="8Blue styled icons-02.jpg"/>
+  <icon style="color" category="default" file="9_SINGLE COLOUR BLUE Icon update-04.png"/>
+  <icon style="color" category="default" file="Black styled icons-01.jpg"/>
+  <icon style="color" category="default" file="Black styled icons-02.jpg"/>
+
+  <!-- zoom — Zoom's own 21 real fixed keyboard shortcuts (AppShortcutCatalog.ZoomShortcuts), fully mapped both styles (42 icons) -->
+  <icon style="black" category="zoom" file="22_Alt_F1.jpg" actionType="zoom" value="Alt + F1"/>
+  <icon style="black" category="zoom" file="23_Alt_F2.jpg" actionType="zoom" value="Alt + F2"/>
+  <icon style="black" category="zoom" file="24_Alt_V.jpg" actionType="zoom" value="Alt + V"/>
+  <icon style="black" category="zoom" file="25_Alt_A.jpg" actionType="zoom" value="Alt + A"/>
+  <icon style="black" category="zoom" file="26_Alt_M.jpg" actionType="zoom" value="Alt + M"/>
+  <icon style="black" category="zoom" file="27_Alt_S.jpg" actionType="zoom" value="Alt + S"/>
+  <icon style="black" category="zoom" file="28_Alt_Shift_S.jpg" actionType="zoom" value="Alt + Shift + S"/>
+  <icon style="black" category="zoom" file="29_Alt_T.jpg" actionType="zoom" value="Alt + T"/>
+  <icon style="black" category="zoom" file="30_Alt_R.jpg" actionType="zoom" value="Alt + R"/>
+  <icon style="black" category="zoom" file="31_Alt_C.jpg" actionType="zoom" value="Alt + C"/>
+  <icon style="black" category="zoom" file="32_Alt_P.jpg" actionType="zoom" value="Alt + P"/>
+  <icon style="black" category="zoom" file="33_Alt_N.jpg" actionType="zoom" value="Alt + N"/>
+  <icon style="black" category="zoom" file="34_Alt_F.jpg" actionType="zoom" value="Alt + F"/>
+  <icon style="black" category="zoom" file="35_Alt_H.jpg" actionType="zoom" value="Alt + H"/>
+  <icon style="black" category="zoom" file="36_Alt_U.jpg" actionType="zoom" value="Alt + U"/>
+  <icon style="black" category="zoom" file="37_Alt_I.jpg" actionType="zoom" value="Alt + I"/>
+  <icon style="black" category="zoom" file="38_Alt_Y.jpg" actionType="zoom" value="Alt + Y"/>
+  <icon style="black" category="zoom" file="39_Alt_Shift_R.jpg" actionType="zoom" value="Alt + Shift + R"/>
+  <icon style="black" category="zoom" file="40_Alt_Shift_G.jpg" actionType="zoom" value="Alt + Shift + G"/>
+  <icon style="black" category="zoom" file="41_Ctrl_Alt_Shift_H.jpg" actionType="zoom" value="Ctrl + Alt + Shift + H"/>
+  <icon style="black" category="zoom" file="42_Alt_Q.jpg" actionType="zoom" value="Alt + Q"/>
+  <icon style="color" category="zoom" file="01_Alt_F1.jpg" actionType="zoom" value="Alt + F1"/>
+  <icon style="color" category="zoom" file="02_Alt_F2.jpg" actionType="zoom" value="Alt + F2"/>
+  <icon style="color" category="zoom" file="03_Alt_V.jpg" actionType="zoom" value="Alt + V"/>
+  <icon style="color" category="zoom" file="04_Alt_A.jpg" actionType="zoom" value="Alt + A"/>
+  <icon style="color" category="zoom" file="05_Alt_M.jpg" actionType="zoom" value="Alt + M"/>
+  <icon style="color" category="zoom" file="06_Alt_S.jpg" actionType="zoom" value="Alt + S"/>
+  <icon style="color" category="zoom" file="07_Alt_Shift_S.jpg" actionType="zoom" value="Alt + Shift + S"/>
+  <icon style="color" category="zoom" file="08_Alt_T.jpg" actionType="zoom" value="Alt + T"/>
+  <icon style="color" category="zoom" file="09_Alt_R.jpg" actionType="zoom" value="Alt + R"/>
+  <icon style="color" category="zoom" file="10_Alt_C.jpg" actionType="zoom" value="Alt + C"/>
+  <icon style="color" category="zoom" file="11_Alt_P.jpg" actionType="zoom" value="Alt + P"/>
+  <icon style="color" category="zoom" file="12_Alt_N.jpg" actionType="zoom" value="Alt + N"/>
+  <icon style="color" category="zoom" file="13_Alt_F.jpg" actionType="zoom" value="Alt + F"/>
+  <icon style="color" category="zoom" file="14_Alt_H.jpg" actionType="zoom" value="Alt + H"/>
+  <icon style="color" category="zoom" file="15_Alt_U.jpg" actionType="zoom" value="Alt + U"/>
+  <icon style="color" category="zoom" file="16_Alt_I.jpg" actionType="zoom" value="Alt + I"/>
+  <icon style="color" category="zoom" file="17_Alt_Y.jpg" actionType="zoom" value="Alt + Y"/>
+  <icon style="color" category="zoom" file="18_Alt_Shift_R.jpg" actionType="zoom" value="Alt + Shift + R"/>
+  <icon style="color" category="zoom" file="19_Alt_Shift_G.jpg" actionType="zoom" value="Alt + Shift + G"/>
+  <icon style="color" category="zoom" file="20_Ctrl_Alt_Shift_H.jpg" actionType="zoom" value="Ctrl + Alt + Shift + H"/>
+  <icon style="color" category="zoom" file="21_Alt_Q.jpg" actionType="zoom" value="Alt + Q"/>
+
+  <!-- obs — matched against ObsBridge's [Description] command names; several files are decorative/ambiguous duplicates left unmapped on purpose (82 icons) -->
+  <icon style="black" category="obs" file="45Next-profile.png" actionType="obs" value="Next Profile"/>
+  <icon style="black" category="obs" file="46Previous-Profile.png" actionType="obs" value="Previous Profile"/>
+  <icon style="black" category="obs" file="47profile black-01.jpg" actionType="obs" value="Set Current Profile"/>
+  <icon style="black" category="obs" file="49next scene black-01.png" actionType="obs" value="Next Scene"/>
+  <icon style="black" category="obs" file="50previous scene black-01.png" actionType="obs" value="Previous Scene"/>
+  <icon style="black" category="obs" file="51scene black-01.jpg" actionType="obs" value="Set Current Scene"/>
+  <icon style="black" category="obs" file="52_Black_OBS_Source.jpg" actionType="obs" value="Set Current Source"/>
+  <icon style="black" category="obs" file="53Next-transition.png" actionType="obs" value="Next Transition"/>
+  <icon style="black" category="obs" file="54Previous-Transition.png" actionType="obs" value="Previous Transition"/>
+  <icon style="black" category="obs" file="55transition black-01.jpg" actionType="obs" value="Set Current TransitionName"/>
+  <icon style="black" category="obs" file="57Set-Transition-Timer.png" actionType="obs" value="Set Transition Duration"/>
+  <icon style="black" category="obs" file="58mic volume plus black-01.png" actionType="obs" value="Mic Volume +"/>
+  <icon style="black" category="obs" file="59mic volume - black-01.png" actionType="obs" value="Mic Volume -"/>
+  <icon style="black" category="obs" file="60Mute mic black-01.png" actionType="obs" value="Mute Mic"/>
+  <icon style="black" category="obs" file="61Icon_Media_Mic.jpg"/>
+  <icon style="black" category="obs" file="62Icon_Volume.jpg" actionType="obs" value="Desktop Volume +"/>
+  <icon style="black" category="obs" file="63Icon_Volume-.jpg" actionType="obs" value="Desktop Volume -"/>
+  <icon style="black" category="obs" file="64Icon_Media_Mute.jpg" actionType="obs" value="Mute Desktop Volume"/>
+  <icon style="black" category="obs" file="65desktop volume unmute black.png" actionType="obs" value="Unmute Desktop Volume"/>
+  <icon style="black" category="obs" file="66Stream.png"/>
+  <icon style="black" category="obs" file="67Stop-Streaming.png" actionType="obs" value="Stop Streaming"/>
+  <icon style="black" category="obs" file="68Record.png"/>
+  <icon style="black" category="obs" file="69Stop-Recording.png" actionType="obs" value="Stop Recording"/>
+  <icon style="black" category="obs" file="70pause recording black-01.png" actionType="obs" value="Pause Recording"/>
+  <icon style="black" category="obs" file="71resume recording black-01.png" actionType="obs" value="Resume Recording"/>
+  <icon style="black" category="obs" file="72start replay buffer black-01.png" actionType="obs" value="Start Replay Buffer"/>
+  <icon style="black" category="obs" file="73Stop replay buffer black-01.png" actionType="obs" value="Stop Replay Buffer"/>
+  <icon style="black" category="obs" file="74Pause replay buffer black.png"/>
+  <icon style="black" category="obs" file="75save replay buffer black-01.png" actionType="obs" value="Save Replay Buffer"/>
+  <icon style="black" category="obs" file="76Icon_Media_PlayPause.jpg"/>
+  <icon style="black" category="obs" file="77Icon_Media_Backward.jpg" actionType="obs" value="Previous Media"/>
+  <icon style="black" category="obs" file="77play black-01.png" actionType="obs" value="Play Media"/>
+  <icon style="black" category="obs" file="78pause black-01.png" actionType="obs" value="Pause Media"/>
+  <icon style="black" category="obs" file="79stop media black-01.png" actionType="obs" value="Stop Media"/>
+  <icon style="black" category="obs" file="80Icon_Media_Forward.jpg" actionType="obs" value="Next Media"/>
+  <icon style="black" category="obs" file="81Icon_OBS.jpg"/>
+  <icon style="black" category="obs" file="83disable studio mode black-01.jpg" actionType="obs" value="Disable Studio Mode"/>
+  <icon style="black" category="obs" file="84enable studio mode black-01.jpg" actionType="obs" value="Enable Studio Mode"/>
+  <icon style="black" category="obs" file="85Open projector black-01.jpg" actionType="obs" value="Open Projector"/>
+  <icon style="black" category="obs" file="86start recording black MTN-01.jpg" actionType="obs" value="Start Recording"/>
+  <icon style="black" category="obs" file="87start streaming black MTN-01.jpg" actionType="obs" value="Start Streaming"/>
+  <icon style="color" category="obs" file="01Next profile blue-01.png" actionType="obs" value="Next Profile"/>
+  <icon style="color" category="obs" file="02previous profile blue-01.png" actionType="obs" value="Previous Profile"/>
+  <icon style="color" category="obs" file="03profile blue-01.jpg" actionType="obs" value="Set Current Profile"/>
+  <icon style="color" category="obs" file="05Next Scene blue-01.png" actionType="obs" value="Next Scene"/>
+  <icon style="color" category="obs" file="06Previous Scene blue.png" actionType="obs" value="Previous Scene"/>
+  <icon style="color" category="obs" file="07Scene blue-01.jpg" actionType="obs" value="Set Current Scene"/>
+  <icon style="color" category="obs" file="08_BLUE_OBS_Source.jpg" actionType="obs" value="Set Current Source"/>
+  <icon style="color" category="obs" file="09Next transition blue-01.png" actionType="obs" value="Next Transition"/>
+  <icon style="color" category="obs" file="10Previous transition blue-01.png" actionType="obs" value="Previous Transition"/>
+  <icon style="color" category="obs" file="11Transition blue-01.jpg" actionType="obs" value="Set Current TransitionName"/>
+  <icon style="color" category="obs" file="12set transition duration blue-01.jpg" actionType="obs" value="Set Transition Duration"/>
+  <icon style="color" category="obs" file="13mic volume plusblue-01.png" actionType="obs" value="Mic Volume +"/>
+  <icon style="color" category="obs" file="14mic volume -blue-01.png" actionType="obs" value="Mic Volume -"/>
+  <icon style="color" category="obs" file="15mute mic blue-01.png" actionType="obs" value="Mute Mic"/>
+  <icon style="color" category="obs" file="16unmute mic blue-01.png" actionType="obs" value="Unmute Mic"/>
+  <icon style="color" category="obs" file="17desktop volume plus blue-01.png" actionType="obs" value="Desktop Volume +"/>
+  <icon style="color" category="obs" file="18desktop volume - blue-01.png" actionType="obs" value="Desktop Volume -"/>
+  <icon style="color" category="obs" file="19desktop volume mute blue-01.png" actionType="obs" value="Mute Desktop Volume"/>
+  <icon style="color" category="obs" file="20desktop volume unmute blue-01.png" actionType="obs" value="Unmute Desktop Volume"/>
+  <icon style="color" category="obs" file="23start streaming blue-01.png" actionType="obs" value="Start Streaming"/>
+  <icon style="color" category="obs" file="24stop streaming blue-01.png" actionType="obs" value="Stop Streaming"/>
+  <icon style="color" category="obs" file="25start recording blue-01.png" actionType="obs" value="Start Recording"/>
+  <icon style="color" category="obs" file="26stop recording blue-01.png" actionType="obs" value="Stop Recording"/>
+  <icon style="color" category="obs" file="27pause recording blue.png" actionType="obs" value="Pause Recording"/>
+  <icon style="color" category="obs" file="28resume recording blue-01.png" actionType="obs" value="Resume Recording"/>
+  <icon style="color" category="obs" file="29Start replay buffer blue-01.png" actionType="obs" value="Start Replay Buffer"/>
+  <icon style="color" category="obs" file="30Stop replay buffer blue-01.png" actionType="obs" value="Stop Replay Buffer"/>
+  <icon style="color" category="obs" file="31Pause replay buffer blue-01.png"/>
+  <icon style="color" category="obs" file="32Save replay buffer blue-01.png" actionType="obs" value="Save Replay Buffer"/>
+  <icon style="color" category="obs" file="33play media blue-01.png" actionType="obs" value="Play Media"/>
+  <icon style="color" category="obs" file="34play blue-01.png"/>
+  <icon style="color" category="obs" file="35pause media blue-01.png" actionType="obs" value="Pause Media"/>
+  <icon style="color" category="obs" file="36pause blue-01.png"/>
+  <icon style="color" category="obs" file="37stop media blue-01.png" actionType="obs" value="Stop Media"/>
+  <icon style="color" category="obs" file="38previous media blue-01.png" actionType="obs" value="Previous Media"/>
+  <icon style="color" category="obs" file="39next media blue-01.png" actionType="obs" value="Next Media"/>
+  <icon style="color" category="obs" file="40start streaming solid MTN-01.jpg"/>
+  <icon style="color" category="obs" file="41disable studio mode blue-01.jpg" actionType="obs" value="Disable Studio Mode"/>
+  <icon style="color" category="obs" file="42enable studio mode blue-01.jpg" actionType="obs" value="Enable Studio Mode"/>
+  <icon style="color" category="obs" file="43open projector blue-01.jpg" actionType="obs" value="Open Projector"/>
+  <icon style="color" category="obs" file="44start recording solid MTN-01.jpg"/>
+
+  <!-- twitch — matched against ButtonActionEngine's twitch command ids; "viewers" has no real action (Base Camp display-only widget, never ported) (24 icons) -->
+  <icon style="black" category="twitch" file="16_chat-message.png" actionType="twitch" value="chat_message"/>
+  <icon style="black" category="twitch" file="17_viewers.png"/>
+  <icon style="black" category="twitch" file="18_play-ad.png" actionType="twitch" value="play_ad"/>
+  <icon style="black" category="twitch" file="19_stream-title-game.png" actionType="twitch" value="stream_title"/>
+  <icon style="black" category="twitch" file="20_sub-chat.png" actionType="twitch" value="subscribers_only"/>
+  <icon style="black" category="twitch" file="21_slow-chat.png" actionType="twitch" value="slow_mode"/>
+  <icon style="black" category="twitch" file="22_followers-chat.png" actionType="twitch" value="followers_only"/>
+  <icon style="black" category="twitch" file="23_emote-chat.png" actionType="twitch" value="emote_only"/>
+  <icon style="black" category="twitch" file="24_create-stream-marker.png" actionType="twitch" value="stream_marker"/>
+  <icon style="black" category="twitch" file="25_clear-chat.png" actionType="twitch" value="clear_chat"/>
+  <icon style="black" category="twitch" file="26_create-clip.png" actionType="twitch" value="create_clip"/>
+  <icon style="black" category="twitch" file="27_open-last-clip.png" actionType="twitch" value="open_last_clip"/>
+  <icon style="color" category="twitch" file="01_chat-message.png" actionType="twitch" value="chat_message"/>
+  <icon style="color" category="twitch" file="02_viewers.png"/>
+  <icon style="color" category="twitch" file="03_play-ad.png" actionType="twitch" value="play_ad"/>
+  <icon style="color" category="twitch" file="04_stream-title-game.png" actionType="twitch" value="stream_title"/>
+  <icon style="color" category="twitch" file="05_sub-chat.png" actionType="twitch" value="subscribers_only"/>
+  <icon style="color" category="twitch" file="06_slow-chat.png" actionType="twitch" value="slow_mode"/>
+  <icon style="color" category="twitch" file="07_followers-chat.png" actionType="twitch" value="followers_only"/>
+  <icon style="color" category="twitch" file="08_emote-chat.png" actionType="twitch" value="emote_only"/>
+  <icon style="color" category="twitch" file="09_create-stream-marker.png" actionType="twitch" value="stream_marker"/>
+  <icon style="color" category="twitch" file="10_clear-chat.png" actionType="twitch" value="clear_chat"/>
+  <icon style="color" category="twitch" file="11_create-clip.png" actionType="twitch" value="create_clip"/>
+  <icon style="color" category="twitch" file="12_open-last-clip.png" actionType="twitch" value="open_last_clip"/>
+
+  <!-- spotify — matched against ButtonActionEngine's spotify command ids; several files (Change_playback_device/play_uri/Playlist_start/Song_info) have no matching K2 command (32 icons) -->
+  <icon style="black" category="spotify" file="21_PlayPause.jpg" actionType="spotify" value="play_pause"/>
+  <icon style="black" category="spotify" file="22_previous.jpg" actionType="spotify" value="previous"/>
+  <icon style="black" category="spotify" file="23_next.jpg" actionType="spotify" value="next"/>
+  <icon style="black" category="spotify" file="24_Change_playback_device.jpg"/>
+  <icon style="black" category="spotify" file="25_Liked_song_toggle.jpg" actionType="spotify" value="like_toggle"/>
+  <icon style="black" category="spotify" file="26_play_uri.png"/>
+  <icon style="black" category="spotify" file="27_Playlist_start.jpg"/>
+  <icon style="black" category="spotify" file="28_Remove_song_from_playlist.jpg" actionType="spotify" value="remove_playlist"/>
+  <icon style="black" category="spotify" file="29_repeat_mode.jpg" actionType="spotify" value="repeat_cycle"/>
+  <icon style="black" category="spotify" file="30_Save_song_to_playlist.jpg" actionType="spotify" value="save_playlist"/>
+  <icon style="black" category="spotify" file="31_shuffle_mode.jpg" actionType="spotify" value="shuffle_toggle"/>
+  <icon style="black" category="spotify" file="32_Song_info.jpg"/>
+  <icon style="black" category="spotify" file="33_volume_plus.jpg" actionType="spotify" value="volume_up"/>
+  <icon style="black" category="spotify" file="34_volume_down.jpg" actionType="spotify" value="volume_down"/>
+  <icon style="black" category="spotify" file="35_volum_mute.jpg" actionType="spotify" value="mute_toggle"/>
+  <icon style="black" category="spotify" file="36_volume_set.png" actionType="spotify" value="volume_set"/>
+  <icon style="color" category="spotify" file="01_PlayPause.png" actionType="spotify" value="play_pause"/>
+  <icon style="color" category="spotify" file="02_previous.png" actionType="spotify" value="previous"/>
+  <icon style="color" category="spotify" file="03_next.png" actionType="spotify" value="next"/>
+  <icon style="color" category="spotify" file="04_Change_playback_device.jpg"/>
+  <icon style="color" category="spotify" file="05_Liked_song_toggle.jpg" actionType="spotify" value="like_toggle"/>
+  <icon style="color" category="spotify" file="06_play_uri.png"/>
+  <icon style="color" category="spotify" file="07_Playlist_start.jpg"/>
+  <icon style="color" category="spotify" file="08_Remove_song_from_playlist.jpg" actionType="spotify" value="remove_playlist"/>
+  <icon style="color" category="spotify" file="09_repeat_mode.jpg" actionType="spotify" value="repeat_cycle"/>
+  <icon style="color" category="spotify" file="10_Save_song_to_playlist.jpg" actionType="spotify" value="save_playlist"/>
+  <icon style="color" category="spotify" file="11_shuffle_mode.jpg" actionType="spotify" value="shuffle_toggle"/>
+  <icon style="color" category="spotify" file="12_Song_info.jpg"/>
+  <icon style="color" category="spotify" file="13_volume_plus.png" actionType="spotify" value="volume_up"/>
+  <icon style="color" category="spotify" file="14_volume_down.png" actionType="spotify" value="volume_down"/>
+  <icon style="color" category="spotify" file="15_volum_mute.png" actionType="spotify" value="mute_toggle"/>
+  <icon style="color" category="spotify" file="16_volume_set.png" actionType="spotify" value="volume_set"/>
+
+  <!-- youtube — only real action is "send chat message" (fixed, ActionValue is free-typed text); "viewers" is Base Camp's display-only widget, never ported (4 icons) -->
+  <icon style="black" category="youtube" file="16_chat-message.png" actionType="youtube"/>
+  <icon style="black" category="youtube" file="17_viewers.png"/>
+  <icon style="color" category="youtube" file="01_chat-message.png" actionType="youtube"/>
+  <icon style="color" category="youtube" file="02_viewers.png"/>
+
+  <!-- davinci — REFERENCE ONLY (see header): ActionValue for this type is just a user-typed keyboard shortcut, never an action name, so these can never auto-match; value="ref:..." records which DaVinciActions entry each icon represents for a future data-model change (78 icons) -->
+  <icon style="black" category="davinci" file="Add &amp; Modify Marker.jpg" actionType="davinci" value="Ctrl + M"/>
+  <icon style="black" category="davinci" file="Add Keyframe.jpg" actionType="davinci" value="Ctrl + ["/>
+  <icon style="black" category="davinci" file="Add Static Keyframe.jpg" actionType="davinci" value="Ctrl + ]"/>
+  <icon style="black" category="davinci" file="Add Transition.jpg" actionType="davinci" value="Ctrl + T"/>
+  <icon style="black" category="davinci" file="Append At End.jpg" actionType="davinci" value="Shift + F12"/>
+  <icon style="black" category="davinci" file="Clear In.jpg" actionType="davinci" value="Alt + I"/>
+  <icon style="black" category="davinci" file="Clear Out.jpg" actionType="davinci" value="Alt + O"/>
+  <icon style="black" category="davinci" file="Clip Link.jpg" actionType="davinci" value="Ctrl + Alt + L"/>
+  <icon style="black" category="davinci" file="Copy.jpg" actionType="davinci" value="Ctrl + C"/>
+  <icon style="black" category="davinci" file="Delete Keyframe.jpg" actionType="davinci" value="Alt + ]"/>
+  <icon style="black" category="davinci" file="Delete Marker.jpg" actionType="davinci" value="Alt + M"/>
+  <icon style="black" category="davinci" file="Delete with Ripple.jpg" actionType="davinci" value="Delete"/>
+  <icon style="black" category="davinci" file="Deselect All.jpg" actionType="davinci" value="Ctrl + Shift + A"/>
+  <icon style="black" category="davinci" file="Export Project.jpg" actionType="davinci" value="Ctrl + E"/>
+  <icon style="black" category="davinci" file="Fast Forward.jpg" actionType="davinci" value="Shift + L"/>
+  <icon style="black" category="davinci" file="Fast Reverse.jpg" actionType="davinci" value="Shift + J"/>
+  <icon style="black" category="davinci" file="Fit To Fill.jpg" actionType="davinci" value="Shift + F11"/>
+  <icon style="black" category="davinci" file="Import Project.jpg" actionType="davinci" value="Ctrl + I"/>
+  <icon style="black" category="davinci" file="Join Clips.jpg" actionType="davinci" value="Alt + \"/>
+  <icon style="black" category="davinci" file="Linked Selection.jpg" actionType="davinci" value="Ctrl + Shift + L"/>
+  <icon style="black" category="davinci" file="LoopUnloop.jpg" actionType="davinci" value="Ctrl + /"/>
+  <icon style="black" category="davinci" file="Modify Marker.jpg" actionType="davinci" value="Shift + M"/>
+  <icon style="black" category="davinci" file="New Bin.jpg" actionType="davinci" value="Ctrl + Shift + N"/>
+  <icon style="black" category="davinci" file="New Timeline.jpg" actionType="davinci" value="Ctrl + N"/>
+  <icon style="black" category="davinci" file="Paste Attribute.jpg" actionType="davinci" value="Alt + V"/>
+  <icon style="black" category="davinci" file="Paste .jpg" actionType="davinci" value="Ctrl + V"/>
+  <icon style="black" category="davinci" file="Play In To Out.jpg" actionType="davinci" value="Alt + /"/>
+  <icon style="black" category="davinci" file="Play To Out.jpg" actionType="davinci" value="Ctrl + Alt + /"/>
+  <icon style="black" category="davinci" file="Razor.jpg" actionType="davinci" value="Ctrl + B"/>
+  <icon style="black" category="davinci" file="Redo.jpg" actionType="davinci" value="Ctrl + Shift + Z"/>
+  <icon style="black" category="davinci" file="Reset Retime.jpg" actionType="davinci" value="ref:Reset Retime"/>
+  <icon style="black" category="davinci" file="Retime Controls.jpg" actionType="davinci" value="Ctrl + R"/>
+  <icon style="black" category="davinci" file="Save Project As….jpg" actionType="davinci" value="Ctrl + Shift + S"/>
+  <icon style="black" category="davinci" file="Save Project.jpg" actionType="davinci" value="Ctrl + S"/>
+  <icon style="black" category="davinci" file="Select All.jpg" actionType="davinci" value="Ctrl + A"/>
+  <icon style="black" category="davinci" file="Select Clips Backward.jpg" actionType="davinci" value="ref:Select Clips Backward"/>
+  <icon style="black" category="davinci" file="Select Nearest ClipGap.jpg" actionType="davinci" value="Shift + V"/>
+  <icon style="black" category="davinci" file="Split Clip.jpg" actionType="davinci" value="Ctrl + \"/>
+  <icon style="black" category="davinci" file="Undo.jpg" actionType="davinci" value="Ctrl + Z"/>
+  <icon style="color" category="davinci" file="10Delete Keyframe.jpg" actionType="davinci" value="Alt + ]"/>
+  <icon style="color" category="davinci" file="11Delete Marker.jpg" actionType="davinci" value="Alt + M"/>
+  <icon style="color" category="davinci" file="12Delete with Ripple.jpg" actionType="davinci" value="Delete"/>
+  <icon style="color" category="davinci" file="13Deselect All.jpg" actionType="davinci" value="Ctrl + Shift + A"/>
+  <icon style="color" category="davinci" file="14Export Project.jpg" actionType="davinci" value="Ctrl + E"/>
+  <icon style="color" category="davinci" file="15Fast Forward.jpg" actionType="davinci" value="Shift + L"/>
+  <icon style="color" category="davinci" file="16Fast Reverse.jpg" actionType="davinci" value="Shift + J"/>
+  <icon style="color" category="davinci" file="17Fit To Fill.jpg" actionType="davinci" value="Shift + F11"/>
+  <icon style="color" category="davinci" file="18Import Project.jpg" actionType="davinci" value="Ctrl + I"/>
+  <icon style="color" category="davinci" file="19Join Clips.jpg" actionType="davinci" value="Alt + \"/>
+  <icon style="color" category="davinci" file="1Add &amp; Modify Marker.jpg" actionType="davinci" value="Ctrl + M"/>
+  <icon style="color" category="davinci" file="20Linked Selection.jpg" actionType="davinci" value="Ctrl + Shift + L"/>
+  <icon style="color" category="davinci" file="21LoopUnloop.jpg" actionType="davinci" value="Ctrl + /"/>
+  <icon style="color" category="davinci" file="22Modify Marker.jpg" actionType="davinci" value="Shift + M"/>
+  <icon style="color" category="davinci" file="23New Bin.jpg" actionType="davinci" value="Ctrl + Shift + N"/>
+  <icon style="color" category="davinci" file="24New Timeline.jpg" actionType="davinci" value="Ctrl + N"/>
+  <icon style="color" category="davinci" file="25Paste Attribute.jpg" actionType="davinci" value="Alt + V"/>
+  <icon style="color" category="davinci" file="26Paste .jpg" actionType="davinci" value="Ctrl + V"/>
+  <icon style="color" category="davinci" file="27Play In To Out.jpg" actionType="davinci" value="Alt + /"/>
+  <icon style="color" category="davinci" file="28Play To Out.jpg" actionType="davinci" value="Ctrl + Alt + /"/>
+  <icon style="color" category="davinci" file="29Razor.jpg" actionType="davinci" value="Ctrl + B"/>
+  <icon style="color" category="davinci" file="2Add Keyframe.jpg" actionType="davinci" value="Ctrl + ["/>
+  <icon style="color" category="davinci" file="30Redo.jpg" actionType="davinci" value="Ctrl + Shift + Z"/>
+  <icon style="color" category="davinci" file="31Reset Retime.jpg" actionType="davinci" value="ref:Reset Retime"/>
+  <icon style="color" category="davinci" file="32Retime Controls.jpg" actionType="davinci" value="Ctrl + R"/>
+  <icon style="color" category="davinci" file="33Save Project As….jpg" actionType="davinci" value="Ctrl + Shift + S"/>
+  <icon style="color" category="davinci" file="34Save Project.jpg" actionType="davinci" value="Ctrl + S"/>
+  <icon style="color" category="davinci" file="35Select All.jpg" actionType="davinci" value="Ctrl + A"/>
+  <icon style="color" category="davinci" file="36Select Clips Backward.jpg" actionType="davinci" value="ref:Select Clips Backward"/>
+  <icon style="color" category="davinci" file="37Select Nearest ClipGap.jpg" actionType="davinci" value="Shift + V"/>
+  <icon style="color" category="davinci" file="38Split Clip.jpg" actionType="davinci" value="Ctrl + \"/>
+  <icon style="color" category="davinci" file="39Undo.jpg" actionType="davinci" value="Ctrl + Z"/>
+  <icon style="color" category="davinci" file="3Add Static Keyframe.jpg" actionType="davinci" value="Ctrl + ]"/>
+  <icon style="color" category="davinci" file="4Add Transition.jpg" actionType="davinci" value="Ctrl + T"/>
+  <icon style="color" category="davinci" file="5Append At End.jpg" actionType="davinci" value="Shift + F12"/>
+  <icon style="color" category="davinci" file="6Clear In.jpg" actionType="davinci" value="Alt + I"/>
+  <icon style="color" category="davinci" file="7Clear Out.jpg" actionType="davinci" value="Alt + O"/>
+  <icon style="color" category="davinci" file="8.jpg" actionType="davinci" value="ref:"/>
+  <icon style="color" category="davinci" file="9Copy.jpg" actionType="davinci" value="Ctrl + C"/>
+
+  <!-- illustrator — REFERENCE ONLY, same reason as davinci (this is one of the 3 apps under the "adobe" action type) (23 icons) -->
+  <icon style="black" category="illustrator" file="Check spelling.jpg" actionType="adobe" value="Ctrl + I"/>
+  <icon style="black" category="illustrator" file="Color Settings.jpg" actionType="adobe" value="Ctrl + Shift + K"/>
+  <icon style="black" category="illustrator" file="Copy.jpg" actionType="adobe" value="Ctrl + C"/>
+  <icon style="black" category="illustrator" file="Cut.jpg" actionType="adobe" value="Ctrl + X"/>
+  <icon style="black" category="illustrator" file="Keyboard Shortcuts.jpg" actionType="adobe" value="Ctrl + Shift + Alt + K"/>
+  <icon style="black" category="illustrator" file="Paste at back.jpg" actionType="adobe" value="Ctrl + B"/>
+  <icon style="black" category="illustrator" file="Paste in front.jpg" actionType="adobe" value="Ctrl + F"/>
+  <icon style="black" category="illustrator" file="Paste in place.jpg" actionType="adobe" value="Ctrl + Shift + V"/>
+  <icon style="black" category="illustrator" file="Paste on all.jpg" actionType="adobe" value="Ctrl + Shift + Alt + V"/>
+  <icon style="black" category="illustrator" file="Paste.jpg" actionType="adobe" value="Ctrl + V"/>
+  <icon style="black" category="illustrator" file="Preferences.jpg" actionType="adobe" value="Ctrl + K"/>
+  <icon style="black" category="illustrator" file="Redo.jpg" actionType="adobe" value="Ctrl + Shift + Z"/>
+  <icon style="black" category="illustrator" file="Undo.jpg" actionType="adobe" value="Ctrl + Z"/>
+  <icon style="color" category="illustrator" file="10Undo.jpg" actionType="adobe" value="Ctrl + Z"/>
+  <icon style="color" category="illustrator" file="1Check spelling.jpg" actionType="adobe" value="Ctrl + I"/>
+  <icon style="color" category="illustrator" file="2Color Settings.jpg" actionType="adobe" value="Ctrl + Shift + K"/>
+  <icon style="color" category="illustrator" file="3Keyboard Shortcuts.jpg" actionType="adobe" value="Ctrl + Shift + Alt + K"/>
+  <icon style="color" category="illustrator" file="4Paste at back.jpg" actionType="adobe" value="Ctrl + B"/>
+  <icon style="color" category="illustrator" file="5Paste in front.jpg" actionType="adobe" value="Ctrl + F"/>
+  <icon style="color" category="illustrator" file="6Paste in place.jpg" actionType="adobe" value="Ctrl + Shift + V"/>
+  <icon style="color" category="illustrator" file="7Paste on all.jpg" actionType="adobe" value="Ctrl + Shift + Alt + V"/>
+  <icon style="color" category="illustrator" file="8Preferences.jpg" actionType="adobe" value="Ctrl + K"/>
+  <icon style="color" category="illustrator" file="9Redo.jpg" actionType="adobe" value="Ctrl + Shift + Z"/>
+
+  <!-- photoshop — REFERENCE ONLY, same reason as davinci (18 icons) -->
+  <icon style="black" category="photoshop" file="Close open documents except selected.jpg" actionType="adobe" value="ref:Photoshop:Close open documents except selected"/>
+  <icon style="black" category="photoshop" file="Delete brushswatch.jpg" actionType="adobe" value="ref:Photoshop:Delete brushswatch"/>
+  <icon style="black" category="photoshop" file="Free Transform.jpg" actionType="adobe" value="Ctrl + T"/>
+  <icon style="black" category="photoshop" file="Move Tool Auto-select ONOFF.jpg" actionType="adobe" value="ref:Photoshop:Move Tool Auto-select ONOFF"/>
+  <icon style="black" category="photoshop" file="Navigate fields backwards.jpg" actionType="adobe" value="Shift + Tab"/>
+  <icon style="black" category="photoshop" file="New layer copy.jpg" actionType="adobe" value="Ctrl + J"/>
+  <icon style="black" category="photoshop" file="New layer cut.jpg" actionType="adobe" value="Ctrl + Shift + J"/>
+  <icon style="black" category="photoshop" file="Rotate brush tip -15°.jpg" actionType="adobe" value="Shift + Left"/>
+  <icon style="black" category="photoshop" file="Rotate brush tip plus15°.jpg" actionType="adobe" value="Shift + Right"/>
+  <icon style="color" category="photoshop" file="1Close open documents except selected.jpg" actionType="adobe" value="ref:Photoshop:Close open documents except selected"/>
+  <icon style="color" category="photoshop" file="2Delete brushswatch.jpg" actionType="adobe" value="ref:Photoshop:Delete brushswatch"/>
+  <icon style="color" category="photoshop" file="3Free Transform.jpg" actionType="adobe" value="Ctrl + T"/>
+  <icon style="color" category="photoshop" file="4Move Tool Auto-select ONOFF.jpg" actionType="adobe" value="ref:Photoshop:Move Tool Auto-select ONOFF"/>
+  <icon style="color" category="photoshop" file="5Navigate fields backwards.jpg" actionType="adobe" value="Shift + Tab"/>
+  <icon style="color" category="photoshop" file="6New layer copy.jpg" actionType="adobe" value="Ctrl + J"/>
+  <icon style="color" category="photoshop" file="7New layer cut.jpg" actionType="adobe" value="Ctrl + Shift + J"/>
+  <icon style="color" category="photoshop" file="8Rotate brush tip plus15°.jpg" actionType="adobe" value="Shift + Right"/>
+  <icon style="color" category="photoshop" file="9Rotate brush tip -15°.jpg" actionType="adobe" value="Shift + Left"/>
+
+  <!-- premiere — REFERENCE ONLY, same reason as davinci (69 icons) -->
+  <icon style="black" category="premiere" file="Browse in Adobe Bridge.jpg" actionType="adobe" value="ref:Premiere Pro:Browse in Adobe Bridge"/>
+  <icon style="black" category="premiere" file="Clear In &amp; Out.jpg" actionType="adobe" value="Ctrl + Shift + X"/>
+  <icon style="black" category="premiere" file="Close Project.jpg" actionType="adobe" value="Ctrl + Shift + W"/>
+  <icon style="black" category="premiere" file="Close.jpg" actionType="adobe" value="Ctrl + W"/>
+  <icon style="black" category="premiere" file="Copy.jpg" actionType="adobe" value="ref:Premiere Pro:Copy"/>
+  <icon style="black" category="premiere" file="Cut.jpg" actionType="adobe" value="ref:Premiere Pro:Cut"/>
+  <icon style="black" category="premiere" file="Deselect All.jpg" actionType="adobe" value="Ctrl + Shift + A"/>
+  <icon style="black" category="premiere" file="Duplicate.jpg" actionType="adobe" value="Ctrl + Shift + /"/>
+  <icon style="black" category="premiere" file="Edit Original.jpg" actionType="adobe" value="Ctrl + E"/>
+  <icon style="black" category="premiere" file="Exit Program.jpg" actionType="adobe" value="Ctrl + Q"/>
+  <icon style="black" category="premiere" file="Export Media.jpg" actionType="adobe" value="Ctrl + M"/>
+  <icon style="black" category="premiere" file="Find.jpg" actionType="adobe" value="ref:Premiere Pro:Find"/>
+  <icon style="black" category="premiere" file="Go to In Point.jpg" actionType="adobe" value="Shift + I"/>
+  <icon style="black" category="premiere" file="Go to Out Point.jpg" actionType="adobe" value="Shift + O"/>
+  <icon style="black" category="premiere" file="Import from Media Browser.jpg" actionType="adobe" value="Ctrl + Alt + I"/>
+  <icon style="black" category="premiere" file="Import Media.jpg" actionType="adobe" value="ref:Premiere Pro:Import Media"/>
+  <icon style="black" category="premiere" file="New Bin.jpg" actionType="adobe" value="ref:Premiere Pro:New Bin"/>
+  <icon style="black" category="premiere" file="New Project.jpg" actionType="adobe" value="Ctrl + Alt + N"/>
+  <icon style="black" category="premiere" file="New Sequence.jpg" actionType="adobe" value="Ctrl + N"/>
+  <icon style="black" category="premiere" file="Open Project.jpg" actionType="adobe" value="Ctrl + O"/>
+  <icon style="black" category="premiere" file="Paste Attributes.jpg" actionType="adobe" value="Ctrl + Alt + V"/>
+  <icon style="black" category="premiere" file="Paste Insert.jpg" actionType="adobe" value="ref:Premiere Pro:Paste Insert"/>
+  <icon style="black" category="premiere" file="Paste.jpg" actionType="adobe" value="ref:Premiere Pro:Paste"/>
+  <icon style="black" category="premiere" file="Redo.jpg" actionType="adobe" value="ref:Premiere Pro:Redo"/>
+  <icon style="black" category="premiere" file="Ripple Delete.jpg" actionType="adobe" value="Shift + Delete"/>
+  <icon style="black" category="premiere" file="Save a Copy.jpg" actionType="adobe" value="Ctrl + Alt + S"/>
+  <icon style="black" category="premiere" file="Save As.jpg" actionType="adobe" value="Ctrl + Shift + S"/>
+  <icon style="black" category="premiere" file="Save.jpg" actionType="adobe" value="Ctrl + S"/>
+  <icon style="black" category="premiere" file="Select All.jpg" actionType="adobe" value="Ctrl + A"/>
+  <icon style="black" category="premiere" file="Selection Properties.jpg" actionType="adobe" value="ref:Premiere Pro:Selection Properties"/>
+  <icon style="black" category="premiere" file="SpeedDuration.jpg" actionType="adobe" value="Ctrl + R"/>
+  <icon style="black" category="premiere" file="Title.jpg" actionType="adobe" value="ref:Premiere Pro:Title"/>
+  <icon style="black" category="premiere" file="Track Select Backward.jpg" actionType="adobe" value="ref:Premiere Pro:Track Select Backward"/>
+  <icon style="black" category="premiere" file="Undo.jpg" actionType="adobe" value="ref:Premiere Pro:Undo"/>
+  <icon style="color" category="premiere" file="10Exit Program.jpg" actionType="adobe" value="Ctrl + Q"/>
+  <icon style="color" category="premiere" file="11Export Media.jpg" actionType="adobe" value="Ctrl + M"/>
+  <icon style="color" category="premiere" file="12Find.jpg" actionType="adobe" value="ref:Premiere Pro:Find"/>
+  <icon style="color" category="premiere" file="13Go to In Point.jpg" actionType="adobe" value="Shift + I"/>
+  <icon style="color" category="premiere" file="14Go to Out Point.jpg" actionType="adobe" value="Shift + O"/>
+  <icon style="color" category="premiere" file="15Import from Media Browser.jpg" actionType="adobe" value="Ctrl + Alt + I"/>
+  <icon style="color" category="premiere" file="16Import Media.jpg" actionType="adobe" value="ref:Premiere Pro:Import Media"/>
+  <icon style="color" category="premiere" file="17New Bin.jpg" actionType="adobe" value="ref:Premiere Pro:New Bin"/>
+  <icon style="color" category="premiere" file="18New Project.jpg" actionType="adobe" value="Ctrl + Alt + N"/>
+  <icon style="color" category="premiere" file="19New Sequence.jpg" actionType="adobe" value="Ctrl + N"/>
+  <icon style="color" category="premiere" file="1Browse in Adobe Bridge.jpg" actionType="adobe" value="ref:Premiere Pro:Browse in Adobe Bridge"/>
+  <icon style="color" category="premiere" file="20Open Project.jpg" actionType="adobe" value="Ctrl + O"/>
+  <icon style="color" category="premiere" file="21Paste Attributes.jpg" actionType="adobe" value="Ctrl + Alt + V"/>
+  <icon style="color" category="premiere" file="22Paste Insert.jpg" actionType="adobe" value="ref:Premiere Pro:Paste Insert"/>
+  <icon style="color" category="premiere" file="23Paste .jpg" actionType="adobe" value="ref:Premiere Pro:Paste"/>
+  <icon style="color" category="premiere" file="24Paste.jpg" actionType="adobe" value="ref:Premiere Pro:Paste"/>
+  <icon style="color" category="premiere" file="25Redo.jpg" actionType="adobe" value="ref:Premiere Pro:Redo"/>
+  <icon style="color" category="premiere" file="26Ripple Delete.jpg" actionType="adobe" value="Shift + Delete"/>
+  <icon style="color" category="premiere" file="27Save a Copy.jpg" actionType="adobe" value="Ctrl + Alt + S"/>
+  <icon style="color" category="premiere" file="28Save As.jpg" actionType="adobe" value="Ctrl + Shift + S"/>
+  <icon style="color" category="premiere" file="29Save.jpg" actionType="adobe" value="Ctrl + S"/>
+  <icon style="color" category="premiere" file="2Clear In &amp; Out.jpg" actionType="adobe" value="Ctrl + Shift + X"/>
+  <icon style="color" category="premiere" file="30Select All.jpg" actionType="adobe" value="Ctrl + A"/>
+  <icon style="color" category="premiere" file="31Selection Properties.jpg" actionType="adobe" value="ref:Premiere Pro:Selection Properties"/>
+  <icon style="color" category="premiere" file="32SpeedDuration.jpg" actionType="adobe" value="Ctrl + R"/>
+  <icon style="color" category="premiere" file="33Title.jpg" actionType="adobe" value="ref:Premiere Pro:Title"/>
+  <icon style="color" category="premiere" file="34Track Select Backward.jpg" actionType="adobe" value="ref:Premiere Pro:Track Select Backward"/>
+  <icon style="color" category="premiere" file="35Undo.jpg" actionType="adobe" value="ref:Premiere Pro:Undo"/>
+  <icon style="color" category="premiere" file="3Close Project.jpg" actionType="adobe" value="Ctrl + Shift + W"/>
+  <icon style="color" category="premiere" file="4Close.jpg" actionType="adobe" value="Ctrl + W"/>
+  <icon style="color" category="premiere" file="5Copy.jpg" actionType="adobe" value="ref:Premiere Pro:Copy"/>
+  <icon style="color" category="premiere" file="6Cut.jpg" actionType="adobe" value="ref:Premiere Pro:Cut"/>
+  <icon style="color" category="premiere" file="7Deselect All.jpg" actionType="adobe" value="Ctrl + Shift + A"/>
+  <icon style="color" category="premiere" file="8Duplicate.jpg" actionType="adobe" value="Ctrl + Shift + /"/>
+  <icon style="color" category="premiere" file="9Edit Original.jpg" actionType="adobe" value="Ctrl + E"/>
+
+  <!-- pc_info — NO matching K2 action type exists at all (Base Camp's PC Info/Clock widgets are display-only, never ported as assignable actions) — catalogued in case that ever changes (18 icons) -->
+  <icon style="black" category="pc_info" file="1Clock_24h.png"/>
+  <icon style="black" category="pc_info" file="2Clock12h.png"/>
+  <icon style="black" category="pc_info" file="3PCInfo_CPU.png"/>
+  <icon style="black" category="pc_info" file="4PCInfo_GPU.png"/>
+  <icon style="black" category="pc_info" file="5PCInfo_HDD.png"/>
+  <icon style="black" category="pc_info" file="6PCInfo_Internet.png"/>
+  <icon style="black" category="pc_info" file="7PCInfo_RAM.png"/>
+  <icon style="black" category="pc_info" file="8_CPU_C.png"/>
+  <icon style="black" category="pc_info" file="8_GPU_C.png"/>
+  <icon style="color" category="pc_info" file="10PCInfo_CPU.png"/>
+  <icon style="color" category="pc_info" file="11PCInfo_GPU.png"/>
+  <icon style="color" category="pc_info" file="12PCInfo_HDD.png"/>
+  <icon style="color" category="pc_info" file="13PCInfo_Internet.png"/>
+  <icon style="color" category="pc_info" file="14PCInfo_RAM.png"/>
+  <icon style="color" category="pc_info" file="15CPU_C.png"/>
+  <icon style="color" category="pc_info" file="16GPU_C.png"/>
+  <icon style="color" category="pc_info" file="8Clock_24h.png"/>
+  <icon style="color" category="pc_info" file="9Clock12h.png"/>
+
+</iconMappings>
+
+<!--
+  ============================================================================
+  LEGEND: action-type tags (top-level "Function type" dropdown in the key
+  action editor) -> their name shown in K2's own UI -> the icon-gallery
+  category they map to here (if any). Use the tag in the "actionType"
+  attribute above when manually mapping an unmapped icon row to an action.
+  Source: K2.Core/ButtonActionDialog.xaml (ComboBoxItem Tag values) +
+  K2.Core/Strings.xml (act_* loc keys, English).
+  ============================================================================
+
+  tag              | name in K2                  | gallery category
+  =================|==============================|========================
+  none             | None                         | (n/a - no action)
+  disable          | Disabled key                 | (n/a)
+  url              | Open URL                     | (n/a - no matching art)
+  exec             | Open program / file          | (n/a - uses the target
+                    |                              |   executable's own icon)
+  folder           | Open folder                  | (n/a - uses the real
+                    |                              |   folder's own icon)
+  dp_folder        | Page (DisplayPad sub-page)    | (n/a - hand-drawn folder
+                    |                              |   glyph, not gallery art)
+  browser          | Open browser                 | (n/a)
+  profile          | Switch profile                | (n/a)
+  oscmd            | System command                 | (n/a)
+  media            | Media key                     | (n/a - no dedicated pack)
+  mouse            | Mouse action                  | default (fixed)
+  keys             | Keys combination               | (n/a)
+  hotkeyswitch     | Hotkey Switch                  | default (fixed)
+  multi            | Multi Action                   | default (fixed)
+  command          | Shell command                  | (n/a)
+  text             | Paste text                     | (n/a)
+  macro            | Play macro                     | default (fixed)
+  googlehome       | Google Home                    | (n/a - own icon system,
+                    |                              |   see GoogleHomeIconCatalog)
+  adobe            | Adobe                          | illustrator / photoshop /
+                    |                              |   premiere (REFERENCE ONLY
+                    |                              |   - see category comments)
+  davinci          | DaVinci Resolve                | davinci (REFERENCE ONLY)
+  zoom             | Zoom                           | zoom (fully mapped)
+  obs              | OBS Studio                     | obs (mostly mapped)
+  twitch           | Twitch                         | twitch (mostly mapped)
+  spotify          | Spotify                        | spotify (mostly mapped)
+  youtube          | YouTube                        | youtube (fixed - chat
+                    |                              |   message only)
+  pyscript         | Python Script                  | (n/a)
+
+  Not a real action type, but present as a gallery category with no way to
+  attach it today: pc_info (Base Camp's PC Info/Clock widgets - display
+  only, never ported as an assignable K2 action).
+-->

@@ -107,9 +107,15 @@ public partial class MainWindow
         if (_evDockPhysicallyConnected)
         {
             // Align to the side where it is physically connected: 1=right, 2=left
-            GrdEvDock.HorizontalAlignment = dockPos == 2
+            bool dockLeft = dockPos == 2;
+            GrdEvDock.HorizontalAlignment = dockLeft
                 ? HorizontalAlignment.Left
                 : HorizontalAlignment.Right;
+            // Nudge 20px toward the board's center from the edge it's aligned to
+            // (requested so the dock/crown art doesn't sit flush against the bezel).
+            GrdEvDock.Margin = dockLeft
+                ? new Thickness(20, 0, 0, -32)
+                : new Thickness(0, 0, 20, -32);
         }
         UpdateDockVisibility();
 

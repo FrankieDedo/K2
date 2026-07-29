@@ -40,6 +40,15 @@ public partial class Everest60KeyBindingPanel : UserControl
     private Action<int, string>? _writeNumpadBinding;
     private Action<int>? _unassignNumpadBinding;
 
+    /// <summary>Injected by MainWindow.Everest60.cs: called after any change to the key
+    /// list so the firmware's disabled main-board keys can be reconciled (see
+    /// <c>PushEv60DisabledKeysToDevice</c>). Main-board bindings otherwise never touch
+    /// the device — "disable" is the sole exception, since nothing host-side can stop
+    /// the keyboard from typing.</summary>
+    private Action? _reconcileDisabledKeys;
+
+    internal void SetMainBoardDisablePush(Action reconcile) => _reconcileDisabledKeys = reconcile;
+
     internal void SetNumpadDevicePush(Action<int, string> writeBinding, Action<int> unassignBinding)
     {
         _writeNumpadBinding = writeBinding;
@@ -218,6 +227,7 @@ public partial class Everest60KeyBindingPanel : UserControl
         _log($"[KeyBind] key led={key.LedIndex} removed");
         if (key.NumpadIndex is int npi)
             _unassignNumpadBinding?.Invoke(Everest60RemapData.NumpadDllKeyId[npi]);
+        _reconcileDisabledKeys?.Invoke();
     }
 
     /// <summary>Persists a key's current action, or — if it has no action assigned —
@@ -246,6 +256,8 @@ public partial class Everest60KeyBindingPanel : UserControl
             if (key.NumpadIndex is int npi2)
                 _writeNumpadBinding?.Invoke(Everest60RemapData.NumpadDllKeyId[npi2], key.Label);
         }
+
+        _reconcileDisabledKeys?.Invoke();
     }
 
     /// <summary>Clears every key of this profile (no firmware to reset —
@@ -257,6 +269,7 @@ public partial class Everest60KeyBindingPanel : UserControl
         _byLed.Clear();
         _ev60Store?.ResetProfileToDefaults(CurrentSlot);
         _log("[KeyBind] restore defaults: all keys cleared");
+        _reconcileDisabledKeys?.Invoke();
     }
 
     /// <summary>Reloads this profile's keys from the store. No firmware
@@ -284,5 +297,9 @@ public partial class Everest60KeyBindingPanel : UserControl
             _byLed[r.LedIndex] = k;
         }
         _log($"[PROFILE] Ev60 reload keys slot={slot}: {_keys.Count} loaded");
+        // Also covers the three "SDK just opened" call sites in MainWindow.Everest60.cs,
+        // which reach this method directly: at startup the profile is loaded before the
+        // device is open, so the disable has to be (re)pushed once it is.
+        _reconcileDisabledKeys?.Invoke();
     }
 }

@@ -90,6 +90,10 @@ public partial class App : Application
         // StartupUri window is created below.
         Core.Services.FontCatalog.Apply(Core.AppSettings.AppFontFamily);
 
+        // Same idea for the app-wide accent color theme (Settings > Accent color
+        // in K2.App: K2 Red vs Mountain Blue) — see AccentCatalog.Apply.
+        Core.Services.AccentCatalog.Apply(Core.AppSettings.AccentTheme);
+
         base.OnStartup(e); // creates/shows the StartupUri window (MainWindow.xaml)
     }
 

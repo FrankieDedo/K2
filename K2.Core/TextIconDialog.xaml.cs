@@ -28,6 +28,7 @@ public partial class TextIconDialog : Window
     private string _fontFamily = "Segoe UI";
     private bool _autoSize = true;
     private double _manualFontSize = 24;
+    private TextIconGenerator.TextAnchor _anchor = TextIconGenerator.TextAnchor.MiddleCenter;
 
     /// <param name="size">Target icon size in pixels (102 for DisplayPad, 72 for Everest numpad display keys).</param>
     /// <param name="baseImagePath">Currently loaded key image, if any — enables the "on image" background mode.</param>
@@ -38,6 +39,12 @@ public partial class TextIconDialog : Window
         _size = size;
         _baseImagePath = !string.IsNullOrEmpty(baseImagePath) && File.Exists(baseImagePath) ? baseImagePath : null;
         RbBgImage.IsEnabled = _baseImagePath is not null;
+        // Default to "on top of the image" whenever one is loaded — otherwise the dialog
+        // opens on RbBgSolid's XAML default (solid color) even with an icon already in
+        // place, and clicking OK without noticing the radio buttons silently replaces the
+        // icon with a plain-background text tile (user report 2026-07-25: "add text elimina
+        // l'icona"). No-op when there's no base image (RbBgImage stays disabled).
+        if (_baseImagePath is not null) RbBgImage.IsChecked = true;
 
         ApplyColorButton(BtnBgColor, _bgColor);
         ApplyColorButton(BtnTextColor, _textColor);
@@ -69,6 +76,19 @@ public partial class TextIconDialog : Window
     private void TxtInput_TextChanged(object sender, TextChangedEventArgs e) => RefreshPreview();
 
     private void BgMode_Changed(object sender, RoutedEventArgs e) => RefreshPreview();
+
+    /// <summary>3x3 anchor grid (see TextIconDialog.xaml) — each RadioButton's Tag is the
+    /// matching <see cref="TextIconGenerator.TextAnchor"/> name. MiddleCenter's IsChecked="True"
+    /// fires this synchronously during InitializeComponent() (same gotcha as RbBgSolid/
+    /// ChkAutoSize above), which is fine here since RefreshPreview only reaches into controls
+    /// declared EARLIER in the XAML (preview image, text box, font picker) that are already
+    /// wired up by the time this row is reached.</summary>
+    private void Anchor_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton rb || rb.Tag is not string tag) return;
+        if (Enum.TryParse<TextIconGenerator.TextAnchor>(tag, out var anchor)) _anchor = anchor;
+        RefreshPreview();
+    }
 
     private void Font_Changed(object sender, SelectionChangedEventArgs e)
     {
@@ -149,7 +169,7 @@ public partial class TextIconDialog : Window
             TxtInput.Text, _size, _textColor,
             UseImageBackground ? (System.Drawing.Color?)null : _bgColor,
             UseImageBackground ? _baseImagePath : null,
-            _fontFamily, CurrentFontSize);
+            _fontFamily, CurrentFontSize, _anchor);
 
         ImgPreview.Source = bmp is null ? null : ToBitmapSource(bmp);
     }
@@ -180,7 +200,7 @@ public partial class TextIconDialog : Window
             TxtInput.Text, _size, dest, _textColor,
             UseImageBackground ? (System.Drawing.Color?)null : _bgColor,
             UseImageBackground ? _baseImagePath : null,
-            _fontFamily, CurrentFontSize);
+            _fontFamily, CurrentFontSize, _anchor);
 
         if (!ok)
         {

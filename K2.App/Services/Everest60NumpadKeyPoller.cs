@@ -23,11 +23,19 @@ namespace K2.App.Services;
 /// 100ms interval — tighter than the LED poller's 300ms since this is
 /// direct user input (perceived latency matters more than for a color
 /// preview), and a single cmd 0x08 round-trip is one Feature Report pair,
-/// not a multi-page sweep. Edge-detected on (counter changed AND pressed):
-/// see <see cref="Everest60Protocol.NumpadKeyBinding.QueryNumpadKeyEvent"/>'s
-/// doc comment for the known limitation (a very fast tap could be missed if
-/// the poll only catches the released state) — a missed edge fails toward
-/// "nothing happens", never toward firing the wrong action.
+/// not a multi-page sweep.
+/// </para>
+///
+/// <para>
+/// <b>Edge detection</b> (reworked 2026-07-27 after a real-hardware report that a
+/// bound numpad key "only opens sometimes"): the device bumps its event counter
+/// TWICE per tap — once for the down, once for the up. Sampling every 100ms, a tap
+/// shorter than the interval is only ever observed in its released state, and the
+/// original "fire when the counter changed AND the sample says pressed" rule dropped
+/// it silently. A tap is now also recognised from its up edge, by the counter having
+/// advanced by more than one since the last sample (the skipped event can only be
+/// this key's own down). Still fails toward "nothing happens" rather than firing the
+/// wrong action: the DllKeyId always comes from the sample in hand.
 /// </para>
 /// </summary>
 internal sealed class Everest60NumpadKeyPoller : IDisposable
@@ -79,9 +87,17 @@ internal sealed class Everest60NumpadKeyPoller : IDisposable
             _inFlight = false;
             if (result is not { } ev) return;
 
-            bool isNewEvent = _lastCounter != ev.Counter;
+            // First sample only primes the baseline: the device reports whatever event
+            // was last in its buffer, which may long predate K2 starting.
+            if (_lastCounter is not int last) { _lastCounter = ev.Counter; return; }
+
+            int advanced = (ev.Counter - last) & 0xFF;   // counter is one byte, it wraps
+            if (advanced == 0) return;
             _lastCounter = ev.Counter;
-            if (isNewEvent && ev.Pressed)
+
+            // Down edge caught directly, or caught late on the up edge of a tap whose
+            // down fell between two polls (see the class doc's edge-detection note).
+            if (ev.Pressed || advanced > 1)
                 dispatcher.BeginInvoke(() => KeyPressed?.Invoke(ev.DllKeyId));
         });
     }

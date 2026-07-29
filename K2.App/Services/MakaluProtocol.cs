@@ -55,7 +55,14 @@ internal static class MakaluProtocol
 
     public static readonly int[] DebounceValuesMs = { 2, 4, 6, 8, 10, 12 };
 
-    /// <summary>Function code (category, code) for button remap, keyed by internal name.</summary>
+    /// <summary>Function code (category, code) for button remap, keyed by internal name.
+    /// <c>profile_next</c>/<c>profile_prev</c> (0x08, confirmed 2026-07-28 via a real
+    /// USBPcap capture, <c>_reference/usb_dumps/makalu_azioni.pcapng</c> — user assigned
+    /// "Next Profile"/"Previous Profile" to the middle button in real Base Camp) reuse the
+    /// same F1/"cycle forward"-F3/"cycle backward" code pair as <c>dpi+</c>/<c>dpi-</c>
+    /// (category 0x09), just under a different category — a purely firmware-side function,
+    /// same as DPI+/-: the mouse cycles its own onboard profile slot autonomously, no K2/
+    /// Base Camp software needs to be running for it to work.</summary>
     public static readonly (string Name, byte Category, byte Code)[] RemapFunctions =
     {
         ("left",         0x00, 0x01),
@@ -68,6 +75,15 @@ internal static class MakaluProtocol
         ("scroll_up",    0x01, 0x01),
         ("scroll_down",  0x01, 0xFF),
         ("disabled",     0xFF, 0x01),
+        ("profile_next", 0x08, 0xF1),
+        ("profile_prev", 0x08, 0xF3),
+        // Confirmed 2026-07-28, same capture as profile_next/prev — user assigned
+        // Brightness cycle then Effect cycle (in that order) to the middle button and
+        // confirmed the order verbally, resolving which of the two categories seen on the
+        // wire (0x21/0x22, both code 0x01) is which. Firmware-side cycle, same as
+        // profile_next/prev — no host software involvement needed.
+        ("brightness_cycle", 0x21, 0x01),
+        ("effect_cycle",     0x22, 0x01),
     };
 
     private static byte[] NewBuf()
@@ -162,6 +178,63 @@ internal static class MakaluProtocol
     }
 
     // ---------------------------------------------------------------
+    // Lift-off "Custom" surface calibration. Base Camp's own makalu_67_dll.dll
+    // (decompiled from BaseCamp.Service.exe's Makalu67.cs) exposes 4 native
+    // exports beyond Set_lod(Low/High): Lod_calibration_start() /
+    // Lod_get_calibration(out byte lod_result, out SURFACE_T{byte varA, varB})
+    // / Lod_set_surface(SURFACE_T) / Lod_reset_surface() — a real sensor
+    // auto-calibration mode with only 2 opaque bytes of learned "surface info"
+    // to persist. Sub-commands below confirmed 2026-07-27 from a real USBPcap
+    // capture (_reference/usb_dumps/makalu_custom.pcapng) of Base Camp's own
+    // "Custom" popup, same 0x0D command family as SetLiftOff/SetPollingRate/etc:
+    //   - clicking "Start" fired TWO SET_REPORTs 120ms apart in one HTTP
+    //     round-trip: sub 0xA6 then sub 0xA4, all-zero payload otherwise (no
+    //     buf[5]=1 marker like the simple on/off toggles use) — inferred as
+    //     reset-then-start (the natural "clean slate, then begin" order; the
+    //     UI's button starts labelled "Start" and only becomes "Reset" AFTER
+    //     that first click, so this session's single "Start" click is the only
+    //     data point so far).
+    //   - "Done" at 29% progress fired one SET_REPORT, sub 0xA7, which got back
+    //     a bare ACK (a0 01 00...) — same shape as every other command's ACK,
+    //     i.e. this capture does NOT tell us the wire layout for "ready"
+    //     (lod_result==1 + real SurfaceA/B), only that 29% coverage reports
+    //     not-ready. LodGetCalibration/LodSetSurface stay stubbed until a
+    //     capture exists where Done is clicked after the popup's own progress
+    //     bar reads near 100% — do NOT guess the ready-response offsets or the
+    //     SetSurface payload shape.
+    // ---------------------------------------------------------------
+
+    public static bool LodResetSurface(SafeFileHandle h)
+    {
+        var buf = NewBuf();
+        buf[1] = CmdPollingRate; buf[2] = 0xA6;
+        return Ack(MakaluHidNative.SendFeature(h, buf));
+    }
+
+    public static bool LodCalibrationStart(SafeFileHandle h)
+    {
+        var buf = NewBuf();
+        buf[1] = CmdPollingRate; buf[2] = 0xA4;
+        return Ack(MakaluHidNative.SendFeature(h, buf));
+    }
+
+    /// <summary>Queries calibration readiness (sub 0xA7, confirmed on the wire) —
+    /// but the "ready" response layout (lod_result/SurfaceA/SurfaceB offsets)
+    /// is NOT yet confirmed (this capture only ever saw the not-ready bare-ACK
+    /// case), so this always reports not-ready for now. See region comment.</summary>
+    public static (bool Ready, byte SurfaceA, byte SurfaceB)? LodGetCalibration(SafeFileHandle h)
+    {
+        var buf = NewBuf();
+        buf[1] = CmdPollingRate; buf[2] = 0xA7;
+        MakaluHidNative.SendFeature(h, buf);
+        return (false, 0, 0);
+    }
+
+    /// <summary>PENDING — no capture yet shows a real Lod_set_surface write
+    /// (the test run's Done never reached "ready"). Do not guess.</summary>
+    public static bool LodSetSurface(SafeFileHandle h, byte surfaceA, byte surfaceB) => false;
+
+    // ---------------------------------------------------------------
     // DPI
     // ---------------------------------------------------------------
 
@@ -244,5 +317,73 @@ internal static class MakaluProtocol
         buf[20] = (byte)(dpi & 0xFF); buf[21] = (byte)((dpi >> 8) & 0xFF); // Y
         buf[22] = 0x0F;
         return Ack(MakaluHidNative.SendFeature(h, buf));
+    }
+
+    // ---------------------------------------------------------------
+    // Software-action button functions (Run Program / Open Folder, category 0x23) —
+    // confirmed 2026-07-28 via two real, independent USBPcap captures
+    // (_reference/usb_dumps/makalu_press_software.pcapng, makalu_press_isolated.pcapng:
+    // the second was a deliberately isolated single press — mouse idle 10s, one press, idle
+    // 15s — to rule out coincidental timing). Unlike every remap function above (click/DPI/
+    // scroll/disabled/profile/lighting-cycle — SetButtonRemap, pure firmware, autonomous),
+    // these categories need HOST execution: pressing the button produces NO standard mouse
+    // click report at all, only an 8-byte notification on the DPI-button's own secondary HID
+    // collection (see MakaluHidNative.FindDpiButtonDevice / MakaluDpiButtonWatcher) —
+    // `03 <category> <id> 00 <buttonIndex 1-based> 01 00 00`. The host must then ack it
+    // (this class's AckButtonEvent) and read back the stored payload (ReadButtonEventPayload)
+    // from the SAME config collection SendFeature already talks to, report IDs 0xA1 (ack
+    // write) / 0xA0 (payload read) — same ReportId/RespId as every other command here, just a
+    // much larger response (~1KB vs 64 bytes). Other software categories seen on the wire but
+    // NOT yet decoded with the same confidence (OS Commands=0x18, Browser=0x24, Run Macro=
+    // 0x03, Media=0x20, Keyboard Shortcut=0x02) are deliberately left unimplemented — see
+    // TODO.md.
+    // ---------------------------------------------------------------
+
+    public const byte CategoryRunProgramOrFolder = 0x23;
+
+    /// <summary>Parses the DPI-button collection's 8-byte "button event" report. Returns null
+    /// for anything that isn't a genuine software-action notification: the DPI button's own
+    /// native pulse (<see cref="MakaluDpiButtonWatcher"/>'s <c>03 02 01 00 00 00 00 00</c>)
+    /// always carries buttonIndex=0 (byte[4]) — a real software-action notification always
+    /// carries a 1-based physical button index there instead (confirmed twice: button 6/DPI
+    /// slot, byte[4]=0x06).</summary>
+    public static (byte Category, int ButtonIndex1Based)? ParseButtonEventReport(byte[] report)
+    {
+        if (report.Length < 8 || report[0] != 0x03) return null;
+        int btn = report[4];
+        if (btn is < 1 or > 8) return null; // 0 = DPI native pulse, not a software action
+        return (report[1], btn);
+    }
+
+    /// <summary>Acks a software-action notification before reading its payload back — Base
+    /// Camp always sends this in between (byte[1]=0x25, byte[2]=button index, byte[5]=0x01,
+    /// exact bytes confirmed by capture; the read in the next capture failed to return
+    /// meaningful data without it in informal testing, so it's not skipped).</summary>
+    public static bool AckButtonEvent(SafeFileHandle h, int buttonIndex1Based)
+    {
+        var buf = NewBuf();
+        buf[1] = 0x25;
+        buf[2] = (byte)buttonIndex1Based;
+        buf[5] = 0x01;
+        return MakaluHidNative.SetFeatureOnly(h, buf);
+    }
+
+    /// <summary>Reads back the stored payload for the button that just fired (path, URL, ...)
+    /// — GET_REPORT id 0xA0. The ASCII text always starts at a fixed offset 17 (16-byte
+    /// header + one marker byte, confirmed at the identical offset in 2 independent real
+    /// captures), null-terminated.</summary>
+    public static string? ReadButtonEventPayload(SafeFileHandle h)
+    {
+        int len = MakaluHidNative.GetMaxFeatureReportLength(h);
+        if (len < 32) return null;
+        var resp = MakaluHidNative.GetFeatureLarge(h, 0xA0, len);
+        if (resp is null) return null;
+
+        const int strOffset = 17;
+        if (resp.Length <= strOffset) return null;
+        int end = Array.IndexOf(resp, (byte)0, strOffset);
+        if (end < 0) end = resp.Length;
+        if (end <= strOffset) return null;
+        return System.Text.Encoding.ASCII.GetString(resp, strOffset, end - strOffset).Trim();
     }
 }

@@ -1,0 +1,132 @@
+<Window x:Class="K2.Core.GoogleHomeSetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="{loc:Get gh_setup_title}"
+        Width="960" Height="680"
+        MinWidth="720" MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        Style="{DynamicResource K2WindowStyle}">
+
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- header -->
+            <RowDefinition Height="8"/>
+            <RowDefinition Height="*"/>     <!-- webview + sidebar -->
+            <RowDefinition Height="10"/>
+            <RowDefinition Height="Auto"/>  <!-- close -->
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="{loc:Get gh_setup_title}" FontSize="16" FontWeight="Bold"/>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="ColWeb" Width="*"/>
+                <ColumnDefinition x:Name="ColGap" Width="12"/>
+                <ColumnDefinition Width="240"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: browser (login, or the app-wide Debug mode's Foyer recording tools) -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="8"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Only when the app-wide Debug mode is on (Settings tab, AppSettings.DebugMode —
+                     same flag that unlocks debug UI everywhere else in K2): a real Foyer RPC
+                     still needs a live click on the page, one device at a time, so it cannot be
+                     part of the bulk auto-import. -->
+                <StackPanel x:Name="PnlAdvanced" Grid.Row="0" Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="BtnRecord" Content="{loc:Get gh_record_start}" MinWidth="140" Click="BtnRecord_Click"/>
+                        <Button x:Name="BtnRecordAlt" Content="{loc:Get gh_record_alt}" MinWidth="160" Margin="8,0,0,0"
+                                IsEnabled="False" Click="BtnRecordAlt_Click"/>
+                    </StackPanel>
+                    <TextBlock x:Name="LblCaptureHint" Text="{loc:Get gh_record_hint}" TextWrapping="Wrap"
+                               Foreground="#AAA" Margin="0,6,0,0"/>
+                </StackPanel>
+
+                <Border x:Name="BorderWeb" Grid.Row="2" BorderBrush="#3A3A40" BorderThickness="1">
+                    <wv2:WebView2 x:Name="WebGh"/>
+                </Border>
+
+                <TextBlock x:Name="LblLoginHint" Grid.Row="3" Text="{loc:Get gh_login_hint}" TextWrapping="Wrap"
+                           Foreground="#AAA" Margin="0,10,0,0"/>
+
+                <Grid x:Name="PnlCaptureName" Grid.Row="4" Margin="0,10,0,0" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="TxtCaptureName" Grid.Column="0" Height="25"
+                             Tag="{loc:Get gh_capture_name_prompt}"/>
+                    <Button Grid.Column="2" Content="{loc:Get ok}" MinWidth="72" Click="BtnCaptureSave_Click"/>
+                    <Button Grid.Column="4" Content="{loc:Get cancel}" MinWidth="72" Click="BtnCaptureCancel_Click"/>
+                </Grid>
+            </Grid>
+
+            <!-- Right: auto-imported devices, checkbox = show in K2's action pickers -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>  <!-- header -->
+                    <RowDefinition Height="4"/>
+                    <RowDefinition Height="Auto"/>  <!-- connection status -->
+                    <RowDefinition Height="8"/>
+                    <RowDefinition Height="Auto"/>  <!-- force refresh / disconnect / advanced -->
+                    <RowDefinition Height="8"/>
+                    <RowDefinition Height="*"/>     <!-- checklist -->
+                    <RowDefinition Height="8"/>
+                    <RowDefinition Height="Auto"/>  <!-- rename / delete -->
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="{loc:Get gh_bindings_header}" FontWeight="Bold"/>
+                <TextBlock x:Name="LblConnStatus" Grid.Row="2" Foreground="#AAA"/>
+
+                <StackPanel x:Name="PnlConnectedButtons" Grid.Row="4" Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="BtnForceRefresh" Content="{loc:Get gh_force_refresh}" MinWidth="110" Click="BtnForceRefresh_Click"/>
+                        <Button x:Name="BtnDisconnect" Content="{loc:Get gh_disconnect}" MinWidth="100" Margin="8,0,0,0" Click="BtnDisconnect_Click"/>
+                    </StackPanel>
+                    <!-- Read-only reflection of the app-wide Debug mode (Settings tab) — not a
+                         separate toggle, see UpdateStateUi. -->
+                    <TextBlock x:Name="LblAdvancedHint" Text="{loc:Get gh_advanced_hint}" TextWrapping="Wrap"
+                               Foreground="#AAA" Margin="0,8,0,0" Visibility="Collapsed"/>
+                </StackPanel>
+
+                <Border Grid.Row="6" Background="#111115" CornerRadius="6" Padding="4">
+                    <ListBox x:Name="LstBindings" SelectionMode="Extended"
+                             Background="Transparent" BorderThickness="0" Foreground="#DDD"
+                             SelectionChanged="LstBindings_SelectionChanged">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Content="{Binding DisplayLabel}" IsChecked="{Binding IsEnabled}"
+                                          Foreground="#DDD" Checked="ChkBindingEnabled_Changed" Unchecked="ChkBindingEnabled_Changed"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+
+                <TextBlock x:Name="LblNoBindings" Grid.Row="6" Text="{loc:Get gh_no_bindings}"
+                           Foreground="#777" TextWrapping="Wrap" VerticalAlignment="Top"
+                           Visibility="Collapsed"/>
+
+                <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="BtnRename" Content="{loc:Get gh_rename}" MinWidth="72" Click="BtnRename_Click" Margin="0,0,6,0"/>
+                    <Button x:Name="BtnDelete" Content="{loc:Get gh_delete}" MinWidth="72" Click="BtnDelete_Click"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="{loc:Get close}" MinWidth="72" IsCancel="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

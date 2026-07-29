@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using K2.Core.Services;
 
 namespace K2.Core;
 
@@ -21,6 +23,11 @@ public sealed class ButtonActionEngine : IDisposable
 
     private readonly IActionHost _host;
     private readonly PyBridge _py;
+
+    /// <summary>Which half of a "hotkeyswitch" action fires next, per (button, ActionValue) —
+    /// in-memory only (resets on restart), deliberately not persisted to any device's store; see
+    /// the "hotkeyswitch" case in <see cref="Dispatch"/>.</summary>
+    private readonly Dictionary<(int ButtonIndex, string Value), bool> _hotkeySwitchNextIsB = new();
 
     public ButtonActionEngine(IActionHost host)
     {
@@ -122,6 +129,37 @@ public sealed class ButtonActionEngine : IDisposable
                 break;
             }
 
+            case "hotkeyswitch":
+            {
+                var spec = HotkeySwitchPayload.Parse(value);
+                if (spec is null) { Log("[EXEC] hotkeyswitch: invalid payload"); break; }
+
+                var toggleKey = (buttonIndex, value);
+                bool nextIsB = _hotkeySwitchNextIsB.TryGetValue(toggleKey, out var stored) && stored;
+                _hotkeySwitchNextIsB[toggleKey] = !nextIsB;
+
+                string shortcut = nextIsB ? spec.ShortcutB : spec.ShortcutA;
+                if (string.IsNullOrWhiteSpace(shortcut)) { Log("[EXEC] hotkeyswitch: empty shortcut"); break; }
+                string seq = shortcut.IndexOfAny(SendKeysMeta) >= 0
+                    ? shortcut : SendKeysTranslator.Translate(shortcut);
+                System.Windows.Forms.SendKeys.SendWait(seq);
+                Log($"[EXEC] hotkeyswitch -> \"{shortcut}\" ({(nextIsB ? "B" : "A")})");
+                break;
+            }
+
+            case "adobe":
+            case "davinci":
+            case "zoom":
+            {
+                if (string.IsNullOrWhiteSpace(value)) { Log($"[EXEC] {type} without payload"); break; }
+                if (ActionExecutor.TryRunAppShortcutSpecial(value, Log)) break;
+                string seq = value.IndexOfAny(SendKeysMeta) >= 0
+                    ? value : SendKeysTranslator.Translate(value);
+                System.Windows.Forms.SendKeys.SendWait(seq);
+                Log($"[EXEC] {type} -> \"{value}\"");
+                break;
+            }
+
             case "oscmd":
                 ActionExecutor.RunOsCommand(value, Log);
                 break;
@@ -133,6 +171,70 @@ public sealed class ButtonActionEngine : IDisposable
             case "mouse":
                 ActionExecutor.DoMouse(value, Log);
                 break;
+
+            case "obs":
+            {
+                if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] obs without payload"); break; }
+                int tilde = value.IndexOf('~');
+                string cmd = tilde < 0 ? value : value[..tilde];
+                string arg = tilde < 0 ? "" : value[(tilde + 1)..];
+                if (!Services.ObsBridge.EnsureConnected(Log)) { Log("[EXEC] obs: not connected"); break; }
+                object?[]? parameters = arg.Length == 0 ? null : new object?[] { Services.ObsBridge.ConvertArg(cmd, arg) };
+                bool ok = Services.ObsBridge.ExecuteCommand(cmd, parameters);
+                Log($"[EXEC] obs -> {cmd}{(arg.Length > 0 ? $" ({arg})" : "")} = {ok}");
+                break;
+            }
+
+            case "twitch":
+            {
+                if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] twitch without payload"); break; }
+                int tilde = value.IndexOf('~');
+                string cmd = tilde < 0 ? value : value[..tilde];
+                string arg = tilde < 0 ? "" : value[(tilde + 1)..];
+                bool ok = cmd switch
+                {
+                    "chat_message"     => Services.TwitchBridge.SendChatMessage(arg, Log),
+                    "clear_chat"       => Services.TwitchBridge.ClearChat(Log),
+                    "emote_only"       => Services.TwitchBridge.ToggleEmoteOnly(Log),
+                    "followers_only"   => Services.TwitchBridge.SetFollowersOnly(arg, Log),
+                    "slow_mode"        => Services.TwitchBridge.SetSlowMode(arg, Log),
+                    "subscribers_only" => Services.TwitchBridge.ToggleSubscribersOnly(Log),
+                    "play_ad"          => Services.TwitchBridge.PlayAd(arg, Log),
+                    "stream_title"     => Services.TwitchBridge.SetStreamTitle(arg, Log),
+                    "stream_marker"    => Services.TwitchBridge.CreateStreamMarker(Log),
+                    "create_clip"      => Services.TwitchBridge.CreateClip(Log),
+                    "open_last_clip"   => Services.TwitchBridge.OpenLastClip(Log),
+                    _ => LogUnhandledTwitchCommand(cmd, Log),
+                };
+                Log($"[EXEC] twitch -> {cmd}{(arg.Length > 0 ? $" ({arg})" : "")} = {ok}");
+                break;
+            }
+
+            case "spotify":
+            {
+                if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] spotify without payload"); break; }
+                int tilde = value.IndexOf('~');
+                string cmd = tilde < 0 ? value : value[..tilde];
+                string arg = tilde < 0 ? "" : value[(tilde + 1)..];
+                bool ok = cmd switch
+                {
+                    "play_pause"      => Services.SpotifyBridge.PlayPauseToggle(Log),
+                    "next"            => Services.SpotifyBridge.Next(Log),
+                    "previous"        => Services.SpotifyBridge.Previous(Log),
+                    "like_toggle"     => Services.SpotifyBridge.LikeToggle(Log),
+                    "shuffle_toggle"  => Services.SpotifyBridge.ShuffleToggle(Log),
+                    "repeat_cycle"    => Services.SpotifyBridge.RepeatCycle(Log),
+                    "mute_toggle"     => Services.SpotifyBridge.MuteToggle(Log),
+                    "volume_up"       => Services.SpotifyBridge.VolumeUp(arg, Log),
+                    "volume_down"     => Services.SpotifyBridge.VolumeDown(arg, Log),
+                    "volume_set"      => Services.SpotifyBridge.VolumeSet(arg, Log),
+                    "save_playlist"   => Services.SpotifyBridge.SaveToPlaylist(arg, Log),
+                    "remove_playlist" => Services.SpotifyBridge.RemoveFromPlaylist(arg, Log),
+                    _ => LogUnhandledSpotifyCommand(cmd, Log),
+                };
+                Log($"[EXEC] spotify -> {cmd}{(arg.Length > 0 ? $" ({arg})" : "")} = {ok}");
+                break;
+            }
 
             case "multi":
                 ActionExecutor.RunMultiAction(value, Log, ExecuteSub);
@@ -148,6 +250,16 @@ public sealed class ButtonActionEngine : IDisposable
 
             case "pyscript":
                 RunPyScript(value, buttonIndex);
+                break;
+
+            case "youtube":
+                if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] youtube without payload"); break; }
+                Services.YouTubeBridge.SendLiveChatMessage(value, Log);
+                break;
+
+            case "googlehome":
+                if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] googlehome without payload"); break; }
+                GoogleHomeBridge.Instance.Trigger(value, Log);
                 break;
 
             case "macro":
@@ -172,10 +284,34 @@ public sealed class ButtonActionEngine : IDisposable
                 // intentionally no action (placeholder for unresolved macros)
                 break;
 
+            case "disable":
+                // "Key disabled": nothing to run by design. Whether the keystroke ITSELF
+                // is suppressed is a per-device firmware matter settled when the binding
+                // is pushed, not here — and today only the Everest 60's numpad accessory
+                // manages it (any bound key there stops emitting, see
+                // Everest60Protocol.NumpadKeyBinding). Everywhere else K2 only observes
+                // presses through the vendor SDK callback and cannot swallow them, so the
+                // key keeps typing; reaching this line at all means that's the case, hence
+                // the explicit wording (user report 2026-07-27).
+                Log("[EXEC] key disabled — no action (keystroke not suppressed on this device)");
+                break;
+
             default:
                 Log($"[EXEC] unknown action type: {type}");
                 break;
         }
+    }
+
+    private static bool LogUnhandledTwitchCommand(string cmd, Action<string> log)
+    {
+        log($"[EXEC] twitch: command \"{cmd}\" not handled");
+        return false;
+    }
+
+    private static bool LogUnhandledSpotifyCommand(string cmd, Action<string> log)
+    {
+        log($"[EXEC] spotify: command \"{cmd}\" not handled");
+        return false;
     }
 
     /// <summary>Executes a single sub-action (called by Multi Action).</summary>

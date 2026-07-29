@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using K2.App.Services;
 using K2.Core;
+using K2.Core.Services;
 using Microsoft.Win32;
 
 namespace K2.App;
@@ -86,6 +87,11 @@ public partial class DpKeyConfigDialog : Window
         PreviewHost.Children.Add(_cropEditor.ViewportBorder);
         PreviewHost.Children.Add(_cropEditor.ControlsPanel);
 
+        // Hide "Default icon…" entirely when no gallery folder exists on disk (partial/
+        // stripped install) — clicking it with nothing to generate would be a silent no-op.
+        BtnGalleryIcon.Visibility = IconGalleryDefaults.HasGallery()
+            ? Visibility.Visible : Visibility.Collapsed;
+
         RefreshImagePreview();
         RefreshActionSummary();
         UpdateRotationAvailability();
@@ -121,11 +127,19 @@ public partial class DpKeyConfigDialog : Window
 
     /// <summary>
     /// Opens the shared "insert text" editor (<see cref="TextIconDialog"/>): plain text
-    /// on a solid color, or overlaid on the image currently loaded in this dialog.
+    /// on a solid color, or overlaid on the image currently loaded in this dialog. For a
+    /// static image, uses the CROPPED/baked icon (what the key will actually show), not the
+    /// raw uncropped <see cref="_pendingPath"/> source — otherwise "on top of image" mode
+    /// would stretch-distort whatever the user hasn't cropped to square yet instead of
+    /// matching the live preview. GIFs keep using the original file (no baked PNG exists for
+    /// them — see <see cref="CropEditor.IsGif"/>).
     /// </summary>
     private void BtnAddText_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new TextIconDialog(DpHidNative.IconSize, _pendingPath) { Owner = this };
+        string? textBaseImage = _cropEditor.HasImage && !_cropEditor.IsGif
+            ? _cropEditor.GetResultPath() ?? _pendingPath
+            : _pendingPath;
+        var dlg = new TextIconDialog(DpHidNative.IconSize, textBaseImage) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
         _pendingPath = dlg.NewImagePath;
@@ -135,6 +149,22 @@ public partial class DpKeyConfigDialog : Window
         RefreshImagePreview();
         UpdateRotationAvailability();
     }
+
+    /// <summary>
+    /// Opens the shared Base Camp icon gallery picker (<see cref="IconGalleryDialog"/>) —
+    /// same "pick a ready-made picture" flow Base Camp itself offers, ported from its own
+    /// asset set (see DISTRIBUTION.md). Mirrors <see cref="BtnAddText_Click"/>: the dialog
+    /// already returns a fully-rendered, correctly-sized tile, so the result just replaces
+    /// <see cref="_pendingPath"/> directly.
+    /// </summary>
+    /// <summary>
+    /// Instantly (re)generates the auto icon for the CURRENT action — no dialog, no browsing:
+    /// exactly what a fresh action assignment already gets via <see cref="TryAutoGenerateKeyImage"/>,
+    /// re-run on demand so the user can reset back to it after loading/cropping something else.
+    /// A popup picker (previous design) was confusing here — the whole point of "Default
+    /// icon" is that there's exactly one right answer for a given action, not a gallery to browse.
+    /// </summary>
+    private void BtnGalleryIcon_Click(object sender, RoutedEventArgs e) => TryAutoGenerateKeyImage(_dpFolderName);
 
     private void RotRadio_Checked(object sender, RoutedEventArgs e)
     {
@@ -231,22 +261,25 @@ public partial class DpKeyConfigDialog : Window
     /// of requiring the user to manually pick an image — mirrors <see cref="BtnLoadImage_Click"/>
     /// but with a generated source instead of a user-picked file. Generated upright, like
     /// any other image; the device's mounting rotation is applied at upload time same as
-    /// everything else (see <c>MainWindow.DisplayPad.cs</c>'s upload paths).
+    /// everything else (see <c>MainWindow.DisplayPad.cs</c>'s upload paths). Any OTHER action
+    /// type falls through to <see cref="IconGalleryDefaults"/> — a matching Base Camp gallery
+    /// icon (see DISTRIBUTION.md), tinted to the current accent, when the ported gallery has
+    /// one for this action; a no-op (keeps whatever image was already there) otherwise.
     /// </summary>
     /// <param name="pageName">Resolved page name (see <c>ButtonActionDialog.ResolvedPageName</c>) —
     /// only used/required when <see cref="ActionType"/> is "dp_folder".</param>
     private void TryAutoGenerateKeyImage(string? pageName = null)
     {
         if (string.IsNullOrWhiteSpace(ActionValue)) return;
-        if (ActionType != "exec" && ActionType != "folder" && ActionType != "dp_folder") return;
 
         string dest = AutoIconCachePath(ActionType!, ActionValue!);
         bool ok = ActionType switch
         {
-            "exec"      => IconImageGenerator.TryGenerateExecIcon(ActionValue!, DpHidNative.IconSize, dest),
-            "folder"    => IconImageGenerator.TryGenerateDiskFolderIcon(ActionValue!, DpHidNative.IconSize, dest),
-            "dp_folder" => IconImageGenerator.TryGenerateFolderIcon(pageName ?? ActionValue!, DpHidNative.IconSize, dest),
-            _           => false,
+            "exec"       => IconImageGenerator.TryGenerateExecIcon(ActionValue!, DpHidNative.IconSize, dest),
+            "folder"     => IconImageGenerator.TryGenerateDiskFolderIcon(ActionValue!, DpHidNative.IconSize, dest),
+            "dp_folder"  => IconImageGenerator.TryGenerateFolderIcon(pageName ?? ActionValue!, DpHidNative.IconSize, dest),
+            "googlehome" => GoogleHomeIconCatalog.TryGenerateKeyIcon(ActionValue!, DpHidNative.IconSize, dest),
+            _            => IconGalleryDefaults.TryGenerateKeyIcon(ActionType!, ActionValue!, DpHidNative.IconSize, dest),
         };
         if (!ok) return;
 
@@ -294,25 +327,9 @@ public partial class DpKeyConfigDialog : Window
             return;
         }
 
-        string val = ActionValue ?? "";
-        LblActionSummary.Text = ActionType switch
-        {
-            "keys"    => $"Keys: {val}",
-            "exec"    => $"Run: {Path.GetFileName(val)}",
-            "folder"  => $"Folder: {val}",
-            "dp_folder" => $"Page: {_dpFolderName ?? val}",
-            "url"     => $"URL: {val}",
-            "browser" => $"Browser: {val}",
-            "profile" => $"Profile: {val}",
-            "oscmd"   => $"Shell: {val}",
-            "media"   => $"Media: {val}",
-            "mouse"   => $"Mouse: {val}",
-            "text"    => $"Text: {val}",
-            "command" => $"Command: {val}",
-            "macro"   => ActionTypeHelper.MacroSummary(val),
-            "pyscript"=> "Python script",
-            _         => ActionTypeHelper.IsUnrecognized(ActionType) ? Loc.Get("act_unrecognized") : $"{ActionType}: {val}",
-        };
+        LblActionSummary.Text = ActionType == "dp_folder"
+            ? $"Page: {_dpFolderName ?? ActionValue}"
+            : ActionTypeHelper.Summary(ActionType, ActionValue);
     }
 
     // =====================================================================

@@ -52,7 +52,7 @@
                     <Style TargetType="ListViewItem">
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
-                                <Setter Property="Background" Value="#900000"/>
+                                <Setter Property="Background" Value="{DynamicResource K2AccentBrush}"/>
                                 <Setter Property="Foreground" Value="#10302F"/>
                             </DataTrigger>
                         </Style.Triggers>

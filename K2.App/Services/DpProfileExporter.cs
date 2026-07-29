@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Xml.Linq;
+using K2.Core;
 
 namespace K2.App.Services;
 
@@ -89,7 +90,7 @@ public static class DpProfileExporter
                 byIndex.TryGetValue(i, out var rec);
                 var meta = KeyMeta[i];
 
-                string? functionType = null, subType = null, funcValue = null, optionalText = null;
+                string? functionType = null, subType = null, funcValue = null, optionalText = null, customUrl = null;
                 bool isAssigned = false;
 
                 if (rec is not null && !string.IsNullOrEmpty(rec.ActionType))
@@ -100,6 +101,7 @@ public static class DpProfileExporter
                         if (mapped is not null)
                         {
                             (functionType, subType, funcValue, optionalText) = mapped.Value;
+                            customUrl = ExtractCustomUrl(rec.ActionType, rec.ActionValue);
                             isAssigned = true;
                             exported++;
                         }
@@ -154,6 +156,7 @@ public static class DpProfileExporter
                     new XElement("DLLKeyId", meta.KeyId),
                     new XElement("DLLKeyName", meta.KeyName),
                     new XElement("DLLMatrixIndex", meta.DllMatrix),
+                    new XElement("CustomURL", customUrl ?? ""),
                     new XElement("IsActive", "true"),
                     new XElement("OptionalText", optionalText ?? ""),
                     new XElement("SecondBase64Image", ""),
@@ -218,8 +221,15 @@ public static class DpProfileExporter
             case "folder":
                 return string.IsNullOrEmpty(v) ? null : ("Open Folder", v, v, null);
 
+            // Real Base Camp has no "Open URL" FunctionType — a specific destination is
+            // always expressed as FunctionType="Run browser" with the URL in the sibling
+            // CustomURL element (see ExtractCustomUrl / BaseCampDbImporter.TranslateAction's
+            // matching comment), never in FunctionValue.
             case "browser":
                 return ("Run browser", "Run browser", "Run browser", null);
+
+            case "url":
+                return string.IsNullOrEmpty(v) ? null : ("Run browser", "Run browser", "Run browser", null);
 
             case "keys":
                 return string.IsNullOrEmpty(v) ? null : ("Keyboard Shortcuts", v, v, null);
@@ -301,8 +311,29 @@ public static class DpProfileExporter
             case "dp_back":
                 return ("Back", "", "", null);
 
-            // pyscript, command, url, macro, multi, createfolder, back (generic),
+            // Base Camp's own "Disable" function — see Ev60ProfileExporter's twin arm.
+            case "disable":
+                return ("Disable", "Disable", "Disable", null);
+
+            // pyscript, command, macro, multi, createfolder, back (generic),
             // pcinfo, clock, none: no confirmed Base Camp equivalent -> omitted.
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>The URL that goes in the exported binding's sibling <c>CustomURL</c> element
+    /// (see <see cref="MapActionToBc"/>'s "browser"/"url" arms) — real Base Camp never puts it
+    /// in FunctionValue. Null for a "browser" action with no URL set (just launch the browser).</summary>
+    private static string? ExtractCustomUrl(string actionType, string? actionValue)
+    {
+        switch (actionType)
+        {
+            case "url":
+                return string.IsNullOrWhiteSpace(actionValue) ? null : actionValue.Trim();
+            case "browser":
+                string? url = BrowserActionPayload.Parse(actionValue)?.Url;
+                return string.IsNullOrEmpty(url) ? null : url;
             default:
                 return null;
         }

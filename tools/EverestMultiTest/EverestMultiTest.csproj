@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Diagnostic-only standalone tool for K2 "multi-Everest Max" investigation
+       (Fase 0.2/0.3 of the plan). NOT part of K2.sln / build-check.bat on purpose:
+       throwaway, x86 (SDKDLL.dll is a 32-bit native library, same constraint as
+       K2.App), never shipped, never referenced by K2.App. Run directly with
+       `dotnet run` from this folder. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+    <Platforms>x86</Platforms>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>EverestMultiTest</AssemblyName>
+    <RootNamespace>EverestMultiTest</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>

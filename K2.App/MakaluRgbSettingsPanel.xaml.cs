@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
@@ -37,9 +37,44 @@ public partial class MakaluRgbSettingsPanel : UserControl
     /// MainWindow.SectionNav.cs). Updated via <see cref="SetBrightness"/>.</summary>
     internal double Brightness { get; private set; } = 100;
 
-    private MakaluCustomRgbWindow? _mkCustomWin;
     private bool _mkCustomActive;
     private (byte r, byte g, byte b)[] _mkCustomColors = new (byte, byte, byte)[8];
+
+    /// <summary>The current paint/brush color for Custom Lighting — NOT a per-LED
+    /// selection (2026-07-27, user feedback: squares should just be clickable paint
+    /// targets, not a select-then-apply flow). Clicking a square or dragging a
+    /// rubber-band rectangle over several (MainWindow.Makalu.cs) paints them with
+    /// whatever this is currently set to, same "click to paint" model as Everest
+    /// Max/60's Custom Lighting.</summary>
+    private int _mkCustomPrimaryColor = 0x900000;
+
+    /// <summary>Whether Custom is the active Lighting effect — MainWindow.Makalu.cs reads
+    /// this to decide whether to show its per-LED square overlay on the device image.</summary>
+    internal bool IsCustomActive => _mkCustomActive;
+
+    /// <summary>Paints one LED with the current brush color (in-memory only — call
+    /// <see cref="CommitCustomPaint"/> once after painting one or several LEDs to
+    /// persist + send to the device). Called by MainWindow.Makalu.cs's square click
+    /// handler and its rubber-band multi-paint.</summary>
+    internal void PaintLed(int led)
+    {
+        _mkCustomColors[led] = (
+            (byte)((_mkCustomPrimaryColor >> 16) & 0xFF),
+            (byte)((_mkCustomPrimaryColor >> 8) & 0xFF),
+            (byte)(_mkCustomPrimaryColor & 0xFF));
+    }
+
+    /// <summary>Repaints the ring preview + square overlay, persists, and sends the
+    /// current 8 LED colors to the device — call once after one or more
+    /// <see cref="PaintLed"/> calls (a single click, or every square touched by one
+    /// rubber-band drag), not per-LED, since SetLightingCustom always sends all 8
+    /// colors in one packet anyway.</summary>
+    internal void CommitCustomPaint()
+    {
+        PreviewChanged?.Invoke();
+        MkPersistLighting();
+        MkApplyCustomToDevice();
+    }
 
     /// <summary>Profile persistence — set once from Init. Null-checked everywhere
     /// (rather than made non-nullable) so this panel keeps working standalone if
@@ -51,6 +86,17 @@ public partial class MakaluRgbSettingsPanel : UserControl
     public MakaluRgbSettingsPanel()
     {
         InitializeComponent();
+
+        // DPI level tiles paint their active-selection Background/Foreground via a
+        // one-shot FindResource in MkUpdateDpiButtonLabels (not a live binding), so a
+        // Settings > Accent color switch would otherwise leave the currently-active
+        // tile the old color until the next DPI edit/profile switch. This control lives
+        // for the whole app lifetime (single static instance in MainWindow.xaml), so no
+        // unsubscribe is needed — matches AccentCatalog's other subscribers.
+        Core.Services.AccentCatalog.Applied += () =>
+        {
+            if (_mkDpiLevelButtons.Count > 0) MkUpdateDpiButtonLabels();
+        };
     }
 
     private static void ApplyColorButton(Button btn, int rgb)
@@ -67,42 +113,70 @@ public partial class MakaluRgbSettingsPanel : UserControl
         public override string ToString() => Label;
     }
 
+    /// <summary>"RGB Breathing" is no longer its own combo entry (2026-07-27, user
+    /// request: merge it into Breathing, picked via a Single/Rainbow radio instead —
+    /// same "one effect + a color-mode choice" pattern Everest 60/Everest Max/MacroPad
+    /// already use). <see cref="MakaluProtocol.Effect.RgbBreathing"/> is still a real
+    /// wire value (see <see cref="ResolveMkWireEffect"/>) — only the combo/UI merged.</summary>
     private static readonly MkEffectChoice[] MkEffectList =
     {
         new(MakaluProtocol.Effect.Static,       "Static"),
         new(MakaluProtocol.Effect.Breathing,    "Breathing"),
-        new(MakaluProtocol.Effect.RgbBreathing, "RGB Breathing"),
         new(MakaluProtocol.Effect.Rainbow,      "Rainbow"),
         new(MakaluProtocol.Effect.Responsive,   "Responsive"),
         new(MakaluProtocol.Effect.Yeti,         "Yeti"),
         new(MakaluProtocol.Effect.Off,          "Off"),
+        new(MakaluProtocol.Effect.Custom,       "Custom"),
     };
 
     /// <summary>internal (not private): reused by MainWindow.Makalu.cs to pick
     /// the LED ring preview's animation style from the same flags that drive
     /// this panel's own speed/direction/color2 row visibility — one place
     /// decides "what does this effect need", instead of two switches drifting
-    /// apart.</summary>
+    /// apart. Color2 is now false for Breathing (was true) — its old dual-color
+    /// crossfade is superseded by the Single/Rainbow radio below (Rainbow needs no
+    /// user color at all, and the merge request only asked for Single vs Rainbow,
+    /// not a 3-way Single/Double/Rainbow like Everest 60's Breathing).</summary>
     internal sealed record MkCaps(bool Speed, bool Color1, bool Color2, bool Direction);
 
     internal static MkCaps CapsFor(MakaluProtocol.Effect e) => e switch
     {
         MakaluProtocol.Effect.Static       => new(false, true,  false, false),
-        MakaluProtocol.Effect.Breathing    => new(true,  true,  true,  false),
+        MakaluProtocol.Effect.Breathing    => new(true,  true,  false, false),
         MakaluProtocol.Effect.RgbBreathing => new(true,  false, false, false),
         MakaluProtocol.Effect.Rainbow      => new(true,  false, false, true),
         MakaluProtocol.Effect.Responsive   => new(false, true,  false, false),
         MakaluProtocol.Effect.Yeti         => new(true,  true,  true,  false),
-        _                                  => new(false, false, false, false), // Off
+        _                                  => new(false, false, false, false), // Off / Custom
     };
+
+    /// <summary>Whether <paramref name="e"/> is the one combo entry that offers a
+    /// Single/Rainbow color-mode radio (<see cref="RbMkColorSingle"/>/
+    /// <see cref="RbMkColorRainbow"/>) instead of the plain always-on swatch(es) —
+    /// currently just Breathing.</summary>
+    private static bool HasColorModeChoice(MakaluProtocol.Effect e) => e == MakaluProtocol.Effect.Breathing;
+
+    /// <summary>Resolves the combo's raw selection to the actual wire effect to send/
+    /// persist/preview: Breathing + the Rainbow radio sends/persists
+    /// <see cref="MakaluProtocol.Effect.RgbBreathing"/> (the old separate combo entry's
+    /// real value), Breathing + Single sends Breathing itself. Every other selection
+    /// passes through unchanged.</summary>
+    private MakaluProtocol.Effect ResolveMkWireEffect(MakaluProtocol.Effect selected) =>
+        selected == MakaluProtocol.Effect.Breathing && RbMkColorRainbow.IsChecked == true
+            ? MakaluProtocol.Effect.RgbBreathing
+            : selected;
 
     /// <summary>Snapshot of the current lighting choice, for the software-only
     /// LED ring preview drawn around the wheel/DPI button on the device image
     /// (MainWindow.Makalu.cs) — the Makalu has no HID readback (unlike
     /// Everest 60's GetColorData2), so this mirrors the panel's own state
-    /// instead of the real device. When <see cref="IsCustom"/> is set, the
-    /// ring shows <see cref="CustomColors"/> (the 8 per-LED colors from
-    /// MakaluCustomRgbWindow) instead of Effect/Color1/Color2.</summary>
+    /// instead of the real device. <see cref="Effect"/> is already the RESOLVED
+    /// wire effect (see <see cref="ResolveMkWireEffect"/>) — Breathing vs Rainbow-
+    /// mode Breathing show up as Breathing/RgbBreathing respectively, exactly like
+    /// before the two were merged into one combo entry, so MainWindow.Makalu.cs's
+    /// ring-preview switch can key off it directly. When <see cref="IsCustom"/> is
+    /// set, the ring shows <see cref="CustomColors"/> (the 8 per-LED colors) instead
+    /// of Effect/Color1/Color2.</summary>
     internal readonly record struct MkPreviewState(
         MakaluProtocol.Effect Effect, int Color1, int Color2, int SpeedIdx, int DirIdx, double Brightness,
         bool IsCustom, (byte r, byte g, byte b)[] CustomColors);
@@ -112,7 +186,7 @@ public partial class MakaluRgbSettingsPanel : UserControl
     internal event Action? PreviewChanged;
 
     internal MkPreviewState GetPreviewState() => new(
-        CbMkEffect.SelectedItem is MkEffectChoice pick ? pick.Eff : MakaluProtocol.Effect.Off,
+        ResolveMkWireEffect(CbMkEffect.SelectedItem is MkEffectChoice pick ? pick.Eff : MakaluProtocol.Effect.Off),
         _mkColor1, _mkColor2,
         _mkSpeedIndex,
         _mkDirIndex,
@@ -147,10 +221,13 @@ public partial class MakaluRgbSettingsPanel : UserControl
             SldMkSpeed.Value = 1; // Medium
             LblMkSpeedVal.Text = "Medium";
             RbMkDirRight.IsChecked = true;
+            RbMkColorSingle.IsChecked = true;
 
-            UpdateMkCapabilities();
             ApplyColorButton(BtnMkColor1, _mkColor1);
             ApplyColorButton(BtnMkColor2, _mkColor2);
+
+            ApplyColorButton(BtnMkCustomPrimary, _mkCustomPrimaryColor);
+            UpdateMkCapabilities();
 
             SldMkPolling.Value = 3; // 1000 Hz
             LblMkPollingVal.Text = "1000 Hz";
@@ -160,6 +237,13 @@ public partial class MakaluRgbSettingsPanel : UserControl
 
             RbMkAngleOff.IsChecked = true;
             RbMkLiftLow.IsChecked = true;
+
+            // Defaults confirmed via decompiled BaseCamp.Data.MakaluSetting's own
+            // constructor (Sensitivity=10, ClickSpeed=0).
+            SldMkSensitivity.Value = 10;
+            LblMkSensitivityVal.Text = "10";
+            SldMkClickSpeed.Value = 0;
+            LblMkClickSpeedVal.Text = "0";
 
             BuildMkDpiLevelButtons();
         }
@@ -195,19 +279,47 @@ public partial class MakaluRgbSettingsPanel : UserControl
     {
         if (CbMkEffect.SelectedItem is not MkEffectChoice pick) return;
         var caps = CapsFor(pick.Eff);
+        bool colorModeChoice = HasColorModeChoice(pick.Eff);
         bool prev = _mkSuppress;
         _mkSuppress = true;
         try
         {
             PnlMkSpeed.Visibility = caps.Speed ? Visibility.Visible : Visibility.Collapsed;
             PnlMkDirection.Visibility = caps.Direction ? Visibility.Visible : Visibility.Collapsed;
-            BtnMkColor1.IsEnabled = caps.Color1;
-            PnlMkColor2.Visibility = caps.Color2 ? Visibility.Visible : Visibility.Collapsed;
+
+            PnlMkColorMode.Visibility = colorModeChoice ? Visibility.Visible : Visibility.Collapsed;
+            if (colorModeChoice)
+            {
+                // First time Breathing is ever selected in this session, default to Single.
+                if (RbMkColorSingle.IsChecked != true && RbMkColorRainbow.IsChecked != true)
+                    RbMkColorSingle.IsChecked = true;
+                bool rainbow = RbMkColorRainbow.IsChecked == true;
+                PnlMkColor1.Visibility = rainbow ? Visibility.Collapsed : Visibility.Visible;
+                PnlMkColor2.Visibility = Visibility.Collapsed; // no Double option for Breathing (user request 2026-07-27)
+            }
+            else
+            {
+                PnlMkColor1.Visibility = caps.Color1 ? Visibility.Visible : Visibility.Collapsed;
+                PnlMkColor2.Visibility = caps.Color2 ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            // "Custom" swaps the normal primary/secondary color row for the per-LED
+            // square panel — mirrors Everest 60/Everest Max/MacroPad's own
+            // PnlNormalControls/PnlCustomLighting swap.
+            PnlMkNormalColors.Visibility = _mkCustomActive ? Visibility.Collapsed : Visibility.Visible;
+            PnlMkCustomLighting.Visibility = _mkCustomActive ? Visibility.Visible : Visibility.Collapsed;
         }
         finally
         {
             _mkSuppress = prev;
         }
+    }
+
+    private void RbMkColorMode_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_mkSuppress) return;
+        UpdateMkCapabilities();
+        ApplyCurrentMkEffect();
     }
 
     // ------------------------------------------------------------
@@ -216,7 +328,7 @@ public partial class MakaluRgbSettingsPanel : UserControl
 
     private void CbMkEffect_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        _mkCustomActive = false; // picking one of the fixed effects exits the Custom ring preview
+        _mkCustomActive = CbMkEffect.SelectedItem is MkEffectChoice pick && pick.Eff == MakaluProtocol.Effect.Custom;
         UpdateMkCapabilities();
         ApplyCurrentMkEffect();
     }
@@ -254,14 +366,14 @@ public partial class MakaluRgbSettingsPanel : UserControl
         ApplyCurrentMkEffect();
     }
 
-    /// <summary>Serializes the current effect/color/speed/direction choice (or,
-    /// when <paramref name="customActive"/>, the 8 custom LED colors) into the
+    /// <summary>Serializes the current effect/color/speed/direction choice (plus,
+    /// whenever Custom is the selected effect, the 8 custom LED colors) into the
     /// current profile slot. Called unconditionally (even while disconnected)
     /// so a profile edited with the mouse unplugged is still saved.</summary>
-    private void MkPersistLighting(bool customActive, double? brightnessOverride = null)
+    private void MkPersistLighting(double? brightnessOverride = null)
     {
         if (_mkStore is null) return;
-        var eff = CbMkEffect.SelectedItem is MkEffectChoice pick ? pick.Eff : MakaluProtocol.Effect.Off;
+        var eff = ResolveMkWireEffect(CbMkEffect.SelectedItem is MkEffectChoice pick ? pick.Eff : MakaluProtocol.Effect.Off);
         var customInts = new int[8];
         for (int i = 0; i < 8; i++)
         {
@@ -270,7 +382,7 @@ public partial class MakaluRgbSettingsPanel : UserControl
         }
         _mkStore.SaveLighting(CurrentSlot, new MakaluLightingRecord(
             (int)eff, _mkColor1, _mkColor2, _mkSpeedIndex, _mkDirIndex,
-            brightnessOverride ?? Brightness, customActive, customInts));
+            brightnessOverride ?? Brightness, _mkCustomActive, customInts));
     }
 
     /// <summary>Reads the panel and sends the effect to the firmware. No-op
@@ -280,11 +392,17 @@ public partial class MakaluRgbSettingsPanel : UserControl
         if (!_mkInitialized || _mkSuppress) return;
         if (CbMkEffect.SelectedItem is not MkEffectChoice pick) return;
 
+        if (pick.Eff == MakaluProtocol.Effect.Custom)
+        {
+            ActivateMkCustomLighting();
+            return;
+        }
+
         // Ring preview is software-only (no HID readback on this device), so
         // it updates regardless of connection state — unlike the actual
         // SetLighting call below.
         PreviewChanged?.Invoke();
-        MkPersistLighting(customActive: false);
+        MkPersistLighting();
 
         if (!_mkConnected)
         {
@@ -293,6 +411,7 @@ public partial class MakaluRgbSettingsPanel : UserControl
         }
 
         var caps = CapsFor(pick.Eff);
+        var wireEffect = ResolveMkWireEffect(pick.Eff);
         int bright = (int)Brightness;
         byte speed = (byte)(caps.Speed ? _mkSpeedIndex : 0);
         byte dir   = (byte)(caps.Direction ? _mkDirIndex : 0);
@@ -303,33 +422,67 @@ public partial class MakaluRgbSettingsPanel : UserControl
         (byte, byte, byte)? secondary = caps.Color2 ? C(_mkColor2) : null;
 
         LblMkRgbStatus.Text = "...";
-        bool ok = _makalu.SetLighting(pick.Eff, C(_mkColor1), bright, dir, speed, secondary);
-        _log($"[RGB ] apply eff={pick.Eff} speed={speed} dir={dir} bright={bright}% c1=#{_mkColor1:X6}" +
+        bool ok = _makalu.SetLighting(wireEffect, C(_mkColor1), bright, dir, speed, secondary);
+        _log($"[RGB ] apply eff={wireEffect} speed={speed} dir={dir} bright={bright}% c1=#{_mkColor1:X6}" +
              (caps.Color2 ? $" c2=#{_mkColor2:X6}" : "") + $" -> {ok}");
-        LblMkRgbStatus.Text = ok ? Loc.Get("makalu_applied") : Loc.Get("makalu_failed");
+        LblMkRgbStatus.Text = ok ? "" : Loc.Get("makalu_failed");
         LblMkRgbStatus.Foreground = ok ? (Brush)FindResource("K2AccentBrush") : (Brush)FindResource("K2DangerBrush");
     }
 
-    private void BtnMkCustomOpen_Click(object sender, RoutedEventArgs e)
+    // ------------------------------------------------------------
+    // Custom (per-LED) lighting — the 8 clickable squares live on the device image
+    // next to the ring (MainWindow.Makalu.cs), this panel only owns the color/selection
+    // DATA plus the primary-color picker (replaces the old MakaluCustomRgbWindow popup,
+    // 2026-07-27 user request).
+    // ------------------------------------------------------------
+
+    /// <summary>Brush-color picker — the Makalu's Custom mode only ever writes a flat
+    /// Static color per LED (no per-LED dynamic effect: SetLightingCustom's wire format
+    /// has no effect-code slot at all, unlike Everest Max/60's Custom Lighting), so
+    /// there's no paint-effect dropdown here, just this one swatch. Only changes which
+    /// color future square clicks/drags paint with — does NOT repaint anything by
+    /// itself (2026-07-27, user feedback: squares are plain click-to-paint targets, not
+    /// a select-then-apply flow), mirroring Everest Max/60's BtnCustomBrushColor_Click.</summary>
+    private void BtnMkCustomPrimary_Click(object sender, RoutedEventArgs e)
     {
-        if (_mkCustomWin is { IsLoaded: true }) { _mkCustomWin.Activate(); return; }
-        _mkCustomWin = new MakaluCustomRgbWindow(_makalu, _log, (int)Brightness) { Owner = Window.GetWindow(this) };
-        _mkCustomWin.ColorsChanged += colors =>
+        using var dlg = new System.Windows.Forms.ColorDialog
         {
-            _mkCustomColors = colors;
-            _mkCustomActive = true;
-            PreviewChanged?.Invoke();
+            FullOpen = true,
+            AnyColor = true,
+            SolidColorOnly = true,
+            Color = System.Drawing.Color.FromArgb(
+                (_mkCustomPrimaryColor >> 16) & 0xFF, (_mkCustomPrimaryColor >> 8) & 0xFF, _mkCustomPrimaryColor & 0xFF),
         };
-        _mkCustomWin.Applied += (colors, brightnessPct) =>
-        {
-            _mkCustomColors = colors;
-            _mkCustomActive = true;
-            MkPersistLighting(customActive: true, brightnessOverride: brightnessPct);
-        };
-        _mkCustomColors = _mkCustomWin.GetColors();
-        _mkCustomActive = true;
+        if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+
+        _mkCustomPrimaryColor = (dlg.Color.R << 16) | (dlg.Color.G << 8) | dlg.Color.B;
+        ApplyColorButton(BtnMkCustomPrimary, _mkCustomPrimaryColor);
+    }
+
+    /// <summary>Selecting "Custom" (or reloading a profile with it active) immediately
+    /// (re)sends the remembered 8 per-LED colors — mirrors Everest 60's own Custom
+    /// branch in ApplyCurrentEv60Effect. Every square-color edit already applies live
+    /// via <see cref="BtnMkCustomPrimary_Click"/>, so this only covers entry into the
+    /// mode itself (combo selection / profile switch / reconnect).</summary>
+    private void ActivateMkCustomLighting()
+    {
         PreviewChanged?.Invoke();
-        _mkCustomWin.Show();
+        MkPersistLighting();
+        MkApplyCustomToDevice();
+    }
+
+    private void MkApplyCustomToDevice()
+    {
+        if (!_mkConnected)
+        {
+            _log("[CUSTOM] skip: Makalu not connected");
+            return;
+        }
+        LblMkRgbStatus.Text = "...";
+        bool ok = _makalu.SetLightingCustom(_mkCustomColors, (int)Brightness);
+        _log($"[CUSTOM] SetLightingCustom -> {ok}");
+        LblMkRgbStatus.Text = ok ? "" : Loc.Get("makalu_failed");
+        LblMkRgbStatus.Foreground = ok ? (Brush)FindResource("K2AccentBrush") : (Brush)FindResource("K2DangerBrush");
     }
 
     // ------------------------------------------------------------
@@ -340,9 +493,9 @@ public partial class MakaluRgbSettingsPanel : UserControl
     {
         int hz = PollingSteps[Math.Clamp((int)Math.Round(e.NewValue), 0, PollingSteps.Length - 1)];
         if (LblMkPollingVal != null) LblMkPollingVal.Text = $"{hz} Hz";
+        if (_mkSuppress) return;
+        MkApplyPolling();
     }
-
-    private void BtnMkPollingApply_Click(object sender, RoutedEventArgs e) => MkApplyPolling();
 
     private void MkApplyPolling()
     {
@@ -350,7 +503,7 @@ public partial class MakaluRgbSettingsPanel : UserControl
         LblMkPollingStatus.Text = "...";
         bool ok = _makalu.SetPollingRate(hz);
         _log($"[SET ] SetPollingRate({hz}) -> {ok}");
-        LblMkPollingStatus.Text = ok ? Loc.Get("makalu_applied") : Loc.Get("makalu_failed");
+        LblMkPollingStatus.Text = ok ? "" : Loc.Get("makalu_failed");
         LblMkPollingStatus.Foreground = ok ? (Brush)FindResource("K2AccentBrush") : (Brush)FindResource("K2DangerBrush");
         MkPersistDeviceSettings();
     }
@@ -359,9 +512,9 @@ public partial class MakaluRgbSettingsPanel : UserControl
     {
         int ms = DebounceSteps[Math.Clamp((int)Math.Round(e.NewValue), 0, DebounceSteps.Length - 1)];
         if (LblMkDebounceVal != null) LblMkDebounceVal.Text = $"{ms} ms";
+        if (_mkSuppress) return;
+        MkApplyDebounce();
     }
-
-    private void BtnMkDebounceApply_Click(object sender, RoutedEventArgs e) => MkApplyDebounce();
 
     private void MkApplyDebounce()
     {
@@ -369,7 +522,7 @@ public partial class MakaluRgbSettingsPanel : UserControl
         LblMkDebounceStatus.Text = "...";
         bool ok = _makalu.SetDebounce(ms);
         _log($"[SET ] SetDebounce({ms}) -> {ok}");
-        LblMkDebounceStatus.Text = ok ? Loc.Get("makalu_applied") : Loc.Get("makalu_failed");
+        LblMkDebounceStatus.Text = ok ? "" : Loc.Get("makalu_failed");
         LblMkDebounceStatus.Foreground = ok ? (Brush)FindResource("K2AccentBrush") : (Brush)FindResource("K2DangerBrush");
         MkPersistDeviceSettings();
     }
@@ -385,7 +538,7 @@ public partial class MakaluRgbSettingsPanel : UserControl
         LblMkAngleStatus.Text = "...";
         bool ok = _makalu.SetAngleSnapping(on);
         _log($"[SET ] SetAngleSnapping({on}) -> {ok}");
-        LblMkAngleStatus.Text = ok ? Loc.Get("makalu_applied") : Loc.Get("makalu_failed");
+        LblMkAngleStatus.Text = ok ? "" : Loc.Get("makalu_failed");
         LblMkAngleStatus.Foreground = ok ? (Brush)FindResource("K2AccentBrush") : (Brush)FindResource("K2DangerBrush");
         MkPersistDeviceSettings();
     }
@@ -401,23 +554,91 @@ public partial class MakaluRgbSettingsPanel : UserControl
         LblMkLiftStatus.Text = "...";
         bool ok = _makalu.SetLiftOff(high);
         _log($"[SET ] SetLiftOff(high={high}) -> {ok}");
-        LblMkLiftStatus.Text = ok ? Loc.Get("makalu_applied") : Loc.Get("makalu_failed");
+        LblMkLiftStatus.Text = ok ? "" : Loc.Get("makalu_failed");
         LblMkLiftStatus.Foreground = ok ? (Brush)FindResource("K2AccentBrush") : (Brush)FindResource("K2DangerBrush");
         MkPersistDeviceSettings();
     }
 
-    /// <summary>Snapshots polling/debounce/angle/lift-off (one combined blob per
-    /// profile) from the current controls — called after each of the four
-    /// independent Apply actions above, so the saved record always reflects
-    /// whichever setting the user has last touched.</summary>
+    private MakaluLodCalibrationWindow? _mkLodWin;
+    private bool _mkLiftCustom;
+    private byte? _mkSurfaceA, _mkSurfaceB;
+
+    /// <summary>Opens the Custom surface calibration popup (see
+    /// MakaluLodCalibrationWindow) instead of writing to the device directly —
+    /// unlike Low/High, "Custom" isn't a Set_lod value, it's a whole
+    /// start/draw/done flow. Applied always fires when the popup's Done
+    /// closes it (see that class's doc for why "not ready" is the expected,
+    /// still-successful outcome) — SurfaceA/B are only non-null on the rare
+    /// confirmed-ready path.</summary>
+    private void RbMkLiftCustom_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_mkSuppress) return;
+        if (_mkLodWin is { IsLoaded: true }) { _mkLodWin.Activate(); return; }
+        _mkLodWin = new MakaluLodCalibrationWindow(_makalu, _log) { Owner = Window.GetWindow(this) };
+        _mkLodWin.Applied += (a, b) =>
+        {
+            _mkLiftCustom = true;
+            _mkSurfaceA = a;
+            _mkSurfaceB = b;
+            LblMkLiftStatus.Text = "";
+            LblMkLiftStatus.Foreground = (Brush)FindResource("K2AccentBrush");
+            MkPersistDeviceSettings();
+        };
+        _mkLodWin.Show();
+    }
+
+    private void SldMkSensitivity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (LblMkSensitivityVal != null) LblMkSensitivityVal.Text = ((int)Math.Round(e.NewValue)).ToString();
+        if (_mkSuppress) return;
+        MkApplySensitivity();
+    }
+
+    private void MkApplySensitivity()
+    {
+        int sensitivity = Math.Clamp((int)Math.Round(SldMkSensitivity.Value), MakaluOsMouseSettings.ScaleMin, MakaluOsMouseSettings.ScaleMax);
+        LblMkSensitivityStatus.Text = "...";
+        bool ok = MakaluOsMouseSettings.ApplySensitivity(sensitivity);
+        _log($"[SET ] ApplySensitivity({sensitivity}) -> {ok}");
+        LblMkSensitivityStatus.Text = ok ? "" : Loc.Get("makalu_failed");
+        LblMkSensitivityStatus.Foreground = ok ? (Brush)FindResource("K2AccentBrush") : (Brush)FindResource("K2DangerBrush");
+        MkPersistDeviceSettings();
+    }
+
+    private void SldMkClickSpeed_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (LblMkClickSpeedVal != null) LblMkClickSpeedVal.Text = ((int)Math.Round(e.NewValue)).ToString();
+        if (_mkSuppress) return;
+        MkApplyClickSpeed();
+    }
+
+    private void MkApplyClickSpeed()
+    {
+        int clickSpeed = Math.Clamp((int)Math.Round(SldMkClickSpeed.Value), MakaluOsMouseSettings.ScaleMin, MakaluOsMouseSettings.ScaleMax);
+        LblMkClickSpeedStatus.Text = "...";
+        bool ok = MakaluOsMouseSettings.ApplyClickSpeed(clickSpeed);
+        _log($"[SET ] ApplyClickSpeed({clickSpeed}) -> {ok}");
+        LblMkClickSpeedStatus.Text = ok ? "" : Loc.Get("makalu_failed");
+        LblMkClickSpeedStatus.Foreground = ok ? (Brush)FindResource("K2AccentBrush") : (Brush)FindResource("K2DangerBrush");
+        MkPersistDeviceSettings();
+    }
+
+    /// <summary>Snapshots polling/debounce/angle/lift-off/sensitivity/click-speed (one
+    /// combined blob per profile) from the current controls — called after each of the
+    /// Apply actions above, so the saved record always reflects whichever setting the
+    /// user has last touched.</summary>
     private void MkPersistDeviceSettings()
     {
         if (_mkStore is null) return;
         int pollIdx = Math.Clamp((int)Math.Round(SldMkPolling.Value), 0, PollingSteps.Length - 1);
         int debIdx  = Math.Clamp((int)Math.Round(SldMkDebounce.Value), 0, DebounceSteps.Length - 1);
+        int sensitivity = Math.Clamp((int)Math.Round(SldMkSensitivity.Value), MakaluOsMouseSettings.ScaleMin, MakaluOsMouseSettings.ScaleMax);
+        int clickSpeed  = Math.Clamp((int)Math.Round(SldMkClickSpeed.Value), MakaluOsMouseSettings.ScaleMin, MakaluOsMouseSettings.ScaleMax);
         _mkStore.SaveSettings(CurrentSlot, new MakaluDeviceSettingsRecord(
             PollingSteps[pollIdx], DebounceSteps[debIdx],
-            RbMkAngleOn.IsChecked == true, RbMkLiftHigh.IsChecked == true));
+            RbMkAngleOn.IsChecked == true, RbMkLiftHigh.IsChecked == true,
+            RbMkLiftCustom.IsChecked == true && _mkLiftCustom, _mkSurfaceA, _mkSurfaceB,
+            sensitivity, clickSpeed));
     }
 
     // ------------------------------------------------------------
@@ -526,7 +747,12 @@ public partial class MakaluRgbSettingsPanel : UserControl
         SldMkDpi.Minimum = _mkInfo.DpiMin;
         if (_mkDpiActive >= _mkDpiCount) _mkDpiActive = _mkDpiCount - 1;
         MkUpdateDpiButtonLabels();
-        SldMkDpi.Value = _mkDpiValues[_mkDpiActive];
+        // Suppressed: rebuilding the tab strip (Init/UpdateDeviceInfo/profile reload/Add/
+        // Remove) must never itself trigger a device write — only a genuine user action
+        // (tab click, slider drag, textbox commit) should, see SldMkDpi_ValueChanged.
+        bool wasSuppress = _mkSuppress;
+        _mkSuppress = true;
+        try { SldMkDpi.Value = _mkDpiValues[_mkDpiActive]; } finally { _mkSuppress = wasSuppress; }
         TxtMkDpi.Text = _mkDpiValues[_mkDpiActive].ToString();
     }
 
@@ -548,10 +774,15 @@ public partial class MakaluRgbSettingsPanel : UserControl
     private void MkDpiSelectLevel(int idx)
     {
         _mkDpiActive = idx;
-        SldMkDpi.Value = _mkDpiValues[idx];
+        bool wasSuppress = _mkSuppress;
+        _mkSuppress = true;
+        try { SldMkDpi.Value = _mkDpiValues[idx]; } finally { _mkSuppress = wasSuppress; }
         TxtMkDpi.Text = _mkDpiValues[idx].ToString();
         MkUpdateDpiButtonLabels();
         _mkDpiLevelButtons[idx].BringIntoView();
+        // Selecting a level is itself a modification (activates it on the device) —
+        // apply immediately, same "no Apply button" rule as the sliders above.
+        MkApplyDpi();
     }
 
     /// <summary>Appends a new DPI level (local UI state only — like every other
@@ -565,12 +796,12 @@ public partial class MakaluRgbSettingsPanel : UserControl
         _mkDpiValues[_mkDpiCount] = DefaultDpiLevels[_mkDpiCount];
         _mkDpiCount++;
         BuildMkDpiLevelButtons();
-        MkDpiSelectLevel(_mkDpiCount - 1);
-        _log($"[DPI ] level {_mkDpiCount} added locally (Apply to send to device)");
+        MkDpiSelectLevel(_mkDpiCount - 1); // also applies to device, see MkDpiSelectLevel
+        _log($"[DPI ] level {_mkDpiCount} added");
     }
 
-    /// <summary>Removes a DPI level (local UI state only, see BtnMkDpiAddLevel_Click).
-    /// Shifts every later level down one slot so level numbering stays contiguous.</summary>
+    /// <summary>Removes a DPI level (shifts every later level down one slot so level
+    /// numbering stays contiguous) and applies the new table immediately.</summary>
     private void MkDpiRemoveLevel(int idx)
     {
         if (_mkDpiCount <= 1 || idx < 0 || idx >= _mkDpiCount) return;
@@ -578,7 +809,8 @@ public partial class MakaluRgbSettingsPanel : UserControl
         _mkDpiValues[_mkDpiCount - 1] = DefaultDpiLevels[_mkDpiCount - 1];
         _mkDpiCount--;
         BuildMkDpiLevelButtons();
-        _log($"[DPI ] level {idx + 1} removed locally (Apply to send to device)");
+        MkApplyDpi();
+        _log($"[DPI ] level {idx + 1} removed");
     }
 
     /// <summary>Scrolls the level strip by one tab — only visible/relevant when
@@ -607,14 +839,15 @@ public partial class MakaluRgbSettingsPanel : UserControl
         _mkDpiValues[_mkDpiActive] = dpi;
         TxtMkDpi.Text = dpi.ToString();
         MkUpdateDpiButtonLabels();
+        MkApplyDpi();
     }
 
     private void TxtMkDpi_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter) MkCommitDpiEntry();
+        if (e.Key == Key.Enter) MkApplyDpi();
     }
 
-    private void TxtMkDpi_LostFocus(object sender, RoutedEventArgs e) => MkCommitDpiEntry();
+    private void TxtMkDpi_LostFocus(object sender, RoutedEventArgs e) => MkApplyDpi();
 
     private void MkCommitDpiEntry()
     {
@@ -627,20 +860,16 @@ public partial class MakaluRgbSettingsPanel : UserControl
         MkUpdateDpiButtonLabels();
     }
 
-    private void BtnMkDpiApply_Click(object sender, RoutedEventArgs e) => MkApplyDpi();
-
     private void MkApplyDpi()
     {
         MkCommitDpiEntry();
         LblMkDpiStatus.Text = "...";
         bool ok = _makalu.SetAllDpi(_mkDpiValues, _mkDpiActive + 1, _mkInfo.DpiMin, _mkDpiCount);
         _log($"[DPI ] SetAllDpi([{string.Join(",", _mkDpiValues)}], active={_mkDpiActive + 1}, count={_mkDpiCount}) -> {ok}");
-        LblMkDpiStatus.Text = ok ? Loc.Get("makalu_applied") : Loc.Get("makalu_failed");
+        LblMkDpiStatus.Text = ok ? "" : Loc.Get("makalu_failed");
         LblMkDpiStatus.Foreground = ok ? (Brush)FindResource("K2AccentBrush") : (Brush)FindResource("K2DangerBrush");
         _mkStore?.SaveDpi(CurrentSlot, new MakaluDpiRecord(_mkDpiValues[.._mkDpiCount], _mkDpiActive));
     }
-
-    private void BtnMkDpiRefresh_Click(object sender, RoutedEventArgs e) => MkDpiRefreshFromDevice();
 
     private void MkDpiRefreshFromDevice()
     {
@@ -697,8 +926,17 @@ public partial class MakaluRgbSettingsPanel : UserControl
             if (lighting is not null)
             {
                 var eff = (MakaluProtocol.Effect)lighting.Effect;
-                int idx = Array.FindIndex(MkEffectList, x => x.Eff == eff);
+                // RgbBreathing is no longer a combo entry of its own (2026-07-27 merge) —
+                // a profile saved with it persists that literal wire value (ResolveMkWireEffect
+                // in MkPersistLighting), so map it back onto Breathing + the Rainbow radio.
+                bool rainbowBreathing = eff == MakaluProtocol.Effect.RgbBreathing;
+                var comboEff = rainbowBreathing ? MakaluProtocol.Effect.Breathing : eff;
+                int idx = Array.FindIndex(MkEffectList, x => x.Eff == comboEff);
                 CbMkEffect.SelectedIndex = idx >= 0 ? idx : 0;
+                if (comboEff == MakaluProtocol.Effect.Breathing)
+                {
+                    if (rainbowBreathing) RbMkColorRainbow.IsChecked = true; else RbMkColorSingle.IsChecked = true;
+                }
                 _mkColor1 = lighting.Color1;
                 _mkColor2 = lighting.Color2;
                 _mkSpeedIndex = Math.Clamp(lighting.SpeedIndex, 0, 2);
@@ -714,6 +952,15 @@ public partial class MakaluRgbSettingsPanel : UserControl
                 {
                     int c = lighting.CustomColors[i];
                     _mkCustomColors[i] = ((byte)((c >> 16) & 0xFF), (byte)((c >> 8) & 0xFF), (byte)(c & 0xFF));
+                }
+                // Self-heal: older/imported records can have CustomActive=true while
+                // Effect stayed at whatever preset was active before Custom was chosen
+                // (Custom only became a CbMkEffect entry itself 2026-07-27) — force the
+                // combo onto Custom so its selection always agrees with _mkCustomActive.
+                if (_mkCustomActive)
+                {
+                    int customIdx = Array.FindIndex(MkEffectList, x => x.Eff == MakaluProtocol.Effect.Custom);
+                    if (customIdx >= 0) CbMkEffect.SelectedIndex = customIdx;
                 }
                 UpdateMkCapabilities();
             }
@@ -741,7 +988,19 @@ public partial class MakaluRgbSettingsPanel : UserControl
                 LblMkDebounceVal.Text = $"{(debIdx >= 0 ? settings.DebounceMs : DebounceSteps[0])} ms";
 
                 if (settings.AngleSnapping) RbMkAngleOn.IsChecked = true; else RbMkAngleOff.IsChecked = true;
-                if (settings.LiftOffHigh) RbMkLiftHigh.IsChecked = true; else RbMkLiftLow.IsChecked = true;
+                _mkLiftCustom = settings.LiftOffCustom;
+                _mkSurfaceA = settings.SurfaceA;
+                _mkSurfaceB = settings.SurfaceB;
+                if (settings.LiftOffCustom) RbMkLiftCustom.IsChecked = true;
+                else if (settings.LiftOffHigh) RbMkLiftHigh.IsChecked = true;
+                else RbMkLiftLow.IsChecked = true;
+
+                int sensitivity = Math.Clamp(settings.Sensitivity, MakaluOsMouseSettings.ScaleMin, MakaluOsMouseSettings.ScaleMax);
+                SldMkSensitivity.Value = sensitivity;
+                LblMkSensitivityVal.Text = sensitivity.ToString();
+                int clickSpeed = Math.Clamp(settings.ClickSpeed, MakaluOsMouseSettings.ScaleMin, MakaluOsMouseSettings.ScaleMax);
+                SldMkClickSpeed.Value = clickSpeed;
+                LblMkClickSpeedVal.Text = clickSpeed.ToString();
             }
         }
         finally { _mkSuppress = wasSuppress; }
@@ -754,21 +1013,31 @@ public partial class MakaluRgbSettingsPanel : UserControl
             return;
         }
 
-        if (_mkCustomActive)
-        {
-            bool ok = _makalu.SetLightingCustom(_mkCustomColors, (int)Brightness);
-            _log($"[PROFILE] reload custom lighting -> {ok}");
-        }
-        else
-        {
-            ApplyCurrentMkEffect();
-        }
+        // CbMkEffect's selection now always agrees with _mkCustomActive (see the
+        // self-heal above), so this alone covers both the Custom and preset paths —
+        // ApplyCurrentMkEffect's own Custom branch calls MkApplyCustomToDevice.
+        ApplyCurrentMkEffect();
         if (settings is not null)
         {
             MkApplyPolling();
             MkApplyDebounce();
             MkApplyAngle(settings.AngleSnapping);
-            MkApplyLiftOff(settings.LiftOffHigh);
+            if (settings.LiftOffCustom)
+            {
+                // No confirmed way to "restore" a specific learned calibration
+                // (LodSetSurface's ready path has never actually fired in
+                // practice, see MakaluLodCalibrationWindow's doc) — the closest
+                // real, confirmed equivalent is just re-arming Custom mode via
+                // the same Lod_calibration_start the popup's own Start uses.
+                if (settings.SurfaceA is { } a && settings.SurfaceB is { } b)
+                    _makalu.LodSetSurface(a, b);
+                else
+                    _makalu.LodCalibrationStart();
+            }
+            else
+            {
+                MkApplyLiftOff(settings.LiftOffHigh);
+            }
         }
         if (dpi is not null) MkApplyDpi();
     }

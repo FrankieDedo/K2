@@ -77,8 +77,16 @@ internal sealed class Everest60LedColorPoller : IDisposable
         {
             bool ok = _ev60.TryGetColorData(_buf);
             _inFlight = false;
+            // A read started right before Stop() takes ~150ms (10 HID round-trips) to
+            // land — user report 2026-07-28: "real AND simulated LED preview stay on
+            // after leaving Lighting". MainWindow.Everest60.cs's own cleanup
+            // (ApplyEv60KeycapAppearanceToAllKeys, called synchronously from
+            // UpdateEv60LedPreviewActive right when Stop() is called) runs BEFORE this
+            // already-in-flight read's result comes back, so without this check the
+            // stale colors land right after the cleanup and nothing repaints again
+            // until an unrelated event happens to trigger one — effectively stuck.
             if (ok)
-                dispatcher.BeginInvoke(() => ColorsUpdated?.Invoke(_buf));
+                dispatcher.BeginInvoke(() => { if (_timer.IsEnabled) ColorsUpdated?.Invoke(_buf); });
         });
     }
 

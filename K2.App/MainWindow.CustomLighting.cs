@@ -1,16 +1,18 @@
-// MainWindow.CustomLighting.cs — partial class: "Custom Lighting" panel.
+﻿// MainWindow.CustomLighting.cs — partial class: "Custom Lighting" panel.
 // Per-key custom color painting: select a color, click keys on the
 // keyboard overlay to color them, apply to device via ChangeCustomizeEffect.
 // Panel separate from the RGB preset, as per spec.
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using K2.App.Services;
 
 namespace K2.App;
@@ -31,6 +33,37 @@ public partial class MainWindow
     /// owning canvas disambiguates (see <see cref="TryButtonToLed"/>).</summary>
     private readonly Dictionary<int, Color> _customKeyColors = new();
 
+    /// <summary>Map LED index → dynamic effect assigned by the user (Wave/Breathing/
+    /// Reactive/Tornado/Matrix/Yeti — everything except Static/Off, which just write a
+    /// plain color into <see cref="_customKeyColors"/> instead). A LED is either in
+    /// this map OR <see cref="_customKeyColors"/>, never both — painting with a dynamic
+    /// effect removes any static color at that LED and vice versa (see
+    /// <see cref="TryCustomPaint"/>). All LEDs sharing the same effect share that
+    /// effect's ONE param set in <see cref="_customFxParams"/> — the firmware only
+    /// takes one param packet per effect code, not per LED (2026-07-22 capture finding,
+    /// see EverestSideLedProtocol's per-region-effects section).</summary>
+    private readonly Dictionary<int, EverestService.Effect> _customKeyEffects = new();
+
+    /// <summary>Per-dynamic-effect parameters (color mode, colors, direction, speed) —
+    /// keyed by <see cref="EverestService.Effect"/>, populated lazily via
+    /// <see cref="FxParamsFor"/>. Brightness is NOT here: it's the single device-wide
+    /// <c>SldEvBrightness</c>, same as the global RGB panel and the Static/side-ring
+    /// custom colors.</summary>
+    private readonly Dictionary<EverestService.Effect, CustomFxParams> _customFxParams = new();
+
+    private sealed class CustomFxParams
+    {
+        public Services.EverestSideLedProtocol.CustomEffectColorMode Mode = Services.EverestSideLedProtocol.CustomEffectColorMode.Single;
+        public int Direction;
+        public int Speed = 50;
+        public Color Color1 = Color.FromRgb(0xFF, 0x00, 0x00);
+        public Color Color2 = Color.FromRgb(0x00, 0x00, 0xFF);
+    }
+
+    /// <summary>Suppresses re-entrant saves while <see cref="UpdateCustomFxParamsVisibility"/>
+    /// programmatically sets the param controls — same pattern as _evRgbSuppress.</summary>
+    private bool _customFxSuppress;
+
     /// <summary>Map wire index (0-44, see <see cref="Services.EverestSideLedProtocol"/>)
     /// → custom color for the 45 border LEDs. Separate channel from
     /// <see cref="_customKeyColors"/>: sent via <see cref="EverestService.SetSideLedColors"/>
@@ -49,13 +82,45 @@ public partial class MainWindow
     // ─────────────────────── Init ───────────────────────
 
     /// <summary>Paint-effect choices for <see cref="CbCustomPaintEffect"/> — the 8
-    /// effects the user asked for (matches Base Camp's own Custom section). Index 0
-    /// (Static) is the only one wired to actually send data today — see
-    /// <see cref="BtnCustomApply_Click"/>'s guard and TODO.md's "mixed dynamic effects"
-    /// open question (2026-07-22). Plain hardcoded English strings, same pattern as
-    /// MainWindow.Everest.cs's EvEffectList (that combo isn't localized either).</summary>
+    /// effects the user asked for (matches Base Camp's own Custom section). Static (0)
+    /// and Off (7) write a plain color via <see cref="_customKeyColors"/> (Off = black);
+    /// the other 6 are dynamic per-region effects wired via <see cref="CustomFxCapsFor"/>
+    /// (2026-07-22, see EverestSideLedProtocol's per-region-effects section). Plain
+    /// hardcoded English strings, same pattern as MainWindow.Everest.cs's EvEffectList
+    /// (that combo isn't localized either).</summary>
     private static readonly string[] CustomPaintEffects =
         { "Static", "Wave", "Tornado", "Breathing", "Reactive", "Matrix", "Yeti", "Off" };
+
+    /// <summary>Per-dynamic-effect capabilities driving <see cref="UpdateCustomFxParamsVisibility"/>
+    /// — which color modes and direction options to show for the effect currently selected
+    /// in <see cref="CbCustomPaintEffect"/>. Direction codes/labels are the SAME ones
+    /// MainWindow.Everest.cs's CapsFor uses for the global RGB panel (already hardware-
+    /// validated there) — reused here on the assumption the raw per-region packet uses an
+    /// identical byte, per <see cref="Services.EverestSideLedProtocol.BuildCustomEffectParamPacket"/>'s
+    /// doc. <c>TwoStopLayout</c> = Reactive/Matrix/Yeti's always-two-colors shape
+    /// (<see cref="Services.EverestSideLedProtocol.BuildTwoStopEffectParamPacket"/>) — no
+    /// color-mode choice, no direction, no rainbow (matches BaseCampLinux's global
+    /// encoding for these three, cross-checked byte-for-byte for Reactive by capture).
+    /// Null for Static(0)/Off(7) — those aren't dynamic effects.</summary>
+    private sealed record CustomFxCaps(
+        EverestService.Effect Eff, bool Rainbow, bool Dual, string[] DirLabels, int[] DirCodes, bool TwoStopLayout);
+
+    private static CustomFxCaps? CustomFxCapsFor(int paintEffectIndex) => paintEffectIndex switch
+    {
+        1 => new(EverestService.Effect.Wave,      true,  false, new[] { "Right", "Down", "Left", "Up" }, new[] { 0, 2, 4, 6 }, false),
+        2 => new(EverestService.Effect.Tornado,   true,  false, new[] { "Clockwise", "Counter-CW" },     new[] { 9, 10 },      false),
+        3 => new(EverestService.Effect.Breath,    true,  true,  System.Array.Empty<string>(), System.Array.Empty<int>(), false),
+        4 => new(EverestService.Effect.ReactiveA, false, true,  System.Array.Empty<string>(), System.Array.Empty<int>(), true),
+        5 => new(EverestService.Effect.Matrix,    false, true,  System.Array.Empty<string>(), System.Array.Empty<int>(), true),
+        6 => new(EverestService.Effect.Yeti,      false, true,  System.Array.Empty<string>(), System.Array.Empty<int>(), true),
+        _ => null, // 0=Static, 7=Off
+    };
+
+    /// <summary>Lazily creates/returns the shared param set for a dynamic effect —
+    /// every LED painted with that effect uses these SAME values (one param packet per
+    /// effect code on the wire, not per LED).</summary>
+    private CustomFxParams FxParamsFor(EverestService.Effect eff) =>
+        _customFxParams.TryGetValue(eff, out var p) ? p : (_customFxParams[eff] = new CustomFxParams());
 
     private void InitCustomLightingPanel()
     {
@@ -67,8 +132,9 @@ public partial class MainWindow
 
         BuildBorderSquares();
 
-        // Load previously saved colors
+        // Load previously saved colors + dynamic-effect assignments/params
         LoadCustomColorsFromStore();
+        UpdateCustomFxParamsVisibility();
 
         // Edge case: if "Custom" was the persisted rgb.effect, UpdateEvCapabilities
         // already called SetCustomPaintModeActive(true) earlier in InitEverestModule
@@ -134,12 +200,11 @@ public partial class MainWindow
             {
                 Width = BorderSz,
                 Height = BorderSz,
-                Padding = new Thickness(0),
+                Style = (Style)FindResource("K2ColorSquareButton"),
                 BorderThickness = new Thickness(1),
                 BorderBrush = new SolidColorBrush(Color.FromRgb(0x45, 0x45, 0x4F)),
                 Background = Brushes.Transparent,
                 Tag = wireIdx,
-                Cursor = System.Windows.Input.Cursors.Hand,
             };
             btn.Click += BorderSquare_Click;
             Canvas.SetLeft(btn, x);
@@ -161,18 +226,65 @@ public partial class MainWindow
 
     /// <summary>
     /// Called when the user clicks a key on the keyboard overlay while paint
-    /// mode is active. Colors the key and records the color (by LED index).
+    /// mode is active. Colors/assigns the key per the selected paint effect.
     /// </summary>
     internal bool TryCustomPaint(Button keyButton, int matrixId)
     {
         if (!_customPaintMode) return false;
 
         if (TryButtonToLed(keyButton, matrixId, out int led))
-        {
-            _customKeyColors[led] = _customBrushColor;
-            ApplyColorOverlay(keyButton, _customBrushColor);
-        }
+            PaintLed(led, keyButton);
         return true; // consumed, do not open action dialog
+    }
+
+    /// <summary>0-based index of "Off" in <see cref="CustomPaintEffects"/> — writes
+    /// black via the Static color channel, not a real dynamic effect.</summary>
+    private static int CustomPaintOffIndex => CustomPaintEffects.Length - 1;
+
+    /// <summary>
+    /// Colors/assigns one LED per the currently selected paint effect: Static writes
+    /// the brush color, Off writes black (both via <see cref="_customKeyColors"/>), any
+    /// dynamic effect assigns the LED to that effect's region
+    /// (<see cref="_customKeyEffects"/>) instead — a LED is in exactly one of the two
+    /// maps, never both. The on-screen tint for a dynamic effect is computed the same
+    /// way as every subsequent animation frame (<see cref="ComputeFxPreviewColor"/>,
+    /// evaluated at the current clock position) instead of a flat Color1 — so a
+    /// freshly-painted key immediately reads as Rainbow/Dual/Single, not a placeholder
+    /// solid color that only turns into the right animation on the next 50ms tick.
+    /// </summary>
+    private void PaintLed(int led, Button keyButton)
+    {
+        var caps = CustomFxCapsFor(CbCustomPaintEffect.SelectedIndex);
+        if (caps is null)
+        {
+            bool off = CbCustomPaintEffect.SelectedIndex == CustomPaintOffIndex;
+            var color = off ? Colors.Black : _customBrushColor;
+            _customKeyEffects.Remove(led);
+            _customKeyColors[led] = color;
+            ApplyColorOverlay(keyButton, color);
+        }
+        else
+        {
+            _customKeyColors.Remove(led);
+            _customKeyEffects[led] = caps.Eff;
+            var p = FxParamsFor(caps.Eff);
+            double t = _customFxPreviewClock.Elapsed.TotalSeconds;
+            ApplyColorOverlay(keyButton, ComputeFxPreviewColor(caps.Eff, led, p, keyButton, t));
+        }
+    }
+
+    /// <summary>Re-tints every on-screen key currently assigned to <paramref name="eff"/>
+    /// with its (possibly just-changed) Color1 — called after editing a dynamic effect's
+    /// params so the preview stays in sync without a full ReapplyCustomOverlays pass.</summary>
+    private void RetintKeysForEffect(EverestService.Effect eff)
+    {
+        var color = FxParamsFor(eff).Color1;
+        foreach (var kvp in _customKeyEffects)
+        {
+            if (kvp.Value != eff) continue;
+            var btn = FindKeyButtonByLed(kvp.Key);
+            if (btn != null) ApplyColorOverlay(btn, color);
+        }
     }
 
     /// <summary>Translates a clicked key Button to its LED index, using the owning
@@ -235,7 +347,7 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>Reapplies overlays from the colors saved in the map.</summary>
+    /// <summary>Reapplies overlays from the colors/effect assignments saved in the maps.</summary>
     private void ReapplyCustomOverlays()
     {
         foreach (var kvp in _customKeyColors)
@@ -243,6 +355,16 @@ public partial class MainWindow
             var btn = FindKeyButtonByLed(kvp.Key);
             if (btn != null)
                 ApplyColorOverlay(btn, kvp.Value);
+        }
+        foreach (var kvp in _customKeyEffects)
+        {
+            var btn = FindKeyButtonByLed(kvp.Key);
+            if (btn != null)
+            {
+                var p = FxParamsFor(kvp.Value);
+                double t = _customFxPreviewClock.Elapsed.TotalSeconds;
+                ApplyColorOverlay(btn, ComputeFxPreviewColor(kvp.Value, kvp.Key, p, btn, t));
+            }
         }
         foreach (var kvp in _customSideColors)
             if (_customSideButtons.TryGetValue(kvp.Key, out var btn))
@@ -270,6 +392,145 @@ public partial class MainWindow
             .FirstOrDefault(b => !_ndkButtons.Contains(b) && b.Tag is int id && id == matrixId);
     }
 
+    // ─────────────────── Simulated dynamic-effect preview ───────────────────
+    // K2 has no way to see the REAL animation (that only exists on the firmware),
+    // so this is a cosmetic approximation — good enough to tell Rainbow/Breathing/
+    // Wave/Tornado apart at a glance and confirm a color/direction/speed change
+    // took effect, not a faithful reproduction of the firmware's actual timing or
+    // curve. User request 2026-07-25: painting a dynamic effect used to just tint
+    // every assigned key with a frozen Color1 (Rainbow always looked plain red,
+    // since Color1 is irrelevant/hidden for that mode). Runs at 20fps while paint
+    // mode is active; only touches LEDs actually in <see cref="_customKeyEffects"/>.
+
+    private DispatcherTimer? _customFxPreviewTimer;
+    private readonly Stopwatch _customFxPreviewClock = Stopwatch.StartNew();
+
+    private void StartCustomFxPreview()
+    {
+        if (_customFxPreviewTimer != null) return;
+        _customFxPreviewTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(50) };
+        _customFxPreviewTimer.Tick += CustomFxPreviewTick;
+        _customFxPreviewTimer.Start();
+    }
+
+    private void StopCustomFxPreview()
+    {
+        if (_customFxPreviewTimer is null) return;
+        _customFxPreviewTimer.Stop();
+        _customFxPreviewTimer.Tick -= CustomFxPreviewTick;
+        _customFxPreviewTimer = null;
+    }
+
+    private void CustomFxPreviewTick(object? sender, EventArgs e)
+    {
+        if (_customKeyEffects.Count == 0) return;
+        double t = _customFxPreviewClock.Elapsed.TotalSeconds;
+        foreach (var kvp in _customKeyEffects)
+        {
+            var btn = FindKeyButtonByLed(kvp.Key);
+            if (btn is null) continue;
+            var p = FxParamsFor(kvp.Value);
+            ApplyColorOverlay(btn, ComputeFxPreviewColor(kvp.Value, kvp.Key, p, btn, t));
+        }
+    }
+
+    /// <summary>Picks an animation shape per color mode/effect: Rainbow cycles hue
+    /// (positionally offset along the wave/tornado direction so it visibly sweeps,
+    /// or by LED index for effects with no direction concept); two-color effects
+    /// (Dual mode, or Reactive/Matrix/Yeti which are ALWAYS two colors — see
+    /// CustomFxCapsFor's TwoStopLayout) crossfade Color1↔Color2 like a slow blink;
+    /// Breathing in Single mode pulses Color1's brightness; Wave/Tornado in Single
+    /// mode sweep a brighter band of Color1 across the assigned keys along the
+    /// chosen direction. Speed maps to 0.15-1.5 animation cycles/sec (0=slowest,
+    /// 100=fastest, same convention as the speed slider) — not the real firmware
+    /// scale, just a UI-reasonable range.</summary>
+    private Color ComputeFxPreviewColor(EverestService.Effect eff, int led, CustomFxParams p, Button btn, double t)
+    {
+        double cyclesPerSec = 0.15 + p.Speed / 100.0 * 1.35;
+
+        if (p.Mode == EverestSideLedProtocol.CustomEffectColorMode.Rainbow)
+        {
+            double phase = eff is EverestService.Effect.Wave or EverestService.Effect.Tornado
+                ? FxPreviewPositionalPhase(btn, eff, p.Direction)
+                : led % 16 / 16.0;
+            double hue = (t * cyclesPerSec * 360.0 + phase * 360.0) % 360.0;
+            return HsvToRgb(hue, 1.0, 1.0);
+        }
+
+        bool twoColor = p.Mode == EverestSideLedProtocol.CustomEffectColorMode.Dual
+            || eff is EverestService.Effect.ReactiveA or EverestService.Effect.Matrix or EverestService.Effect.Yeti;
+        if (twoColor)
+        {
+            double phase = led % 16 / 16.0;
+            double wave = (Math.Sin(2 * Math.PI * (t * cyclesPerSec + phase)) + 1) / 2;
+            return LerpColor(p.Color2, p.Color1, wave);
+        }
+
+        if (eff == EverestService.Effect.Breath)
+        {
+            double wave = (Math.Sin(2 * Math.PI * t * cyclesPerSec) + 1) / 2;
+            return LerpColor(Colors.Black, p.Color1, 0.15 + 0.85 * wave);
+        }
+
+        // Wave/Tornado, Single mode: traveling bright band along the direction.
+        double bandPhase = FxPreviewPositionalPhase(btn, eff, p.Direction);
+        double band = (Math.Cos(2 * Math.PI * (bandPhase - t * cyclesPerSec)) + 1) / 2;
+        return LerpColor(Colors.Black, p.Color1, 0.2 + 0.8 * band);
+    }
+
+    /// <summary>0-1 position of <paramref name="btn"/> along the effect's direction,
+    /// in <see cref="CvsEvRubberBand"/>'s coordinate space (spans the whole device
+    /// box, so keyboard/numpad keys share one consistent frame). Tornado uses the
+    /// angle around the box's center instead of a straight axis.</summary>
+    private double FxPreviewPositionalPhase(Button btn, EverestService.Effect eff, int direction)
+    {
+        double w = CvsEvRubberBand.ActualWidth, h = CvsEvRubberBand.ActualHeight;
+        if (w <= 0 || h <= 0 || !btn.IsVisible) return 0;
+        Point center = btn.TransformToVisual(CvsEvRubberBand).Transform(new Point(btn.ActualWidth / 2, btn.ActualHeight / 2));
+
+        if (eff == EverestService.Effect.Tornado)
+        {
+            double angle = Math.Atan2(center.Y - h / 2, center.X - w / 2); // -pi..pi
+            double norm = (angle + Math.PI) / (2 * Math.PI); // 0..1
+            return direction == 10 ? 1 - norm : norm; // 10=Counter-CW, reversed sweep
+        }
+
+        return direction switch
+        {
+            4 => 1 - center.X / w, // Left
+            2 => center.Y / h,     // Down
+            6 => 1 - center.Y / h, // Up
+            _ => center.X / w,     // Right (0) and fallback
+        };
+    }
+
+    private static Color HsvToRgb(double hueDeg, double s, double v)
+    {
+        hueDeg = (hueDeg % 360 + 360) % 360;
+        double c = v * s;
+        double x = c * (1 - Math.Abs(hueDeg / 60.0 % 2 - 1));
+        double m = v - c;
+        var (r, g, b) = hueDeg switch
+        {
+            < 60 => (c, x, 0.0),
+            < 120 => (x, c, 0.0),
+            < 180 => (0.0, c, x),
+            < 240 => (0.0, x, c),
+            < 300 => (x, 0.0, c),
+            _ => (c, 0.0, x),
+        };
+        return Color.FromRgb((byte)((r + m) * 255), (byte)((g + m) * 255), (byte)((b + m) * 255));
+    }
+
+    private static Color LerpColor(Color a, Color b, double t)
+    {
+        t = Math.Clamp(t, 0, 1);
+        return Color.FromRgb(
+            (byte)(a.R + (b.R - a.R) * t),
+            (byte)(a.G + (b.G - a.G) * t),
+            (byte)(a.B + (b.B - a.B) * t));
+    }
+
     // ─────────────────────── Event handlers ───────────────────────
 
     /// <summary>
@@ -286,9 +547,15 @@ public partial class MainWindow
         UpdateBorderOverlayVisibility();
         UpdateDockVisibility();
         if (_customPaintMode)
+        {
             ReapplyCustomOverlays();
+            StartCustomFxPreview();
+        }
         else
+        {
+            StopCustomFxPreview();
             ClearAllOverlays();
+        }
     }
 
     /// <summary>
@@ -326,6 +593,7 @@ public partial class MainWindow
     private void CbCustomPaintEffect_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
         UpdateBorderOverlayVisibility();
+        UpdateCustomFxParamsVisibility();
     }
 
     private void BtnCustomBrushColor_Click(object sender, RoutedEventArgs e)
@@ -336,6 +604,138 @@ public partial class MainWindow
 
         _customBrushColor = Color.FromRgb((byte)((rgb >> 16) & 0xFF), (byte)((rgb >> 8) & 0xFF), (byte)(rgb & 0xFF));
         BtnCustomBrushColor.Background = new SolidColorBrush(_customBrushColor);
+    }
+
+    // ─────────────────────── Dynamic effect params panel ───────────────────────
+
+    /// <summary>
+    /// Shows/hides <c>PnlCustomFxParams</c> (direction/speed/color-mode/colors) per
+    /// whether <see cref="CbCustomPaintEffect"/>'s current selection is a dynamic effect
+    /// (<see cref="CustomFxCapsFor"/> non-null), and populates the controls from that
+    /// effect's own remembered param set (<see cref="FxParamsFor"/>) — mirrors
+    /// MainWindow.Everest.cs's UpdateEvCapabilities for the global RGB panel. Only
+    /// Static keeps showing the plain brush-color swatch (Off always paints black
+    /// regardless of the brush color, so the swatch would be misleading there).
+    /// </summary>
+    private void UpdateCustomFxParamsVisibility()
+    {
+        var caps = CustomFxCapsFor(CbCustomPaintEffect.SelectedIndex);
+        bool dynamic = caps != null;
+        bool isStatic = CbCustomPaintEffect.SelectedIndex == 0;
+        PnlCustomFxParams.Visibility = dynamic ? Visibility.Visible : Visibility.Collapsed;
+        LblCustomColorStatic.Visibility = isStatic ? Visibility.Visible : Visibility.Collapsed;
+        BtnCustomBrushColor.Visibility = isStatic ? Visibility.Visible : Visibility.Collapsed;
+        if (caps is null) return;
+
+        var p = FxParamsFor(caps.Eff);
+        bool prevSuppress = _customFxSuppress;
+        _customFxSuppress = true;
+        try
+        {
+            if (caps.DirLabels.Length > 0)
+            {
+                int di = System.Array.IndexOf(caps.DirCodes, p.Direction);
+                if (di < 0) di = 0;
+                SegmentedButtonGroup.Rebuild(GridCustomFxDirection, "CustomFxDirection", caps.DirLabels, RbCustomFxDirection_Checked, di);
+                PnlCustomFxDirection.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                GridCustomFxDirection.Children.Clear();
+                PnlCustomFxDirection.Visibility = Visibility.Collapsed;
+            }
+
+            // Reactive/Matrix/Yeti (TwoStopLayout) are always two colors, no mode
+            // choice — hide the radio group entirely and force Dual for the color-row
+            // visibility logic below.
+            PnlCustomFxColorMode.Visibility = caps.TwoStopLayout ? Visibility.Collapsed : Visibility.Visible;
+            RbCustomFxDual.Visibility = caps.Dual ? Visibility.Visible : Visibility.Collapsed;
+            RbCustomFxDual.IsEnabled = caps.Dual;
+            RbCustomFxRainbow.Visibility = caps.Rainbow ? Visibility.Visible : Visibility.Collapsed;
+            RbCustomFxRainbow.IsEnabled = caps.Rainbow;
+
+            var mode = caps.TwoStopLayout ? EverestSideLedProtocol.CustomEffectColorMode.Dual : p.Mode;
+            if (mode == EverestSideLedProtocol.CustomEffectColorMode.Rainbow && caps.Rainbow) RbCustomFxRainbow.IsChecked = true;
+            else if (mode == EverestSideLedProtocol.CustomEffectColorMode.Dual && caps.Dual) RbCustomFxDual.IsChecked = true;
+            else RbCustomFxSingle.IsChecked = true;
+
+            SldCustomFxSpeed.Value = p.Speed;
+            LblCustomFxSpeed.Text = $"{p.Speed}%";
+            BtnCustomFxColor1.Background = new SolidColorBrush(p.Color1);
+            BtnCustomFxColor2.Background = new SolidColorBrush(p.Color2);
+
+            UpdateCustomFxColorRowVisibility(caps, mode);
+        }
+        finally
+        {
+            _customFxSuppress = prevSuppress;
+        }
+    }
+
+    /// <summary>Color-swatch rows follow the color mode, same pattern as the global RGB
+    /// panel's UpdateEvColorRowVisibility — Color1 hidden under Rainbow, Color2 shown
+    /// only under Dual (or always, for the TwoStopLayout effects which have no mode
+    /// choice and are always two colors).</summary>
+    private void UpdateCustomFxColorRowVisibility(CustomFxCaps caps, EverestSideLedProtocol.CustomEffectColorMode mode)
+    {
+        if (caps.TwoStopLayout)
+        {
+            PnlCustomFxColor1.Visibility = Visibility.Visible;
+            PnlCustomFxColor2.Visibility = Visibility.Visible;
+            return;
+        }
+        bool rainbow = mode == EverestSideLedProtocol.CustomEffectColorMode.Rainbow;
+        PnlCustomFxColor1.Visibility = rainbow ? Visibility.Collapsed : Visibility.Visible;
+        PnlCustomFxColor2.Visibility = !rainbow && mode == EverestSideLedProtocol.CustomEffectColorMode.Dual
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RbCustomFxColorMode_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_customFxSuppress) return;
+        var caps = CustomFxCapsFor(CbCustomPaintEffect.SelectedIndex);
+        if (caps is null) return;
+        var p = FxParamsFor(caps.Eff);
+        p.Mode = RbCustomFxRainbow.IsChecked == true ? EverestSideLedProtocol.CustomEffectColorMode.Rainbow
+               : RbCustomFxDual.IsChecked == true ? EverestSideLedProtocol.CustomEffectColorMode.Dual
+               : EverestSideLedProtocol.CustomEffectColorMode.Single;
+        UpdateCustomFxColorRowVisibility(caps, p.Mode);
+    }
+
+    private void RbCustomFxDirection_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_customFxSuppress) return;
+        var caps = CustomFxCapsFor(CbCustomPaintEffect.SelectedIndex);
+        if (caps is null || sender is not RadioButton rb) return;
+        int di = (int)rb.Tag;
+        if (di >= 0 && di < caps.DirCodes.Length)
+            FxParamsFor(caps.Eff).Direction = caps.DirCodes[di];
+    }
+
+    private void SldCustomFxSpeed_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (LblCustomFxSpeed != null) LblCustomFxSpeed.Text = $"{(int)SldCustomFxSpeed.Value}%";
+        if (_customFxSuppress) return;
+        var caps = CustomFxCapsFor(CbCustomPaintEffect.SelectedIndex);
+        if (caps is null) return;
+        FxParamsFor(caps.Eff).Speed = (int)SldCustomFxSpeed.Value;
+    }
+
+    private void BtnCustomFxColor_Click(object sender, RoutedEventArgs e)
+    {
+        var caps = CustomFxCapsFor(CbCustomPaintEffect.SelectedIndex);
+        if (caps is null || sender is not Button { Tag: string tag } btn) return;
+        var p = FxParamsFor(caps.Eff);
+        var current = tag == "1" ? p.Color1 : p.Color2;
+
+        int currentRgb = (current.R << 16) | (current.G << 8) | current.B;
+        int? picked = K2.Core.ColorPickerDialog.Pick(this, currentRgb);
+        if (picked is not int rgb) return;
+
+        var color = Color.FromRgb((byte)((rgb >> 16) & 0xFF), (byte)((rgb >> 8) & 0xFF), (byte)(rgb & 0xFF));
+        if (tag == "1") p.Color1 = color; else p.Color2 = color;
+        btn.Background = new SolidColorBrush(color);
+        if (tag == "1") RetintKeysForEffect(caps.Eff); // Color2 never shows in the overlay preview
     }
 
     /// <summary>
@@ -355,33 +755,28 @@ public partial class MainWindow
     private void BtnCustomApply_Click(object sender, RoutedEventArgs e)
     {
         if (_everest is null || !_everest.IsOpen) return;
-
-        if (CbCustomPaintEffect.SelectedIndex > 0)
-        {
-            // Only "Static" (per-key color) is wired to a real wire protocol today —
-            // see CustomPaintEffects' doc comment. Refuse rather than silently send
-            // Static-shaped data under a different effect's name.
-            LogEverest($"[CUSTOM] '{CbCustomPaintEffect.SelectedItem}' paint effect not yet implemented — only Static sends data. Nothing applied.");
-            return;
-        }
-
-        ApplyCustomColorsToDevice();
+        ApplyCustomColorsToDevice((byte)SldEvBrightness.Value);
         SaveCustomColorsToStore();
     }
 
     /// <summary>
-    /// Sends the current in-memory paint state (<see cref="_customKeyColors"/>/
-    /// <see cref="_customSideColors"/>) to the device via the raw-HID custom apply.
-    /// Unpainted positions go out black, same as Base Camp sends for unselected keys —
-    /// so an empty state means "everything off". Called by the panel's Apply button and
-    /// by ApplyCurrentEffect when the Custom effect is (re)selected (auto-apply of the
-    /// remembered colors, user request 2026-07-22).
+    /// Sends the current in-memory paint state to the device via the raw-HID custom
+    /// apply: <see cref="_customKeyColors"/>/<see cref="_customSideColors"/> (plain
+    /// Static/Off colors — unpainted positions go out black, so an empty state means
+    /// "everything off") PLUS <see cref="_customKeyEffects"/>/<see cref="_customFxParams"/>
+    /// (dynamic per-region effects, added 2026-07-22 — see EverestSideLedProtocol's
+    /// per-region-effects section). Called by the panel's Apply button and by
+    /// ApplyCurrentEffect when the Custom effect is (re)selected (auto-apply of the
+    /// remembered state, user request 2026-07-22).
     /// </summary>
     private bool ApplyCustomColorsToDevice(byte brightness = 100)
     {
         if (_everest is null || !_everest.IsOpen) return false;
 
-        // _customKeyColors is already keyed by LED index = wire position.
+        // _customKeyColors is already keyed by LED index = wire position. LEDs governed
+        // by a dynamic effect are deliberately NOT in this map (PaintLed keeps the two
+        // maps mutually exclusive), so they stay black here — the effect's own param
+        // packet + region bitmap below are what actually light them.
         var keycapWire = new int[Services.EverestSideLedProtocol.KeycapWireCount];
         foreach (var kvp in _customKeyColors)
         {
@@ -394,9 +789,55 @@ public partial class MainWindow
             if (kvp.Key >= 0 && kvp.Key < sideWire.Length)
                 sideWire[kvp.Key] = (kvp.Value.R << 16) | (kvp.Value.G << 8) | kvp.Value.B;
 
-        bool ok = _everest.ApplyEverestCustomLighting(keycapWire, sideWire, brightness);
-        LogEverest($"[CUSTOM] Applied {_customKeyColors.Count} keycap + {_customSideColors.Count} border LEDs via raw HID (bright={brightness}) -> {ok}");
+        var (ledEffectCode, effectParamPackets) = BuildEffectRegionState(brightness);
+
+        bool ok = _everest.ApplyEverestCustomLighting(keycapWire, sideWire, brightness,
+            ledEffectCode: ledEffectCode, effectParamPackets: effectParamPackets);
+        LogEverest($"[CUSTOM] Applied {_customKeyColors.Count} keycap + {_customSideColors.Count} border LEDs + " +
+                    $"{_customKeyEffects.Count} dynamic-effect LED(s) ({effectParamPackets.Count} effect(s)) via raw HID (bright={brightness}) -> {ok}");
         return ok;
+    }
+
+    /// <summary>Builds the 180-slot LED→effect-code bitmap and one parameter packet per
+    /// distinct effect currently in use, from <see cref="_customKeyEffects"/>/
+    /// <see cref="_customFxParams"/> — see <see cref="EverestService.ApplyEverestCustomLighting"/>'s
+    /// new optional args and EverestSideLedProtocol's per-region-effects section.
+    /// <paramref name="brightness"/> is the single device-wide brightness (SldEvBrightness),
+    /// same value used for the static keycap pages.</summary>
+    private (byte[] ledEffectCode, List<byte[]> effectParamPackets) BuildEffectRegionState(byte brightness)
+    {
+        var ledEffectCode = new byte[Services.EverestSideLedProtocol.EffectRegionSlotCount];
+        foreach (var kvp in _customKeyEffects)
+            if (kvp.Key >= 0 && kvp.Key < ledEffectCode.Length)
+                ledEffectCode[kvp.Key] = (byte)kvp.Value;
+
+        var packets = new List<byte[]>();
+        foreach (var eff in _customKeyEffects.Values.Distinct())
+            packets.Add(BuildEffectParamPacket(eff, brightness));
+        return (ledEffectCode, packets);
+    }
+
+    /// <summary>Builds ONE effect's parameter packet from its remembered
+    /// <see cref="CustomFxParams"/>, dispatching to <see cref="EverestSideLedProtocol.
+    /// BuildCustomEffectParamPacket"/> (Wave/Tornado/Breathing) or
+    /// <see cref="EverestSideLedProtocol.BuildTwoStopEffectParamPacket"/> (Reactive/
+    /// Matrix/Yeti, always two colors — see CustomFxCapsFor's TwoStopLayout flag).
+    /// hwSpeed uses the same inversion formula as the global RGB panel/BaseCampLinux:
+    /// 1=fastest, 100=slowest.</summary>
+    private byte[] BuildEffectParamPacket(EverestService.Effect eff, byte brightness)
+    {
+        var p = FxParamsFor(eff);
+        byte hwSpeed = (byte)Math.Clamp(101 - p.Speed, 1, 100);
+        (byte, byte, byte) C(Color c) => (c.R, c.G, c.B);
+
+        if (eff is EverestService.Effect.ReactiveA or EverestService.Effect.Matrix or EverestService.Effect.Yeti)
+            return Services.EverestSideLedProtocol.BuildTwoStopEffectParamPacket(
+                (byte)eff, brightness, hwSpeed, C(p.Color1), C(p.Color2));
+
+        byte direction = (byte)p.Direction;
+        (byte, byte, byte)? color2 = p.Mode == Services.EverestSideLedProtocol.CustomEffectColorMode.Dual ? C(p.Color2) : null;
+        return Services.EverestSideLedProtocol.BuildCustomEffectParamPacket(
+            (byte)eff, brightness, hwSpeed, p.Mode, direction, C(p.Color1), color2);
     }
 
     // NB: the "Read from device" button was removed 2026-07-22 (user request): it had
@@ -408,6 +849,7 @@ public partial class MainWindow
     private void BtnCustomClear_Click(object sender, RoutedEventArgs e)
     {
         _customKeyColors.Clear();
+        _customKeyEffects.Clear();
         _customSideColors.Clear();
         ClearAllOverlays();
         SaveCustomColorsToStore();
@@ -417,13 +859,21 @@ public partial class MainWindow
     private void BtnCustomFillAll_Click(object sender, RoutedEventArgs e)
     {
         // Fill every known LED index (values of both LedMatrixMapping tables — main
-        // board + numpad, no overlap) + all 45 border LEDs with the brush color.
+        // board + numpad, no overlap) per the selected paint effect — plain color
+        // (Static/Off) via PaintLed, or a dynamic-effect region assignment. Border
+        // squares only fill under Static (matches the border's own paint-click rule —
+        // UpdateBorderOverlayVisibility already hides them for every other effect).
         foreach (var led in Models.LedMatrixMapping.EverestKeyboard.Values.Concat(Models.LedMatrixMapping.EverestNumpad.Values))
-            _customKeyColors[led] = _customBrushColor;
-        for (int i = 0; i < Services.EverestSideLedProtocol.TotalCount; i++)
-            _customSideColors[i] = _customBrushColor;
+        {
+            var btn = FindKeyButtonByLed(led);
+            if (btn != null) PaintLed(led, btn);
+        }
+        if (CbCustomPaintEffect.SelectedIndex == 0)
+            for (int i = 0; i < Services.EverestSideLedProtocol.TotalCount; i++)
+                _customSideColors[i] = _customBrushColor;
         ReapplyCustomOverlays();
-        LogEverest($"[CUSTOM] All keys + {Services.EverestSideLedProtocol.TotalCount} border LEDs set to #{_customBrushColor.R:X2}{_customBrushColor.G:X2}{_customBrushColor.B:X2}");
+        LogEverest($"[CUSTOM] Fill All ({CbCustomPaintEffect.SelectedItem}) applied to every key" +
+                    (CbCustomPaintEffect.SelectedIndex == 0 ? $" + {Services.EverestSideLedProtocol.TotalCount} border LEDs" : ""));
     }
 
     // ─────────────────────── Persistence ───────────────────────
@@ -431,6 +881,8 @@ public partial class MainWindow
     private void SaveCustomColorsToStore()
     {
         if (_evStore is null) return;
+        string p = EvCustomPrefix();
+
         // Save as JSON: { "ledIndex": "#RRGGBB", ... }. Key renamed keyColors →
         // keyLedColors 2026-07-22 when the dictionary switched from VK-keyed to
         // LED-index-keyed (see _customKeyColors' doc) — old VK-keyed data under the
@@ -438,18 +890,50 @@ public partial class MainWindow
         var dict = _customKeyColors.ToDictionary(
             kvp => kvp.Key.ToString(),
             kvp => $"#{kvp.Value.R:X2}{kvp.Value.G:X2}{kvp.Value.B:X2}");
-        _evStore.SetSetting("custom.keyLedColors", JsonSerializer.Serialize(dict));
+        _evStore.SetSetting(p + "keyLedColors", JsonSerializer.Serialize(dict));
 
         var sideDict = _customSideColors.ToDictionary(
             kvp => kvp.Key.ToString(),
             kvp => $"#{kvp.Value.R:X2}{kvp.Value.G:X2}{kvp.Value.B:X2}");
-        _evStore.SetSetting("custom.sideColors", JsonSerializer.Serialize(sideDict));
+        _evStore.SetSetting(p + "sideColors", JsonSerializer.Serialize(sideDict));
+
+        // LED → dynamic-effect assignment (byte value = EverestService.Effect).
+        var fxDict = _customKeyEffects.ToDictionary(kvp => kvp.Key.ToString(), kvp => (byte)kvp.Value);
+        _evStore.SetSetting(p + "keyEffects", JsonSerializer.Serialize(fxDict));
+
+        // Per-effect param sets — only the ones actually touched (FxParamsFor is lazy).
+        var paramsDict = _customFxParams.ToDictionary(
+            kvp => ((byte)kvp.Key).ToString(),
+            kvp => new CustomFxParamsDto(
+                (byte)kvp.Value.Mode, kvp.Value.Direction, kvp.Value.Speed,
+                $"#{kvp.Value.Color1.R:X2}{kvp.Value.Color1.G:X2}{kvp.Value.Color1.B:X2}",
+                $"#{kvp.Value.Color2.R:X2}{kvp.Value.Color2.G:X2}{kvp.Value.Color2.B:X2}"));
+        _evStore.SetSetting(p + "fxParams", JsonSerializer.Serialize(paramsDict));
     }
 
+    /// <summary>JSON shape for one dynamic effect's persisted param set — colors as hex
+    /// strings since <see cref="Color"/> itself doesn't round-trip through
+    /// JsonSerializer.</summary>
+    private sealed record CustomFxParamsDto(byte Mode, int Direction, int Speed, string Color1, string Color2);
+
+    /// <summary>Restores the painted board from Settings (see <see cref="EvCustomPrefix"/>):
+    /// falls back once to the legacy always-global <c>custom.*</c> keys for a profile that
+    /// has no per-profile value yet (existing installs), same pattern as
+    /// LoadMacroLedFromStore.</summary>
     private void LoadCustomColorsFromStore()
     {
         if (_evStore is null) return;
-        var json = _evStore.GetSetting("custom.keyLedColors");
+        string p = EvCustomPrefix();
+        const string gp = "custom.";
+        string? Setting(string key) => _evStore.GetSetting(p + key) ?? _evStore.GetSetting(gp + key);
+
+        // Cleared up front, not inside each parse block: on a profile switch the new
+        // profile may simply have no painted board, and the previous one's colors must
+        // not survive into it.
+        _customKeyColors.Clear();
+        _customSideColors.Clear();
+
+        var json = Setting("keyLedColors");
         if (!string.IsNullOrWhiteSpace(json))
         {
             try
@@ -475,7 +959,7 @@ public partial class MainWindow
             catch { /* ignore invalid JSON */ }
         }
 
-        var sideJson = _evStore.GetSetting("custom.sideColors");
+        var sideJson = Setting("sideColors");
         if (!string.IsNullOrWhiteSpace(sideJson))
         {
             try
@@ -500,6 +984,49 @@ public partial class MainWindow
             }
             catch { /* ignore invalid JSON */ }
         }
+
+        _customKeyEffects.Clear();
+        var fxJson = Setting("keyEffects");
+        if (!string.IsNullOrWhiteSpace(fxJson))
+        {
+            try
+            {
+                var dict = JsonSerializer.Deserialize<Dictionary<string, byte>>(fxJson);
+                if (dict != null)
+                    foreach (var kvp in dict)
+                        if (int.TryParse(kvp.Key, out int led))
+                            _customKeyEffects[led] = (EverestService.Effect)kvp.Value;
+            }
+            catch { /* ignore invalid JSON */ }
+        }
+
+        _customFxParams.Clear();
+        var paramsJson = Setting("fxParams");
+        if (!string.IsNullOrWhiteSpace(paramsJson))
+        {
+            try
+            {
+                var dict = JsonSerializer.Deserialize<Dictionary<string, CustomFxParamsDto>>(paramsJson);
+                if (dict != null)
+                    foreach (var kvp in dict)
+                    {
+                        if (!byte.TryParse(kvp.Key, out byte effByte) || kvp.Value is not { } dto) continue;
+                        try
+                        {
+                            _customFxParams[(EverestService.Effect)effByte] = new CustomFxParams
+                            {
+                                Mode = (Services.EverestSideLedProtocol.CustomEffectColorMode)dto.Mode,
+                                Direction = dto.Direction,
+                                Speed = dto.Speed,
+                                Color1 = (Color)ColorConverter.ConvertFromString(dto.Color1),
+                                Color2 = (Color)ColorConverter.ConvertFromString(dto.Color2),
+                            };
+                        }
+                        catch { /* ignore unparsable entry */ }
+                    }
+            }
+            catch { /* ignore invalid JSON */ }
+        }
     }
 
     // ─────────────────── Rectangular multi-LED selection ───────────────────
@@ -509,6 +1036,13 @@ public partial class MainWindow
     // BdrEvDeviceBox's Preview mouse events (MainWindow.xaml) so the drag can
     // start on top of a key Button; a plain click (below the 5px threshold)
     // falls through to the normal single-key paint.
+    //
+    // Also engages during Settings' "Edit individual keycaps" mode (user request
+    // 2026-07-26): same drag gesture, but instead of painting it collects every
+    // key the rectangle touches and opens ONE KeycapCustomizeDialog whose
+    // result is applied to all of them — see OpenKeycapDialogForRect
+    // (MainWindow.KeycapAppearance.cs). The two modes are mutually exclusive
+    // (Custom Lighting vs. Settings section), so only one gate is ever true.
 
     private Point _rubberStart;
     private bool _rubberTracking; // mouse down seen, watching for drag threshold
@@ -516,7 +1050,7 @@ public partial class MainWindow
 
     private void EvDeviceBox_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (!_customPaintMode) return;
+        if (!_customPaintMode && !(_evKeycapEditMode && IsEvSettingsSectionActive)) return;
         _rubberStart = e.GetPosition(CvsEvRubberBand);
         _rubberTracking = true;
         _rubberActive = false;
@@ -555,7 +1089,10 @@ public partial class MainWindow
         CancelRubberBand();
         if (!wasActive) return; // plain click: let the Button handle it normally
         e.Handled = true;       // suppress the click that would otherwise fire on release
-        PaintLedsInRect(rect);
+        if (_customPaintMode)
+            PaintLedsInRect(rect);
+        else if (_evKeycapEditMode && IsEvSettingsSectionActive)
+            OpenKeycapDialogForRect(rect);
     }
 
     private void CancelRubberBand()
@@ -593,10 +1130,7 @@ public partial class MainWindow
                 TryPaintButton(btn, () =>
                 {
                     if (TryButtonToLed(btn, vk, out int led))
-                    {
-                        _customKeyColors[led] = _customBrushColor;
-                        ApplyColorOverlay(btn, _customBrushColor);
-                    }
+                        PaintLed(led, btn);
                 });
             }
         }

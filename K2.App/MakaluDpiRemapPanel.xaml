@@ -12,7 +12,7 @@
          though the WinDbg session that eventually root-caused the *real*
          bug that day (a plain null-ref in MkSection_Changed/
          SldMkDpi_ValueChanged firing before dependent fields were assigned
-         — see MainWindow.Makalu.cs and _mkSuppress above) suggests the
+         — see MainWindow.Makalu.cs's doc comment) suggests the
          "nesting" theory may itself have been a misdiagnosis of the same
          root cause, never independently re-verified after the real fix.
          Treat nesting as unconfirmed-risky, not proven-safe, until someone
@@ -23,30 +23,60 @@
              MainWindow.xaml). This is the default Makalu section (see
              InitMkSectionNav), so it starts Visible, not Collapsed — the
              sibling sections in MakaluRgbSettingsPanel (SecRgb/SecSettings)
-             both start Collapsed to match. -->
+             both start Collapsed to match.
+             Layout aligned to every other device's Key Binding section
+             (2026-07-27, explicit user request — previously Makalu was the
+             one deliberate exception, see MainWindow.xaml's PnlSecKeyMapping
+             comment): hint + list + Configure/Remove, same shape as
+             Everest60KeyBindingPanel/MainWindow.xaml's PnlSecKeyMapping. The
+             list only shows buttons whose assignment differs from this
+             model's default (2026-07-27, user feedback: showing every
+             physical button — including every still-default one — read as
+             clutter/empty rows; MakaluDpiRemapPanel.xaml.cs's
+             RefreshMkItemVisibility filters, _byIdx stays unfiltered so
+             hotspot-click-to-configure still reaches every button
+             regardless), built by BuildMkButtonList. Configure opens
+             MakaluRemapConfigDialog (Makalu's own small firmware vocabulary,
+             not the shared ButtonActionDialog/K2Action — see that dialog's
+             doc comment); Remove resets the button back to its model
+             default. Clicking a hotspot on the device image
+             (MainWindow.Makalu.cs's MkHotspotClicked -> SelectRemapButton)
+             selects the row AND opens Configure directly, same flow as
+             Everest 60's SelectKey. -->
         <Grid x:Name="SecRemap">
-            <StackPanel>
-                <TextBlock Text="{loc:Get makalu_remap_title}" FontWeight="Bold" Margin="0,0,0,14"/>
-                <WrapPanel x:Name="PnlMkRemapButtons" Orientation="Horizontal" Margin="0,0,0,12"/>
-                <WrapPanel Orientation="Horizontal" Margin="0,0,0,16">
-                    <TextBlock Text="{loc:Get makalu_remap_category}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <ComboBox x:Name="CbMkRemapCategory" Width="110" Margin="0,0,12,0"
-                              SelectionChanged="CbMkRemapCategory_SelectionChanged"/>
-                    <TextBlock Text="{loc:Get makalu_remap_function}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <ComboBox x:Name="CbMkRemapFunction" Width="150"/>
-                </WrapPanel>
-                <WrapPanel x:Name="PnlMkSniper" Orientation="Horizontal" Margin="0,0,0,16" Visibility="Collapsed">
-                    <TextBlock Text="{loc:Get makalu_remap_sniper_dpi}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <Slider x:Name="SldMkSniperDpi" Minimum="50" Maximum="19000" Width="160"
-                            ValueChanged="SldMkSniperDpi_ValueChanged" VerticalAlignment="Center"/>
-                    <TextBox x:Name="TxtMkSniperDpi" Width="70" Margin="8,0,0,0" TextAlignment="Center"
-                             KeyDown="TxtMkSniperDpi_KeyDown" LostFocus="TxtMkSniperDpi_LostFocus"/>
-                </WrapPanel>
-                <WrapPanel Orientation="Horizontal">
-                    <Button x:Name="BtnMkRemapApply" Content="{loc:Get makalu_apply}" Click="BtnMkRemapApply_Click" Padding="8,4" Margin="0,0,6,0"/>
-                    <TextBlock x:Name="LblMkRemapStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
-                </WrapPanel>
-            </StackPanel>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/> <!-- title -->
+                <RowDefinition Height="Auto"/> <!-- hint -->
+                <RowDefinition Height="*"/>    <!-- list + buttons -->
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="{loc:Get makalu_remap_title}" FontWeight="Bold" Margin="0,0,0,6"/>
+            <TextBlock Grid.Row="1" Text="{loc:Get key_binding_hint}"
+                       Foreground="#9A9AA2" FontStyle="Italic"
+                       TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+            <Grid Grid.Row="2" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="170"/>
+                </Grid.ColumnDefinitions>
+                <ListView Grid.Column="0" x:Name="LvMkButtons" Margin="0,0,8,0"
+                          SelectionChanged="LvMkButtons_SelectionChanged">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Display}" FontFamily="Consolas" Padding="2"/>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+                <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                    <Button x:Name="BtnMkConfigure" Content="{loc:Get ev_configure}" Padding="8,4"
+                            Click="BtnMkConfigure_Click" HorizontalAlignment="Stretch" Margin="0,0,0,4"
+                            IsEnabled="False"/>
+                    <Button x:Name="BtnMkRemove" Content="{loc:Get ev_remove}" Padding="8,4"
+                            Click="BtnMkRemove_Click" HorizontalAlignment="Stretch"
+                            IsEnabled="False"/>
+                </StackPanel>
+            </Grid>
         </Grid>
 
         <!-- Remap-left-button safety confirm overlay (auto-revert countdown) -->

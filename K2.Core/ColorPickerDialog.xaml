@@ -117,7 +117,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="R" VerticalAlignment="Center"
                                Foreground="{StaticResource K2TextMutedBrush}"/>
-                    <TextBox x:Name="TxtR" Grid.Column="1" MaxLength="3" TextChanged="RgbBox_TextChanged"/>
+                    <TextBox x:Name="TxtR" Grid.Column="1" Height="25" MaxLength="3" TextChanged="RgbBox_TextChanged"/>
                 </Grid>
                 <Grid Margin="0,0,0,4">
                     <Grid.ColumnDefinitions>
@@ -126,7 +126,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="G" VerticalAlignment="Center"
                                Foreground="{StaticResource K2TextMutedBrush}"/>
-                    <TextBox x:Name="TxtG" Grid.Column="1" MaxLength="3" TextChanged="RgbBox_TextChanged"/>
+                    <TextBox x:Name="TxtG" Grid.Column="1" Height="25" MaxLength="3" TextChanged="RgbBox_TextChanged"/>
                 </Grid>
                 <Grid Margin="0,0,0,12">
                     <Grid.ColumnDefinitions>
@@ -135,12 +135,12 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="B" VerticalAlignment="Center"
                                Foreground="{StaticResource K2TextMutedBrush}"/>
-                    <TextBox x:Name="TxtB" Grid.Column="1" MaxLength="3" TextChanged="RgbBox_TextChanged"/>
+                    <TextBox x:Name="TxtB" Grid.Column="1" Height="25" MaxLength="3" TextChanged="RgbBox_TextChanged"/>
                 </Grid>
 
                 <TextBlock Text="{loc:Get colorpicker_hex}" Foreground="{StaticResource K2TextMutedBrush}"
                            FontSize="11" Margin="0,0,0,4"/>
-                <TextBox x:Name="TxtHex" FontFamily="Consolas" MaxLength="7" TextChanged="HexBox_TextChanged"/>
+                <TextBox x:Name="TxtHex" Height="25" FontFamily="Consolas" MaxLength="7" TextChanged="HexBox_TextChanged"/>
             </StackPanel>
         </Grid>
 

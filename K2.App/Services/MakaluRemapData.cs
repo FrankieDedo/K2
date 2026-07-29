@@ -41,10 +41,12 @@ internal static class MakaluRemapData
 
     public static readonly Dictionary<string, string[]> RemapCategories = new()
     {
-        ["Mouse"]  = new[] { "left", "right", "middle", "back", "forward", "disabled" },
-        ["DPI"]    = new[] { "dpi+", "dpi-", "disabled" },
-        ["Scroll"] = new[] { "scroll_up", "scroll_down", "disabled" },
-        ["Sniper"] = new[] { "sniper" },
+        ["Mouse"]   = new[] { "left", "right", "middle", "back", "forward", "disabled" },
+        ["DPI"]     = new[] { "dpi+", "dpi-", "disabled" },
+        ["Scroll"]  = new[] { "scroll_up", "scroll_down", "disabled" },
+        ["Sniper"]  = new[] { "sniper" },
+        ["Profile"] = new[] { "profile_next", "profile_prev", "disabled" },
+        ["Lighting"] = new[] { "brightness_cycle", "effect_cycle", "disabled" },
     };
 
     private static readonly Dictionary<string, string> FnLangKeys = new()
@@ -55,12 +57,15 @@ internal static class MakaluRemapData
         ["dpi+"] = "makalu_remap_fn_dpi_plus", ["dpi-"] = "makalu_remap_fn_dpi_minus",
         ["scroll_up"] = "makalu_remap_fn_scroll_up", ["scroll_down"] = "makalu_remap_fn_scroll_down",
         ["disabled"] = "makalu_remap_fn_disabled", ["sniper"] = "makalu_remap_fn_sniper",
+        ["profile_next"] = "makalu_remap_fn_profile_next", ["profile_prev"] = "makalu_remap_fn_profile_prev",
+        ["brightness_cycle"] = "makalu_remap_fn_brightness_cycle", ["effect_cycle"] = "makalu_remap_fn_effect_cycle",
     };
 
     private static readonly Dictionary<string, string> CatLangKeys = new()
     {
         ["Mouse"] = "makalu_remap_cat_mouse", ["DPI"] = "makalu_remap_cat_dpi",
         ["Scroll"] = "makalu_remap_cat_scroll", ["Sniper"] = "makalu_remap_cat_sniper",
+        ["Profile"] = "makalu_remap_cat_profile", ["Lighting"] = "makalu_remap_cat_lighting",
     };
 
     public static string FnLabel(string key) => Loc.Get(FnLangKeys.GetValueOrDefault(key, key));

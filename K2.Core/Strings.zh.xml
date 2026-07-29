@@ -1,20 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  K2 中文（简体）本地化文件。
+  与可执行文件放在同一目录下，命名为 Strings.zh.xml。
+  当界面语言为 "zh" 时会自动加载，或设置环境变量 K2_LANG=zh，
+  也可以通过应用内的语言菜单选择。
+-->
 <strings>
+  <!-- ═══════════════════════════════════════════════════════════════
+       通用 / 共享
+       ═══════════════════════════════════════════════════════════════ -->
   <string name="app_title">K2</string>
+  <string name="tab_home">主页</string>
+  <string name="home_no_device">未连接设备</string>
+  <string name="home_heading">已连接的设备</string>
+  <string name="app_already_running">K2 的另一个实例已在运行。</string>
   <string name="driver_not_opened">驱动程序未打开。</string>
   <string name="open_driver">打开驱动程序</string>
   <string name="close_driver">关闭驱动程序</string>
   <string name="refresh">刷新</string>
   <string name="refresh_devices">刷新设备</string>
+  <string name="debug_group">调试</string>
   <string name="profile">配置文件</string>
   <string name="device">设备</string>
   <string name="positioning">定位</string>
+  <string name="backlight_auto_off_group">背光自动关闭</string>
+  <string name="backlight_auto_off_enable">闲置时关闭背光</string>
+  <string name="backlight_auto_off_seconds">之后</string>
+  <string name="keyboard_language_layout">语言设置</string>
   <string name="pos_horizontal">水平 ({0}°)</string>
   <string name="pos_vertical">垂直 ({0}°)</string>
   <string name="brightness">亮度:</string>
   <string name="save">保存</string>
   <string name="cancel">取消</string>
   <string name="ok">确定</string>
+  <string name="colorpicker_title">选择颜色</string>
+  <string name="colorpicker_preview">预览</string>
+  <string name="colorpicker_hex">Hex</string>
+  <string name="colorpicker_saved">已保存的颜色</string>
+  <string name="colorpicker_add">+ 添加</string>
+  <string name="colorpicker_remove">从已保存颜色中移除</string>
+  <string name="browse">浏览…</string>
+  <string name="crop_hint">拖动以重新定位，滚动或使用滑块进行缩放。</string>
+  <string name="crop_title">裁剪图片 ({0}×{1})</string>
+  <string name="crop_no_crop">按原样插入（不裁剪/缩放）</string>
+  <string name="crop_show_grid">显示按键轮廓</string>
   <string name="error">错误</string>
   <string name="copy">复制</string>
   <string name="open_log">打开日志…</string>
@@ -30,23 +59,159 @@
   <string name="new_profile">+ 新建配置文件</string>
   <string name="profile_n">配置文件 {0}</string>
   <string name="select_device_first">请先选择设备。</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       按钮动作对话框 (K2.Core)
+       ═══════════════════════════════════════════════════════════════ -->
   <string name="dlg_title">配置按钮动作</string>
   <string name="dlg_button_label">按钮 #?</string>
   <string name="dlg_action_type">动作类型:</string>
   <string name="dlg_value">值:</string>
   <string name="act_none">无</string>
+  <string name="act_disable">禁用按键</string>
   <string name="act_url">打开网址</string>
   <string name="act_exec">打开程序 / 文件</string>
   <string name="act_folder">打开文件夹</string>
+  <string name="act_page">页面</string>
+  <string name="page_pick_label">页面:</string>
+  <string name="page_name_label">页面名称:</string>
+  <string name="page_new_option">— 新建页面 —</string>
   <string name="act_browser">打开浏览器</string>
   <string name="act_profile">切换配置文件</string>
   <string name="act_oscmd">系统命令</string>
   <string name="act_media">媒体键</string>
   <string name="act_mouse">鼠标动作</string>
-  <string name="act_keys">按键 (Ctrl+Shift+A)</string>
+  <string name="act_keys">组合键</string>
+  <string name="act_hotkeyswitch">热键切换</string>
+  <string name="hotkey_shortcut_a">快捷键 A</string>
+  <string name="hotkey_shortcut_b">快捷键 B</string>
+  <string name="hotkey_hint">每次按下都会在上面两个快捷键之间交替。</string>
+  <string name="act_multi">多重操作</string>
+  <string name="multi_steps_label">步骤:</string>
+  <string name="multi_add_step">添加步骤</string>
+  <string name="multi_delay_ms">延迟（毫秒）</string>
+  <string name="act_multi_summary">{0} 个步骤</string>
+  <string name="act_adobe">Adobe</string>
+  <string name="act_davinci">DaVinci Resolve</string>
+  <string name="act_zoom">Zoom</string>
+  <string name="act_obs">OBS Studio</string>
+  <string name="act_twitch">Twitch</string>
+  <string name="act_spotify">Spotify</string>
+  <string name="act_youtube">YouTube</string>
+  <string name="appshortcut_app_label">应用程序:</string>
+  <string name="appshortcut_action_label">操作:</string>
+  <string name="appshortcut_custom">自定义…</string>
+  <string name="obs_settings_title">OBS Studio 设置</string>
+  <string name="obs_host_label">主机:</string>
+  <string name="obs_port_label">端口:</string>
+  <string name="obs_password_label">密码:</string>
+  <string name="obs_test_connection">测试连接</string>
+  <string name="obs_connected">已连接</string>
+  <string name="obs_not_connected">未连接</string>
+  <string name="obs_settings_button">OBS 设置…</string>
+  <string name="obs_arg_hint">场景/配置文件/来源/转场名称，或数字（时长毫秒，音量dB）</string>
+  <string name="obs_cmd_start_streaming">开始直播</string>
+  <string name="obs_cmd_stop_streaming">停止直播</string>
+  <string name="obs_cmd_start_recording">开始录制</string>
+  <string name="obs_cmd_stop_recording">停止录制</string>
+  <string name="obs_cmd_pause_recording">暂停录制</string>
+  <string name="obs_cmd_resume_recording">恢复录制</string>
+  <string name="obs_cmd_next_profile">下一个配置文件</string>
+  <string name="obs_cmd_previous_profile">上一个配置文件</string>
+  <string name="obs_cmd_set_current_profile">设置当前配置文件</string>
+  <string name="obs_cmd_next_scene">下一个场景</string>
+  <string name="obs_cmd_previous_scene">上一个场景</string>
+  <string name="obs_cmd_set_current_scene">设置当前场景</string>
+  <string name="obs_cmd_set_current_source">切换来源</string>
+  <string name="obs_cmd_next_transition">下一个转场</string>
+  <string name="obs_cmd_previous_transition">上一个转场</string>
+  <string name="obs_cmd_set_transition_duration">设置转场时长</string>
+  <string name="obs_cmd_set_current_transition">设置当前转场</string>
+  <string name="obs_cmd_mic_volume_up">麦克风音量 +</string>
+  <string name="obs_cmd_mic_volume_down">麦克风音量 -</string>
+  <string name="obs_cmd_mute_mic">静音麦克风</string>
+  <string name="obs_cmd_unmute_mic">取消静音麦克风</string>
+  <string name="obs_cmd_set_mic_volume">设置麦克风音量</string>
+  <string name="obs_cmd_desktop_volume_up">桌面音量 +</string>
+  <string name="obs_cmd_desktop_volume_down">桌面音量 -</string>
+  <string name="obs_cmd_mute_desktop">静音桌面音频</string>
+  <string name="obs_cmd_unmute_desktop">取消静音桌面音频</string>
+  <string name="obs_cmd_set_desktop_volume">设置桌面音量</string>
+  <string name="obs_cmd_enable_studio_mode">启用演播室模式</string>
+  <string name="obs_cmd_disable_studio_mode">禁用演播室模式</string>
+  <string name="obs_cmd_start_replay_buffer">启动回放缓冲区</string>
+  <string name="obs_cmd_stop_replay_buffer">停止回放缓冲区</string>
+  <string name="obs_cmd_save_replay_buffer">保存回放缓冲区</string>
+  <string name="obs_cmd_next_media">下一个媒体</string>
+  <string name="obs_cmd_previous_media">上一个媒体</string>
+  <string name="obs_cmd_play_media">播放媒体</string>
+  <string name="obs_cmd_pause_media">暂停媒体</string>
+  <string name="obs_cmd_stop_media">停止媒体</string>
+  <string name="obs_cmd_open_projector">打开投影窗口</string>
+  <string name="twitch_settings_title">Twitch 设置</string>
+  <string name="twitch_hint">在 dev.twitch.tv 注册你自己的应用，OAuth 重定向 URL 设为 "http://localhost:17563/callback"，然后将 Client ID/Secret 粘贴到这里。</string>
+  <string name="twitch_setup_guide">1. 前往 dev.twitch.tv/console/apps，点击 "Register Your Application"。
+2. OAuth 重定向 URL：http://localhost:17563/callback
+3. 类别：任意（例如 "Application Integration"）。
+4. 保存后复制 Client ID，然后点击 "New Secret" 获取 Client Secret。</string>
+  <string name="twitch_client_id_label">Client ID:</string>
+  <string name="twitch_client_secret_label">Client Secret:</string>
+  <string name="twitch_connect">连接</string>
+  <string name="twitch_connecting">连接中…</string>
+  <string name="twitch_disconnect">断开连接</string>
+  <string name="twitch_connected_as">已连接账户</string>
+  <string name="twitch_settings_button">Twitch 设置…</string>
+  <string name="twitch_cmd_chat_message">发送聊天消息</string>
+  <string name="twitch_cmd_clear_chat">清空聊天</string>
+  <string name="twitch_cmd_emote_only">切换仅表情聊天模式</string>
+  <string name="twitch_cmd_followers_only">设置仅粉丝聊天模式</string>
+  <string name="twitch_cmd_slow_mode">设置慢速模式</string>
+  <string name="twitch_cmd_subscribers_only">切换仅订阅者聊天模式</string>
+  <string name="twitch_cmd_play_ad">播放广告</string>
+  <string name="twitch_cmd_stream_title">设置直播标题</string>
+  <string name="twitch_cmd_stream_marker">创建直播标记</string>
+  <string name="twitch_cmd_create_clip">创建剪辑</string>
+  <string name="twitch_cmd_open_last_clip">打开最新剪辑</string>
+  <string name="spotify_settings_title">Spotify 设置</string>
+  <string name="spotify_hint">在 developer.spotify.com/dashboard 注册你自己的应用，重定向 URI 设为 "http://127.0.0.1:17564/callback"，然后将 Client ID/Secret 粘贴到这里。</string>
+  <string name="spotify_setup_guide">1. 前往 developer.spotify.com/dashboard，点击 "Create app"。
+2. Redirect URI：http://127.0.0.1:17564/callback
+3. Which API/SDKs are you planning to use：Web API。
+4. 保存后复制 Client ID，然后点击 "View client secret" 获取 Client Secret。</string>
+  <string name="spotify_client_id_label">Client ID:</string>
+  <string name="spotify_client_secret_label">Client Secret:</string>
+  <string name="spotify_connected_as">已连接账户</string>
+  <string name="spotify_settings_button">Spotify 设置…</string>
+  <string name="spotify_cmd_play_pause">播放/暂停</string>
+  <string name="spotify_cmd_next">下一曲</string>
+  <string name="spotify_cmd_previous">上一曲</string>
+  <string name="spotify_cmd_like_toggle">喜欢/取消喜欢歌曲</string>
+  <string name="spotify_cmd_shuffle_toggle">切换随机播放</string>
+  <string name="spotify_cmd_repeat_cycle">切换循环模式</string>
+  <string name="spotify_cmd_mute_toggle">静音/取消静音</string>
+  <string name="spotify_cmd_volume_up">提高音量</string>
+  <string name="spotify_cmd_volume_down">降低音量</string>
+  <string name="spotify_cmd_volume_set">设置音量</string>
+  <string name="spotify_cmd_save_playlist">将歌曲保存到播放列表</string>
+  <string name="spotify_cmd_remove_playlist">从播放列表中移除歌曲</string>
+  <string name="youtube_settings_title">YouTube 设置</string>
+  <string name="youtube_hint">在 console.cloud.google.com 创建启用了 YouTube Data API v3 的桌面应用 OAuth 客户端，然后将 Client ID/Secret 粘贴到这里。</string>
+  <string name="youtube_setup_guide">1. 前往 console.cloud.google.com，创建/选择一个项目，然后启用 "YouTube Data API v3"（APIs &amp; Services -&gt; Library）。
+2. 打开 "Google Auth Platform" -&gt; Branding：设置一个 App name 和支持邮箱（首次运行会显示 "Get Started" 向导）。
+3. Audience 标签页：User type 选择 "External"，然后在 "Test users" 下添加你自己的 Google 账号。
+4. Clients 标签页 -&gt; Create Client -&gt; Application type：Desktop app -&gt; Create。立即复制 Client ID/Secret — 该密钥只会显示一次。
+5. 首次登录会显示 "Google hasn't verified this app"（属正常现象，涉及敏感权限范围）— 点击 Advanced -&gt; Go to your app (unsafe)。在 Testing 状态下，登录可能每隔约 7 天需要重新进行；在 Audience 中点击 "Publish app" 可避免此问题。</string>
+  <string name="youtube_client_id_label">Client ID:</string>
+  <string name="youtube_client_secret_label">Client Secret:</string>
+  <string name="youtube_settings_button">YouTube 设置…</string>
+  <string name="youtube_chat_message_label">实时聊天消息:</string>
   <string name="act_command">Shell 命令</string>
   <string name="act_text">粘贴文本</string>
+  <string name="act_macro">播放宏</string>
+  <string name="act_macro_unresolved">播放宏（未分配）</string>
+  <string name="act_googlehome">Google Home</string>
   <string name="act_pyscript">Python 脚本</string>
+  <string name="act_unrecognized">无法识别</string>
   <string name="py_file">文件 .py</string>
   <string name="py_inline">内联代码</string>
   <string name="py_browse">浏览…</string>
@@ -79,6 +244,7 @@
   <string name="media_vol_up">Volume up</string>
   <string name="media_vol_down">Volume down</string>
   <string name="media_mute">Mute</string>
+  <string name="media_shuffle">随机播放</string>
   <string name="mouse_left">Left button</string>
   <string name="mouse_right">Right button</string>
   <string name="mouse_middle">Middle button</string>
@@ -91,6 +257,107 @@
   <string name="keys_modifiers_label">Modifiers:</string>
   <string name="keys_key_label">Key:</string>
   <string name="keys_win_hint">The Windows key can be selected but is not sent by the current keystroke backend (SendKeys) — it is silently ignored.</string>
+  <string name="gh_manage">管理 Google Home 设备…</string>
+  <string name="gh_summary_missing">Google Home（绑定已移除）</string>
+  <string name="gh_setup_title">Google Home 设备</string>
+  <string name="gh_capture_name_prompt">为此绑定命名…</string>
+  <string name="gh_bindings_header">已保存的绑定</string>
+  <string name="gh_no_bindings">尚未找到任何设备 — 请在上方登录以自动导入。</string>
+  <string name="gh_rename">重命名</string>
+  <string name="gh_delete">删除</string>
+  <string name="gh_login_hint">请在上方登录 — 登录后每台设备都会自动导入。</string>
+  <string name="gh_status_connected">已连接</string>
+  <string name="gh_status_disconnected">未连接 — 请在上方登录以重新连接</string>
+  <string name="gh_force_refresh">强制刷新</string>
+  <string name="gh_disconnect">断开连接</string>
+  <string name="gh_advanced_hint">调试模式已开启（设置）— 左侧显示了高级 Foyer 录制工具。</string>
+  <string name="gh_record_start">录制动作</string>
+  <string name="gh_record_alt">录制相反动作</string>
+  <string name="gh_record_hint">请在上方登录，然后点击“录制动作”并在页面上执行该动作（开启、调暗、更改颜色…）：K2 会捕获 Google Home 发送的命令，并在按键按下时重放它。“录制相反动作”会将相反的动作添加到所选绑定中，这样一个按键就能在两者之间切换。</string>
+  <string name="gh_record_armed">正在录制 — 请现在在页面上执行该动作。</string>
+  <string name="gh_record_alt_armed">正在录制相反动作 — 请现在在页面上执行它。</string>
+  <string name="close">关闭</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       常规设置标签页
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="tab_settings">设置</string>
+  <string name="tab_macro">宏</string>
+  <string name="settings_debug_mode">调试模式</string>
+  <string name="settings_debug_mode_hint">在每台设备上启用调试工具（打开/关闭驱动程序、AP 控制、事件日志）。</string>
+  <string name="settings_log_level">日志记录</string>
+  <string name="log_off">关闭</string>
+  <string name="log_normal">正常</string>
+  <string name="log_verbose">详细</string>
+  <string name="settings_dp_native">DisplayPad：原生 USB 引擎（实验性）</string>
+  <string name="settings_dp_native_hint">通过 USB 直接驱动 DisplayPad，而不是使用 Mountain SDK：传输已确认（无图标损坏），无卫星进程。设备上的配置文件持久化不可用；图片会从 K2 数据库重新上传。重启 K2 后生效。</string>
+  <string name="settings_ev_native">Everest Max：原生 USB 引擎（实验性，部分支持）</string>
+  <string name="settings_ev_native_hint">通过 USB 直接驱动 Everest Max 的连接和数字键盘的 4 个显示按键，而不是使用 SDKDLL.dll — 消除了该 DLL 在其覆盖范围内长期存在的定时器线程崩溃问题。RGB 效果、数字键盘图标、Media Dock 和全键盘重新映射事件目前仍使用 SDKDLL.dll（尚未移植）。重启 K2 后生效。</string>
+  <string name="settings_auto_stop_bc">启动时自动停止 Base Camp</string>
+  <string name="settings_auto_stop_bc_hint">K2 每次启动时，都会停止 Base Camp 的 Windows 服务，并关闭所有仍在运行或被 Windows 自启动重新拉起的 Base Camp 进程（GUI、服务、worker、Makalu monitor）— 这样 K2 就能完全取代 Base Camp，而不是两者同时运行。如果你仍想在使用 K2 的同时使用 Base Camp，请禁用此选项。</string>
+  <string name="settings_kill_bc_worker">终止 Base Camp 的 DisplayPad 工作进程</string>
+  <string name="settings_kill_bc_worker_hint">MountainDisplayPadWorker 在后台运行，并与 K2 同时写入 DisplayPad，导致图标损坏。启用后，K2 会自动终止该进程（并在运行期间保持其关闭）。</string>
+  <string name="settings_bc_autostart">随 Windows 启动 Base Camp 服务</string>
+  <string name="settings_bc_autostart_hint">启用/禁用 Base Camp 的 Windows 自启动项（与任务管理器的"启动"选项卡机制相同 — 可逆）。HKLM 中的项可能需要以管理员身份运行 K2。</string>
+  <string name="settings_bc_autostart_none">在注册表中未找到 Base Camp 自启动项。</string>
+  <string name="settings_bc_autostart_done">Base Camp 自启动：已更新 {0} 个项。</string>
+  <string name="settings_restart_bc_on_close">K2 关闭时重启 Base Camp</string>
+  <string name="settings_restart_bc_on_close_hint">K2 关闭时，会重新启动它自动停止的 Base Camp 进程（GUI、worker、Makalu monitor、Windows 服务）— 这样 Base Camp 就会恢复到 K2 启动前的状态。MountainDisplayPadWorker 总是以静默方式重新启动，不显示窗口。默认禁用：大多数启用自动停止的用户希望 Base Camp 在 K2 关闭后保持停止状态。</string>
+  <string name="settings_export_log_btn">导出日志…</string>
+  <string name="settings_export_log_hint">将当前的 K2.App 日志（以及崩溃日志，如果有）复制到你选择的文件夹 — 便于在报告问题时分享。</string>
+  <string name="settings_export_log_done">日志已导出到 {0}</string>
+  <!-- Base Camp 导入提示 -->
+  <string name="settings_bc_import_group">Base Camp 导入</string>
+  <string name="settings_bc_import_btn">从 Base Camp 导入…</string>
+  <string name="settings_bc_import_hint">查找现有的 Base Camp 安装，并为每台 K2 设备（Everest Max、Everest 60、Makalu、MacroPad、DisplayPad）提供导入其配置文件和设置的选项。K2 首次运行时会自动显示 — 之后可随时使用此按钮重新运行。</string>
+  <string name="bc_import_prompt_title">从 Base Camp 导入</string>
+  <string name="bc_import_prompt_text">检测到此电脑上安装了 Base Camp。是否要将其现有的配置文件和设置导入到 K2 中？在导入任何内容之前，你都可以先查看每台已连接设备中找到的内容。</string>
+  <!-- Base Camp DLL 文件夹选择器 -->
+  <string name="settings_bc_dll_group">Base Camp DLL 文件夹</string>
+  <string name="settings_bc_dll_hint">MacroPad、Everest Max 和 Everest 60 依赖一些原生 DLL，它们是 Base Camp 的内部组件，K2 并未随附（MacroPadSDK.dll、SDKDLL.dll、Everest360_USB.dll）。请使用自动检测到的 Base Camp 安装，或为 K2 指定一个包含这些 DLL 的文件夹。</string>
+  <string name="settings_bc_dll_radio_auto">使用在此电脑上找到的 Base Camp 安装：</string>
+  <string name="settings_bc_dll_radio_auto_notfound">未自动检测到 Base Camp 安装。</string>
+  <string name="settings_bc_dll_radio_manual">手动指定文件夹：</string>
+  <string name="settings_bc_dll_browse">浏览…</string>
+  <string name="settings_bc_dll_none">未设置文件夹。</string>
+  <string name="settings_bc_dll_found">已找到</string>
+  <string name="settings_bc_dll_missing">缺失</string>
+  <!-- 更新检查器 -->
+  <string name="settings_update_group">更新</string>
+  <string name="settings_update_current_version">K2 版本 {0}</string>
+  <string name="settings_update_check_btn">检查更新</string>
+  <string name="settings_update_checking">正在检查更新…</string>
+  <string name="settings_update_uptodate">K2 已是最新版本。</string>
+  <string name="settings_update_check_failed">无法检查更新：{0}</string>
+  <string name="settings_update_available">有新版本可用：{0}</string>
+  <string name="settings_update_install_btn">下载并安装</string>
+  <string name="settings_update_zip_btn">下载 ZIP…</string>
+  <string name="settings_update_view_release_btn">查看发行说明</string>
+  <string name="settings_update_downloading">正在下载…</string>
+  <string name="settings_update_install_confirm">下载版本 {0} 并运行安装程序？安装程序启动后 K2 会立即关闭，以便完成更新。</string>
+  <string name="settings_update_zip_done">已保存到 {0}</string>
+  <!-- 恢复默认设置 -->
+  <string name="settings_danger_zone">危险区域</string>
+  <string name="restore_defaults">恢复默认设置</string>
+  <string name="restore_defaults_profile_confirm">将配置文件 '{0}' 在此设备上恢复为 K2 的默认设置（按键绑定、灯光和设置，如适用）？此操作无法撤销。</string>
+  <string name="restore_defaults_app">恢复所有默认设置</string>
+  <string name="restore_defaults_app_hint">重置以上所有应用偏好设置，并清除每台设备（Everest Max、Everest 60、Makalu、MacroPad、DisplayPad）已保存的所有配置文件、按键绑定、灯光设置和宏。此操作无法撤销。</string>
+  <string name="restore_defaults_app_confirm">此操作将重置所有应用偏好设置，并清除每台设备（Everest Max、Everest 60、Makalu、MacroPad、DisplayPad）已保存的所有配置文件、按键绑定、灯光设置和宏。此操作无法撤销。是否继续？</string>
+  <string name="restore_defaults_app_done">所有应用设置和设备配置文件均已恢复为默认设置。</string>
+  <string name="settings_general">常规选项</string>
+  <string name="settings_close_to_tray">关闭时最小化到系统托盘，而不是退出</string>
+  <string name="settings_k2_autostart">随 Windows 启动 K2</string>
+  <string name="settings_k2_autostart_hint">K2 现在需要管理员权限（以控制 BaseCampService）。Windows 不会自动提升通过登录时 Run 注册表项启动的应用权限，因此仅靠此设置可能无法静默启动 K2 — 如果发生这种情况，请改用任务计划程序（将任务设置为登录时“以最高权限运行”）。</string>
+  <string name="settings_start_min_tray">启动时直接最小化到托盘</string>
+  <string name="settings_start_min_tray_hint">K2 启动时驱动程序保持激活，但窗口隐藏在托盘中 — 可随时从托盘图标打开。</string>
+  <string name="settings_font_family">字体</string>
+  <string name="settings_font_family_hint">立即更改整个应用的界面字体，无需重启。</string>
+  <string name="tray_show">显示 K2</string>
+  <string name="tray_exit">退出</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       EVEREST MAX 标签页
+       ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_everest">Everest</string>
   <string name="tab_everest_max">Everest Max</string>
   <string name="tab_everest_core">Everest Core</string>
@@ -99,6 +366,13 @@
   <string name="ev_driver_opened">Everest 驱动程序已打开。</string>
   <string name="ev_driver_open_failed">Everest 驱动程序打开失败。</string>
   <string name="ev_driver_closed">Everest 驱动程序已关闭。</string>
+  <string name="loading_drivers">正在初始化驱动程序…</string>
+  <string name="hw_busy_uploading_image">正在将图片上传到设备，请稍候…</string>
+  <string name="hw_busy_importing_profile">正在导入配置文件，请稍候…</string>
+  <string name="hw_busy_importing_profiles">正在导入配置文件，请稍候…</string>
+  <string name="ev_crash_recovering">驱动程序已崩溃 — 正在尝试 3 秒后自动恢复…</string>
+  <string name="ev_crash_recovered">驱动程序已恢复 — LED 预览已重新启动。</string>
+  <string name="ev_crash_recovery_failed">驱动程序恢复失败 — 请重启 K2.App。</string>
   <string name="ev_cancel_mapping">取消映射</string>
   <string name="ev_mapping_step">映射 [{0}/{1}]：请按下物理按键 «{2}»…</string>
   <string name="ev_mapping_done">映射完成：已保存 {0} 个按键。</string>
@@ -106,24 +380,123 @@
   <string name="ev_configure">配置</string>
   <string name="ev_remove">删除</string>
   <string name="ev_sdk_log">SDK 日志</string>
+  <!-- RGB 灯光 -->
   <string name="rgb_lighting">灯光</string>
   <string name="rgb_effect">效果:</string>
   <string name="rgb_speed">速度:</string>
   <string name="rgb_direction">方向:</string>
   <string name="rgb_rainbow">彩虹</string>
   <string name="rgb_rainbow_tip">彩虹颜色（忽略颜色选择器）。</string>
+  <string name="rgb_single">单色</string>
+  <string name="rgb_single_tip">为该效果使用单一纯色。</string>
+  <string name="rgb_double">双色</string>
+  <string name="rgb_double_tip">为该效果使用两种颜色（并非所有效果都支持）。</string>
   <string name="rgb_sync_profiles">同步配置文件</string>
   <string name="rgb_primary">主色:</string>
   <string name="rgb_secondary">辅色:</string>
   <string name="rgb_tertiary">第三色:</string>
   <string name="rgb_save">保存</string>
   <string name="rgb_save_tip">使应用的效果永久生效（拔插/重启后仍保留）。</string>
+  <!-- 自定义灯光 -->
   <string name="custom_lighting">自定义灯光（按键级别）</string>
   <string name="custom_paint_hint">启用涂色模式，选择颜色，然后点击键盘上的按键为其着色。</string>
   <string name="custom_paint_mode">涂色模式</string>
+  <string name="custom_paint_effect">应用的效果:</string>
+  <string name="apply">应用</string>
   <string name="custom_color">颜色:</string>
   <string name="custom_fill_all">填充全部</string>
+  <string name="custom_read_tooltip">重新加载上次保存的颜色（不是从设备实时读取 — 在此硬件上不可靠）。</string>
   <string name="custom_clear">清除</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       EVEREST 60 标签页（仅 raw-HID 灯光 — 参见 Everest60HidNative）
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="tab_everest60">Everest 60</string>
+  <string name="ev60_hint">Raw-HID 灯光控制（无厂商 DLL）。按键重新映射功能尚不可用 — Everest 60 的固件重映射协议尚未被逆向解析。</string>
+  <string name="ev60_status_connected">已连接：{0}</string>
+  <string name="ev60_status_disconnected">未连接</string>
+  <string name="ev60_refresh">刷新</string>
+  <string name="ev60_key_lighting">自定义灯光（按键级别）</string>
+  <string name="ev60_key_lighting_hint">选择一种颜色并点击按键（主键盘或数字键盘），或边框光环上的方块，为其着色，然后点击“应用”。</string>
+  <string name="ev60_numpad_decorative_tip">仅作装饰 — 此配件没有已知的灯光/重映射协议。</string>
+  <string name="ev60_key_binding">按键绑定</string>
+  <string name="ev60_key_binding_hint">点击上方键盘上的一个按键以选中它，然后选择它应执行的操作。</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       MAKALU 标签页（鼠标 — raw-HID，无厂商 SDK — 参见 MakaluHidNative）
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="tab_makalu">Makalu</string>
+  <string name="makalu_hint">Raw-HID 控制（此鼠标不存在厂商 DLL）。协议移植自 BaseCampLinux 社区项目。</string>
+  <string name="makalu_status_connected">已连接：{0}</string>
+  <string name="makalu_status_disconnected">未连接</string>
+  <string name="makalu_refresh">刷新</string>
+  <string name="makalu_apply">应用</string>
+  <string name="makalu_failed">失败</string>
+  <string name="makalu_close">关闭</string>
+  <string name="makalu_log">日志</string>
+  <string name="makalu_custom_hint">选择一种颜色，然后点击鼠标图片上的一个 LED（或拖动一个矩形选中多个）为其上色。</string>
+  <string name="makalu_dpi_title">DPI</string>
+  <string name="makalu_dpi_prev">上一档</string>
+  <string name="makalu_dpi_next">下一档</string>
+  <string name="makalu_dpi_add">添加 DPI 档位</string>
+  <string name="makalu_dpi_remove_level">移除档位</string>
+  <string name="makalu_remap_title">按钮重新映射</string>
+  <string name="makalu_remap_configure_title">{0} — 配置</string>
+  <string name="makalu_remap_category">类别:</string>
+  <string name="makalu_remap_function">功能:</string>
+  <string name="makalu_remap_sniper_dpi">狙击 DPI:</string>
+  <string name="makalu_remap_applied">已应用</string>
+  <string name="makalu_remap_reverted">已还原</string>
+  <string name="makalu_remap_keep_btn">保留</string>
+  <string name="makalu_remap_revert_btn">还原</string>
+  <string name="makalu_remap_keep_text">左键已重新映射。是否保留此更改？将在 {0} 秒后自动还原…</string>
+  <string name="makalu_remap_cat_mouse">鼠标</string>
+  <string name="makalu_remap_cat_dpi">DPI</string>
+  <string name="makalu_remap_cat_scroll">滚轮</string>
+  <string name="makalu_remap_cat_sniper">狙击</string>
+  <string name="makalu_remap_cat_profile">配置文件</string>
+  <string name="makalu_remap_cat_lighting">灯光</string>
+  <string name="makalu_remap_fn_left">左键单击</string>
+  <string name="makalu_remap_fn_right">右键单击</string>
+  <string name="makalu_remap_fn_middle">中键单击</string>
+  <string name="makalu_remap_fn_back">后退</string>
+  <string name="makalu_remap_fn_forward">前进</string>
+  <string name="makalu_remap_fn_dpi_plus">DPI +</string>
+  <string name="makalu_remap_fn_dpi_minus">DPI -</string>
+  <string name="makalu_remap_fn_scroll_up">向上滚动</string>
+  <string name="makalu_remap_fn_scroll_down">向下滚动</string>
+  <string name="makalu_remap_fn_disabled">已禁用</string>
+  <string name="makalu_remap_fn_sniper">狙击</string>
+  <string name="makalu_remap_fn_profile_next">下一个配置文件</string>
+  <string name="makalu_remap_fn_profile_prev">上一个配置文件</string>
+  <string name="makalu_remap_fn_brightness_cycle">亮度循环</string>
+  <string name="makalu_remap_fn_effect_cycle">效果循环</string>
+  <string name="makalu_remap_btn_left">左键</string>
+  <string name="makalu_remap_btn_right">右键</string>
+  <string name="makalu_remap_btn_middle">中键</string>
+  <string name="makalu_remap_btn_back">后退键</string>
+  <string name="makalu_remap_btn_forward">前进键</string>
+  <string name="makalu_remap_btn_dpi">DPI 键</string>
+  <string name="makalu_remap_btn_5">按钮 5</string>
+  <string name="makalu_remap_btn_6">按钮 6</string>
+  <string name="makalu_settings_title">设备设置</string>
+  <string name="makalu_setting_poll">轮询率:</string>
+  <string name="makalu_setting_debounce">按键响应:</string>
+  <string name="makalu_setting_angle">角度校正:</string>
+  <string name="makalu_setting_on">开</string>
+  <string name="makalu_setting_off">关</string>
+  <string name="makalu_setting_liftoff">离地高度:</string>
+  <string name="makalu_setting_liftoff_low">低</string>
+  <string name="makalu_setting_liftoff_high">高</string>
+  <string name="makalu_setting_liftoff_custom">自定义</string>
+  <!-- Makalu 自定义 LOD（离地高度）表面校准 -->
+  <string name="makalu_lod_title">自定义表面校准</string>
+  <string name="makalu_lod_hint">某些表面可通过自定义表面校准获得更好效果。要开始校准，请点击“开始”，然后点击并按住下方图标，在窗口中移动鼠标，直到进度条填满。</string>
+  <string name="makalu_lod_start">开始</string>
+  <string name="makalu_lod_reset">重置</string>
+  <string name="makalu_lod_done">完成</string>
+  <string name="makalu_lod_progress">进度</string>
+  <!-- Display Dial（显示拨盘） -->
   <string name="display_dial">显示拨盘</string>
   <string name="dial_pages_visible">可见拨盘页面:</string>
   <string name="dial_clock">时钟</string>
@@ -134,21 +507,89 @@
   <string name="dial_pcinfo">电脑信息</string>
   <string name="dial_apm">APM</string>
   <string name="dial_custom">自定义</string>
+  <string name="dial_image">图片</string>
+  <string name="dial_timer">计时器</string>
+  <string name="dial_stopwatch">秒表</string>
+  <string name="dial_pcinfo_cpu">电脑信息 - CPU</string>
+  <string name="dial_pcinfo_gpu">电脑信息 - GPU</string>
+  <string name="dial_pcinfo_hdd">电脑信息 - 硬盘</string>
+  <string name="dial_pcinfo_internet">电脑信息 - 网络</string>
+  <string name="dial_pcinfo_ram">电脑信息 - 内存</string>
+  <string name="dial_load_image">加载图片</string>
+  <string name="dial_load_image_title">选择屏幕保护程序图片（240×204 px）</string>
+  <string name="dial_clock_section">时钟类型</string>
   <string name="dial_clock_label">时钟:</string>
+  <string name="dial_clock_style_label">样式:</string>
+  <string name="dial_clock_digital">数字</string>
+  <string name="dial_clock_analog">指针</string>
+  <string name="dial_screensaver_section">屏幕保护程序</string>
   <string name="dial_screensaver">屏幕保护程序 (秒):</string>
+  <string name="dial_screensaver_enable_tip">如果禁用，显示拨盘将永远不会变暗/切换到屏幕保护程序。</string>
+  <string name="dial_screensaver_function_label">显示内容:</string>
   <string name="dial_autooff">自动关闭 (秒):</string>
+  <string name="dial_turnoff_enable_tip">如果禁用，显示拨盘将一直保持开启。</string>
   <string name="dial_menu_color">菜单颜色:</string>
+  <string name="reset_display_dial">重置显示拨盘</string>
+  <string name="unit_seconds">秒</string>
   <string name="dial_cannot_read">无法从设备读取 ExtendInfo。</string>
+  <!-- 按键绑定（已映射按键 + 用于底座/表冠/显示按键热区的硬件捕获工具） -->
+  <string name="ev_key_binding">按键绑定</string>
+  <string name="key_binding_hint">点击上方设备上的一个按键以配置其动作。</string>
   <string name="dock_capture_hw">捕获 HW 按键…</string>
   <string name="dock_cancel_capture">取消捕获</string>
   <string name="dock_press_hw">请按下 HW 按键（底座、显示按键、表冠）…</string>
   <string name="dock_press_for">请按下"{0}"的按键…</string>
   <string name="dock_action_none">无</string>
   <string name="dock_capture_matrix">捕获 matrixId…</string>
+  <string name="ev_display_key_label">显示按键 {0}</string>
+  <string name="ev_display_key_icon_only">（图标）</string>
   <string name="dock_configure_action">配置动作…</string>
   <string name="dock_remove_action">删除动作</string>
+  <!-- 设置（Everest 侧栏部分：键盘布局） -->
+  <string name="ev_settings">设置</string>
+  <string name="ev_layout">布局</string>
+  <string name="settings_sync_profiles">跨配置文件同步</string>
+  <string name="settings_game_mode">游戏模式</string>
+  <string name="settings_game_mode_tip">游戏模式会禁用某些按键组合，以避免意外中断游戏。</string>
+  <string name="settings_disable_shift_tab">禁用 Shift + Tab</string>
+  <string name="settings_disable_alt_f4">禁用 Alt + F4</string>
+  <string name="settings_disable_win_key">禁用 Windows 键</string>
+  <string name="settings_disable_alt_tab">禁用 Alt + Tab</string>
+  <string name="settings_indicator_leds">指示灯 LED</string>
+  <string name="settings_enable_core_led">启用 Core 指示灯 LED</string>
+  <string name="settings_keyboard_color">键盘颜色</string>
+  <string name="color_silver">银色</string>
+  <string name="color_black">黑色</string>
+  <string name="settings_keycap_group">键帽外观</string>
+  <string name="settings_keycap_color">键帽颜色</string>
+  <string name="settings_keycap_black">黑色</string>
+  <string name="settings_keycap_white">白色</string>
+  <string name="settings_keycap_custom">自定义</string>
+  <string name="settings_keycap_text_color">文字颜色</string>
+  <string name="settings_keycap_style">键帽类型</string>
+  <string name="settings_keycap_style_normal">普通（按键周围有光晕）</string>
+  <string name="settings_keycap_style_pudding">布丁（彩色边框，键帽色中心）</string>
+  <string name="settings_keycap_style_reverse_pudding">反布丁（键帽色边框，彩色中心）</string>
+  <string name="settings_keycap_translucent_legend">半透明字符（字符颜色随 LED 实时颜色变化）</string>
+  <string name="settings_keycap_hint">仅影响外观 — 改变 K2 中此处的屏幕预览如何将 LED 颜色匹配到你的键帽，不会影响发送到键盘的 RGB 效果。</string>
+  <string name="settings_keycap_edit_individual">编辑单个键帽</string>
+  <string name="settings_keycap_edit_individual_hint">启用后，点击上方键盘上的一个按键可自定义其颜色或图片，或拖动选择框框选多个按键一次性自定义。</string>
+  <string name="settings_keycap_edit_multi_label">{0} 个按键</string>
+  <string name="keycap_customize_title">自定义键帽 — {0}</string>
+  <string name="keycap_customize_override_color">覆盖键帽颜色</string>
+  <string name="keycap_customize_custom_image">自定义图片…</string>
+  <string name="keycap_customize_clear_image">清除图片</string>
+  <string name="keycap_customize_use_mountain_logo">使用 Mountain 标志（固定）</string>
+  <string name="keycap_customize_clear_all">清除所有自定义</string>
+  <string name="keycap_customize_close">关闭</string>
+  <string name="settings_factory_reset">恢复出厂设置</string>
+  <string name="settings_factory_reset_confirm">此操作会将键盘的游戏模式、指示灯 LED 和灯光效果恢复为出厂默认设置。是否继续？</string>
+  <!-- 键盘宏 -->
   <string name="keyboard_macro">键盘宏</string>
+  <string name="macro_library">宏库</string>
   <string name="macro_new">新建</string>
+  <string name="macro_duplicate">复制</string>
+  <string name="macro_duplicate_name">{0}（副本）</string>
   <string name="macro_delete">删除</string>
   <string name="macro_record">录制</string>
   <string name="macro_record_stop">■ 停止</string>
@@ -163,7 +604,21 @@
   <string name="macro_playback_repeat">重复 N 次</string>
   <string name="macro_playback_held">按住时播放</string>
   <string name="macro_playback_toggle">切换</string>
+  <string name="macro_repeat_short">重复</string>
+  <string name="macro_times_suffix">次</string>
   <string name="macro_record_mouse">录制鼠标</string>
+  <string name="macro_record_mouse_movement">录制鼠标移动</string>
+  <string name="macro_record_keyboard">录制键盘</string>
+  <string name="macro_section_devices">设备</string>
+  <string name="macro_section_inputs">输入</string>
+  <string name="macro_section_assigned">已分配到</string>
+  <string name="macro_assigned_help">当前配置为播放此宏的所有设备上的每个按键。</string>
+  <string name="macro_not_assigned">尚未分配给任何按键。</string>
+  <string name="macro_show_press_release">显示按下/释放</string>
+  <string name="macro_start_recording">开始录制</string>
+  <string name="macro_move_up">上移</string>
+  <string name="macro_move_down">下移</string>
+  <string name="macro_delete_input">移除</string>
   <string name="macro_actions_count">{0} 个动作</string>
   <string name="macro_import_bc">从 Base Camp 导入</string>
   <string name="macro_select_first">请在录制前选择或创建宏。</string>
@@ -172,6 +627,7 @@
   <string name="macro_import_confirm">从 BaseCamp.db 导入 {0} 个宏？</string>
   <string name="macro_imported">已导入 {0} 个宏。</string>
   <string name="macro_import_error">导入错误：{0}</string>
+  <!-- USB 录制器 -->
   <string name="usb_recorder">USB 录制器</string>
   <string name="usb_interface">接口:</string>
   <string name="usb_label">标签:</string>
@@ -183,19 +639,31 @@
   <string name="usb_results">捕获结果</string>
   <string name="usb_save_report">保存报告</string>
   <string name="usb_open_folder">打开文件夹</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       MACROPAD 标签页
+       ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_macropad">MacroPad</string>
   <string name="mp_connected_devices">已连接的 MacroPad 设备</string>
   <string name="mp_event_log">事件日志</string>
   <string name="mp_cancel_mapping">取消映射</string>
+  <!-- MacroPad LED 灯光 -->
   <string name="led_sync_profiles">跨配置文件同步</string>
   <string name="led_backlight_off">背光 关闭</string>
   <string name="led_backlight_on">背光 开启</string>
+  <string name="led_backlight_label">背光:</string>
   <string name="led_save_flash_tip">使应用的效果永久生效（拔插/重启后仍保留）。</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       DISPLAYPAD 标签页
+       ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_displaypad">DisplayPad</string>
   <string name="dp_open_driver">打开驱动程序</string>
   <string name="dp_driver_opened">DisplayPad 驱动程序已打开。</string>
   <string name="dp_driver_open_failed">DisplayPad 驱动程序打开失败。</string>
   <string name="dp_driver_closed">DisplayPad 驱动程序已关闭。</string>
+  <string name="dp_rotate_icons_ccw">旋转图标 ↺</string>
+  <string name="dp_rotate_icons_cw">旋转图标 ↻</string>
   <string name="dp_reset_keys">重置按键</string>
   <string name="dp_import_xml">导入 XML…</string>
   <string name="dp_import_bc">从 Base Camp 导入</string>
@@ -208,9 +676,34 @@
   <string name="dp_mapping_done">DisplayPad 映射完成。</string>
   <string name="dp_imported_xml">配置文件 '{0}' 已导入到槽位 {1}。</string>
   <string name="dp_choose_image">为按键 #{0} 选择图片</string>
+  <string name="dp_key_button_label">按键 {0}</string>
+  <string name="dp_load_image">加载图片…</string>
+  <string name="dp_rotate_image">旋转图片：</string>
+  <string name="dp_action_section">动作</string>
   <string name="dp_configure_action">配置动作…</string>
   <string name="dp_remove_action">删除动作</string>
+  <string name="dp_change_image">更改图片…</string>
   <string name="dp_remove_image">删除图片</string>
+  <string name="dp_create_folder">创建文件夹页面…</string>
+  <string name="dp_create_folder_title">创建文件夹页面</string>
+  <string name="dp_create_folder_prompt">文件夹名称:</string>
+  <string name="dp_set_back">设为返回按钮</string>
+  <string name="dp_pages">页面</string>
+  <string name="dp_no_pages">尚未创建任何文件夹页面。</string>
+  <string name="dp_delete_page">删除</string>
+  <string name="dp_delete_page_title">删除页面</string>
+  <string name="dp_delete_page_confirm">删除页面 "{0}"？打开该页面的所有按键都将停止工作。</string>
+  <string name="dp_add_text">添加文字…</string>
+  <string name="txt_dialog_title">插入文字</string>
+  <string name="txt_label">文字:</string>
+  <string name="txt_font_label">字体:</string>
+  <string name="txt_font_size_auto">自动调整大小</string>
+  <string name="txt_bg_solid">纯色背景</string>
+  <string name="txt_bg_image">叠加在已加载的图片上</string>
+  <string name="txt_bg_color">背景:</string>
+  <string name="txt_color">文字:</string>
+  <string name="txt_position_label">位置:</string>
+  <string name="txt_generate_failed">无法生成文字图片。</string>
   <string name="dp_open_bc_profile">打开 BaseCamp 配置文件</string>
   <string name="dp_filter_bc_xml">BaseCamp 配置文件 (*.xml)|*.xml|所有文件|*.*</string>
   <string name="dp_bc_db_not_found">未找到 BaseCamp.db。请设置 K2_BASECAMP_DB 或安装 Base Camp。</string>
@@ -218,54 +711,8 @@
   <string name="dp_no_matching_devices">没有已连接的设备与数据库中的配置文件匹配。</string>
   <string name="dp_import_confirm">将 {0} 个配置文件导入到 {1} 台设备？</string>
   <string name="dp_imported">已从 Base Camp 导入 {0} 个配置文件（{1} 个按键）。</string>
-  <string name="dpw_title">K2 — DisplayPad 控制台</string>
-  <string name="dpw_open_driver">打开驱动程序</string>
-  <string name="dpw_refresh_devices">刷新设备</string>
-  <string name="dpw_close_driver">关闭驱动程序</string>
-  <string name="err_title">K2 — 错误</string>
-  <string name="err_message">发生了一个错误</string>
-  <string name="imp_title">导入 BaseCamp 配置文件</string>
-  <string name="imp_header">导入 BaseCamp 配置文件</string>
-  <string name="imp_slot">K2 配置文件槽位 (1..5):</string>
-  <string name="imp_switch_now">导入后立即切换到此槽位</string>
-  <string name="unhandled_error_ui">未处理的错误 (UI)</string>
-  <string name="unhandled_error_domain">未处理的错误 (域)</string>
-  <string name="veh_no_return">Frame-walk：未找到 SDKDLL.dll 外部的返回地址</string>
-  <string name="profile_switch_unsupported">配置文件：MacroPad 暂不支持配置文件切换</string>
-  <string name="browse">浏览…</string>
-  <string name="crop_hint">拖动以重新定位，滚动或使用滑块进行缩放。</string>
-  <string name="crop_title">裁剪图片 ({0}×{1})</string>
-  <string name="crop_no_crop">按原样插入（不裁剪/缩放）</string>
-  <string name="crop_show_grid">显示按键轮廓</string>
-  <string name="tab_settings">设置</string>
-  <string name="settings_debug_mode">调试模式</string>
-  <string name="settings_debug_mode_hint">在每台设备上启用调试工具（打开/关闭驱动程序、AP 控制、事件日志）。</string>
-  <string name="settings_log_level">日志记录</string>
-  <string name="log_off">关闭</string>
-  <string name="log_normal">正常</string>
-  <string name="log_verbose">详细</string>
-  <string name="settings_dp_native">DisplayPad：原生 USB 引擎（实验性）</string>
-  <string name="settings_dp_native_hint">通过 USB 直接驱动 DisplayPad，而不是使用 Mountain SDK：传输已确认（无图标损坏），无卫星进程。设备上的配置文件持久化不可用；图片会从 K2 数据库重新上传。重启 K2 后生效。</string>
-  <string name="settings_ev_native">Everest Max：原生 USB 引擎（实验性，部分支持）</string>
-  <string name="settings_ev_native_hint">通过 USB 直接驱动 Everest Max 的连接和数字键盘的 4 个显示按键，而不是使用 SDKDLL.dll — 消除了该 DLL 在其覆盖范围内长期存在的定时器线程崩溃问题。RGB 效果、数字键盘图标、Media Dock 和全键盘重新映射事件目前仍使用 SDKDLL.dll（尚未移植）。重启 K2 后生效。</string>
-  <string name="settings_kill_bc_worker">终止 Base Camp 的 DisplayPad 工作进程</string>
-  <string name="settings_kill_bc_worker_hint">MountainDisplayPadWorker 在后台运行，并与 K2 同时写入 DisplayPad，导致图标损坏。启用后，K2 会自动终止该进程（并在运行期间保持其关闭）。</string>
-  <string name="settings_bc_autostart">随 Windows 启动 Base Camp 服务</string>
-  <string name="settings_bc_autostart_hint">启用/禁用 Base Camp 的 Windows 自启动项（与任务管理器的"启动"选项卡机制相同 — 可逆）。HKLM 中的项可能需要以管理员身份运行 K2。</string>
-  <string name="settings_bc_autostart_none">在注册表中未找到 Base Camp 自启动项。</string>
-  <string name="settings_bc_autostart_done">Base Camp 自启动：已更新 {0} 个项。</string>
-  <string name="loading_drivers">正在初始化驱动程序…</string>
-  <string name="ev_crash_recovering">驱动程序已崩溃 — 正在尝试 3 秒后自动恢复…</string>
-  <string name="ev_crash_recovered">驱动程序已恢复 — LED 预览已重新启动。</string>
-  <string name="ev_crash_recovery_failed">驱动程序恢复失败 — 请重启 K2.App。</string>
-  <string name="ev_key_binding">按键绑定</string>
-  <string name="dp_rotate_icons_ccw">旋转图标 ↺</string>
-  <string name="dp_rotate_icons_cw">旋转图标 ↻</string>
-  <string name="dp_load_image">加载图片…</string>
-  <string name="dp_rotate_image">旋转图片：</string>
-  <string name="dp_action_section">动作</string>
-  <string name="dp_change_image">更改图片…</string>
   <string name="import_bc">从 Base Camp 导入</string>
+  <!-- 导出 -->
   <string name="export">导出</string>
   <string name="dp_export_bc">导出（Base Camp）…</string>
   <string name="dp_export_k2">导出（K2）…</string>
@@ -274,30 +721,99 @@
   <string name="dp_exported_bc">已将 '{0}' 导出为 Base Camp XML：已写入 {1} 个动作，跳过 {2} 个（Base Camp 中无对应项）。</string>
   <string name="dp_exported_k2">已将 '{0}' 导出为 K2 XML：已写入 {1} 个动作。</string>
   <string name="dp_export_no_profile">请先选择一个配置文件。</string>
+  <string name="export_profiles_btn">导出配置文件…</string>
+  <string name="export_profiles_title">导出配置文件</string>
+  <string name="export_profiles_pick">选择要导出的配置文件:</string>
+  <string name="export_format_section">格式:</string>
+  <string name="export_format_bc">Base Camp</string>
+  <string name="export_format_k2">K2</string>
+  <string name="export_select_at_least_one">请至少选择一个配置文件。</string>
+  <string name="export_pick_folder">为导出的配置文件选择一个文件夹</string>
+  <!-- 屏幕保护程序（全屏图片，始终显示或在空闲 N 秒后显示） -->
   <string name="dp_fullscreen_group">全屏</string>
   <string name="dp_fullscreen_set">设置全屏图片…</string>
   <string name="dp_fullscreen_clear">移除全屏</string>
   <string name="dp_fullscreen_dialog_title">全屏图片</string>
   <string name="dp_fullscreen_prompt">选择要在此页面全部 12 个按键上显示的图片或 GIF：</string>
+  <string name="dp_screensaver_delay_enable">以下时间后开启屏幕保护程序</string>
+  <string name="dp_screensaver_delay_hint">启用后，图片仅在这么多秒内没有按键按下后才会显示；首次按键会先恢复该配置文件的图标，然后再执行该按键的动作。禁用时，只要显示此页面，图片就会一直显示在面板上。</string>
   <string name="dp_fullscreen_rotation">旋转</string>
   <string name="dp_fullscreen_rotation_hint">在调整图片以适应面板之前旋转整张图片。上方预览不会反映此选择 — 它会在图片显示到设备上时生效。</string>
   <string name="dp_fullscreen_current">当前：{0}</string>
   <string name="dp_fullscreen_none_set">未选择图片。</string>
   <string name="dp_fullscreen_set_ok">已为此页面设置全屏图片。</string>
   <string name="dp_fullscreen_cleared">已移除全屏图片 — 已恢复各按键图标。</string>
+  <string name="dp_live_test">面板实时测试</string>
+  <string name="dp_live_test_icon">图标实时测试（第 1 个按键）</string>
+  <!-- 重命名设备 -->
   <string name="rename_device">重命名设备</string>
   <string name="rename_device_title">重命名设备</string>
   <string name="rename_device_prompt">输入此设备的名称：</string>
+  <string name="profile_not_available_tip">此设备尚不支持此功能 — 未实现配置文件存储。</string>
+  <!-- 重命名/删除配置文件 -->
   <string name="rename_profile">重命名配置文件</string>
   <string name="rename_profile_title">重命名配置文件</string>
   <string name="rename_profile_prompt">输入此配置文件的名称：</string>
   <string name="delete_profile">删除配置文件</string>
   <string name="delete_profile_confirm">删除配置文件 '{0}'？该配置文件中的所有按键绑定都将被移除。</string>
   <string name="delete_profile_last">无法删除最后一个配置文件。</string>
+  <string name="import_no_free_slot">全部 5 个配置文件槽位均已占用 — 请先删除或释放一个槽位，再导入 "{0}"。</string>
+  <string name="import_some_skipped_no_slot">已跳过 {0} 个配置文件：没有空闲槽位（全部 5 个均已占用）。</string>
+  <!-- 新建配置文件选择器（DisplayPad） -->
+  <string name="new_profile_dialog_title">新建配置文件</string>
+  <string name="new_profile_generic">通用配置文件</string>
+  <string name="new_profile_dedicated">专用配置文件</string>
+  <string name="new_profile_dedicated_hint">选择此配置文件对应的应用/功能:</string>
+  <string name="new_profile_create_btn">创建</string>
+  <!-- 配置文件设置弹窗（齿轮图标，所有设备） -->
+  <string name="profile_settings_title">配置文件设置</string>
+  <string name="profile_settings_name_label">名称</string>
+  <string name="profile_settings_exe_label">启动可执行文件</string>
+  <string name="profile_settings_exe_hint">当此程序启动时，K2 会自动切换到此配置文件。</string>
+  <string name="profile_settings_clear">清除</string>
+  <!-- Base Camp 设备选择器（当数据库中存在多台同类型物理设备的配置文件时显示） -->
+  <string name="bc_pick_device_title">选择 Base Camp 设备</string>
+  <string name="bc_pick_device_text">Base Camp 中有多台设备的配置文件。请选择要导入到 "{0}" 的设备:</string>
+  <string name="bc_pick_device_none">请选择要从中导入的设备。</string>
+  <string name="bc_pick_device_label">设备 #{0} — {1} 个配置文件：{2}</string>
+  <string name="bc_import_will_wipe">此操作将在导入前删除 "{0}" 上所有现有的 K2 配置文件。</string>
+  <string name="bc_import_read_failed">无法读取 Base Camp 数据库（{0}）。未导入任何内容，你现有的 K2 配置文件未受影响。</string>
+  <!-- Everest 导入 -->
   <string name="ev_no_profiles_in_bc">在 Base Camp 数据库中未找到 Everest 配置文件。</string>
   <string name="ev_imported_bc">已从 Base Camp 导入 {0} 个 Everest 配置文件（{1} 个按键）。</string>
+  <!-- MacroPad 导入 -->
   <string name="mp_no_profiles_in_bc">在 Base Camp 数据库中未找到 MacroPad 配置文件。</string>
   <string name="mp_imported_bc">已从 Base Camp 导入 {0} 个 MacroPad 配置文件（{1} 个按键）。</string>
+  <!-- Makalu 导入 -->
+  <string name="mk_no_profiles_in_bc">在 Base Camp 数据库中未找到 Makalu 配置文件。</string>
+  <string name="mk_imported_bc">已从 Base Camp 导入 {0} 个 Makalu 配置文件（{1} 个重新映射的按钮）。</string>
+  <!-- Everest 60 导入 -->
+  <string name="ev60_no_profiles_in_bc">在 Base Camp 数据库中未找到 Everest 60 配置文件。</string>
+  <string name="ev60_imported_bc">已从 Base Camp 导入 {0} 个 Everest 60 配置文件（{1} 个按键）。</string>
+  <!-- DisplayPad 文件夹导航 -->
   <string name="dp_back">返回</string>
-  <string name="debug_group">调试</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       DISPLAYPAD 独立程序 (K2.DisplayPad)
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="dpw_title">K2 — DisplayPad 控制台</string>
+  <string name="dpw_open_driver">打开驱动程序</string>
+  <string name="dpw_refresh_devices">刷新设备</string>
+  <string name="dpw_close_driver">关闭驱动程序</string>
+  <!-- 错误对话框 -->
+  <string name="err_title">K2 — 错误</string>
+  <string name="err_message">发生了一个错误</string>
+  <!-- 导入配置文件对话框 -->
+  <string name="imp_title">导入 BaseCamp 配置文件</string>
+  <string name="imp_header">导入 BaseCamp 配置文件</string>
+  <string name="imp_slot">K2 配置文件槽位 (1..5):</string>
+  <string name="imp_switch_now">导入后立即切换到此槽位</string>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       常规错误消息
+       ═══════════════════════════════════════════════════════════════ -->
+  <string name="unhandled_error_ui">未处理的错误 (UI)</string>
+  <string name="unhandled_error_domain">未处理的错误 (域)</string>
+  <string name="veh_no_return">Frame-walk：未找到 SDKDLL.dll 外部的返回地址</string>
+  <string name="profile_switch_unsupported">配置文件：MacroPad 暂不支持配置文件切换</string>
 </strings>

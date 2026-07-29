@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -127,6 +127,7 @@ public partial class MainWindow
         Closed += (_, _) =>
         {
             CleanupMediaDock();
+            try { RestoreEvDisabledKeysOnExit(); } catch { /* ignore */ }
             try { StopEvAccessoryPoll();  } catch { /* ignore */ }
             try { _evEngine?.Dispose(); } catch { /* ignore */ }
             try { _everest.Dispose();   } catch { /* ignore */ }
@@ -543,12 +544,20 @@ public partial class MainWindow
     /// the checkboxes, to avoid re-saving/re-applying spuriously.</summary>
     private bool _evSettingsSuppress;
 
+    /// <summary>False until <see cref="InitEverestSettingsPanel"/> has run once — guards
+    /// <see cref="ReloadEverestSettingsForProfileSwitch"/> against the very first
+    /// <c>ReloadEverestProfile</c> call, which happens before this panel's own Init
+    /// (see the call order comment where ReloadEverestProfile is first invoked). Mirrors
+    /// <c>_evRgbInitialized</c>'s exact role for the RGB panel.</summary>
+    private bool _evSettingsInitialized;
+
     private void InitEverestSettingsPanel()
     {
         InitKeycapAppearanceControls();
         _evSettingsSuppress = true;
         try { LoadEverestSettingsFromStore(); }
         finally { _evSettingsSuppress = false; }
+        _evSettingsInitialized = true;
     }
 
     /// <summary>
@@ -561,20 +570,41 @@ public partial class MainWindow
     {
         CkSettingsSync.IsChecked = CkEvSync.IsChecked;
 
-        int mode = int.TryParse(_evStore.GetSetting("settings.game_mode"), out var m) ? m : 0;
+        string prefix = EvSettingsPrefix();
+        int mode = int.TryParse(_evStore.GetSetting(prefix + "game_mode")
+            ?? _evStore.GetSetting("settings.game_mode"), out var m) ? m : 0;
         CkGameModeShiftTab.IsChecked = (mode & 0x1) != 0;
         CkGameModeAltF4.IsChecked    = (mode & 0x2) != 0;
         CkGameModeWinKey.IsChecked   = (mode & 0x4) != 0;
         CkGameModeAltTab.IsChecked   = (mode & 0x8) != 0;
 
         CkCoreIndicatorLed.IsChecked =
-            int.TryParse(_evStore.GetSetting("settings.indicator_led"), out var led) && led != 0;
+            int.TryParse(_evStore.GetSetting(prefix + "indicator_led")
+                ?? _evStore.GetSetting("settings.indicator_led"), out var led) && led != 0;
 
+        // Keyboard body color is a physical/cosmetic fact about the unit, not a
+        // per-profile preference — always the global key, never prefixed.
         bool black = _evStore.GetSetting("settings.keyboard_color") == "black";
         (black ? RbEvKbColorBlack : RbEvKbColorSilver).IsChecked = true;
         ApplyKeyboardColor(black);
 
         LoadKeycapAppearanceFromStore();
+    }
+
+    /// <summary>
+    /// Re-loads Game Mode/Indicator LED/Keycap Appearance for the profile that just
+    /// became active and re-applies them to the device — mirrors
+    /// <see cref="ReloadEverestRgbForProfileSwitch"/>. Called from
+    /// <see cref="ReloadEverestProfile"/>. User request 2026-07-25.
+    /// </summary>
+    private void ReloadEverestSettingsForProfileSwitch()
+    {
+        if (!_evSettingsInitialized) return;
+        bool prev = _evSettingsSuppress;
+        _evSettingsSuppress = true;
+        try { LoadEverestSettingsFromStore(); }
+        finally { _evSettingsSuppress = prev; }
+        ApplyEverestSettingsToDevice();
     }
 
     private void RbEvKbColor_Checked(object sender, RoutedEventArgs e)
@@ -621,7 +651,7 @@ public partial class MainWindow
     {
         if (_evSettingsSuppress) return;
         int mode = EvGameModeBitmask();
-        _evStore.SetSetting("settings.game_mode", mode.ToString());
+        _evStore.SetSetting(EvSettingsPrefix() + "game_mode", mode.ToString());
         if (!_everest.IsOpen) { LogEverest("[WARN] Everest driver not open: state saved but not applied"); return; }
         LogEverest($"[SET ] SetGameMode({mode}) -> {_everest.SetGameMode(mode)}");
     }
@@ -630,7 +660,7 @@ public partial class MainWindow
     {
         if (_evSettingsSuppress) return;
         bool enable = CkCoreIndicatorLed.IsChecked == true;
-        _evStore.SetSetting("settings.indicator_led", enable ? "1" : "0");
+        _evStore.SetSetting(EvSettingsPrefix() + "indicator_led", enable ? "1" : "0");
         if (!_everest.IsOpen) { LogEverest("[WARN] Everest driver not open: state saved but not applied"); return; }
         LogEverest($"[SET ] SetIndicatorLed({enable}) -> {_everest.SetIndicatorLed(enable)}");
     }
@@ -799,10 +829,13 @@ public partial class MainWindow
     {
         if (!_evKeyboardButtons.TryGetValue(matrixId, out var btn)) return;
 
-        SetKeyTint(btn, pressed ? new SolidColorBrush(Color.FromRgb(0x5B, 0xBE, 0xC3)) : Brushes.Transparent); // K2 teal
+        // Same red as MacroPad's press flash (user request 2026-07-27), via the Tint
+        // overlay rather than MacroPad's Background/BorderBrush trigger — see the class
+        // doc comment above for why that keeps this immune to MacroPad's "stuck gray" bug.
+        SetKeyTint(btn, pressed ? new SolidColorBrush(Color.FromRgb(0x90, 0x00, 0x00)) : Brushes.Transparent);
 
-        // Highlight text with contrasting color too
-        SetLegendForeground(btn, pressed ? Brushes.Black : new SolidColorBrush(ResolveEverestKeycapTextColor()));
+        // Highlight text with contrasting color too (white reads on the dark red tint).
+        SetLegendForeground(btn, pressed ? Brushes.White : new SolidColorBrush(ResolveEverestKeycapTextColor()));
     }
 
     // ============================================================
@@ -923,8 +956,21 @@ public partial class MainWindow
     /// (VK code used as button Tag). Checks the merged user+default map first,
     /// then the built-in default, and finally falls back to wMatrix unchanged.
     /// </summary>
-    private int EvTranslateMatrix(int wMatrix)
+    /// <param name="fromHidUsage">True when the value is a HID usage from the native
+    /// engine's NKRO bitmap instead of an SDK wMatrix. The standard usage table is then
+    /// consulted FIRST and the wMatrix table not at all: the two spaces overlap in the
+    /// low integers, so a leftover guided-remap entry (or the default wMatrix table)
+    /// would happily translate a usage into an unrelated key. The learned map still acts
+    /// as the fallback, which is what covers the layout-dependent punctuation keys
+    /// EverestWMatrixMap.HidUsageToMatrixId deliberately leaves out.</param>
+    private int EvTranslateMatrix(int wMatrix, bool fromHidUsage = false)
     {
+        if (fromHidUsage)
+        {
+            if (EverestWMatrixMap.HidUsageToMatrixId.TryGetValue(wMatrix, out int vk)) return vk;
+            if (_evWMatrixToLayout.TryGetValue(wMatrix, out vk))                        return vk;
+            return wMatrix;
+        }
         if (_evWMatrixToLayout.TryGetValue(wMatrix, out int layoutId)) return layoutId;
         if (s_defaultWMatrixMap.TryGetValue(wMatrix, out layoutId))    return layoutId;
         return wMatrix;
@@ -1044,6 +1090,12 @@ public partial class MainWindow
             LogEverest($"Firmware current profile: {fi.currentlyProfileIndex}");
 
         UpdateKeyboardLayout();
+
+        // Both open paths (EvAutoOpen at startup, BtnEvOpen_Click) end here, and the
+        // profile is loaded before either runs — so a "disabled key" in the stored
+        // profile only reaches the firmware now. Also re-applies after a reconnect,
+        // which the device forgets (nothing here is flash-persisted).
+        PushEvDisabledKeysToDevice();
     }
 
     private void BtnEvApOn_Click(object sender, RoutedEventArgs e)  =>
@@ -1125,9 +1177,10 @@ public partial class MainWindow
                 string? funcType  = b.Element("FunctionType")?.Value;
                 string? subType   = b.Element("SubFunctionType")?.Value;
                 string? funcValue = b.Element("FunctionValue")?.Value;
+                string? customUrl = b.Element("CustomURL")?.Value;
                 if (funcType == "K2Action")
                     return (subType, string.IsNullOrEmpty(funcValue) ? null : funcValue);
-                return BaseCampDbImporter.TranslateAction(funcType, subType, funcValue, macroNames);
+                return BaseCampDbImporter.TranslateAction(funcType, subType, funcValue, macroNames, customUrl);
             }
 
             var touchBindings = new List<(int MatrixId, System.Xml.Linq.XElement El)>();
@@ -1140,7 +1193,14 @@ public partial class MainWindow
 
                 var (actionType, actionValue) = TranslateBinding(b);
                 if (actionType is null) continue;
-                _evStore.SaveKey(new EverestKeyRecord(slot, matrixId, null, actionType, actionValue));
+                // DLLMatrixIndex is the raw SDK wMatrix code, a different numbering space
+                // from the VK-code matrixId a physical key press resolves to — same
+                // translation BaseCampDbImporter.ImportEverestProfile already applies for
+                // the DB import path. Without it an imported key's KeyMatrix never matches
+                // what a live press looks up, so the action silently never fires (this was
+                // missing here — confirmed real bug, 2026-07-26).
+                int keyMatrix = Models.EverestWMatrixMap.Translate(matrixId);
+                _evStore.SaveKey(new EverestKeyRecord(slot, keyMatrix, null, actionType, actionValue));
                 regular++;
             }
 
@@ -1186,6 +1246,86 @@ public partial class MainWindow
                 ndkIndex++;
             }
 
+            // Lighting (EverestLightings/Lighting) — always written under the
+            // profile-scoped rgb.p{slot}. namespace, see BaseCampDbImporter.
+            // ImportEverestProfile's matching DB-import comment for why.
+            var lightingRows = new List<BaseCampDbImporter.BcLightingRow>();
+            BaseCampDbImporter.BcCustomLighting? importedCustom = null;
+            foreach (var lt in root.Descendants("Lighting"))
+            {
+                string? effName = lt.Element("EffIndex")?.Value;
+                int speed = int.TryParse(lt.Element("Speed")?.Value, out var sp) ? sp : 50;
+                int brightness = int.TryParse(lt.Element("Brightness")?.Value, out var br) ? br : 100;
+                int direction = int.TryParse(lt.Element("Direction")?.Value, out var di) ? di : 0;
+                bool active = string.Equals(lt.Element("IsActive")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+                byte effByte = BaseCampDbImporter.ResolveLightingEffectByte(effName, null);
+                int c1 = BaseCampDbImporter.ParseBcColor(lt.Element("Color1")?.Value, 0x900000);
+                int c2 = BaseCampDbImporter.ParseBcColor(lt.Element("Color2")?.Value, 0);
+                int c3 = BaseCampDbImporter.ParseBcColor(lt.Element("Color3")?.Value, 0);
+                lightingRows.Add(new BaseCampDbImporter.BcLightingRow(effByte, speed, brightness, direction, c1, c2, c3, active));
+
+                // Per-key paint state of the Custom effect (126 keycap LEDs + which keys
+                // carry a dynamic effect), from the Custom row's own <CustomLightings>.
+                //
+                // ONLY when that row is the ACTIVE effect: Base Camp's XML exporter
+                // SYNTHESIZES this payload when the profile has no saved paint at all —
+                // proven 2026-07-26 by exporting a profile whose DB CustomLightings has
+                // every nested entry null, which came out as a full 126 x #FFFFFF board
+                // (12 x #000000 on the MacroPad). Importing that unconditionally turned
+                // "this profile never used Custom" into "every key painted white". Real
+                // paint, when it exists, does live in the DB (verified: a painted profile
+                // reads back 61 red / 64 white / 1 green), so the DB import path is the
+                // trustworthy source for Custom — see BaseCampDbImporter.
+                // ReadKeyboardCustomLighting.
+                if (effByte == (byte)EverestSdkNative.EffectIndex.Custom && active)
+                {
+                    importedCustom = BaseCampDbImporter.ParseKeyboardCustomLighting(
+                        lt.Element("CustomLightings")?.Value, BaseCampDbImporter.EverestKeycapLedCount);
+                    if (importedCustom is not null)
+                    {
+                        BaseCampDbImporter.ApplyCustomLightingToStore(_evStore.SetSetting,
+                            $"custom.p{slot}.keyLedColors", $"custom.p{slot}.keyEffects", importedCustom);
+                        LogEverest($"[IMP-XML] custom lighting: {importedCustom.Colors.Count} painted LED(s), " +
+                                   $"{importedCustom.Effects.Count} dynamic-effect LED(s) — note: Base Camp's XML " +
+                                   "export may carry a synthesized default board here; import from " +
+                                   "BaseCamp.db for the real paint");
+                    }
+                }
+            }
+            if (lightingRows.Count > 0)
+                BaseCampDbImporter.ApplyLightingToStore(_evStore.SetSetting, $"rgb.p{slot}.", lightingRows);
+
+            // After the effect rows (they set rgb.p{slot}.effect from IsActive): a really
+            // painted board wins — see BaseCampDbImporter.LooksPainted.
+            if (importedCustom is not null
+                && BaseCampDbImporter.LooksPainted(importedCustom, BaseCampDbImporter.EverestKeycapLedCount))
+            {
+                _evStore.SetSetting($"rgb.p{slot}.effect",
+                    ((int)EverestSdkNative.EffectIndex.Custom).ToString());
+            }
+
+            // Settings (EverestKeyboardSettings/KeyboardSetting) — Game Mode/Core LED/
+            // Dial turn-off+clock, same fields BaseCampDbImporter.ReadKeyboardSettings
+            // reads from the DB (see that method's doc comment for the bit layout and
+            // for why the fuller Display Dial page config isn't here at all).
+            var settingsEl = root.Descendants("KeyboardSetting").FirstOrDefault();
+            if (settingsEl is not null)
+            {
+                bool B(string name) => string.Equals(settingsEl.Element(name)?.Value, "true", StringComparison.OrdinalIgnoreCase);
+                int mode = (B("DisableShift") ? 0x1 : 0) | (B("DisableAltF4") ? 0x2 : 0)
+                         | (B("DisableWin") ? 0x4 : 0) | (B("DisableAltTab") ? 0x8 : 0);
+                string sp2 = $"settings.p{slot}.";
+                _evStore.SetSetting(sp2 + "game_mode", mode.ToString());
+                _evStore.SetSetting(sp2 + "indicator_led", B("EnableCoreLED") ? "1" : "0");
+
+                string dp2 = $"dial.p{slot}.";
+                _evStore.SetSetting(dp2 + "turnOffEnable", B("IsTurnOffAfter") ? "1" : "0");
+                _evStore.SetSetting(dp2 + "turnOff",
+                    BaseCampDbImporter.TurnOffSecondsFromTimeSpanText(settingsEl.Element("TurnOffAfter")?.Value).ToString());
+                _evStore.SetSetting(dp2 + "clockType",
+                    (int.TryParse(settingsEl.Element("ClockType")?.Value, out var ct) ? ct : 0).ToString());
+            }
+
             _evStore.SetCurrentProfile(slot);
             EvRefreshProfiles();
             EvSelectProfileSlot(slot);
@@ -1202,6 +1342,11 @@ public partial class MainWindow
             if (touch > 0 && _everest.IsOpen) EvUploadNdkImages(busyMessage: Loc.Get("hw_busy_importing_profile"));
             EvResetEmptyNdkSlots(Loc.Get("hw_busy_importing_profile"));
             EvSyncNdkBindingsToFw();
+
+            // Replay the effect-dropdown pick so the imported lighting (Custom board
+            // included) reaches the keyboard and the preview without the user having to
+            // touch the dropdown — see EvReapplySelectedEffect.
+            EvReapplySelectedEffect();
 
             LogEverest($"[IMP-XML] '{profileName}' -> slot {slot}: {regular} keys, {touch} display keys");
             LblStatus.Text = Loc.Get("dp_imported_xml", profileName, slot);
@@ -1318,7 +1463,7 @@ public partial class MainWindow
         foreach (var slot in _evStore.GetExistingProfiles())
             _evStore.ClearProfile(slot);
 
-        int totalRegular = 0, totalTouch = 0;
+        int totalRegular = 0, totalTouch = 0, skipped = 0;
 
         var usedSlots = new HashSet<int>();
 
@@ -1337,7 +1482,7 @@ public partial class MainWindow
             try
             {
                 int targetSlot = BaseCampDbImporter.FindFreeSlot(usedSlots);
-                if (targetSlot == 0) continue; // sanity ceiling only (5 real firmware slots)
+                if (targetSlot == 0) { skipped++; continue; } // more BC profiles than the 5 firmware slots allow
                 usedSlots.Add(targetSlot);
 
                 var (reg, touch) = BaseCampDbImporter.ImportEverestProfile(dbPath, profile, _evStore, targetSlot, macroNames);
@@ -1376,8 +1521,18 @@ public partial class MainWindow
         EvSyncNdkBindingsToFw();
         LoadNdkState();
 
+        // Same post-import apply as the XML path — see EvReapplySelectedEffect.
+        EvReapplySelectedEffect();
+
         LogEverest($"[IMP-BC] Done: {totalRegular} regular + {totalTouch} display keys across {allProfiles.Count} profiles");
         LblStatus.Text = Loc.Get("ev_imported_bc", allProfiles.Count, totalRegular);
+
+        if (skipped > 0)
+        {
+            LogEverest($"[IMP-BC] {skipped} profile(s) skipped: no free slot left.");
+            MessageBox.Show(this, Loc.Get("import_some_skipped_no_slot", skipped),
+                "Import from Base Camp", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     /// <summary>
@@ -1649,6 +1804,11 @@ public partial class MainWindow
         _evByMatrix.Remove(key.KeyMatrix);
         _evStore.RemoveKey(EvCurrentProfile(), key.KeyMatrix);
         LogEverest($"[KEY ] key 0x{key.KeyMatrix:X2} removed");
+        // Removing a "disabled key" entry has to re-enable it in firmware — this path
+        // doesn't go through EvPersistOrDiscardKey, so it needs its own reconcile or the
+        // key stays dead until some other change happens to trigger one (user report
+        // 2026-07-27: "after removing the disabled action the key doesn't come back").
+        PushEvDisabledKeysToDevice();
     }
 
     /// <summary>
@@ -1670,6 +1830,72 @@ public partial class MainWindow
                 EvCurrentProfile(), key.KeyMatrix, key.Label, key.ActionType, key.ActionValue));
             LogEverest($"[ACT ] key 0x{key.KeyMatrix:X2} <- type={key.ActionType}");
         }
+
+        PushEvDisabledKeysToDevice();
+    }
+
+    // ============================================================
+    // "Disabled key" — the one binding that has to reach the firmware
+    // ============================================================
+
+    /// <summary>matrixIds K2 currently holds in a non-factory firmware output mode
+    /// (disabled, or claimed by the host). Tracked because each must be UNDONE when the
+    /// key loses its binding or the profile changes, and the device won't tell us what
+    /// we set — see <see cref="PushEvDisabledKeysToDevice"/>.</summary>
+    private readonly HashSet<int> _evFirmwareDisabledKeys = new();
+
+    /// <summary>
+    /// Reconciles each key's firmware state with the current profile: every key that
+    /// carries a K2 binding is silenced so its action can run WITHOUT the key also typing
+    /// its character (user report 2026-07-27: pressing "2" opened the calculator and typed
+    /// "2"), and everything else goes back to its factory function. The action itself
+    /// still executes host-side off the key report — the firmware write only decides what
+    /// the key emits on its own.
+    ///
+    /// <para>Every wanted key is (re)written each time rather than only the newly-added
+    /// ones. The set says what K2 asked for, NOT what the keyboard currently holds — a
+    /// replug wipes the firmware side silently, and diffing against a stale set would
+    /// then skip the re-push and leave the key alive. Rewriting is idempotent and only
+    /// happens on user-driven events (key saved, profile switched, device opened), never
+    /// per keystroke, and none of it touches flash.</para>
+    /// </summary>
+    private void PushEvDisabledKeysToDevice()
+    {
+        // Display keys (D1-D4) are excluded: they have their own firmware binding path
+        // (WriteNumpadBinding) and aren't in the ordinary-key catalog at all.
+        // Both a "disable" binding and an ordinary action end up in the same firmware
+        // state: the key emits nothing and K2 runs whatever it's bound to off the NKRO
+        // report. Same design as the Everest 60's PushEv60DisabledKeysToDevice.
+        var wanted = _evKeys
+            .Where(k => k.NdkIndex is null && k.HasAction)
+            .Select(k => k.KeyMatrix)
+            .ToHashSet();
+
+        foreach (int matrixId in _evFirmwareDisabledKeys.Except(wanted).ToList())
+        {
+            bool ok = _everest.SetKeyOutputMode(matrixId, EverestHidNative.Pad.KeyOutputMode.Default);
+            LogEverest($"[KEY ] key 0x{matrixId:X2} back to factory -> {ok}");
+        }
+
+        foreach (int matrixId in wanted)
+        {
+            bool ok = _everest.SetKeyOutputMode(matrixId, EverestHidNative.Pad.KeyOutputMode.Disabled);
+            LogEverest($"[KEY ] key 0x{matrixId:X2} silenced in firmware -> {ok}");
+        }
+
+        _evFirmwareDisabledKeys.Clear();
+        _evFirmwareDisabledKeys.UnionWith(wanted);
+    }
+
+    /// <summary>Puts every key K2 took over back to its factory function, on shutdown.
+    /// Without it, closing K2 would leave a disabled key dead and a bound key silent
+    /// until the keyboard is replugged.</summary>
+    private void RestoreEvDisabledKeysOnExit()
+    {
+        foreach (int matrixId in _evFirmwareDisabledKeys.ToList())
+            try { _everest.SetKeyOutputMode(matrixId, EverestHidNative.Pad.KeyOutputMode.Default); }
+            catch { /* shutting down */ }
+        _evFirmwareDisabledKeys.Clear();
     }
 
     // ============================================================
@@ -1688,7 +1914,8 @@ public partial class MainWindow
         // Per-key-press log: noisy in normal use, so it only fires at LogLevel.Verbose
         // (see General Settings tab / AppSettings.LogLevel).
         if (AppSettings.LogLevel == K2LogLevel.Verbose)
-            LogEverest($"[KEY ] wMatrix=0x{rawMatrix:X2} {(e.Pressed ? "down" : "up")}");
+            LogEverest($"[KEY ] {(e.FromNativeKeyReport ? "hidUsage" : "wMatrix")}=0x{rawMatrix:X2} " +
+                       $"{(e.Pressed ? "down" : "up")}");
 
         // ---- Guided remapping in progress: capture wMatrix → matrixId ----
         if (e.Pressed && _evMapAwaitingIndex >= 0 && _evMapAwaitingIndex < _evMapKeyDefs.Length)
@@ -1705,27 +1932,62 @@ public partial class MainWindow
             return;
         }
 
-        // ---- HW capture for dock/display/dial slots ----
-        if (e.Pressed && TryHwCapture(rawMatrix))
-            return;
+        // ---- HW capture / assigned dock/display/dial actions ----
+        // Skipped for native key reports: those slots are stored in wMatrix space, which
+        // overlaps the HID usage range numerically, so feeding usages here would capture
+        // or fire the wrong slot. Dock and display keys don't come through the NKRO
+        // bitmap anyway — they have their own vendor bits (Pad.DecodeNumpadButtons).
+        if (!e.FromNativeKeyReport)
+        {
+            if (e.Pressed && TryHwCapture(rawMatrix))
+                return;
+            if (e.Pressed && TryExecuteHwAction(rawMatrix))
+                return;
+        }
 
-        // ---- Assigned dock/display/dial actions ----
-        if (e.Pressed && TryExecuteHwAction(rawMatrix))
-            return;
+        int matrix = EvTranslateMatrix(rawMatrix, e.FromNativeKeyReport);
 
-        // Translate SDK wMatrix to visual layout matrixId
-        int matrix = EvTranslateMatrix(rawMatrix);
-
-        // Physical-press highlight disabled (2026-07-17, user request): the
-        // wMatrix→matrixId translation has gaps, so the tint fired inconsistently
-        // across keys and read as broken rather than useful.
-        // EvHighlightKeyboardButton(matrix, e.Pressed);
+        // Physical-press highlight — re-enabled 2026-07-27 (user request: mirror
+        // MacroPad's press effect). Previously disabled 2026-07-17 because the
+        // wMatrix→matrixId translation had gaps and the tint fired inconsistently; it
+        // uses the Tint overlay (SetKeyTint), never Background/BorderBrush, so — unlike
+        // MacroPad's IsHighlighted style trigger — it can't leave a key's keycap color
+        // stuck/wrong after release. If a specific key's tint still misfires, that's a
+        // s_defaultWMatrixMap/_evWMatrixToLayout gap (see EvTranslateMatrix), not this bug.
+        EvHighlightKeyboardButton(matrix, e.Pressed);
 
         if (_evByMatrix.TryGetValue(matrix, out var key))
         {
             key.IsHighlighted = e.Pressed;
-            if (e.Pressed) ExecuteEverestKey(key);
+            if (e.Pressed) ExecuteEverestKeyDeduped(key);
         }
+    }
+
+    /// <summary>Last (matrixId, moment) actually executed, for
+    /// <see cref="ExecuteEverestKeyDeduped"/>.</summary>
+    private (int Matrix, DateTime At) _evLastExecuted = (-1, DateTime.MinValue);
+
+    /// <summary>
+    /// Runs a key's action at most once per physical press. Once a key is claimed by the
+    /// host (<c>KeyOutputMode.HostBound</c>), one press arrives as TWO down edges in the
+    /// NKRO bitmap a few milliseconds apart — reported on hardware 2026-07-27 as the
+    /// assigned action firing twice, and not observable before the claim was written. The
+    /// bit genuinely goes set/clear/set, so the report-level edge detection in
+    /// <see cref="EverestHidNative.Pad"/> can't collapse it; the guard has to be here.
+    /// The window is short enough to leave deliberate fast repeats alone.
+    /// </summary>
+    private void ExecuteEverestKeyDeduped(EverestKey key)
+    {
+        var now = DateTime.UtcNow;
+        if (_evLastExecuted.Matrix == key.KeyMatrix
+            && (now - _evLastExecuted.At) < TimeSpan.FromMilliseconds(200))
+        {
+            if (AppSettings.LogLevel == K2LogLevel.Verbose)
+                LogEverest($"[KEY ] key 0x{key.KeyMatrix:X2} duplicate press ignored");
+            return;
+        }
+        _evLastExecuted = (key.KeyMatrix, now);
+        ExecuteEverestKey(key);
     }
 
     private void ExecuteEverestKey(EverestKey k) =>
@@ -1755,7 +2017,13 @@ public partial class MainWindow
         EvAddNdkEntriesToKeyList();
         LogEverest($"[DB  ] profile {profile}: loaded {_evKeys.Count} keys");
 
+        // Firmware-side disabled keys follow the profile (the previous profile's may need
+        // undoing) — see PushEvDisabledKeysToDevice.
+        PushEvDisabledKeysToDevice();
+
         ReloadEverestRgbForProfileSwitch();
+        ReloadEverestSettingsForProfileSwitch();
+        ReloadEverestDialForProfileSwitch();
     }
 
     /// <summary>
@@ -1774,6 +2042,13 @@ public partial class MainWindow
         try
         {
             LoadEverestRgbFromStore();
+            // Custom Lighting is per-profile too since 2026-07-26 (see EvCustomPrefix) —
+            // reload the painted board alongside the preset, same as the MacroPad twin.
+            // BEFORE UpdateEvCapabilities, never after: that's what flips paint mode on
+            // for a Custom profile, and SetCustomPaintModeActive repaints the overlays
+            // from these dictionaries (an earlier ReapplyCustomOverlays here was either
+            // redundant or wiped by the ClearAllOverlays of a non-Custom profile).
+            LoadCustomColorsFromStore();
             UpdateEvCapabilities();
             LblEvBrightness.Text = $"{(int)SldEvBrightness.Value}%";
             ApplyColorButton(BtnEvColor1, _evColor1);
@@ -2040,24 +2315,53 @@ public partial class MainWindow
         EvSelectProfileSlot(pi.Slot);
     }
 
-    /// <summary>Resets the currently selected profile's key bindings back to K2's
-    /// defaults (empty) and re-applies. RGB lighting/keycap appearance are device-wide
-    /// (not per-profile) for the Everest Max, so they are untouched — see the
-    /// architectural note in _PROJECT_MAP.md.</summary>
+    /// <summary>Wipes EVERY Everest Max profile back to K2's defaults: other profiles are
+    /// deleted outright (mirrors BtnEvDeleteProfile_Click), the current one keeps its
+    /// name but has its key bindings cleared and its RGB lighting reset to the factory
+    /// values (<see cref="EvResetRgbToDefaults"/>) — RGB became per-profile 2026-07-22
+    /// (see EvRgbPrefix), so "restore defaults" needs to touch it too, unlike when this
+    /// button was last documented as lighting being device-wide. User request 2026-07-29.</summary>
     private void BtnEvRestoreDefaults_Click(object sender, RoutedEventArgs e)
     {
-        int slot = EvCurrentProfile();
-        string profileName = _evStore.GetProfileName(slot) ?? Loc.Get("profile_n", slot);
         var res = MessageBox.Show(
-            Loc.Get("restore_defaults_profile_confirm", profileName),
+            Loc.Get("restore_defaults_device_confirm", Loc.Get("tab_everest_max")),
             Loc.Get("restore_defaults"),
             MessageBoxButton.OKCancel,
             MessageBoxImage.Warning);
         if (res != MessageBoxResult.OK) return;
-        _evStore.ResetProfileToDefaults(slot);
-        LogEverest($"[UI ] Everest profile {slot} restored to defaults.");
+
+        int current = EvCurrentProfile();
+        foreach (var slot in _evStore.GetExistingProfiles())
+            if (slot != current) _evStore.ClearProfile(slot);
+
+        _evStore.ResetProfileToDefaults(current);
+        EvResetRgbToDefaults();
+        LogEverest($"[UI ] Everest restored to factory defaults (all profiles, lighting and key bindings).");
         EvRefreshProfiles();
+        EvSelectProfileSlot(current);
         ReloadEverestProfile();
+    }
+
+    /// <summary>Sets the RGB panel back to the same factory defaults <see cref="InitEverestRgbPanel"/>
+    /// seeds a brand-new install with (Wave, K2 teal, 50% speed, 100% brightness, single
+    /// color) and saves them under the current profile's namespace — <see cref="ReloadEverestProfile"/>
+    /// (called right after by the caller) then reads them back and pushes them to the
+    /// keyboard, same path as any normal effect change.</summary>
+    private void EvResetRgbToDefaults()
+    {
+        bool prev = _evRgbSuppress;
+        _evRgbSuppress = true;
+        try
+        {
+            CbEvEffect.SelectedIndex = 2; // Wave
+            SldEvSpeed.Value         = 50;
+            SldEvBrightness.Value    = 100;
+            _evDirIndex              = 0;
+            RbEvColorSingle.IsChecked = true;
+            _evColor1 = 0x900000; _evColor2 = 0; _evColor3 = 0;
+        }
+        finally { _evRgbSuppress = prev; }
+        SaveEverestRgbToStore();
     }
 
     private int EvSdkVersion()
@@ -2104,8 +2408,20 @@ public partial class MainWindow
             next = n;
         else
         {
-            LogEverest($"[EXEC] profile: target \"{t}\" not resolved");
-            return;
+            // Base Camp can carry the destination profile's NAME instead of Next/Previous/a
+            // slot number (confirmed via a real user XML export, see BaseCampDbImporter's
+            // TranslateAction "Profile" case) — resolved here by matching it against this
+            // device's own profile names, case-insensitively, same tolerance as macro-name
+            // matching elsewhere in this codebase.
+            int? byName = null;
+            for (int s = 1; s <= EverestService.ProfileCount; s++)
+                if (string.Equals(_evStore.GetProfileName(s), t, StringComparison.OrdinalIgnoreCase)) { byName = s; break; }
+            if (byName is int found) next = found;
+            else
+            {
+                LogEverest($"[EXEC] profile: target \"{t}\" not resolved");
+                return;
+            }
         }
         if (next == cur) { LogEverest($"[EXEC] profile: already on {cur}"); return; }
 
@@ -2318,6 +2634,37 @@ public partial class MainWindow
         CkEvSync.IsChecked == true ? "rgb." : $"rgb.p{EvCurrentProfile()}.";
 
     /// <summary>
+    /// Key namespace for the Settings section (Game Mode/Indicator LED/Keycap
+    /// Appearance) — same shared/profile-scoped split as <see cref="EvRgbPrefix"/>,
+    /// reusing the SAME flag (<c>CkEvSync</c>/<c>rgb.sync</c>, mirrored by
+    /// <c>CkSettingsSync</c>): this isn't a separate concept, it's the real
+    /// Base Camp "sync across profiles" device flag (<c>SetSyncAcrossProfiles</c>,
+    /// see <see cref="ApplyEverestSettingsToDevice"/>), which is device-wide by
+    /// definition — one toggle governs RGB, Settings and Display Dial together.
+    /// <c>settings.keyboard_color</c> is intentionally excluded (kept always
+    /// global): it's a cosmetic "what color is my physical unit" fact, not a
+    /// per-profile preference. User request 2026-07-25.
+    /// </summary>
+    private string EvSettingsPrefix() =>
+        CkEvSync.IsChecked == true ? "settings." : $"settings.p{EvCurrentProfile()}.";
+
+    /// <summary>Key namespace for the Display Dial section — see <see cref="EvSettingsPrefix"/>,
+    /// same shared flag. User request 2026-07-25.</summary>
+    private string EvDialPrefix() =>
+        CkEvSync.IsChecked == true ? "dial." : $"dial.p{EvCurrentProfile()}.";
+
+    /// <summary>Key namespace for the Custom Lighting paint state — same shared/
+    /// profile-scoped split as <see cref="EvRgbPrefix"/>, of which Custom is just
+    /// another effect. Made profile-scoped 2026-07-26 (it used to be device-global
+    /// under bare <c>custom.*</c>, unlike the MacroPad twin which was per-profile from
+    /// the start): Base Camp stores the painted board per profile, so importing a BC
+    /// profile had nowhere to put it without clobbering the live board.
+    /// <see cref="LoadCustomColorsFromStore"/> falls back to the legacy global keys for
+    /// installs that predate the split.</summary>
+    private string EvCustomPrefix() =>
+        CkEvSync.IsChecked == true ? "custom." : $"custom.p{EvCurrentProfile()}.";
+
+    /// <summary>
     /// Loads RGB parameters saved from the previous session/profile (see
     /// <see cref="EvRgbPrefix"/>). The "sync" flag itself and the auto-off
     /// timer are always global device settings, not per-profile.
@@ -2478,20 +2825,33 @@ public partial class MainWindow
     }
 
     private void CbEvEffect_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        => EvReapplySelectedEffect();
+
+    /// <summary>
+    /// The whole body of the effect-dropdown handler, callable directly: replays
+    /// "the user picked this effect" (per-effect params → controls, realign the
+    /// capabilities/paint mode, apply to the device). Also called at the end of an
+    /// import so the imported profile actually reaches the keyboard and the on-screen
+    /// preview — user request 2026-07-26: "devi simulare un clic sulla tendina degli
+    /// effetti (di fatto un apply) perche' dopo l'import la tastiera non si aggiorna".
+    /// </summary>
+    private void EvReapplySelectedEffect()
     {
+        if (!_evRgbInitialized) return;
         _evEffectChangedWhileOpen = true;
         // Restore the newly selected effect's own remembered parameters before
         // realigning/applying (per-effect memory — the old values were already
         // saved under the previous effect's namespace on every change). Suppressed:
         // ApplyCurrentEffect below does the single apply+save.
-        if (_evRgbInitialized && CbEvEffect.SelectedItem is EvEffectChoice pick)
+        if (CbEvEffect.SelectedItem is EvEffectChoice pick)
         {
             bool prev = _evRgbSuppress;
             _evRgbSuppress = true;
             try { LoadEffectParamsIntoControls(pick.Eff); }
             finally { _evRgbSuppress = prev; }
         }
-        UpdateEvCapabilities();   // realign the controls to the new effect
+        UpdateEvCapabilities();   // realign the controls to the new effect (also turns
+                                  // paint mode + the overlays back on for Custom)
         ApplyCurrentEffect();
     }
 
@@ -2554,8 +2914,22 @@ public partial class MainWindow
 
     private void CkEvSync_Click(object sender, RoutedEventArgs e)
     {
-        CkSettingsSync.IsChecked = CkEvSync.IsChecked; // same device flag as the Settings panel's checkbox
+        // Same device flag mirrored by all 3 sections' checkboxes (RGB/Settings/Dial) —
+        // see EvSettingsPrefix/EvDialPrefix's doc comment.
+        CkSettingsSync.IsChecked = CkEvSync.IsChecked;
+        CkDialSync.IsChecked     = CkEvSync.IsChecked;
         SaveEverestRgbToStore();
+        // Re-save the currently-displayed Settings/Dial values under the namespace the
+        // flag just switched to (shared or this profile's own) — same "what's on screen
+        // becomes the new state" behavior as the RGB save above, so flipping sync doesn't
+        // silently reveal a stale/default value from the other namespace.
+        if (!_evSettingsSuppress)
+        {
+            CkGameMode_Click(sender, e);
+            CkCoreIndicatorLed_Click(sender, e);
+            SaveKeycapAppearanceToStore();
+        }
+        if (!_dialLoading) SaveDialSettings();
         if (!_everest.IsOpen)
         {
             LogEverest("[WARN] Everest driver not open: state saved but not applied");

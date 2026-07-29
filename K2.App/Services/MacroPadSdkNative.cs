@@ -289,7 +289,8 @@ internal static class MacroPadSdkNative
                                    FWColor? background = null,
                                    byte speed = 60,
                                    BrightT bright = BrightT.B100,
-                                   bool randomColor = false)
+                                   bool randomColor = false,
+                                   bool isCustom = false)
         {
             bool isOff   = eff == EffectIndex.Off;
             bool noSpeed = isOff || eff == EffectIndex.Static;
@@ -340,7 +341,11 @@ internal static class MacroPadSdkNative
                 // sent (Static/Breathing/Reactive/Matrix/Yeti/Off). The
                 // previous "byAll=1" was never verified and is a likely reason
                 // ChangeEffect returned true but never visibly applied.
-                byAll         = 0,
+                // isCustom=true (Custom/per-key mode only, see getChangeEffect's
+                // decompile 2026-07-26) is the ONE case that legitimately wants
+                // byAll=1 — confirmed by decompiled IL, not the same code path
+                // as the whole-device presets validated by the capture above.
+                byAll         = (byte)(isCustom ? 1 : 0),
                 bySpeed       = noSpeed ? (byte)255 : speed,
                 byLightness   = (byte)bright,
                 byRandColor   = randColor,
@@ -422,12 +427,15 @@ internal static class MacroPadSdkNative
         /// </para>
         /// </summary>
         public static BlockData New(MacroPadSdkNative.EffectIndex eff, byte direction, byte speed, byte lightness,
-                                     FWColor c1, FWColor? c2 = null, bool rainbow = false)
+                                     FWColor c1, FWColor? c2 = null, bool rainbow = false, bool isCustom = false)
         {
             var d = new BlockData
             {
                 byEffectIndex = (byte)eff,
-                byAll         = 0,
+                // isCustom=true (Custom/per-key mode only) -> byAll=1, same
+                // finding/rationale as EffData.New's isCustom param (decompiled
+                // MacroPadDLLHelper.getChangeBlockEffect, 2026-07-26).
+                byAll         = (byte)(isCustom ? 1 : 0),
                 bySpeed       = speed,
                 byLightness   = lightness,
                 byDirection   = direction,
@@ -534,4 +542,92 @@ internal static class MacroPadSdkNative
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool GetColorData(ref MACROPAD_COLOR colorData, uint ID);
+
+    // =======================================================================
+    // Custom (per-key) lighting — SwitchToCustomizeEffect/ChangeCustomizeStatic/
+    // SetCustomizeTable(/GetCustomizeTable/GetEffCustomizeStatic)
+    // =======================================================================
+    //
+    // NOT guessed: extracted 2026-07-26 from a fresh ECMA-335 metadata dump +
+    // IL decompile of BaseCamp.Service.exe's MacroPadSDK class (same technique
+    // as the pinvoke dump above, extended to decode full method/field
+    // signatures via System.Reflection.Metadata instead of hand-rolled table
+    // parsing). Key finding: unlike Everest Max/60 (which have a DEDICATED
+    // ChangeCustomizeEffect export for a big 126/171-LED buffer), the MacroPad
+    // has NO ChangeCustomizeEffect at all — its Custom mode instead reuses
+    // ChangeCustomizeStatic (per-key STATIC color) + SetCustomizeTable
+    // (per-key EFFECT INDEX assignment) + the same ChangeEffect/
+    // ChangeBlockEffect already used for whole-device presets, called with
+    // byAll=1 instead of 0 (see EffData.New/BlockData.New's isCustom param
+    // below). FW_NUM_CUSTOM_KEY == FW_NUM_KEY == 12: Custom is per PHYSICAL
+    // KEY, no LED subdivision — much simpler than Everest's per-key model.
+    // Decompiled call sequence (BaseCamp.Service.Helpers.MacroPadSDK.
+    // SetCustomLighting/SetAllEffectInHWforCustom/MacroPadResetCustomMode):
+    //   1. SwitchToCustomizeEffect(brightness 0-100, ID) — enters Custom mode.
+    //   2. ChangeCustomizeStatic(CustomStatic{FWColor[12]}, ID) — one flat
+    //      color per key (keys governed by a dynamic effect are left black
+    //      here; their light comes from step 3 instead).
+    //   3. For each DISTINCT dynamic effect assigned to at least one key:
+    //      ChangeEffect(getChangeEffect(effect, isCustom:1), ID) or
+    //      ChangeBlockEffect(getChangeBlockEffect(effect, isCustom:1), ID)
+    //      for Wave/Tornado — programs that effect's ONE shared color/speed/
+    //      direction; every key assigned to it renders the same animation.
+    //   4. SetCustomizeTable(CustomTable{byte[12] effValue}, ID) — effValue[i]
+    //      = the firmware EffectIndex (0=Static, else the dynamic effect's
+    //      own index) that key i should render.
+    //   5. SaveFlash(6 /*ALL_PROFILE*/, ID) — persists.
+    // Reset (MacroPadResetCustomMode): all 12 colors -> WHITE (0xFFFFFF, not
+    // black), table all-zero (Static), SaveFlash(6, ID).
+
+    /// <summary>Physical keys addressable by Custom (per-key) lighting — same
+    /// count as <see cref="FW_NUM_KEY"/> (12), kept as its own constant since
+    /// it's a distinct BaseCamp.Service.Helpers.MacroPadSDK field
+    /// (<c>FW_NUM_CUSTOM_KEY</c>).</summary>
+    public const int FW_NUM_CUSTOM_KEY = 12;
+
+    /// <summary>Per-key flat color for Custom mode (Pack=1, <see cref="FW_NUM_CUSTOM_KEY"/>
+    /// entries — verified via FieldMarshal ByValArray[12] on the real struct).</summary>
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct CustomStatic
+    {
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = FW_NUM_CUSTOM_KEY)]
+        public FWColor[] color;
+    }
+
+    /// <summary>Per-key firmware EffectIndex assignment for Custom mode (Pack=1,
+    /// <see cref="FW_NUM_CUSTOM_KEY"/> entries) — effValue[i]=0 (Static) renders
+    /// <see cref="CustomStatic"/>'s color at key i; any other value renders
+    /// whichever dynamic effect was last programmed with that EffectIndex via
+    /// <see cref="ChangeEffect"/>/<see cref="ChangeBlockEffect"/> (isCustom:1).</summary>
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct CustomTable
+    {
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = FW_NUM_CUSTOM_KEY)]
+        public byte[] effValue;
+    }
+
+    /// <summary>Enters/refreshes Custom (per-key) mode at the given brightness (0-100).</summary>
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool SwitchToCustomizeEffect(int byBrightness, uint ID);
+
+    /// <summary>Writes the per-key flat color table (Custom mode).</summary>
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool ChangeCustomizeStatic(CustomStatic data, uint ID);
+
+    /// <summary>Reads back the per-key flat color table for the given profile.</summary>
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool GetEffCustomizeStatic(int profile, ref CustomStatic data, uint ID);
+
+    /// <summary>Writes the per-key EffectIndex assignment table (Custom mode).</summary>
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool SetCustomizeTable(CustomTable dataTable, uint ID);
+
+    /// <summary>Reads back the per-key EffectIndex assignment table for the given profile.</summary>
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool GetCustomizeTable(int profile, ref CustomTable dataTable, uint ID);
 }

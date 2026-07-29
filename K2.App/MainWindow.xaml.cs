@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -53,6 +54,9 @@ public partial class MainWindow : Window
         _macroPad.DevicePlug += OnMacroPadPlug;
         _macroPad.FirmwareProgress += OnMacroPadProgress;
 
+        PreviewKeyDown += MainWindow_SuppressHardwareNavigationKeys;
+
+        Core.Services.AccentCatalog.Applied += RefreshNavTabAccentColors;
         Closed += OnWindowClosed;
 
         CheckNativeDependency();
@@ -61,6 +65,33 @@ public partial class MainWindow : Window
         // prompt (see MainWindow.Settings.cs) pops up over an already-visible main
         // window instead of blocking construction before the app is even shown.
         Loaded += (_, _) => CheckFirstRunBcImport();
+    }
+
+    /// <summary>Navigation keys whose default WPF behavior (focus movement, button
+    /// activation, scrolling) gets suppressed by <see cref="MainWindow_SuppressHardwareNavigationKeys"/>.</summary>
+    private static readonly HashSet<Key> s_suppressedNavKeys = new()
+    {
+        Key.Space, Key.Left, Key.Right, Key.Up, Key.Down,
+        Key.Home, Key.End, Key.PageUp, Key.PageDown,
+    };
+
+    /// <summary>
+    /// The Everest/Everest 60/MacroPad boards are real USB HID keyboards, not just K2's
+    /// own private vendor interface — a physical press also arrives as an ordinary OS
+    /// keystroke, and if K2's own window happens to have focus (e.g. while the user is
+    /// testing/using the hardware) WPF's default keyboard handling reacts to it: arrows
+    /// move focus between controls, Space activates whatever's focused, Home/End/PageUp/
+    /// PageDown scroll the focused ScrollViewer/ListBox — moving K2's own panels/section
+    /// around as a side effect of an unrelated physical key press (user report
+    /// 2026-07-27). Suppressed everywhere except while a text-editing control has focus,
+    /// so typing/cursor movement in a TextBox/PasswordBox/editable ComboBox — from either
+    /// the Everest keyboard or the user's regular one — keeps working normally.
+    /// </summary>
+    private void MainWindow_SuppressHardwareNavigationKeys(object sender, KeyEventArgs e)
+    {
+        if (!s_suppressedNavKeys.Contains(e.Key)) return;
+        if (Keyboard.FocusedElement is TextBoxBase or PasswordBox or ComboBox { IsEditable: true }) return;
+        e.Handled = true;
     }
 
     /// <summary>
@@ -104,6 +135,7 @@ public partial class MainWindow : Window
         HwndSource.FromHwnd(_hWnd)?.AddHook(WndProc);
         App.WriteLog($"[MainWindow] HWND=0x{_hWnd.ToInt64():X}, WndProc hooked");
         Services.RawKeyboardActivityWatcher.Register(_hWnd);
+        Services.RawMouseActivityWatcher.Register(_hWnd);
 
         // Auto-open all drivers after the window is fully rendered
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded,
@@ -314,16 +346,32 @@ public partial class MainWindow : Window
         SelectFirstMacro();
     }
 
+    private bool _settingsTabActive;
+    private bool _macroTabActive;
+
     private void SetSettingsTabActive(bool active)
     {
+        _settingsTabActive = active;
         BtnSettingsTab.Background = active ? (Brush)FindResource("K2AccentBrush")     : Brushes.Transparent;
         BtnSettingsTab.Foreground = active ? (Brush)FindResource("K2AccentTextBrush") : (Brush)FindResource("K2TextMutedBrush");
     }
 
     private void SetMacroTabActive(bool active)
     {
+        _macroTabActive = active;
         BtnMacroTab.Background = active ? (Brush)FindResource("K2AccentBrush")     : Brushes.Transparent;
         BtnMacroTab.Foreground = active ? (Brush)FindResource("K2AccentTextBrush") : (Brush)FindResource("K2TextMutedBrush");
+    }
+
+    /// <summary>Re-resolves the Settings/Macro nav button colors after a live accent
+    /// theme switch (Settings &gt; Accent color) — SetSettingsTabActive/SetMacroTabActive
+    /// call FindResource once per tab switch, not a live binding, so the currently-active
+    /// one would otherwise stay the old color until the next tab switch. Wired to
+    /// AccentCatalog.Applied in the constructor.</summary>
+    private void RefreshNavTabAccentColors()
+    {
+        SetSettingsTabActive(_settingsTabActive);
+        SetMacroTabActive(_macroTabActive);
     }
 
     /// <summary>Removes all top-level device tabs with the given tag prefix.</summary>
@@ -363,12 +411,13 @@ public partial class MainWindow : Window
     }
 
     /// <summary>True for the "+ New profile" placeholder row of any device's profile list
-    /// (Everest 60/Makalu have fixed slots and no such row — their item records simply
-    /// never match here).</summary>
+    /// (Makalu has fixed slots with no empty-slot concept and no such row — its item
+    /// record simply never matches here).</summary>
     private static bool IsNewProfileRow(object? dataContext) => dataContext switch
     {
         DpProfileItem dp => dp.IsNew,
         EvProfileItem ev => ev.IsNew,
+        Ev60ProfileItem ev60 => ev60.IsNew,
         MpProfileItem mp => mp.IsNew,
         _ => false,
     };
@@ -540,6 +589,17 @@ public partial class MainWindow : Window
             _ev60AutoOffTimer?.RegisterActivity();
         }
 
+        // Makalu physical-press hotspot highlight (user request 2026-07-27) — see
+        // RawMouseActivityWatcher's doc comment for why this is Raw Input rather than the
+        // vendor HID channel (Makalu has no readback path for button state at all).
+        Services.RawMouseActivityWatcher.HandleMessage(msg, lParam, OnMakaluRawButton);
+
+        // Everest 60 main-board key-press highlight — see RawEv60KeyWatcher's doc comment
+        // for why this replaced the vendor SDK's KEY_CALLBACK (2026-07-28: never fires on
+        // real hardware) AND a direct raw-HID read of the board's own collection
+        // (2026-07-28: ACCESS_DENIED, reserved for kbdhid.sys) as the actual working source.
+        Services.RawEv60KeyWatcher.HandleMessage(msg, lParam, HandleEv60KeyFromHid);
+
         return IntPtr.Zero;
     }
 
@@ -631,6 +691,8 @@ public partial class MainWindow : Window
 
     private void OnWindowClosed(object? sender, EventArgs e)
     {
+        Core.Services.AccentCatalog.Applied -= RefreshNavTabAccentColors;
+        Core.Services.AccentCatalog.Applied -= RefreshMkHotspotAccentColors;
         _ledPoller?.Dispose();
         _macroPad.Dispose();
         _store.Dispose();

@@ -155,6 +155,126 @@ internal static class MakaluHidNative
         finally { HidD_FreePreparsedData(preparsed); }
     }
 
+    /// <summary>Same as <see cref="TryGetFeatureReportLength"/> but for InputReportByteLength —
+    /// used by <see cref="FindDpiButtonDevice"/> to pick the DPI button's own collection
+    /// (distinct from the Feature-Report-only vendor config collection above).</summary>
+    private static bool TryGetInputReportLength(SafeFileHandle h, out int length)
+    {
+        length = 0;
+        if (!HidD_GetPreparsedData(h, out IntPtr preparsed) || preparsed == IntPtr.Zero)
+            return false;
+        try
+        {
+            if (HidP_GetCaps(preparsed, out HIDP_CAPS caps) != HIDP_STATUS_SUCCESS)
+                return false;
+            length = caps.InputReportByteLength;
+            return true;
+        }
+        finally { HidD_FreePreparsedData(preparsed); }
+    }
+
+    /// <summary>Last known-good DPI-button collection path (mirrors <see cref="_cached"/>'s
+    /// caching rationale for the vendor config collection above).</summary>
+    private static FoundDevice? _cachedDpi;
+
+    /// <summary>
+    /// Finds the Makalu's DPI-BUTTON HID collection — a SEPARATE top-level collection on
+    /// the same USB interface (mi_01) as the vendor Feature-Report config channel above, but
+    /// its own device path in Windows (col01 vs col02, etc.). Confirmed via USB capture
+    /// 2026-07-27 (_reference/usb_dumps/makalu_tasti.pcapng, see MakaluDpiButtonWatcher's
+    /// class doc): the DPI button sends a plain 8-byte HID INPUT report on this collection
+    /// (03 02 01 00 00 00 00 00, one-shot, no release) — invisible to both the vendor Feature
+    /// Report channel (FeatureReportByteLength=0 here) and to Windows' mouse Raw Input
+    /// decoding (not a Generic Desktop/Mouse usage). Distinguished from the config collection
+    /// by InputReportByteLength: 0 for the config collection (Feature-only), &gt;=
+    /// <see cref="MakaluDpiButtonWatcher.InputReportSize"/> for this one.
+    /// </summary>
+    public static FoundDevice? FindDpiButtonDevice(Action<string>? log = null)
+    {
+        if (_cachedDpi is { } cached && StillValidInput(cached))
+            return cached;
+
+        var found = FindDpiButtonDeviceUncached(log);
+        _cachedDpi = found;
+        return found;
+    }
+
+    private static bool StillValidInput(FoundDevice cached)
+    {
+        using var h = OpenHandle(cached.Path, throwOnFail: false, queryOnly: true);
+        if (h is null || h.IsInvalid) return false;
+        var attrs = new HIDD_ATTRIBUTES { Size = Marshal.SizeOf<HIDD_ATTRIBUTES>() };
+        return HidD_GetAttributes(h, ref attrs) && attrs.VendorID == VID && attrs.ProductID == cached.Pid;
+    }
+
+    private static FoundDevice? FindDpiButtonDeviceUncached(Action<string>? log)
+    {
+        HidD_GetHidGuid(out Guid hidGuid);
+        IntPtr devs = SetupDiGetClassDevsW(ref hidGuid, null, IntPtr.Zero,
+                                           DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+        if (devs == INVALID_HANDLE_VALUE) return null;
+        try
+        {
+            var ifData = new SP_DEVICE_INTERFACE_DATA { cbSize = Marshal.SizeOf<SP_DEVICE_INTERFACE_DATA>() };
+            for (uint i = 0; SetupDiEnumDeviceInterfaces(devs, IntPtr.Zero, ref hidGuid, i, ref ifData); i++)
+            {
+                var devInfo = new SP_DEVINFO_DATA { cbSize = Marshal.SizeOf<SP_DEVINFO_DATA>() };
+                string? path = GetInterfacePath(devs, ref ifData, ref devInfo);
+                if (path is null) continue;
+
+                using var h = OpenHandle(path, throwOnFail: false, queryOnly: true);
+                if (h is null || h.IsInvalid) continue;
+
+                var attrs = new HIDD_ATTRIBUTES { Size = Marshal.SizeOf<HIDD_ATTRIBUTES>() };
+                if (!HidD_GetAttributes(h, ref attrs) || attrs.VendorID != VID)
+                    continue;
+                if (attrs.ProductID != PidMakalu67 && attrs.ProductID != PidMakaluMax)
+                    continue;
+
+                string lower = path.ToLowerInvariant();
+                if (!lower.Contains(InterfaceMarker)) continue;
+
+                if (!TryGetInputReportLength(h, out int inputLen) || inputLen < 8)
+                    continue;
+
+                log?.Invoke($"[MakaluNative] found DPI-button collection {lower[..Math.Min(80, lower.Length)]}…");
+                return new FoundDevice(path, attrs.ProductID);
+            }
+        }
+        finally { SetupDiDestroyDeviceInfoList(devs); }
+        return null;
+    }
+
+    /// <summary>Opens the DPI-button collection for a persistent blocking read loop (see
+    /// <see cref="MakaluDpiButtonWatcher"/>) — plain synchronous handle, no
+    /// FILE_FLAG_OVERLAPPED: a background thread blocks in ReadFile and Dispose()-ing the
+    /// handle from another thread is what unblocks/cancels it on Stop().</summary>
+    public static SafeFileHandle? OpenForRead(string path, Action<string>? log = null)
+    {
+        var h = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
+        if (h.IsInvalid)
+        {
+            log?.Invoke($"[MakaluNative] OpenForRead failed (win32={Marshal.GetLastWin32Error()}) for {path}");
+            h.Dispose();
+            return null;
+        }
+        return h;
+    }
+
+    /// <summary>Blocking synchronous ReadFile — waits for the next HID input report on
+    /// <paramref name="h"/> (opened via <see cref="OpenForRead"/>, no overlapped flag).
+    /// Returns false on error (including the handle being closed by another thread, which
+    /// is how <see cref="MakaluDpiButtonWatcher.Stop"/> cancels a pending read).</summary>
+    public static bool ReadReport(SafeFileHandle h, byte[] buf, out int bytesRead)
+    {
+        bytesRead = 0;
+        if (!ReadFile(h, buf, (uint)buf.Length, out uint read, IntPtr.Zero))
+            return false;
+        bytesRead = (int)read;
+        return true;
+    }
+
     private static string? GetInterfacePath(IntPtr devs, ref SP_DEVICE_INTERFACE_DATA ifData,
                                             ref SP_DEVINFO_DATA devInfo)
     {
@@ -212,6 +332,33 @@ internal static class MakaluHidNative
         resp[0] = MakaluProtocol.ReportId;
         return HidD_GetFeature(h, resp, resp.Length) ? resp : null;
     }
+
+    /// <summary>Sets a feature report with no follow-up read — used for the software-action
+    /// "ack" write (<see cref="MakaluProtocol.AckButtonEvent"/>), which is followed by a
+    /// DIFFERENT, much larger report ID read (0xA0, ~1KB) rather than the usual same-size
+    /// round-trip <see cref="SendFeature"/> assumes.</summary>
+    public static bool SetFeatureOnly(SafeFileHandle h, byte[] report) =>
+        HidD_SetFeature(h, report, report.Length);
+
+    /// <summary>Reads a feature report of a caller-specified length/report ID — used for the
+    /// software-action payload read (report ID 0xA0, confirmed by capture to be far larger
+    /// than the fixed 64-byte <see cref="ReportSize"/> every other command here uses).
+    /// <paramref name="reportId"/> is written to byte[0] before the call, as Windows' HID
+    /// class driver requires.</summary>
+    public static byte[]? GetFeatureLarge(SafeFileHandle h, byte reportId, int length)
+    {
+        var resp = new byte[length];
+        resp[0] = reportId;
+        return HidD_GetFeature(h, resp, resp.Length) ? resp : null;
+    }
+
+    /// <summary>Declared max Feature Report length for the collection <paramref name="h"/> is
+    /// open on (<see cref="TryGetFeatureReportLength"/>, public wrapper) — used instead of a
+    /// hardcoded buffer size for <see cref="GetFeatureLarge"/>, since the two real captures
+    /// backing the software-action payload read disagreed on exact byte count (1041 vs 1049)
+    /// depending on context; asking the device its own declared max avoids guessing which.</summary>
+    public static int GetMaxFeatureReportLength(SafeFileHandle h) =>
+        TryGetFeatureReportLength(h, out int len) ? len : ReportSize;
 
     // ================================================================
     // P/Invoke (same shape as Everest60HidNative — hid.dll + setupapi.
@@ -301,4 +448,8 @@ internal static class MakaluHidNative
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern SafeFileHandle CreateFileW(string path, uint access, uint share,
         IntPtr security, uint disposition, uint flags, IntPtr template);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool ReadFile(SafeFileHandle h, byte[] buf, uint numberOfBytesToRead,
+        out uint numberOfBytesRead, IntPtr overlapped);
 }

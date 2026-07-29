@@ -65,13 +65,29 @@ public partial class ButtonActionDialog : Window
             LoadProfileSpec(ProfileTargetPayload.Parse(currentValue)
                 ?? LegacyProfileSpec(currentValue));
         }
-        else if (currentType is "oscmd" or "media" or "mouse" or "macro")
+        else if (currentType is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify")
         {
             LoadComboSpec(currentType, currentValue ?? "");
         }
         else if (currentType == "keys")
         {
             LoadKeysSpec(currentValue ?? "");
+        }
+        else if (currentType == "hotkeyswitch")
+        {
+            LoadHotkeySwitchSpec(currentValue ?? "");
+        }
+        else if (currentType == "multi")
+        {
+            LoadMultiSpec(currentValue ?? "");
+        }
+        else if (currentType is "adobe" or "davinci" or "zoom")
+        {
+            LoadAppShortcutSpec(currentType, currentValue ?? "");
+        }
+        else if (currentType == "youtube")
+        {
+            TxtYoutubeMessage.Text = currentValue ?? "";
         }
         else
         {
@@ -128,14 +144,25 @@ public partial class ButtonActionDialog : Window
             "media"    => ("Media key:",                   "Play/Pause | Stop | Previous | Next | Volume Up | Volume Down | Mute"),
             "mouse"    => ("Mouse action:",                "Left Button | Right Button | Middle Button | Forward | Backward | Scroll Up/Down/Left/Right"),
             "keys"     => ("Shortcut (human syntax):",     "Ctrl + Shift + A   |   Ctrl + F4"),
+            "hotkeyswitch" => ("Two alternating shortcuts:", ""),
+            "multi"    => ("Chain of steps:",              ""),
+            "adobe"    => ("Adobe shortcut:",               ""),
+            "davinci"  => ("DaVinci Resolve shortcut:",     ""),
+            "zoom"     => ("Zoom shortcut:",                ""),
             "command"  => ("Command line:",                "cmd /c echo hello"),
             "text"     => ("Text to paste:",               "hello world"),
             "macro"    => ("Macro:",                        ""),
+            "googlehome" => ("Google Home action:",         ""),
+            "obs"        => ("OBS Studio command:",         ""),
+            "twitch"     => ("Twitch action:",              ""),
+            "spotify"    => ("Spotify action:",             ""),
+            "youtube"    => ("YouTube live chat message:",  ""),
             "pyscript" => ("Python Script",                ""),
+            "disable"  => ("Key disabled (no payload)",    ""),
             _          => ("No action",                    "")
         };
         LblPayload.Text      = label;
-        TxtPayload.IsEnabled = tag != "none";
+        TxtPayload.IsEnabled = tag is not ("none" or "disable");
         if (string.IsNullOrEmpty(TxtPayload.Text)) TxtPayload.Tag = hint;
 
         UpdatePanels();
@@ -151,9 +178,13 @@ public partial class ButtonActionDialog : Window
         bool page    = tag == "dp_folder";
         bool browser = tag == "browser";
         bool profile = tag == "profile";
-        bool combo   = tag is "oscmd" or "media" or "mouse" or "macro";
+        bool combo   = tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify";
         bool keys    = tag == "keys";
-        bool std     = !py && !exec && !folder && !page && !browser && !profile && !combo && !keys;
+        bool hotkeyswitch = tag == "hotkeyswitch";
+        bool multi   = tag == "multi";
+        bool appShortcut = tag is "adobe" or "davinci" or "zoom";
+        bool youtube = tag == "youtube";
+        bool std     = !py && !exec && !folder && !page && !browser && !profile && !combo && !keys && !hotkeyswitch && !multi && !appShortcut && !youtube;
 
         PyPanel.Visibility       = py      ? Visibility.Visible : Visibility.Collapsed;
         ExecPanel.Visibility     = exec    ? Visibility.Visible : Visibility.Collapsed;
@@ -163,6 +194,10 @@ public partial class ButtonActionDialog : Window
         ProfilePanel.Visibility  = profile ? Visibility.Visible : Visibility.Collapsed;
         ComboPanel.Visibility    = combo   ? Visibility.Visible : Visibility.Collapsed;
         KeysPanel.Visibility     = keys    ? Visibility.Visible : Visibility.Collapsed;
+        HotkeySwitchPanel.Visibility = hotkeyswitch ? Visibility.Visible : Visibility.Collapsed;
+        MultiPanel.Visibility    = multi   ? Visibility.Visible : Visibility.Collapsed;
+        AppShortcutPanel.Visibility = appShortcut ? Visibility.Visible : Visibility.Collapsed;
+        YoutubePanel.Visibility  = youtube ? Visibility.Visible : Visibility.Collapsed;
         StandardPanel.Visibility = std     ? Visibility.Visible : Visibility.Collapsed;
 
         if (exec) RefreshExecPanel();
@@ -170,8 +205,11 @@ public partial class ButtonActionDialog : Window
         if (page) EnsurePagePanel();
         if (browser) EnsureBrowserChoicesPopulated();
         if (profile) EnsureProfileRows();
+        if (multi) EnsureMultiPanel();
         if (combo) EnsureComboPanel(tag);
         if (keys) EnsureKeysPanel();
+        if (hotkeyswitch) EnsureHotkeySwitchPanel();
+        if (appShortcut) EnsureAppShortcutPanel(tag);
     }
 
     // ---- Python Script panel ----------------------------------------
@@ -251,13 +289,35 @@ public partial class ButtonActionDialog : Window
         {
             ActionValue = SaveProfileSpec().ToJson();
         }
-        else if (tag is "oscmd" or "media" or "mouse" or "macro")
+        else if (tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify")
         {
             ActionValue = SaveComboSpec();
         }
         else if (tag == "keys")
         {
             ActionValue = SaveKeysSpec();
+        }
+        else if (tag == "hotkeyswitch")
+        {
+            ActionValue = SaveHotkeySwitchSpec();
+        }
+        else if (tag == "multi")
+        {
+            ActionValue = SaveMultiSpec();
+        }
+        else if (tag is "adobe" or "davinci" or "zoom")
+        {
+            ActionValue = SaveAppShortcutSpec();
+        }
+        else if (tag == "youtube")
+        {
+            ActionValue = TxtYoutubeMessage.Text?.Trim() ?? "";
+        }
+        else if (tag == "disable")
+        {
+            // Payload-less by definition — never carry over whatever the (disabled)
+            // standard text box happened to still show from the previous type.
+            ActionValue = "";
         }
         else
         {

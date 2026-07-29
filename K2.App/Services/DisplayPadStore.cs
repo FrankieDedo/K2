@@ -402,6 +402,32 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
     public void ClearFullscreenImage(int deviceId, int profile, int pageId) =>
         SetSetting($"dp.fullscreen.{deviceId}.{profile}.{pageId}.path", "");
 
+    /// <summary>
+    /// "Screensaver" mode for the page's fullscreen image (2026-07-28): when enabled, the
+    /// image is NOT painted as soon as the page is shown — it only takes over the panel
+    /// after <c>Seconds</c> without a physical key press, and the profile's own per-key
+    /// icons come back on the first press (see <c>MainWindow.DisplayPad.cs</c>'s
+    /// <c>DpScreensaverTimeout</c>/<c>DpScreensaverWake</c>). Disabled = the historical
+    /// always-on fullscreen behaviour. Stored next to the image itself, same
+    /// device+profile+page scope.
+    /// </summary>
+    public (bool Enabled, int Seconds) GetScreensaverDelay(int deviceId, int profile, int pageId)
+    {
+        string key = $"dp.fullscreen.{deviceId}.{profile}.{pageId}";
+        bool enabled = GetSetting($"{key}.ssOn") == "1";
+        int seconds = int.TryParse(GetSetting($"{key}.ssSec"), out var s) && s > 0 ? s : DefaultScreensaverSeconds;
+        return (enabled, seconds);
+    }
+
+    public void SetScreensaverDelay(int deviceId, int profile, int pageId, bool enabled, int seconds)
+    {
+        string key = $"dp.fullscreen.{deviceId}.{profile}.{pageId}";
+        SetSetting($"{key}.ssOn", enabled ? "1" : "0");
+        SetSetting($"{key}.ssSec", (seconds > 0 ? seconds : DefaultScreensaverSeconds).ToString());
+    }
+
+    public const int DefaultScreensaverSeconds = 60;
+
     public void Dispose() => _conn.Dispose();
 }
 

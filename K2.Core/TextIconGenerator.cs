@@ -17,6 +17,20 @@ namespace K2.Core;
 public static class TextIconGenerator
 {
     /// <summary>
+    /// Where the text sits within the icon (9-position anchor, PowerPoint-style), each with
+    /// a small fixed padding from the edge (see <see cref="DrawFittedText"/>'s margin) rather
+    /// than a free pixel coordinate — simpler to reason about and immune to the source icon
+    /// being replaced/rescaled later. <see cref="MiddleCenter"/> is the historical default
+    /// (text always centered) kept for callers that don't care.
+    /// </summary>
+    public enum TextAnchor
+    {
+        TopLeft, TopCenter, TopRight,
+        MiddleLeft, MiddleCenter, MiddleRight,
+        BottomLeft, BottomCenter, BottomRight,
+    }
+
+    /// <summary>
     /// Renders the icon in memory. Caller owns the returned <see cref="Bitmap"/>
     /// (dispose it). Returns null only on unexpected rendering failure.
     /// </summary>
@@ -27,7 +41,8 @@ public static class TextIconGenerator
         Color? backgroundColor,
         string? baseImagePath,
         string? fontFamily = null,
-        float? fontSize = null)
+        float? fontSize = null,
+        TextAnchor anchor = TextAnchor.MiddleCenter)
     {
         try
         {
@@ -51,7 +66,7 @@ public static class TextIconGenerator
                     g.Clear(backgroundColor ?? Color.Black);
                 }
 
-                DrawFittedText(g, text ?? string.Empty, size, textColor, fontFamily, fontSize);
+                DrawFittedText(g, text ?? string.Empty, size, textColor, fontFamily, fontSize, anchor);
             }
             return canvas;
         }
@@ -70,9 +85,10 @@ public static class TextIconGenerator
         Color? backgroundColor,
         string? baseImagePath,
         string? fontFamily = null,
-        float? fontSize = null)
+        float? fontSize = null,
+        TextAnchor anchor = TextAnchor.MiddleCenter)
     {
-        using var canvas = TryRenderTextIcon(text, size, textColor, backgroundColor, baseImagePath, fontFamily, fontSize);
+        using var canvas = TryRenderTextIcon(text, size, textColor, backgroundColor, baseImagePath, fontFamily, fontSize, anchor);
         if (canvas is null) return false;
 
         try
@@ -88,9 +104,11 @@ public static class TextIconGenerator
     }
 
     /// <summary>
-    /// Word-wraps <paramref name="text"/> inside a centered square-ish region, shrinking
-    /// the font until it fits, then draws it with a thin outline (auto black/white based
-    /// on the text color's luminance) for legibility over any background.
+    /// Word-wraps <paramref name="text"/> inside a fixed-margin region anchored per
+    /// <paramref name="anchor"/> (8% of the canvas from each edge — a few px at DisplayPad/
+    /// Everest display-key sizes, plenty for a legend), shrinking the font until it fits,
+    /// then draws it with a thin outline (auto black/white based on the text color's
+    /// luminance) for legibility over any background.
     /// <paramref name="preferredFontSize"/> (pixels) is the STARTING size for the shrink
     /// loop — never grown beyond, only shrunk further if the text doesn't fit — so a
     /// user-chosen size can never overflow the canvas. Null picks the previous default
@@ -99,20 +117,25 @@ public static class TextIconGenerator
     /// fallback family rather than throwing on an unknown name).
     /// </summary>
     private static void DrawFittedText(Graphics g, string text, int size, Color color,
-        string? familyName, float? preferredFontSize)
+        string? familyName, float? preferredFontSize, TextAnchor anchor)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
 
         string family = string.IsNullOrWhiteSpace(familyName) ? "Segoe UI" : familyName;
 
         var rect = new RectangleF(size * 0.08f, size * 0.08f, size * 0.84f, size * 0.84f);
+        var (hAlign, vAlign) = AnchorToAlignment(anchor);
         using var format = new StringFormat
         {
-            Alignment = StringAlignment.Center,
-            LineAlignment = StringAlignment.Center,
+            Alignment = hAlign,
+            LineAlignment = vAlign,
             Trimming = StringTrimming.EllipsisWord,
         };
 
+        // Shrink loop must reject BOTH overflow axes — checking only Height (as before)
+        // let an unbroken long word (no space to wrap on) pass at a large font size even
+        // though its measured Width already spilled past the box, which is what made
+        // "auto-fit" look like it was always picking too big a size.
         const float minFontSize = 8f;
         float fontSize = preferredFontSize ?? size * 0.42f;
         if (fontSize < minFontSize) fontSize = minFontSize;
@@ -121,7 +144,7 @@ public static class TextIconGenerator
         {
             var candidate = CreateFont(family, fontSize);
             SizeF measured = g.MeasureString(text, candidate, (int)rect.Width, format);
-            if (measured.Height <= rect.Height)
+            if (measured.Height <= rect.Height && measured.Width <= rect.Width)
             {
                 fitFont = candidate;
                 break;
@@ -146,6 +169,23 @@ public static class TextIconGenerator
             g.FillPath(brush, path);
         }
     }
+
+    /// <summary>Maps a <see cref="TextAnchor"/> to the GDI+ horizontal/vertical
+    /// <see cref="StringAlignment"/> pair that positions text within the fixed-margin
+    /// rect built by <see cref="DrawFittedText"/> — the margin itself is what gives the
+    /// "padding from the edge" look for every non-center anchor.</summary>
+    private static (StringAlignment H, StringAlignment V) AnchorToAlignment(TextAnchor anchor) => anchor switch
+    {
+        TextAnchor.TopLeft      => (StringAlignment.Near,   StringAlignment.Near),
+        TextAnchor.TopCenter    => (StringAlignment.Center, StringAlignment.Near),
+        TextAnchor.TopRight     => (StringAlignment.Far,    StringAlignment.Near),
+        TextAnchor.MiddleLeft   => (StringAlignment.Near,   StringAlignment.Center),
+        TextAnchor.MiddleRight  => (StringAlignment.Far,    StringAlignment.Center),
+        TextAnchor.BottomLeft   => (StringAlignment.Near,   StringAlignment.Far),
+        TextAnchor.BottomCenter => (StringAlignment.Center, StringAlignment.Far),
+        TextAnchor.BottomRight  => (StringAlignment.Far,    StringAlignment.Far),
+        _                       => (StringAlignment.Center, StringAlignment.Center),
+    };
 
     /// <summary>
     /// Prefers Bold (matches the previous fixed look), but some installed families have

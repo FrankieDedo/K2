@@ -165,8 +165,15 @@ public static class EverestKeyboardLayout
     // F-keys:  VK_F1=112 .. VK_F12=123
     // Modifier (left/right specific): LShift=160, RShift=161,
     //   LCtrl=162, RCtrl=163, LAlt=164, RAlt=165
-    // Nav:     Ins=96*, Home=103*, PgUp=105*, Del=110*, End=97*, PgDn=99*
-    //   (*match VK_NUMPAD*; the SDK doesn't distinguish nav from numpad)
+    // Nav:     Ins=45, Home=36, PgUp=33, Del=46, End=35, PgDn=34 (dedicated VK_INSERT/
+    //   VK_HOME/VK_PRIOR/VK_DELETE/VK_END/VK_NEXT — NOT the VK_NUMPAD* values: those were
+    //   used here until 2026-07-27, on the mistaken assumption the SDK/firmware couldn't
+    //   tell nav-cluster and numpad apart. It can (both engines report the nav cluster's
+    //   own dedicated codes, confirmed live), and the shared codes made this dictionary
+    //   collide with the real numpad digits below (BuildBoardRight), silently pointing
+    //   Ins/Home/PgUp/Del/End/PgDn's highlight+action identity at Numpad0/7/9/./1/3
+    //   instead (user report: nav-cluster keys never highlighted; a numpad digit would
+    //   have fired a nav-cluster key's bound action instead).
     // Numpad:  VK_NUMPAD0=96 .. VK_NUMPAD9=105, +=107, -=109, *=106,
     //   /=111, .=110, NumLock=144
     // OEM:     `=192, -=189, ==187, [=219, ]=221, \=220, ;=186,
@@ -233,7 +240,7 @@ public static class EverestKeyboardLayout
             (56, "8", U), (57, "9", U), (48, "0", U), (189, "-", U),
             (187, "=", U), (8, "⭠", 68));
         Row(k, navStart, y,
-            (96, "INS", U), (103, "HOME", U), (105, "PG UP", U));
+            (45, "INS", U), (36, "HOME", U), (33, "PG UP", U));
 
         // ---- Row 2: Tab Q-P [] \ | Del End PgDn ----
         y += RH;
@@ -243,7 +250,7 @@ public static class EverestKeyboardLayout
             (73, "I", U), (79, "O", U), (80, "P", U), (219, "[", U),
             (221, "]", U), (220, "\\", 50));
         Row(k, navStart, y,
-            (110, "DEL", U), (97, "END", U), (99, "PG DN", U));
+            (46, "DEL", U), (35, "END", U), (34, "PG DN", U));
 
         // ---- Row 3: CapsLock A-L ;' Enter ----
         y += RH;
@@ -299,7 +306,7 @@ public static class EverestKeyboardLayout
             (56, L(56, "8"), U), (57, L(57, "9"), U), (48, L(48, "0"), U), (189, L(189, "-"), U),
             (187, L(187, "="), U), (8, "⭠", 68));
         Row(k, navStart, y,
-            (96, "INS", U), (103, "HOME", U), (105, "PG UP", U));
+            (45, "INS", U), (36, "HOME", U), (33, "PG UP", U));
 
         // ---- Row 2: Tab Q-P <oem><oem> [Enter tall 2 rows] | Del End PgDn ----
         y += RH;
@@ -315,7 +322,7 @@ public static class EverestKeyboardLayout
         Key(k, 13, "ENTER", enterX, row2Y, 42, RH + U); // h = 62 (2 rows)
 
         Row(k, navStart, y,
-            (110, "DEL", U), (97, "END", U), (99, "PG DN", U));
+            (46, "DEL", U), (35, "END", U), (34, "PG DN", U));
 
         // ---- Row 3: CapsLock A-L <oem><oem><oem> (Enter covers the right side) ----
         y += RH;

@@ -1,4 +1,4 @@
-<Window x:Class="K2.App.MainWindow"
+﻿<Window x:Class="K2.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
@@ -152,7 +152,7 @@
         <Style x:Key="MacroKeyStyle" TargetType="Button" BasedOn="{StaticResource KeyCapStyle}">
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
-                    <Setter Property="Background" Value="#900000"/>
+                    <Setter Property="Background" Value="{DynamicResource K2AccentBrush}"/>
                     <Setter Property="Foreground" Value="#10302F"/>
                 </DataTrigger>
             </Style.Triggers>
@@ -259,11 +259,17 @@
                             <Image Source="pack://application:,,,/Assets/key_button.png"
                                    Stretch="Fill" IsHitTestVisible="False"/>
 
-                            <!-- 2. 52×52 user icon, rounded corners (border-radius 10px) -->
+                            <!-- 2. 52×52 user icon, rounded corners (border-radius 10px). NOTE:
+                                 ClipToBounds only clips to the plain rectangular bounds — it does
+                                 NOT follow CornerRadius (that only shapes a Border's own
+                                 Background/BorderBrush painting, never its children). An explicit
+                                 Clip geometry is required to actually round the Image underneath. -->
                             <Border Width="52" Height="52"
-                                    CornerRadius="9" ClipToBounds="True"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     IsHitTestVisible="False">
+                                <Border.Clip>
+                                    <RectangleGeometry Rect="0,0,52,52" RadiusX="9" RadiusY="9"/>
+                                </Border.Clip>
                                 <Image x:Name="ImgIcon" Source="{Binding Preview}" Stretch="UniformToFill"/>
                             </Border>
 
@@ -302,10 +308,12 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="SelBorder" Property="BorderBrush" Value="#900000"/>
+                                <Setter TargetName="SelBorder" Property="BorderBrush" Value="{DynamicResource K2AccentBrush}"/>
                             </Trigger>
                             <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
-                                <Setter TargetName="SelBorder" Property="BorderBrush"     Value="White"/>
+                                <!-- Same accent color as the physical-press flash everywhere else
+                                     (MacroPad/Everest Max/Everest 60/NDK) — user request 2026-07-27. -->
+                                <Setter TargetName="SelBorder" Property="BorderBrush"     Value="{DynamicResource K2AccentBrush}"/>
                                 <Setter TargetName="SelBorder" Property="BorderThickness" Value="3"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding HasImageNoAction}" Value="True">
@@ -315,6 +323,13 @@
                                  (BaseCampDbImporter.TranslateDefaultAction) — same "action not
                                  found" warning triangle as an image without an action. -->
                             <DataTrigger Binding="{Binding HasUnresolvedAction}" Value="True">
+                                <Setter TargetName="WarnTriangle" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                            <!-- "googlehome" action while the Google Home account is
+                                 disconnected (K2.App.Models.DisplayPadKey.IsGoogleHomeDisconnected) —
+                                 the binding still exists and resumes once reconnected, but every
+                                 press is a no-op meanwhile. -->
+                            <DataTrigger Binding="{Binding IsGoogleHomeDisconnected}" Value="True">
                                 <Setter TargetName="WarnTriangle" Property="Visibility" Value="Visible"/>
                             </DataTrigger>
                             <!-- Unresolved macro whose original BC name IS preserved
@@ -360,7 +375,9 @@
             <Setter Property="ContentTemplate">
                 <Setter.Value>
                     <DataTemplate>
-                        <TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Left" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding Converter={StaticResource UpperCaseConverter}}"
+                                   TextWrapping="Wrap" TextAlignment="Left"
+                                   FontWeight="Bold" FontStyle="Italic"/>
                     </DataTemplate>
                 </Setter.Value>
             </Setter>
@@ -379,7 +396,7 @@
                                          Points="18,0 18,18 0,18"
                                          Fill="#54545E"
                                          HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                         Margin="0,0,4,4"/>
+                                         Margin="0,0,9,9"/>
                                 <ContentPresenter Margin="{TemplateBinding Padding}"
                                                   HorizontalAlignment="Left"
                                                   VerticalAlignment="Top"/>
@@ -388,12 +405,12 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource K2HoverBrush}"/>
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource K2AccentBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource K2AccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource K2AccentBrush}"/>
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource K2AccentBrush}"/>
-                                <Setter Property="Foreground" Value="{StaticResource K2AccentTextBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource K2AccentBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource K2AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource K2AccentTextBrush}"/>
                                 <Setter TargetName="CornerTriangle" Property="Points" Value="36,0 36,36 0,36"/>
                                 <Setter TargetName="CornerTriangle" Property="Fill" Value="White"/>
                             </Trigger>
@@ -496,7 +513,7 @@
                     <Setter TargetName="BtnGear" Property="Visibility" Value="Visible"/>
                 </MultiDataTrigger>
                 <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected}" Value="True">
-                    <Setter TargetName="PathGear" Property="Fill" Value="{StaticResource K2AccentTextBrush}"/>
+                    <Setter TargetName="PathGear" Property="Fill" Value="{DynamicResource K2AccentTextBrush}"/>
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -529,9 +546,9 @@
                                 <Setter Property="Foreground" Value="#DCDCE0"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource K2AccentBrush}"/>
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource K2AccentBrush}"/>
-                                <Setter Property="Foreground" Value="{StaticResource K2AccentTextBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource K2AccentBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource K2AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource K2AccentTextBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -591,8 +608,8 @@
                                 <Setter TargetName="Bd" Property="Background" Value="#2A2A30"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource K2AccentBrush}"/>
-                                <Setter Property="Foreground" Value="{StaticResource K2AccentTextBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource K2AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource K2AccentTextBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -652,9 +669,9 @@
                                 <Setter Property="Foreground" Value="#DCDCE0"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource K2AccentBrush}"/>
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource K2AccentBrush}"/>
-                                <Setter Property="Foreground" Value="{StaticResource K2AccentTextBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource K2AccentBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource K2AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource K2AccentTextBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -714,8 +731,6 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Border Grid.ColumnSpan="3" BorderBrush="#2A2A32" BorderThickness="0,0,0,1"/>
-
                 <TabControl x:Name="TcDevices" Grid.Column="0"
                             SelectionChanged="TcDevices_SelectionChanged">
                     <TabControl.Template>
@@ -727,7 +742,8 @@
                          the app's landing tab, always first regardless of what's plugged in. -->
                     <TabItem x:Name="TabHome" Tag="home" ToolTip="{loc:Get tab_home}">
                         <TabItem.Header>
-                            <TextBlock Text="&#xE80F;" FontFamily="Segoe MDL2 Assets" FontSize="16"/>
+                            <TextBlock Text="&#xE80F;" FontFamily="Segoe MDL2 Assets" FontSize="20"
+                                       FontWeight="Normal" FontStyle="Normal"/>
                         </TabItem.Header>
                     </TabItem>
                     <!-- Fixed device order: Everest Max > Everest 60 > Makalu > DisplayPad > MacroPad
@@ -857,16 +873,16 @@
 
             <!-- Loading overlay — covers tab strip + content while AutoOpenDrivers runs.
                  Collapsed by code once all drivers are open. -->
-            <Grid x:Name="PnlLoading" Grid.RowSpan="3" Panel.ZIndex="10" Background="#1A1A1E" Visibility="Visible">
+            <Grid x:Name="PnlLoading" Grid.RowSpan="3" Panel.ZIndex="10" Background="#1A1A1E">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <Image Source="Assets/K2_logo.png" Width="96" Height="96"
                            HorizontalAlignment="Center" Margin="0,0,0,16"
                            RenderOptions.BitmapScalingMode="HighQuality"/>
                     <TextBlock Text="{loc:Get loading_drivers}"
-                               FontSize="15" Foreground="#900000"
+                               FontSize="15" Foreground="{DynamicResource K2AccentBrush}"
                                HorizontalAlignment="Center" TextAlignment="Center"/>
                     <ProgressBar IsIndeterminate="True" Width="280" Height="3"
-                                 Margin="0,14,0,0" Foreground="#900000" Background="#2A2A32"/>
+                                 Margin="0,14,0,0" Foreground="{DynamicResource K2AccentBrush}" Background="#2A2A32"/>
                 </StackPanel>
             </Grid>
 
@@ -915,15 +931,17 @@
                                                                 <ColumnDefinition Width="*"/>
                                                             </Grid.ColumnDefinitions>
                                                             <Border Grid.Column="0"
-                                                                Background="{StaticResource K2AccentBrush}"
+                                                                Background="{DynamicResource K2AccentBrush}"
                                                                 CornerRadius="5,0,0,5"/>
                                                             <Image Grid.Column="1" Source="{Binding ImagePath}"
                                                                Stretch="Uniform" HorizontalAlignment="Right"
                                                                VerticalAlignment="Bottom"
                                                                Width="{Binding ImageWidth}" Height="{Binding ImageHeight}"
-                                                               Margin="0,0,-13,-13"/>
-                                                            <TextBlock Grid.Column="1" Text="{Binding Name}"
-                                                                   FontSize="29" FontWeight="Bold"
+                                                               Margin="0,0,-13,-13"
+                                                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                            <TextBlock Grid.Column="1"
+                                                                   Text="{Binding Name, Converter={StaticResource UpperCaseConverter}}"
+                                                                   FontSize="29" FontWeight="Bold" FontStyle="Italic"
                                                                    Foreground="{StaticResource K2TextBrush}"
                                                                    Margin="23,23,13,13" TextWrapping="Wrap"
                                                                    VerticalAlignment="Top"/>
@@ -932,7 +950,7 @@
                                                     <ControlTemplate.Triggers>
                                                         <Trigger Property="IsMouseOver" Value="True">
                                                             <Setter TargetName="Card" Property="BorderBrush"
-                                                                Value="{StaticResource K2AccentBrush}"/>
+                                                                Value="{DynamicResource K2AccentBrush}"/>
                                                         </Trigger>
                                                     </ControlTemplate.Triggers>
                                                 </ControlTemplate>
@@ -990,8 +1008,6 @@
                             <Border Grid.Column="0" Background="#111115" CornerRadius="6"
                                 Margin="0,0,8,0" Padding="4">
                                 <StackPanel>
-                                    <TextBlock Text="SECTIONS" FontSize="9" Foreground="#4A4A58"
-                                           Margin="14,8,0,6" FontWeight="Bold"/>
                                     <RadioButton x:Name="RbSecKeyMapping"
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get ev_key_binding}" GroupName="EvSections"
@@ -1047,30 +1063,30 @@
                                     PreviewMouseLeftButtonDown="EvDeviceBox_MouseDown"
                                     PreviewMouseMove="EvDeviceBox_MouseMove"
                                     PreviewMouseLeftButtonUp="EvDeviceBox_MouseUp">
-                                  <Grid>
-                                    <DockPanel>
-                                        <StackPanel x:Name="SpEvLayout" Orientation="Horizontal"
+                                    <Grid>
+                                        <DockPanel>
+                                            <StackPanel x:Name="SpEvLayout" Orientation="Horizontal"
                                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <!-- +20% zoom on request: LayoutTransform (not RenderTransform)
+                                                <!-- +20% zoom on request: LayoutTransform (not RenderTransform)
                                              so the Grid/Border around it re-measures at the scaled size
                                              and WPF's hit-testing keeps mapping clicks to the right Button
                                              automatically — no changes needed to KeyDef X/Y/W/H math. -->
-                                            <StackPanel.LayoutTransform>
-                                                <ScaleTransform ScaleX="1.2" ScaleY="1.2"/>
-                                            </StackPanel.LayoutTransform>
-                                            <!-- Left column: dock overlay + keyboard body -->
-                                            <Grid x:Name="GrdEvKeyColumn">
-                                                <Grid.RowDefinitions>
-                                                    <RowDefinition Height="Auto"/>
-                                                    <RowDefinition Height="Auto"/>
-                                                </Grid.RowDefinitions>
-                                                <Canvas x:Name="CvsEvKeyboard" Grid.Row="1"
+                                                <StackPanel.LayoutTransform>
+                                                    <ScaleTransform ScaleX="1.2" ScaleY="1.2"/>
+                                                </StackPanel.LayoutTransform>
+                                                <!-- Left column: dock overlay + keyboard body -->
+                                                <Grid x:Name="GrdEvKeyColumn">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+                                                    <Canvas x:Name="CvsEvKeyboard" Grid.Row="1"
                                                     Width="642" Height="260" ClipToBounds="True">
-                                                    <Canvas.Background>
-                                                        <ImageBrush x:Name="BrushEvKeyBg" ImageSource="Assets/keybg.png" Stretch="Fill"/>
-                                                    </Canvas.Background>
-                                                </Canvas>
-                                                <!-- Border/side-LED paint overlay (Custom Lighting only): 31
+                                                        <Canvas.Background>
+                                                            <ImageBrush x:Name="BrushEvKeyBg" ImageSource="Assets/keybg.png" Stretch="Fill"/>
+                                                        </Canvas.Background>
+                                                    </Canvas>
+                                                    <!-- Border/side-LED paint overlay (Custom Lighting only): 31
                                                  small squares around the main board's bezel, built in code
                                                  (BuildBorderSquares/PlaceEdge, MainWindow.CustomLighting.cs).
                                                  SAME Grid.Row + SAME Width/Height as CvsEvKeyboard (not
@@ -1082,59 +1098,59 @@
                                                  in code render outside the nominal 642x260 rect just fine.
                                                  Declared AFTER CvsEvKeyboard (+ explicit ZIndex) to paint on
                                                  top of it. -->
-                                                <!-- NO Background here: a Transparent background would be
+                                                    <!-- NO Background here: a Transparent background would be
                                                  hit-testable and, sitting at ZIndex 2 over the whole board,
                                                  swallowed every key click while paint mode was on (root cause
                                                  of "keys won't paint on single click", 2026-07-22). A null
                                                  background lets clicks fall through to the keys while the
                                                  border squares (children with their own background) stay
                                                  clickable. -->
-                                                <Canvas x:Name="CvsEvBorderMain" Grid.Row="1"
+                                                    <Canvas x:Name="CvsEvBorderMain" Grid.Row="1"
                                                     Width="642" Height="260"
                                                     Panel.ZIndex="2"
                                                     Visibility="Collapsed"/>
-                                                <!-- Dock overlay: keytop art + a transparent Canvas holding the
+                                                    <!-- Dock overlay: keytop art + a transparent Canvas holding the
                                                  clickable hotspots (4 media buttons + 2 crown rotation buttons,
                                                  the latter positioned above the artwork via negative Canvas.Top).
                                                  GrdEvDock keeps the Left/Right alignment toggle previously on
                                                  ImgEvDock (see UpdateKeyboardLayout), so the hotspots follow it. -->
-                                                <Grid x:Name="GrdEvDock" Grid.Row="0" Width="200"
+                                                    <Grid x:Name="GrdEvDock" Grid.Row="0" Width="200"
                                                   HorizontalAlignment="Center"
                                                   Margin="0,0,0,-32" Panel.ZIndex="1"
                                                   Visibility="Collapsed">
-                                                    <Image x:Name="ImgEvDock" Source="Assets/keytop.png" Stretch="Uniform"/>
-                                                    <Canvas x:Name="CvsEvDock" Width="200" Height="64"/>
+                                                        <Image x:Name="ImgEvDock" Source="Assets/keytop.png" Stretch="Uniform"/>
+                                                        <Canvas x:Name="CvsEvDock" Width="200" Height="64"/>
+                                                    </Grid>
                                                 </Grid>
-                                            </Grid>
-                                            <!-- Numpad + display keys, wrapped in a Grid (was a bare Canvas)
+                                                <!-- Numpad + display keys, wrapped in a Grid (was a bare Canvas)
                                              so a same-size border overlay can share its cell — same reasoning
                                              as CvsEvBorderMain above. The Margin/VerticalAlignment that used
                                              to live on CvsEvNumpad itself move to the wrapping Grid so the
                                              pair positions identically to before. -->
-                                            <Grid x:Name="GrdEvNumpadColumn" Margin="6,0,0,0" VerticalAlignment="Bottom">
-                                                <Canvas x:Name="CvsEvNumpad" Width="166" Height="260"
+                                                <Grid x:Name="GrdEvNumpadColumn" Margin="6,0,0,0" VerticalAlignment="Bottom">
+                                                    <Canvas x:Name="CvsEvNumpad" Width="166" Height="260"
                                                     ClipToBounds="True">
-                                                    <Canvas.Background>
-                                                        <ImageBrush x:Name="BrushEvBoardRight" ImageSource="Assets/board_right.png" Stretch="Fill"/>
-                                                    </Canvas.Background>
-                                                </Canvas>
-                                                <!-- Same null-background reasoning as CvsEvBorderMain above. -->
-                                                <Canvas x:Name="CvsEvBorderNumpad" Width="166" Height="260"
+                                                        <Canvas.Background>
+                                                            <ImageBrush x:Name="BrushEvBoardRight" ImageSource="Assets/board_right.png" Stretch="Fill"/>
+                                                        </Canvas.Background>
+                                                    </Canvas>
+                                                    <!-- Same null-background reasoning as CvsEvBorderMain above. -->
+                                                    <Canvas x:Name="CvsEvBorderNumpad" Width="166" Height="260"
                                                     Panel.ZIndex="2"
                                                     Visibility="Collapsed"/>
-                                            </Grid>
-                                        </StackPanel>
-                                    </DockPanel>
-                                    <!-- Rubber-band overlay for rectangular multi-LED selection: same
+                                                </Grid>
+                                            </StackPanel>
+                                        </DockPanel>
+                                        <!-- Rubber-band overlay for rectangular multi-LED selection: same
                                      Grid cell as the DockPanel so it covers the whole device box;
                                      IsHitTestVisible=False so it never steals clicks — the Border's
                                      Preview handlers drive it. -->
-                                    <Canvas x:Name="CvsEvRubberBand" IsHitTestVisible="False">
-                                        <Rectangle x:Name="RectEvRubberBand" Visibility="Collapsed"
+                                        <Canvas x:Name="CvsEvRubberBand" IsHitTestVisible="False">
+                                            <Rectangle x:Name="RectEvRubberBand" Visibility="Collapsed"
                                                Stroke="#5BBEC3" StrokeThickness="1"
                                                StrokeDashArray="3 2" Fill="#335BBEC3"/>
-                                    </Canvas>
-                                  </Grid>
+                                        </Canvas>
+                                    </Grid>
                                 </Border>
 
                                 <!-- HW capture bar: feedback-only text for the media dock / crown "Capture
@@ -1146,7 +1162,7 @@
                                 <WrapPanel x:Name="PnlHwCaptureBar" Grid.Row="1" Orientation="Horizontal"
                                        Margin="0,8,0,0" Visibility="Collapsed">
                                     <TextBlock x:Name="LblCapturedKey" Text=""
-                                           VerticalAlignment="Center" Foreground="#900000"/>
+                                           VerticalAlignment="Center" Foreground="{DynamicResource K2AccentBrush}"/>
                                 </WrapPanel>
 
                                 <!-- Bottom settings panel: grows with the window (Row="*" above); MinHeight
@@ -1201,8 +1217,10 @@
                                              actually lets LvEvKeys grow with the window. Same
                                              hint-row + list/buttons layout as MacroPad's
                                              PnlMpSecKeyBinding (shared "key_binding_hint" string) — kept
-                                             in sync across every device's Key Binding section except
-                                             Makalu, per user request. ── -->
+                                             in sync across every device's Key Binding section, including
+                                             Makalu's (MakaluDpiRemapPanel's SecRemap, aligned 2026-07-27 —
+                                             previously the one deliberate exception, per an earlier user
+                                             request that was superseded). ── -->
                                             <Grid x:Name="PnlSecKeyMapping" Grid.RowSpan="2" Visibility="Collapsed">
                                                 <Grid.RowDefinitions>
                                                     <RowDefinition Height="Auto"/>
@@ -1223,7 +1241,7 @@
                                                             <Style TargetType="ListViewItem">
                                                                 <Style.Triggers>
                                                                     <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
-                                                                        <Setter Property="Background" Value="#900000"/>
+                                                                        <Setter Property="Background" Value="{DynamicResource K2AccentBrush}"/>
                                                                         <Setter Property="Foreground" Value="#10302F"/>
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
@@ -1282,6 +1300,15 @@
                                                             <TextBlock Text="{loc:Get led_backlight_label}" VerticalAlignment="Center" Margin="12,0,8,0"/>
                                                             <CheckBox x:Name="CkEvBacklight" Style="{StaticResource K2InlineSwitch}"
                                                                 VerticalAlignment="Center" IsChecked="True" Click="CkEvBacklight_Click"/>
+                                                            <!-- Auto-off row, moved here 2026-07-25 (user request: "accanto
+                                                             allo switch della backlight") from its old spot at the bottom
+                                                             of this section — same controls/handlers, just relocated. -->
+                                                            <CheckBox x:Name="CkEvAutoOffEnable" Content="{loc:Get backlight_auto_off_enable}"
+                                                                Click="CkEvAutoOffEnable_Click" VerticalAlignment="Center" Margin="16,0,10,0"/>
+                                                            <TextBlock Text="{loc:Get backlight_auto_off_seconds}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                            <TextBox x:Name="TxtEvAutoOffSeconds" Width="60" TextAlignment="Center"
+                                                                LostFocus="TxtEvAutoOffSeconds_LostFocus" VerticalAlignment="Center" Height="25" Padding="3,2,3,0" TextChanged="TxtEvAutoOffSeconds_TextChanged"/>
+                                                            <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                                         </StackPanel>
                                                         <!-- Right-aligned to match CkSettingsSync's position in the
                                                          Settings section below (PnlSecSettings) — both sit in a
@@ -1364,30 +1391,77 @@
                                                             <TextBlock Text="{loc:Get custom_paint_hint}"
                                                                Foreground="#9A9AA2" FontStyle="Italic"
                                                                TextWrapping="Wrap" Margin="0,0,0,6"/>
-                                                            <!-- Paint effect: which effect newly-painted keys get. Only
-                                                             "Static" actually sends per-key colors today — the others
-                                                             are UI-ready but not yet wired to a wire protocol (no
-                                                             confirmed way to run a dynamic effect on a painted key
-                                                             subset — see TODO.md/CHANGELOG 2026-07-22): BtnCustomApply_Click
-                                                             logs and no-ops instead of sending misleading data. Border
-                                                             squares only paintable under Static (matches Base Camp: "con
-                                                             gli effetti dinamici si possono dipingere solo i led dei
-                                                             keycap" — user description). Dropdown hidden (user request
-                                                             2026-07-22, since only Static works) — stays Collapsed but
-                                                             in the tree so CbCustomPaintEffect keeps its SelectedIndex=0
-                                                             (Static) default from InitCustomLightingPanel; re-enabling
-                                                             other effects later is a one-line Visibility flip. -->
+                                                            <!-- Paint effect: which effect newly-painted keys get. Wired
+                                                             to the real per-region dynamic-effect protocol 2026-07-22
+                                                             (see EverestSideLedProtocol's per-region-effects section +
+                                                             CHANGELOG for the capture trace) — Static (plain color, the
+                                                             LED-index-keyed static pages), Wave/Tornado/Breathing/
+                                                             Reactive/Matrix/Yeti (raw 14 A0 region bitmap + 14 2C
+                                                             effect-code param packet) and Off (paints black, same
+                                                             channel as Static) are all live. Border squares stay
+                                                             Static-only (matches Base Camp: "con gli effetti dinamici
+                                                             si possono dipingere solo i led dei keycap"). -->
                                                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                                                <StackPanel x:Name="PnlCustomPaintEffect" Orientation="Horizontal" Visibility="Collapsed">
-                                                                    <TextBlock Text="{loc:Get custom_paint_effect}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                                    <ComboBox x:Name="CbCustomPaintEffect" Width="130"
-                                                                          SelectionChanged="CbCustomPaintEffect_SelectionChanged"/>
-                                                                </StackPanel>
-                                                                <TextBlock Text="{loc:Get custom_color}" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                                                <TextBlock Text="{loc:Get custom_paint_effect}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                                <ComboBox x:Name="CbCustomPaintEffect" Width="130"
+                                                                      SelectionChanged="CbCustomPaintEffect_SelectionChanged"/>
+                                                                <TextBlock x:Name="LblCustomColorStatic" Text="{loc:Get custom_color}" VerticalAlignment="Center" Margin="10,0,4,0"/>
                                                                 <Button x:Name="BtnCustomBrushColor" Width="30" Height="30"
                                                                 Background="#FF0000" BorderThickness="2"
                                                                 BorderBrush="#3A3A40" Click="BtnCustomBrushColor_Click"/>
                                                             </StackPanel>
+
+                                                            <!-- Contextual parameters for the SELECTED dynamic effect
+                                                             (hidden under Static/Off, which just use the brush color
+                                                             above) — mirrors PnlEvNormalControls' direction/color-mode/
+                                                             swatches pattern but scoped to Custom Lighting's own paint
+                                                             effect, since each dynamic effect keeps its OWN params
+                                                             (speed/brightness/direction/colors), shared by every key
+                                                             currently painted with it (one param packet per effect
+                                                             code on the wire — see BuildCustomEffectParamPacket's doc).
+                                                             brightness reuses SldEvBrightness (top of the Everest tab,
+                                                             one brightness for the whole device regardless of effect,
+                                                             same as the global RGB panel). -->
+                                                            <StackPanel x:Name="PnlCustomFxParams" Visibility="Collapsed" Margin="0,0,0,6">
+                                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                                    <StackPanel x:Name="PnlCustomFxDirection" Orientation="Horizontal" Margin="0,0,16,0">
+                                                                        <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                                        <Border Style="{StaticResource K2SegmentedGroupBorder}">
+                                                                            <UniformGrid x:Name="GridCustomFxDirection" Rows="1"/>
+                                                                        </Border>
+                                                                    </StackPanel>
+                                                                    <StackPanel Orientation="Horizontal">
+                                                                        <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                                        <Slider x:Name="SldCustomFxSpeed" Minimum="0" Maximum="100" Width="100"
+                                                                            TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                                                                            ValueChanged="SldCustomFxSpeed_ValueChanged" VerticalAlignment="Center"/>
+                                                                        <TextBlock x:Name="LblCustomFxSpeed" Text="50%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
+                                                                    </StackPanel>
+                                                                </WrapPanel>
+                                                                <WrapPanel Orientation="Horizontal">
+                                                                    <StackPanel x:Name="PnlCustomFxColorMode" Orientation="Vertical" Margin="0,0,20,0" VerticalAlignment="Center">
+                                                                        <RadioButton x:Name="RbCustomFxSingle" Content="{loc:Get rgb_single}" GroupName="CustomFxColorMode"
+                                                                            Margin="0,0,0,6" Checked="RbCustomFxColorMode_Checked"/>
+                                                                        <RadioButton x:Name="RbCustomFxDual" Content="{loc:Get rgb_double}" GroupName="CustomFxColorMode"
+                                                                            Margin="0,0,0,6" Checked="RbCustomFxColorMode_Checked"/>
+                                                                        <RadioButton x:Name="RbCustomFxRainbow" Content="{loc:Get rgb_rainbow}" GroupName="CustomFxColorMode"
+                                                                            Checked="RbCustomFxColorMode_Checked"/>
+                                                                    </StackPanel>
+                                                                    <StackPanel x:Name="PnlCustomFxColor1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                                                                        <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                                        <Button x:Name="BtnCustomFxColor1" Width="30" Height="30"
+                                                                            Background="#FF0000" BorderThickness="2"
+                                                                            BorderBrush="#3A3A40" Click="BtnCustomFxColor_Click" Tag="1"/>
+                                                                    </StackPanel>
+                                                                    <StackPanel x:Name="PnlCustomFxColor2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                                        <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                                        <Button x:Name="BtnCustomFxColor2" Width="30" Height="30"
+                                                                            Background="#0000FF" BorderThickness="2"
+                                                                            BorderBrush="#3A3A40" Click="BtnCustomFxColor_Click" Tag="2"/>
+                                                                    </StackPanel>
+                                                                </WrapPanel>
+                                                            </StackPanel>
+
                                                             <WrapPanel Orientation="Horizontal">
                                                                 <Button x:Name="BtnCustomApply"   Content="{loc:Get apply}"           Padding="8,2" Margin="0,0,4,0" Click="BtnCustomApply_Click"  Style="{StaticResource K2IconAccentButton}" Tag="&#xE73E;"/>
                                                                 <Button x:Name="BtnCustomFillAll" Content="{loc:Get custom_fill_all}" Padding="8,2" Margin="0,0,4,0" Click="BtnCustomFillAll_Click" Style="{StaticResource K2IconButton}"       Tag="&#xE771;"/>
@@ -1395,14 +1469,6 @@
                                                             </WrapPanel>
                                                         </StackPanel>
                                                     </Grid>
-                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                        <CheckBox x:Name="CkEvAutoOffEnable" Content="{loc:Get backlight_auto_off_enable}"
-      Click="CkEvAutoOffEnable_Click" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                                                        <TextBlock Text="{loc:Get backlight_auto_off_seconds}" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                                        <TextBox x:Name="TxtEvAutoOffSeconds" Width="70" TextAlignment="Center"
-     LostFocus="TxtEvAutoOffSeconds_LostFocus" VerticalAlignment="Center" Height="25" Padding="3,2,3,0" TextChanged="TxtEvAutoOffSeconds_TextChanged"/>
-                                                        <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
-                                                    </WrapPanel>
                                                 </StackPanel>
                                             </ScrollViewer>
 
@@ -1411,14 +1477,19 @@
                                             <ScrollViewer x:Name="PnlSecDial"
                                                       VerticalScrollBarVisibility="Auto" Grid.RowSpan="2" Visibility="Collapsed">
                                                 <StackPanel>
+                                                    <!-- Mirrors CkEvSync/CkSettingsSync — same underlying device flag,
+                                                     see EvDialPrefix's doc comment (MainWindow.DisplayDial.cs). -->
+
                                                     <Grid>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="*"/>
                                                             <ColumnDefinition Width="20"/>
-                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="150"/>
                                                         </Grid.ColumnDefinitions>
 
                                                         <!-- Left: show/hide menu pages — 2 columns x 4 rows, toggle-switch rows -->
+                                                        <CheckBox  Grid.Column="3" x:Name="CkDialSync" Content="{loc:Get rgb_sync_profiles}" Click="CkDialSync_Click" HorizontalAlignment="Left" VerticalAlignment="Top" Width="110" Margin="40,2,0,0"/>
                                                         <StackPanel Grid.Column="0">
                                                             <TextBlock Text="{loc:Get dial_pages_visible}" FontWeight="SemiBold" Margin="0,0,0,8"/>
                                                             <Grid>
@@ -1474,7 +1545,7 @@
 
 
                                                             <TextBlock Text="{loc:Get dial_screensaver_section}" FontWeight="SemiBold"/>
-                                                            <Grid Margin="0,0,0,12">
+                                                            <Grid Margin="0,6,0,12">
                                                                 <Grid.ColumnDefinitions>
                                                                     <!-- Fixed-width label column so both rows' entries share the same left edge -->
                                                                     <ColumnDefinition Width="130"/>
@@ -1679,7 +1750,7 @@
                                                         Margin="0,0,8,0" Click="BtnUsbRefresh_Click"
                                                         Style="{StaticResource K2IconButton}" Tag="&#xE72C;"/>
                                                         <TextBlock Text="{loc:Get usb_label}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                        <TextBox x:Name="TxtUsbLabel" Width="120" Margin="0,0,8,0" Text="basecamp"/>
+                                                        <TextBox x:Name="TxtUsbLabel" Width="120" Height="25" Margin="0,0,8,0" Text="basecamp"/>
                                                         <Button x:Name="BtnUsbRecord" Content="Start" Padding="8,2"
                                                         Click="BtnUsbRecord_Click"
                                                         Style="{StaticResource K2IconAccentButton}" Tag="&#xE7C8;"/>
@@ -1817,8 +1888,6 @@
                             <Border Grid.Column="0" Background="#111115" CornerRadius="6"
                                 Margin="0,0,8,0" Padding="4">
                                 <StackPanel>
-                                    <TextBlock Text="SECTIONS" FontSize="9" Foreground="#4A4A58"
-                                           Margin="14,8,0,6" FontWeight="Bold"/>
                                     <RadioButton x:Name="RbEv60SecKeyBinding"
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get ev60_key_binding}" GroupName="Ev60Sections"
@@ -1858,32 +1927,88 @@
                                  either side of SpEv60Layout and BrushEv60NumpadBg mirrored for "right"
                                  (no separate right-side art exists — see EV60_NumpadLeft.png, no
                                  EV60_NumpadRight.png in Base Camp's own assets). -->
-                                <Border Grid.Row="0" Background="#18181C" CornerRadius="6" Padding="8">
-                                    <StackPanel x:Name="SpEv60Layout" Orientation="Horizontal"
+                                <!-- BdrEv60DeviceBox + CvsEv60RubberBand implement Key Lighting's
+                                 rectangular multi-LED selection (drag a square over keys/numpad/border
+                                 squares to paint them all at once) — ported from Everest Max's
+                                 BdrEvDeviceBox/CvsEvRubberBand (MainWindow.CustomLighting.cs's
+                                 EvDeviceBox_* is the pattern Ev60DeviceBox_* in
+                                 MainWindow.Everest60.cs mirrors), user request 2026-07-25. Preview
+                                 (tunnel) events so a drag can START on a key Button without the Button
+                                 swallowing the gesture; a plain click still reaches the Button normally
+                                 because the rubber band only engages past a small drag threshold. -->
+                                <Border Grid.Row="0" Background="#18181C" CornerRadius="6" Padding="8"
+                                    x:Name="BdrEv60DeviceBox"
+                                    PreviewMouseLeftButtonDown="Ev60DeviceBox_MouseDown"
+                                    PreviewMouseMove="Ev60DeviceBox_MouseMove"
+                                    PreviewMouseLeftButtonUp="Ev60DeviceBox_MouseUp">
+                                    <Grid>
+                                        <StackPanel x:Name="SpEv60Layout" Orientation="Horizontal"
                                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <!-- +20% zoom on request, same as Everest Max's SpEvLayout:
+                                            <!-- +20% zoom on request, same as Everest Max's SpEvLayout:
                                          LayoutTransform (not RenderTransform) so the Grid/Border
                                          re-measures at the scaled size and WPF's hit-testing keeps
                                          mapping clicks to the right Button automatically — no changes
                                          needed to Everest60KeyboardLayout's X/Y/W/H math. -->
-                                        <StackPanel.LayoutTransform>
-                                            <ScaleTransform ScaleX="1.2" ScaleY="1.2"/>
-                                        </StackPanel.LayoutTransform>
-                                        <Canvas x:Name="CvsEv60Numpad" Width="154" Height="186"
-                                            ClipToBounds="True" Margin="0,0,6,0"
-                                            Visibility="Collapsed">
-                                            <Canvas.Background>
-                                                <ImageBrush x:Name="BrushEv60NumpadBg"
-                                                        ImageSource="Assets/everest60_numpad.png" Stretch="Fill"/>
-                                            </Canvas.Background>
+                                            <StackPanel.LayoutTransform>
+                                                <ScaleTransform ScaleX="1.2" ScaleY="1.2"/>
+                                            </StackPanel.LayoutTransform>
+                                            <!-- Wrapped in a Grid (was a bare Canvas) so a same-size border
+                                         overlay can share its cell — same technique as GrdEv60KeyColumn
+                                         below/Everest Max's GrdEvNumpadColumn (MainWindow.xaml). Margin
+                                         moved here from the bare Canvas (MainWindow.Everest60.cs's
+                                         ApplyEv60NumpadGap sets it, since this Grid — not the Canvas — is
+                                         SpEv60Layout's actual child now). -->
+                                            <Grid x:Name="GrdEv60NumpadColumn" Margin="0,0,6,0">
+                                                <Canvas x:Name="CvsEv60Numpad" Width="154" Height="186"
+                                                ClipToBounds="True"
+                                                Visibility="Collapsed">
+                                                    <Canvas.Background>
+                                                        <ImageBrush x:Name="BrushEv60NumpadBg"
+                                                            ImageSource="Assets/everest60_numpad.png" Stretch="Fill"/>
+                                                    </Canvas.Background>
+                                                </Canvas>
+                                                <!-- Numpad-ring paint overlay (Key Lighting's paint mode only):
+                                             22 small squares around the numpad accessory's bezel, built in
+                                             code (BuildEv60NumpadBorderSquares, MainWindow.Everest60.cs) —
+                                             mirrors CvsEv60BorderMain below. Gated on numpad presence too
+                                             (there's nothing to draw a ring around when it's unplugged), see
+                                             UpdateEv60BorderOverlayVisibility. Same NO-Background reasoning as
+                                             CvsEv60BorderMain. -->
+                                                <Canvas x:Name="CvsEv60BorderNumpad" Width="154" Height="186"
+                                                Panel.ZIndex="2"
+                                                Visibility="Collapsed"/>
+                                            </Grid>
+                                            <!-- Wrapped in a Grid (was a bare Canvas) so a same-size border
+                                         overlay can share its cell — same technique as Everest Max's
+                                         GrdEvKeyColumn/CvsEvBorderMain (MainWindow.xaml). -->
+                                            <Grid x:Name="GrdEv60KeyColumn">
+                                                <Canvas x:Name="CvsEv60Keyboard" Width="504" Height="186"
+                                                ClipToBounds="True">
+                                                    <Canvas.Background>
+                                                        <ImageBrush ImageSource="Assets/everest60_board.png" Stretch="Fill"/>
+                                                    </Canvas.Background>
+                                                </Canvas>
+                                                <!-- Border/side-LED paint overlay (Key Lighting's paint mode only):
+                                             44 small squares around the main board's bezel, built in code
+                                             (BuildEv60BorderSquares, MainWindow.Everest60.cs) — mirrors
+                                             Everest Max's CvsEvBorderMain. NO Background (see that comment for
+                                             why: a hit-testable Transparent background at ZIndex 2 would
+                                             swallow every key click while paint mode is on). -->
+                                                <Canvas x:Name="CvsEv60BorderMain" Width="504" Height="186"
+                                                Panel.ZIndex="2"
+                                                Visibility="Collapsed"/>
+                                            </Grid>
+                                        </StackPanel>
+                                        <!-- Rubber-band overlay for rectangular multi-LED selection: same
+                                     Grid cell as SpEv60Layout so it covers the whole device box;
+                                     IsHitTestVisible=False so it never steals clicks — the Border's
+                                     Preview handlers drive it. -->
+                                        <Canvas x:Name="CvsEv60RubberBand" IsHitTestVisible="False">
+                                            <Rectangle x:Name="RectEv60RubberBand" Visibility="Collapsed"
+                                               Stroke="#5BBEC3" StrokeThickness="1"
+                                               StrokeDashArray="3 2" Fill="#335BBEC3"/>
                                         </Canvas>
-                                        <Canvas x:Name="CvsEv60Keyboard" Width="504" Height="186"
-                                            ClipToBounds="True">
-                                            <Canvas.Background>
-                                                <ImageBrush ImageSource="Assets/everest60_board.png" Stretch="Fill"/>
-                                            </Canvas.Background>
-                                        </Canvas>
-                                    </StackPanel>
+                                    </Grid>
                                 </Border>
 
                                 <!-- Bottom section panel: grows with the window (Row="*" above); MinHeight
@@ -1993,9 +2118,32 @@
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="1">
                                                     <TextBlock Text="{loc:Get keyboard_language_layout}" FontWeight="SemiBold" Margin="0,0  ,0,10"/>
-                                                    <WrapPanel Orientation="Horizontal">
+                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,15">
                                                         <TextBlock Text="{loc:Get ev_layout}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,6,0"/>
                                                         <ComboBox x:Name="CbEv60KeyboardLayout" Width="200" Margin="0,0,16,0"/>
+                                                    </WrapPanel>
+
+                                                    <!-- Game Mode + Core Indicator LED — ported from Everest Max's
+                                                     Settings section (user request 2026-07-26): same fields
+                                                     (KeyboardSettings table/EverestKeyboardSettings XML DisableShift/
+                                                     DisableAltF4/DisableWin/DisableAltTab/EnableCoreLED) exist for
+                                                     Everest 60 too (Everest60Settings table), but no raw-HID/SDK
+                                                     command to apply them has been reverse-engineered yet for this
+                                                     device (checked K2/_reference and BaseCampLinux — neither has
+                                                     one for EverestMini) — persisted + imported like every other
+                                                     Ev60 setting, not yet sent to the device. -->
+                                                    <TextBlock Text="{loc:Get settings_game_mode}" FontWeight="SemiBold" Margin="0,0,0,6"
+                                                       ToolTip="{loc:Get settings_game_mode_tip}"/>
+                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                                        <CheckBox x:Name="CkEv60GameModeShiftTab" Content="{loc:Get settings_disable_shift_tab}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,10,0"/>
+                                                        <CheckBox x:Name="CkEv60GameModeAltF4" Content="{loc:Get settings_disable_alt_f4}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,10,0"/>
+                                                        <CheckBox x:Name="CkEv60GameModeWinKey" Content="{loc:Get settings_disable_win_key}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,10,0"/>
+                                                        <CheckBox x:Name="CkEv60GameModeAltTab" Content="{loc:Get settings_disable_alt_tab}" Click="CkEv60GameMode_Click" Height="25"/>
+                                                    </WrapPanel>
+                                                    <TextBlock Text="{loc:Get settings_indicator_leds}" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                                                    <WrapPanel Orientation="Horizontal">
+                                                        <CheckBox x:Name="CkEv60CoreIndicatorLed" Height="25" Content="{loc:Get settings_enable_core_led}"
+                                                          Click="CkEv60CoreIndicatorLed_Click"/>
                                                     </WrapPanel>
                                                 </StackPanel>
                                             </Grid>
@@ -2121,8 +2269,6 @@
                             <Border Grid.Column="0" Background="#111115" CornerRadius="6"
                                 Margin="0,0,8,0" Padding="4">
                                 <StackPanel>
-                                    <TextBlock Text="SECTIONS" FontSize="9" Foreground="#4A4A58"
-                                           Margin="14,8,0,6" FontWeight="Bold"/>
                                     <!-- Order matches MacroPad/DisplayPad/Everest 60: Key Binding
                                      first (also the default section, see InitMkSectionNav),
                                      device-specific Lighting in the middle, Settings last. DPI
@@ -2165,8 +2311,26 @@
                                     <!-- section content: grows with window height -->
                                 </Grid.RowDefinitions>
 
-                                <Border Grid.Row="0" Background="#18181C" CornerRadius="6" Padding="8">
-                                    <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <!-- Preview (tunnel) mouse events on THIS Border (not on CvsMkCustomSquares
+                                 itself) so a rubber-band drag started over EMPTY space between squares is
+                                 still caught: a Canvas with no Background isn't hit-testable on its empty
+                                 area (only its children are), so attaching the handlers there missed any
+                                 drag that didn't start exactly on a square — this Border has a real opaque
+                                 Background, so it's hit-testable everywhere within the device box, same
+                                 reasoning as Everest Max/60's BdrEvDeviceBox (MainWindow.CustomLighting.cs).
+                                 The handlers themselves no-op unless Custom Lighting is active. -->
+                                <Border Grid.Row="0" Background="#18181C" CornerRadius="6" Padding="8"
+                                        x:Name="BdrMkDeviceBox"
+                                        PreviewMouseLeftButtonDown="BdrMkDeviceBox_MouseDown"
+                                        PreviewMouseMove="BdrMkDeviceBox_MouseMove"
+                                        PreviewMouseLeftButtonUp="BdrMkDeviceBox_MouseUp">
+                                    <!-- A Canvas (not a Grid) so the 190px-wide mouse image can sit
+                                     offset within a wider host, leaving flanking columns for the
+                                     Custom Lighting square overlay below (MkDeviceImageOffsetX in
+                                     MainWindow.Makalu.cs) — same width/height numbers duplicated there
+                                     for square/leader-line placement, see that file's geometry consts. -->
+                                    <Canvas x:Name="CvsMkDeviceHost" Width="330" Height="422"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <!-- LED ring preview host — BEHIND the Image on purpose: the ring
                                          area in makalu_mouse.png is a genuinely TRANSPARENT cutout (not
                                          painted pixels, confirmed 2026-07-12), so the colored ring is
@@ -2176,29 +2340,56 @@
                                          Lighting section is active — ImgMkMouse switches back to the
                                          opaque makalu_mouse_rainbow.png (no cutout) for every other
                                          section, see MkSection_Changed/MkUpdateMouseImage. -->
-                                        <Canvas x:Name="CvsMkRingBack" Width="190" Height="422"/>
-                                        <Image x:Name="ImgMkMouse" Source="Assets/makalu_mouse.png" Width="190" Stretch="Uniform"/>
+                                        <Canvas x:Name="CvsMkRingBack" Width="190" Height="422" Canvas.Left="70"/>
+                                        <Image x:Name="ImgMkMouse" Source="Assets/makalu_mouse.png" Width="190" Stretch="Uniform" Canvas.Left="70"/>
                                         <!-- Hotspots positioned in BuildMkHotspots (Canvas coords match
-                                         the Image's rendered 190×422 size at Stretch=Uniform). -->
-                                        <Canvas x:Name="CvsMkHotspots" Width="190" Height="422"/>
-                                    </Grid>
+                                         the Image's rendered 190×422 size at Stretch=Uniform, offset by
+                                         the same Canvas.Left as the image itself). -->
+                                        <Canvas x:Name="CvsMkHotspots" Width="190" Height="422" Canvas.Left="70"/>
+                                        <!-- 8 Custom Lighting squares + leader lines pointing at their LED's
+                                         ring sector (user request 2026-07-27, matches Base Camp's own
+                                         reference photo) — topmost so the lines draw over the mouse body.
+                                         Built/positioned by MainWindow.Makalu.cs's BuildMkCustomSquares;
+                                         visible only while Custom is the active Lighting effect. -->
+                                        <Canvas x:Name="CvsMkCustomSquares" Width="330" Height="422" Visibility="Collapsed"/>
+                                        <!-- Rubber-band rectangle — a SEPARATE sibling, not a child of
+                                         CvsMkCustomSquares: BuildMkCustomSquares calls
+                                         CvsMkCustomSquares.Children.Clear() every rebuild, which would
+                                         silently rip this out of the tree too (2026-07-27 bug: the drag
+                                         worked — squares got painted — but the rectangle itself never
+                                         rendered, because Visibility/Canvas.Left/Top were being set on an
+                                         element no longer attached to anything). Declared LAST so it draws
+                                         on top of the squares. -->
+                                        <Rectangle x:Name="RectMkRubberBand" Visibility="Collapsed" IsHitTestVisible="False"
+                                           Stroke="#5BBEC3" StrokeThickness="1"
+                                           StrokeDashArray="3 2" Fill="#335BBEC3"/>
+                                    </Canvas>
                                 </Border>
 
                                 <!-- Bottom section panel: grows with the window (Row="*" above); MinHeight
                                  keeps its old fixed size as a floor so it doesn't collapse below the
                                  tallest section (RGB / DPI / Remap / Settings). Both controls are
                                  ALWAYS present (siblings in the same cell); each toggles its own
-                                 SecXxx children's Visibility, so only the active section is ever painted. -->
+                                 SecXxx children's Visibility, so only the active section is ever painted.
+                                 MkDpiRemap sits OUTSIDE the ScrollViewer (2026-07-27, user report: its
+                                 Key Binding list rendered as an unreadable 2-3px sliver) — a ScrollViewer
+                                 measures its content with infinite available height, so SecRemap's own
+                                 Grid.RowDefinition Height="*" list row had nothing real to stretch
+                                 against and collapsed to its minimum. Same fix Everest 60's own Key
+                                 Binding panel already needed (see Everest60KeyBindingPanel.xaml's
+                                 2026-07-14 doc comment) — MkRgbSettings keeps the ScrollViewer since its
+                                 Settings section (DPI levels + device settings) has enough content to
+                                 occasionally need it on a short window. -->
                                 <Border Grid.Row="1" Background="#14141A"
                                     BorderBrush="#2A2A32" BorderThickness="1"
                                     CornerRadius="6" Padding="12,10" Margin="0,8,0,0"
                                     MinHeight="180">
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                        <Grid>
+                                    <Grid>
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
                                             <local:MakaluRgbSettingsPanel x:Name="MkRgbSettings"/>
-                                            <local:MakaluDpiRemapPanel x:Name="MkDpiRemap"/>
-                                        </Grid>
-                                    </ScrollViewer>
+                                        </ScrollViewer>
+                                        <local:MakaluDpiRemapPanel x:Name="MkDpiRemap"/>
+                                    </Grid>
                                 </Border>
                             </Grid>
 
@@ -2309,8 +2500,6 @@
                             <Border Grid.Column="0" Background="#111115" CornerRadius="6"
                                 Margin="0,0,8,0" Padding="4">
                                 <StackPanel>
-                                    <TextBlock Text="SECTIONS" FontSize="9" Foreground="#4A4A58"
-                                           Margin="14,8,0,6" FontWeight="Bold"/>
                                     <RadioButton x:Name="RbMpSecKeyBinding"
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get ev_key_binding}" GroupName="MpSections"
@@ -2343,13 +2532,30 @@
                                     <!-- settings: grows with window height -->
                                 </Grid.RowDefinitions>
 
-                                <Border Grid.Row="0" Background="#18181C" CornerRadius="6" Padding="8">
+                                <!-- BdrMpDeviceBox + CvsMpRubberBand: rectangular multi-key selection for
+                                 Settings' "Edit individual keycaps" mode only (MacroPad has no per-key
+                                 custom-lighting paint mode) — drag a square over multiple keys to open
+                                 ONE KeycapCustomizeDialog for all of them, mirrors Everest/Everest 60's
+                                 identical feature (MainWindow.CustomLighting.cs/MainWindow.Everest60.cs).
+                                 User request 2026-07-26. -->
+                                <Border Grid.Row="0" Background="#18181C" CornerRadius="6" Padding="8"
+                                    x:Name="BdrMpDeviceBox"
+                                    PreviewMouseLeftButtonDown="MpDeviceBox_MouseDown"
+                                    PreviewMouseMove="MpDeviceBox_MouseMove"
+                                    PreviewMouseLeftButtonUp="MpDeviceBox_MouseUp">
+                                  <Grid>
                                     <Canvas x:Name="CvsMacroKeys" Width="510" Height="370" ClipToBounds="True"
                                         HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <Canvas.Background>
                                             <ImageBrush ImageSource="Assets/mkd_bg.png" Stretch="Fill"/>
                                         </Canvas.Background>
                                     </Canvas>
+                                    <Canvas x:Name="CvsMpRubberBand" IsHitTestVisible="False">
+                                        <Rectangle x:Name="RectMpRubberBand" Visibility="Collapsed"
+                                               Stroke="#5BBEC3" StrokeThickness="1"
+                                               StrokeDashArray="3 2" Fill="#335BBEC3"/>
+                                    </Canvas>
+                                  </Grid>
                                 </Border>
 
                                 <!-- Bottom settings panel: grows with the window (Row="*" above); MinHeight
@@ -2393,7 +2599,7 @@
                                                         <Style TargetType="ListViewItem">
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
-                                                                    <Setter Property="Background" Value="#900000"/>
+                                                                    <Setter Property="Background" Value="{DynamicResource K2AccentBrush}"/>
                                                                     <Setter Property="Foreground" Value="#10302F"/>
                                                                 </DataTrigger>
                                                             </Style.Triggers>
@@ -2450,8 +2656,16 @@
                                                         <TextBlock Text="{loc:Get led_backlight_label}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                                         <CheckBox x:Name="CkMacroBacklight" Style="{StaticResource K2InlineSwitch}"
                                                             VerticalAlignment="Center" IsChecked="True" Click="CkMacroBacklight_Click"/>
-
-
+                                                        <!-- Auto-off row, moved here 2026-07-26 (user request: next to the
+                                                     backlight switch, mirrors Everest Max's 2026-07-25 move) from its
+                                                     old spot at the bottom of this section — same controls/handlers,
+                                                     just relocated. -->
+                                                        <CheckBox x:Name="CkMacroAutoOffEnable" Content="{loc:Get backlight_auto_off_enable}"
+      Click="CkMacroAutoOffEnable_Click" VerticalAlignment="Center" Margin="16,0,10,0"/>
+                                                        <TextBlock Text="{loc:Get backlight_auto_off_seconds}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                        <TextBox x:Name="TxtMacroAutoOffSeconds" Width="60" TextAlignment="Center"
+     LostFocus="TxtMacroAutoOffSeconds_LostFocus" Text="5" VerticalAlignment="Center" Height="25" Padding="3,2,3,0"/>
+                                                        <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                                     </StackPanel>
 
                                                     <CheckBox Grid.Column="1"  x:Name="CkMacroSync" Content="{loc:Get led_sync_profiles}" Click="CkMacroSync_Click" Width="159" VerticalAlignment="Center" HorizontalAlignment="Right"/>
@@ -2459,48 +2673,111 @@
                                                 </Grid>
 
 
-                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                    <StackPanel x:Name="PnlMpDirection" Orientation="Horizontal" Margin="0,0,12,0">
-                                                        <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                        <Border Style="{StaticResource K2SegmentedGroupBorder}">
-                                                            <UniformGrid x:Name="GridMacroDirection" Rows="1"/>
-                                                        </Border>
-                                                    </StackPanel>
-                                                </WrapPanel>
-                                                <!-- Preset effects row 2: color mode (Single/Double/Rainbow, one
+                                                <!-- Whole-device preset controls (direction/color-mode/swatches) —
+                                             hidden as a group when CbMacroEffect="Custom" (see UpdateMpCapabilities
+                                             in MainWindow.MacroLed.cs), same pattern as Everest Max's
+                                             PnlEvNormalControls/PnlEvCustomLighting swap. -->
+                                                <StackPanel x:Name="PnlMpNormalControls">
+                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                        <StackPanel x:Name="PnlMpDirection" Orientation="Horizontal" Margin="0,0,12,0">
+                                                            <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                            <Border Style="{StaticResource K2SegmentedGroupBorder}">
+                                                                <UniformGrid x:Name="GridMacroDirection" Rows="1"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </WrapPanel>
+                                                    <!-- Preset effects row 2: color mode (Single/Double/Rainbow, one
                                              mutually-exclusive vertical radio group) + swatches + on/off. -->
-                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                    <StackPanel Orientation="Vertical" Margin="0,0,20,0" VerticalAlignment="Center">
-                                                        <RadioButton x:Name="RbMacroColorSingle" Content="{loc:Get rgb_single}" GroupName="MacroColorMode"
-                                                            Margin="0,0,0,6" Checked="RbMacroColorMode_Checked" ToolTip="{loc:Get rgb_single_tip}"/>
-                                                        <RadioButton x:Name="RbMacroColorDouble" Content="{loc:Get rgb_double}" GroupName="MacroColorMode"
-                                                            Margin="0,0,0,6" Checked="RbMacroColorMode_Checked" ToolTip="{loc:Get rgb_double_tip}"/>
-                                                        <RadioButton x:Name="RbMacroRainbow" Content="{loc:Get rgb_rainbow}" GroupName="MacroColorMode"
-                                                            Checked="RbMacroColorMode_Checked" ToolTip="{loc:Get rgb_rainbow_tip}"/>
-                                                    </StackPanel>
-                                                    <StackPanel x:Name="PnlMacroColor1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,20,0">
-                                                        <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,10,0" />
-                                                        <Button x:Name="BtnMacroColor1" Width="30" Height="30"
+                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                        <StackPanel Orientation="Vertical" Margin="0,0,20,0" VerticalAlignment="Center">
+                                                            <RadioButton x:Name="RbMacroColorSingle" Content="{loc:Get rgb_single}" GroupName="MacroColorMode"
+                                                                Margin="0,0,0,6" Checked="RbMacroColorMode_Checked" ToolTip="{loc:Get rgb_single_tip}"/>
+                                                            <RadioButton x:Name="RbMacroColorDouble" Content="{loc:Get rgb_double}" GroupName="MacroColorMode"
+                                                                Margin="0,0,0,6" Checked="RbMacroColorMode_Checked" ToolTip="{loc:Get rgb_double_tip}"/>
+                                                            <RadioButton x:Name="RbMacroRainbow" Content="{loc:Get rgb_rainbow}" GroupName="MacroColorMode"
+                                                                Checked="RbMacroColorMode_Checked" ToolTip="{loc:Get rgb_rainbow_tip}"/>
+                                                        </StackPanel>
+                                                        <StackPanel x:Name="PnlMacroColor1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,20,0">
+                                                            <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                                            <Button x:Name="BtnMacroColor1" Width="30" Height="30"
                                                         Background="#900000" BorderThickness="2"
                                                         BorderBrush="#3A3A40" Click="BtnMacroColor_Click" Tag="1"/>
-                                                    </StackPanel>
-                                                    <StackPanel x:Name="PnlMacroColor2" Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,10,0" />
-                                                        <Button x:Name="BtnMacroColor2" Width="30" Height="30"
+                                                        </StackPanel>
+                                                        <StackPanel x:Name="PnlMacroColor2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                                            <Button x:Name="BtnMacroColor2" Width="30" Height="30"
                                                         Background="#1A1A1E" BorderThickness="2"
                                                         BorderBrush="#3A3A40" Click="BtnMacroColor_Click" Tag="2"/>
+                                                        </StackPanel>
+                                                    </WrapPanel>
+                                                </StackPanel>
+
+                                                <!-- Per-key Custom lighting — shown only for CbMacroEffect="Custom".
+                                             Mirrors Everest Max's PnlEvCustomLighting (MainWindow.CustomLighting.cs)
+                                             adapted to the MacroPad's own verified protocol (12 physical keys,
+                                             no LED subdivision) — see MainWindow.MpCustomLighting.cs. -->
+                                                <StackPanel x:Name="PnlMpCustomLighting" Visibility="Collapsed">
+                                                    <TextBlock Text="{loc:Get custom_lighting}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                                    <TextBlock Text="{loc:Get custom_paint_hint}"
+                                               Foreground="#9A9AA2" FontStyle="Italic"
+                                               TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                        <TextBlock Text="{loc:Get custom_paint_effect}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                        <ComboBox x:Name="CbMpCustomPaintEffect" Width="130"
+                                                      SelectionChanged="CbMpCustomPaintEffect_SelectionChanged"/>
+                                                        <TextBlock x:Name="LblMpCustomColorStatic" Text="{loc:Get custom_color}" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                                        <Button x:Name="BtnMpCustomBrushColor" Width="30" Height="30"
+                                                Background="#FF0000" BorderThickness="2"
+                                                BorderBrush="#3A3A40" Click="BtnMpCustomBrushColor_Click"/>
                                                     </StackPanel>
-                                                </WrapPanel>
-                                                <!-- Backlight auto-off — moved here from Settings (user request
- 2026-07-21), sized like the rest of this panel. -->
-                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                    <CheckBox x:Name="CkMacroAutoOffEnable" Content="{loc:Get backlight_auto_off_enable}"
-      Click="CkMacroAutoOffEnable_Click" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                                                    <TextBlock Text="{loc:Get backlight_auto_off_seconds}" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                                    <TextBox x:Name="TxtMacroAutoOffSeconds" Width="70" TextAlignment="Center"
-     LostFocus="TxtMacroAutoOffSeconds_LostFocus" Text="5" VerticalAlignment="Center" Height="25" Padding="3,2,3,0"/>
-                                                    <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
-                                                </WrapPanel>
+
+                                                    <StackPanel x:Name="PnlMpCustomFxParams" Visibility="Collapsed" Margin="0,0,0,6">
+                                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                            <StackPanel x:Name="PnlMpCustomFxDirection" Orientation="Horizontal" Margin="0,0,16,0">
+                                                                <TextBlock Text="{loc:Get rgb_direction}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                                <Border Style="{StaticResource K2SegmentedGroupBorder}">
+                                                                    <UniformGrid x:Name="GridMpCustomFxDirection" Rows="1"/>
+                                                                </Border>
+                                                            </StackPanel>
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                                <Slider x:Name="SldMpCustomFxSpeed" Minimum="0" Maximum="100" Width="100"
+                                                                TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                                                                ValueChanged="SldMpCustomFxSpeed_ValueChanged" VerticalAlignment="Center"/>
+                                                                <TextBlock x:Name="LblMpCustomFxSpeed" Text="50%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
+                                                            </StackPanel>
+                                                        </WrapPanel>
+                                                        <WrapPanel Orientation="Horizontal">
+                                                            <StackPanel x:Name="PnlMpCustomFxColorMode" Orientation="Vertical" Margin="0,0,20,0" VerticalAlignment="Center">
+                                                                <RadioButton x:Name="RbMpCustomFxSingle" Content="{loc:Get rgb_single}" GroupName="MpCustomFxColorMode"
+                                                                    Margin="0,0,0,6" Checked="RbMpCustomFxColorMode_Checked"/>
+                                                                <RadioButton x:Name="RbMpCustomFxDual" Content="{loc:Get rgb_double}" GroupName="MpCustomFxColorMode"
+                                                                    Margin="0,0,0,6" Checked="RbMpCustomFxColorMode_Checked"/>
+                                                                <RadioButton x:Name="RbMpCustomFxRainbow" Content="{loc:Get rgb_rainbow}" GroupName="MpCustomFxColorMode"
+                                                                    Checked="RbMpCustomFxColorMode_Checked"/>
+                                                            </StackPanel>
+                                                            <StackPanel x:Name="PnlMpCustomFxColor1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                                                                <TextBlock Text="{loc:Get rgb_primary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                                <Button x:Name="BtnMpCustomFxColor1" Width="30" Height="30"
+                                                                    Background="#FF0000" BorderThickness="2"
+                                                                    BorderBrush="#3A3A40" Click="BtnMpCustomFxColor_Click" Tag="1"/>
+                                                            </StackPanel>
+                                                            <StackPanel x:Name="PnlMpCustomFxColor2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                                <TextBlock Text="{loc:Get rgb_secondary}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                                <Button x:Name="BtnMpCustomFxColor2" Width="30" Height="30"
+                                                                    Background="#0000FF" BorderThickness="2"
+                                                                    BorderBrush="#3A3A40" Click="BtnMpCustomFxColor_Click" Tag="2"/>
+                                                            </StackPanel>
+                                                        </WrapPanel>
+                                                    </StackPanel>
+
+                                                    <WrapPanel Orientation="Horizontal">
+                                                        <Button x:Name="BtnMpCustomApply"   Content="{loc:Get apply}"           Padding="8,2" Margin="0,0,4,0" Click="BtnMpCustomApply_Click"  Style="{StaticResource K2IconAccentButton}" Tag="&#xE73E;"/>
+                                                        <Button x:Name="BtnMpCustomFillAll" Content="{loc:Get custom_fill_all}" Padding="8,2" Margin="0,0,4,0" Click="BtnMpCustomFillAll_Click" Style="{StaticResource K2IconButton}"       Tag="&#xE771;"/>
+                                                        <Button x:Name="BtnMpCustomClear"   Content="{loc:Get custom_clear}"    Padding="8,2"                   Click="BtnMpCustomClear_Click"   Style="{StaticResource K2IconButton}"       Tag="&#xE74D;"/>
+                                                    </WrapPanel>
+                                                </StackPanel>
+
                                             </StackPanel>
                                         </ScrollViewer>
 
@@ -2562,6 +2839,10 @@
                                                            TextWrapping="Wrap" Margin="0,3,0,10" FontSize="12"/>
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="1">
+                                                    <!-- Mirrors CkMacroSync (LED panel) — same underlying device flag,
+                                                     see MpSettingsPrefix's doc comment (MainWindow.MacroKeycapAppearance.cs). -->
+                                                    <CheckBox x:Name="CkMpSettingsSync" Content="{loc:Get led_sync_profiles}"
+                                                          Click="CkMpSettingsSync_Click" HorizontalAlignment="Right" Margin="0,0,0,10"/>
                                                     <TextBlock Text="{loc:Get positioning}" FontWeight="SemiBold" Margin="0,0,0,6"/>
                                                     <WrapPanel Orientation="Horizontal">
                                                         <ComboBox x:Name="CbMacroRotation" Width="190"
@@ -2623,7 +2904,8 @@
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
                                 <GroupBox x:Name="GbMpDevices" Grid.Row="0" Header="{loc:Get mp_connected_devices}">
-                                    <ListView x:Name="LvDevices" Height="120">
+                                    <ListView x:Name="LvDevices" Height="120"
+                                              ItemContainerStyle="{StaticResource K2GridViewListViewItem}">
                                         <ListView.View>
                                             <GridView>
                                                 <GridViewColumn Header="Device"  Width="90"  DisplayMemberBinding="{Binding Label}"/>
@@ -2701,8 +2983,6 @@
                             <Border Grid.Column="0" Background="#111115" CornerRadius="6"
                                 Margin="0,0,8,0" Padding="4">
                                 <StackPanel>
-                                    <TextBlock Text="SECTIONS" FontSize="9" Foreground="#4A4A58"
-                                           Margin="14,8,0,6" FontWeight="Bold"/>
                                     <RadioButton x:Name="RbDpSecKeyBinding"
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get ev_key_binding}" GroupName="DpSections"
@@ -2787,7 +3067,7 @@
                                                         <Style TargetType="ListViewItem">
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
-                                                                    <Setter Property="Background" Value="#900000"/>
+                                                                    <Setter Property="Background" Value="{DynamicResource K2AccentBrush}"/>
                                                                     <Setter Property="Foreground" Value="#10302F"/>
                                                                 </DataTrigger>
                                                             </Style.Triggers>
@@ -2935,6 +3215,12 @@
                                         <Button x:Name="BtnDpRefresh" Content="{loc:Get refresh}"
                                             Style="{StaticResource K2SideActionButton}" Tag="&#xE72C;"
                                             Click="BtnDpRefresh_Click"/>
+                                        <Button x:Name="BtnDpLiveTest" Content="{loc:Get dp_live_test}"
+                                            Style="{StaticResource K2SideActionButton}" Tag="&#xE768;"
+                                            Click="BtnDpLiveTest_Click"/>
+                                        <Button x:Name="BtnDpLiveTestIcon" Content="{loc:Get dp_live_test_icon}"
+                                            Style="{StaticResource K2SideActionButton}" Tag="&#xE768;"
+                                            Click="BtnDpLiveTestIcon_Click"/>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
@@ -2946,7 +3232,8 @@
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
                                 <GroupBox x:Name="GbDpDevices" Grid.Row="0" Header="{loc:Get dp_connected_devices}">
-                                    <ListView x:Name="LvDpDevices" Height="120">
+                                    <ListView x:Name="LvDpDevices" Height="120"
+                                              ItemContainerStyle="{StaticResource K2GridViewListViewItem}">
                                         <ListView.View>
                                             <GridView>
                                                 <GridViewColumn Header="Device"         Width="100" DisplayMemberBinding="{Binding Label}"/>
@@ -3039,7 +3326,7 @@
 
                                 <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
                                     <TextBlock Text="{loc:Get macro_name}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBox x:Name="TxtMacroName" Width="220"
+                                    <TextBox x:Name="TxtMacroName" Width="220" Height="25"
                                          Background="#2A2A2E" Foreground="White"
                                          TextChanged="TxtMacroName_TextChanged"/>
                                 </WrapPanel>
@@ -3071,7 +3358,7 @@
                                                  Style="{StaticResource MacroOptionRowStyle}" Checked="RbMacroDelay_Checked">
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="{loc:Get macro_delay_custom}" VerticalAlignment="Center"/>
-                                                <TextBox x:Name="TxtMacroCustomDelay" Width="66" Margin="8,0,4,0"
+                                                <TextBox x:Name="TxtMacroCustomDelay" Width="66" Height="25" Margin="8,0,4,0"
                                                      Padding="5,2" Background="#2A2A2E" Foreground="White"
                                                      TextChanged="TxtMacroCustomDelay_TextChanged"/>
                                                 <TextBlock Text="ms" VerticalAlignment="Center" Opacity="0.7"/>
@@ -3092,7 +3379,7 @@
                                                  Style="{StaticResource MacroOptionRowStyle}" Checked="RbMacroPlayback_Checked">
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="{loc:Get macro_repeat_short}" VerticalAlignment="Center"/>
-                                                <TextBox x:Name="TxtMacroRepeatN" Width="66" Margin="8,0,4,0"
+                                                <TextBox x:Name="TxtMacroRepeatN" Width="66" Height="25" Margin="8,0,4,0"
                                                      Padding="5,2" Background="#2A2A2E" Foreground="White"
                                                      TextChanged="TxtMacroRepeatN_TextChanged"/>
                                                 <TextBlock Text="{loc:Get macro_times_suffix}" VerticalAlignment="Center" Opacity="0.7"/>
@@ -3236,6 +3523,37 @@
                         <StackPanel Margin="24" MaxWidth="480" HorizontalAlignment="Left">
                             <TextBlock Text="{loc:Get tab_settings}" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
 
+                            <GroupBox x:Name="GbAppUpdate" Header="{loc:Get settings_update_group}" Margin="0,0,0,20">
+                                <StackPanel Margin="8">
+                                    <TextBlock x:Name="TxtAppCurrentVersion" Foreground="#9A9AA2" FontSize="12"/>
+                                    <Button x:Name="BtnAppCheckUpdate" Content="{loc:Get settings_update_check_btn}"
+                                    Padding="8,4" HorizontalAlignment="Left" Margin="0,10,0,0"
+                                    Click="BtnAppCheckUpdate_Click"
+                                    Style="{StaticResource K2IconButton}" Tag="&#xE895;"/>
+                                    <TextBlock x:Name="TxtAppUpdateStatus" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,8,0,0" FontSize="12"/>
+
+                                    <StackPanel x:Name="PnlAppUpdateAvailable" Visibility="Collapsed" Margin="0,12,0,0">
+                                        <TextBlock x:Name="TxtAppUpdateNotes" Foreground="#C8C8CE"
+                                           TextWrapping="Wrap" FontSize="12"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                            <Button x:Name="BtnAppUpdateInstall" Content="{loc:Get settings_update_install_btn}"
+                                            Padding="10,6" Margin="0,0,8,0" Visibility="Collapsed"
+                                            Click="BtnAppUpdateInstall_Click"
+                                            Style="{StaticResource K2IconAccentButton}" Tag="&#xE896;"/>
+                                            <Button x:Name="BtnAppUpdateZip" Content="{loc:Get settings_update_zip_btn}"
+                                            Padding="10,6" Margin="0,0,8,0" Visibility="Collapsed"
+                                            Click="BtnAppUpdateZip_Click"
+                                            Style="{StaticResource K2IconAccentButton}" Tag="&#xE896;"/>
+                                            <Button x:Name="BtnAppUpdateViewRelease" Content="{loc:Get settings_update_view_release_btn}"
+                                            Padding="8,4"
+                                            Click="BtnAppUpdateViewRelease_Click"
+                                            Style="{StaticResource K2IconButton}" Tag="&#xE8A7;"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </StackPanel>
+                            </GroupBox>
+
                             <GroupBox x:Name="GbAppBcImport" Header="{loc:Get settings_bc_import_group}" Margin="0,0,0,20">
                                 <StackPanel Margin="8">
                                     <Button x:Name="BtnAppImportFromBaseCamp" Content="{loc:Get settings_bc_import_btn}"
@@ -3296,6 +3614,30 @@
                                     <ComboBox x:Name="CmbAppFont" Width="220" HorizontalAlignment="Left"
                                       SelectionChanged="CmbAppFont_SelectionChanged"/>
                                     <TextBlock Text="{loc:Get settings_font_family_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox x:Name="GbAppAccentColor" Header="{loc:Get settings_accent_color}" Margin="0,0,0,20">
+                                <StackPanel Margin="8">
+                                    <ComboBox x:Name="CmbAppAccentColor" Width="220" HorizontalAlignment="Left"
+                                      SelectionChanged="CmbAppAccentColor_SelectionChanged"/>
+                                    <TextBlock Text="{loc:Get settings_accent_color_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox x:Name="GbIconGalleryStyle" Header="{loc:Get settings_icon_style}" Margin="0,0,0,20">
+                                <StackPanel Margin="8">
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton x:Name="RbIconStyleBlack" Content="{loc:Get settings_icon_style_black}"
+                                             GroupName="IconGalleryStyle" Margin="0,0,20,0"
+                                             Checked="IconGalleryStyle_Checked"/>
+                                        <RadioButton x:Name="RbIconStyleColor" Content="{loc:Get settings_icon_style_color}"
+                                             GroupName="IconGalleryStyle"
+                                             Checked="IconGalleryStyle_Checked"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{loc:Get settings_icon_style_hint}" Foreground="#9A9AA2"
                                        TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
                                 </StackPanel>
                             </GroupBox>
@@ -3407,14 +3749,14 @@
         <Grid x:Name="PnlHwBusy" Grid.RowSpan="2" Panel.ZIndex="20" Background="#D91A1A1E"
               Visibility="Collapsed">
             <Border VerticalAlignment="Center" HorizontalAlignment="Center"
-                    Background="#F02A2A32" BorderBrush="#900000" BorderThickness="1"
+                    Background="#F02A2A32" BorderBrush="{DynamicResource K2AccentBrush}" BorderThickness="1"
                     CornerRadius="10" Padding="36,28">
                 <StackPanel>
                     <TextBlock x:Name="TxtHwBusyMessage" FontSize="16" Foreground="White"
                                HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="380"
                                TextWrapping="Wrap"/>
                     <ProgressBar IsIndeterminate="True" Width="280" Height="3"
-                                 Margin="0,18,0,0" Foreground="#900000" Background="#1A1A1E"/>
+                                 Margin="0,18,0,0" Foreground="{DynamicResource K2AccentBrush}" Background="#1A1A1E"/>
                 </StackPanel>
             </Border>
         </Grid>

@@ -147,7 +147,13 @@ internal static class Everest60HidNative
         byte[]? last = null;
         for (int attempt = 0; attempt < retries; attempt++)
         {
-            if (!HidD_SetFeature(h, report65, report65.Length))
+            bool setOk = RunWithTimeout(() => HidD_SetFeature(h, report65, report65.Length), out bool setTimedOut);
+            if (setTimedOut)
+            {
+                log?.Invoke($"[Ev60-HID] SendFeature cmd=0x{cmd:X2}: HidD_SetFeature timed out after {HidCallTimeoutMs}ms (firmware unresponsive?), aborting call");
+                return last;
+            }
+            if (!setOk)
             {
                 log?.Invoke($"[Ev60-HID] SendFeature cmd=0x{cmd:X2}: HidD_SetFeature failed, attempt {attempt + 1}/{retries}");
                 Thread.Sleep(delayMs);
@@ -156,7 +162,13 @@ internal static class Everest60HidNative
             Thread.Sleep(delayMs);
 
             var resp = new byte[ReportSize];
-            if (HidD_GetFeature(h, resp, resp.Length))
+            bool getOk = RunWithTimeout(() => HidD_GetFeature(h, resp, resp.Length), out bool getTimedOut);
+            if (getTimedOut)
+            {
+                log?.Invoke($"[Ev60-HID] SendFeature cmd=0x{cmd:X2}: HidD_GetFeature timed out after {HidCallTimeoutMs}ms (firmware unresponsive?), aborting call");
+                return last;
+            }
+            if (getOk)
             {
                 last = resp;
                 if (resp.Length >= 2 && resp[1] == cmd) return resp;
@@ -176,6 +188,53 @@ internal static class Everest60HidNative
         }
         if (last is null) log?.Invoke($"[Ev60-HID] SendFeature cmd=0x{cmd:X2}: gave up after {retries} attempts, no response at all");
         return last;
+    }
+
+    private const int HidCallTimeoutMs = 1000;
+
+    /// <summary>
+    /// Runs a blocking HID call on a dedicated (non-pool) thread with a hard
+    /// deadline. <c>HidD_SetFeature</c>/<c>HidD_GetFeature</c> are plain
+    /// synchronous control transfers with no OS-level timeout — if the
+    /// firmware goes silent (the known dropout window after a numpad key
+    /// binding write, see <see cref="Everest60NumpadKeyPoller"/>'s doc
+    /// comment — plausibly also other times, unconfirmed) the call never
+    /// returns, which previously held <c>Everest60Service._hidLock</c>
+    /// forever and starved every other Everest 60 poller permanently.
+    /// Real-hardware report 2026-07-25: while stuck, an unrelated USB
+    /// gamepad on the same hub stopped responding too, and only recovered
+    /// once the keyboard was physically replugged — consistent with a
+    /// pending control-transfer IRP wedging the shared hub, not just this
+    /// process. <c>CancelSynchronousIo</c> aborts the pending kernel-mode
+    /// request cleanly (the blocked thread wakes with
+    /// ERROR_OPERATION_ABORTED) instead of leaking a thread stuck forever.
+    /// </summary>
+    private static bool RunWithTimeout(Func<bool> blockingCall, out bool timedOut)
+    {
+        bool result = false;
+        IntPtr threadHandle = IntPtr.Zero;
+        using var handleReady = new ManualResetEventSlim(false);
+        var thread = new Thread(() =>
+        {
+            DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(),
+                out threadHandle, 0, false, DUPLICATE_SAME_ACCESS);
+            handleReady.Set();
+            try { result = blockingCall(); }
+            catch { /* aborted by CancelSynchronousIo below, or device error */ }
+        })
+        { IsBackground = true };
+        thread.Start();
+        handleReady.Wait();
+
+        bool completed = thread.Join(HidCallTimeoutMs);
+        timedOut = !completed;
+        if (!completed)
+        {
+            CancelSynchronousIo(threadHandle);
+            thread.Join(2000); // let the aborted call unwind
+        }
+        if (threadHandle != IntPtr.Zero) CloseHandle(threadHandle);
+        return completed && result;
     }
 
     // ================================================================
@@ -231,4 +290,23 @@ internal static class Everest60HidNative
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern SafeFileHandle CreateFileW(string path, uint access, uint share,
         IntPtr security, uint disposition, uint flags, IntPtr template);
+
+    private const uint DUPLICATE_SAME_ACCESS = 0x00000002;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CancelSynchronousIo(IntPtr hThread);
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentThread();
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool DuplicateHandle(IntPtr hSourceProcessHandle, IntPtr hSourceHandle,
+        IntPtr hTargetProcessHandle, out IntPtr lpTargetHandle, uint dwDesiredAccess,
+        bool bInheritHandle, uint dwOptions);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr hObject);
 }

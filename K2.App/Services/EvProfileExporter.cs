@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
+using K2.Core;
 
 namespace K2.App.Services;
 
@@ -76,7 +77,7 @@ public static class EvProfileExporter
         {
             if (string.IsNullOrEmpty(k.ActionType)) continue;
 
-            string? functionType = null, subType = null, funcValue = null;
+            string? functionType = null, subType = null, funcValue = null, customUrl = null;
             bool isAssigned = false;
 
             if (bcCompatible)
@@ -85,6 +86,7 @@ public static class EvProfileExporter
                 if (mapped is not null)
                 {
                     (functionType, subType, funcValue) = mapped.Value;
+                    customUrl = ExtractCustomUrl(k.ActionType, k.ActionValue);
                     isAssigned = true;
                     exported++;
                 }
@@ -105,7 +107,7 @@ public static class EvProfileExporter
             }
 
             bindingsEl.Add(BuildBinding(k.KeyMatrix, k.KeyMatrix, k.Label ?? $"K{k.KeyMatrix}",
-                isAssigned, isTouchKey: false, functionType, subType, funcValue, imageB64: null));
+                isAssigned, isTouchKey: false, functionType, subType, funcValue, imageB64: null, customUrl));
         }
 
         // ---- Numpad LCD keys (NDK), 0-3 — per-profile ----
@@ -156,15 +158,59 @@ public static class EvProfileExporter
             }
         }
 
+        // ---- Lighting + Settings ----
+        // Both were missing entirely until 2026-07-26 (this exporter wrote key bindings
+        // only), so a K2 export lost every lighting/settings value the matching import
+        // path already knew how to read back. Profile-scoped keys with a fallback to the
+        // shared ones, mirroring EvRgbPrefix/EvSettingsPrefix's own "synced = global"
+        // rule (the panel writes to the shared namespace when sync is on).
+        string? Get(string key) => Scoped(store.GetSetting, key, slot);
+
+        root.Add(KeyboardLightingXml.BuildLightings(
+            Get, $"rgb.p{slot}.", $"custom.p{slot}.keyLedColors", $"custom.p{slot}.keyEffects",
+            BaseCampDbImporter.EverestKeycapLedCount));
+
+        int mode = int.TryParse(Get($"settings.p{slot}.game_mode"), out var gm) ? gm : 0;
+        int turnOffSec = int.TryParse(Get($"dial.p{slot}.turnOff"), out var to) ? to : 0;
+        root.Add(new XElement("EverestKeyboardSettings",
+            new XElement("KeyboardSetting",
+                new XElement("ProfileId", 0),
+                new XElement("SysncAcrossProfile", "false"),
+                new XElement("DisableShift", Bool((mode & 0x1) != 0)),
+                new XElement("DisableAltF4", Bool((mode & 0x2) != 0)),
+                new XElement("DisableWin", Bool((mode & 0x4) != 0)),
+                new XElement("DisableAltTab", Bool((mode & 0x8) != 0)),
+                new XElement("EnableCoreLED", Bool(Get($"settings.p{slot}.indicator_led") == "1")),
+                new XElement("IsTurnOffAfter", Bool(Get($"dial.p{slot}.turnOffEnable") == "1")),
+                // Base Camp stores this as a "H:MM:SS" TimeSpan string, not a seconds
+                // count — see BaseCampDbImporter.TurnOffSecondsFromTimeSpanText.
+                new XElement("TurnOffAfter", TimeSpan.FromSeconds(turnOffSec).ToString(@"h\:mm\:ss")),
+                new XElement("ClockType", int.TryParse(Get($"dial.p{slot}.clockType"), out var ct) ? ct : 0),
+                new XElement("modified_at", DateTime.Now.ToString("o")))));
+
         var doc = new XDocument(new XDeclaration("1.0", "utf-8", null), root);
         doc.Save(filePath);
 
         return new ExportResult(exported, skipped, reasons);
     }
 
+    private static string Bool(bool v) => v ? "true" : "false";
+
+    /// <summary>Reads a profile-scoped settings key, falling back to its shared
+    /// (device-wide) twin — <c>rgb.p3.speed</c> → <c>rgb.speed</c> — for a profile whose
+    /// values live in the shared namespace because "sync across profiles" is on.</summary>
+    private static string? Scoped(Func<string, string?> getSetting, string key, int slot)
+    {
+        var direct = getSetting(key);
+        if (direct is not null) return direct;
+        string marker = $".p{slot}.";
+        int at = key.IndexOf(marker, StringComparison.Ordinal);
+        return at < 0 ? null : getSetting(key[..at] + "." + key[(at + marker.Length)..]);
+    }
+
     private static XElement BuildBinding(
         int keyId, int dllMatrixIndex, string keyName, bool isAssigned, bool isTouchKey,
-        string? functionType, string? subType, string? funcValue, string? imageB64)
+        string? functionType, string? subType, string? funcValue, string? imageB64, string? customUrl = null)
     {
         // Tag "KeyboardBinding" = real Base Camp per-item class name (confirmed
         // 2026-07-15 against a real Base Camp XML export + decompiled classes —
@@ -189,6 +235,7 @@ public static class EvProfileExporter
             new XElement("DLLKeyId", keyId),
             new XElement("DLLKeyName", keyName),
             new XElement("DLLMatrixIndex", dllMatrixIndex),
+            new XElement("CustomURL", customUrl ?? ""),
             new XElement("OptionalText", ""));
     }
 
@@ -208,8 +255,15 @@ public static class EvProfileExporter
             case "folder":
                 return string.IsNullOrEmpty(v) ? null : ("Open Folder", v, v);
 
+            // Real Base Camp has no "Open URL" FunctionType — a specific destination is
+            // always expressed as FunctionType="Run browser" with the URL in the sibling
+            // CustomURL element (see ExtractCustomUrl / BaseCampDbImporter.TranslateAction's
+            // matching comment), never in FunctionValue.
             case "browser":
                 return ("Run browser", "Run browser", "Run browser");
+
+            case "url":
+                return string.IsNullOrEmpty(v) ? null : ("Run browser", "Run browser", "Run browser");
 
             case "keys":
                 return string.IsNullOrEmpty(v) ? null : ("Keyboard Shortcuts", v, v);
@@ -279,9 +333,30 @@ public static class EvProfileExporter
             case "text":
                 return v.Length == 1 ? ("Default", v, v) : null;
 
+            // Base Camp's own "Disable" function — see Ev60ProfileExporter's twin arm.
+            case "disable":
+                return ("Disable", "Disable", "Disable");
+
             // dp_folder/dp_back: DisplayPad-only concepts, not applicable
-            // to the Everest. pyscript/command/url/macro/multi/pcinfo/clock/none:
+            // to the Everest. pyscript/command/macro/multi/pcinfo/clock/none:
             // no confirmed Base Camp equivalent -> omitted.
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>The URL that goes in the exported binding's sibling <c>CustomURL</c> element
+    /// (see <see cref="MapActionToBc"/>'s "browser"/"url" arms) — real Base Camp never puts it
+    /// in FunctionValue. Null for a "browser" action with no URL set (just launch the browser).</summary>
+    private static string? ExtractCustomUrl(string actionType, string? actionValue)
+    {
+        switch (actionType)
+        {
+            case "url":
+                return string.IsNullOrWhiteSpace(actionValue) ? null : actionValue.Trim();
+            case "browser":
+                string? url = BrowserActionPayload.Parse(actionValue)?.Url;
+                return string.IsNullOrEmpty(url) ? null : url;
             default:
                 return null;
         }

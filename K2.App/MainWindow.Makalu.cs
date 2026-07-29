@@ -45,6 +45,17 @@ public partial class MainWindow
         new(MakaluService.Model.Makalu67, "Makalu 67", 6, MakaluProtocol.DpiMin67);
     private bool _mkSuppressProfile;
 
+    /// <summary>Background reader for the DPI button's physical press (see
+    /// <see cref="MakaluDpiButtonWatcher"/> — the mouse's other 5 buttons come through
+    /// RawMouseActivityWatcher/OnMakaluRawButton instead, this one has no OS mouse-click
+    /// identity at all).</summary>
+    private MakaluDpiButtonWatcher? _mkDpiWatcher;
+
+    /// <summary>One-shot flash timer for the DPI hotspot — that button has no distinct
+    /// release edge (see MakaluDpiButtonWatcher's class doc), so its highlight is timed
+    /// instead of press/release like the other 5.</summary>
+    private DispatcherTimer? _mkDpiFlashTimer;
+
     /// <summary>Called once from the MainWindow constructor.</summary>
     private void InitMakaluModule()
     {
@@ -56,6 +67,23 @@ public partial class MainWindow
         MkRgbSettings.PreviewChanged += MkUpdateLedRingPreview;
         BuildMkHotspots();
         InitMkSectionNav();
+
+        // Hotspot dot outlines are painted once in BuildMkHotspots (FindResource, not a
+        // live binding) — without this, a Settings > Accent color switch leaves them the
+        // old color until the device image is rebuilt (reconnect/model change), which
+        // reads as "doesn't recolor until I restart".
+        AccentCatalog.Applied += RefreshMkHotspotAccentColors;
+
+        // _log runs on the watcher's OWN background read thread (unlike _makalu/
+        // MkRgbSettings/MkDpiRemap's LogMakalu above, only ever invoked from UI-thread
+        // event handlers) — must marshal here too, same as DpiPressed below, or
+        // TxtMkLog.AppendText crashes the whole app with a cross-thread
+        // InvalidOperationException the moment the read loop logs anything (found
+        // 2026-07-27 while smoke-testing against a real Makalu: every launch crashed
+        // within ~1 minute, right as ReadLoop logged "read thread exiting").
+        _mkDpiWatcher = new MakaluDpiButtonWatcher(msg => Dispatcher.BeginInvoke(() => LogMakalu(msg)));
+        _mkDpiWatcher.DpiPressed += () => Dispatcher.BeginInvoke(OnMakaluDpiPressed);
+        _mkDpiWatcher.ButtonEvent += (cat, btn) => Dispatcher.BeginInvoke(() => OnMakaluButtonEvent(cat, btn));
 
         LstMkProfile.ContextMenu = MkBuildProfileContextMenu();
         BtnMkProfileMenu.ContextMenu = MkBuildProfileMenuNoEdit();
@@ -81,41 +109,55 @@ public partial class MainWindow
 
     private sealed record MkProfileItem(int Slot, string Label)
     {
-        // Fixed 5 slots, no "+ New profile" row (see class doc comment above) — always real.
-        public bool IsNew => false;
-        public bool IsRealProfile => true;
+        // "+ New profile" row, same convention as Ev/MpProfileItem — user request
+        // 2026-07-29: only list slots actually configured, not all 5 fixed ones
+        // unconditionally (previously always real/never "new" here).
+        public bool IsNew => Label.StartsWith("+");
+        public bool IsRealProfile => !IsNew;
         public override string ToString() => Label;
     }
 
     private int MkCurrentProfile()
         => LstMkProfile.SelectedItem is MkProfileItem pi ? pi.Slot : 1;
 
+    /// <summary>Populates the Makalu profile list with configured profiles + "New
+    /// profile…" (5 fixed K2-side slots exist regardless — see MakaluStore's doc
+    /// comment — but the UI only lists the ones actually in use, same as
+    /// Everest/MacroPad/DisplayPad, since 2026-07-29).</summary>
     private void MkRefreshProfiles()
     {
         _mkSuppressProfile = true;
         try
         {
-            var items = Enumerable.Range(1, 5)
-                .Select(s => new MkProfileItem(s, _mkStore.GetProfileName(s) ?? Loc.Get("profile_n", s)))
-                .ToList();
+            var existing = _mkStore.GetExistingProfiles();
+            if (existing.Count == 0) existing.Add(1);
+            var items = new List<MkProfileItem>();
+            foreach (var slot in existing)
+                items.Add(new MkProfileItem(slot, _mkStore.GetProfileName(slot) ?? Loc.Get("profile_n", slot)));
+
+            int nextFree = Enumerable.Range(1, 5).FirstOrDefault(s => !existing.Contains(s));
+            if (nextFree > 0)
+                items.Add(new MkProfileItem(nextFree, Loc.Get("new_profile")));
+
             LstMkProfile.ItemsSource = items;
 
             int current = _mkStore.GetCurrentProfile();
-            LstMkProfile.SelectedItem = items.Find(x => x.Slot == current) ?? items[0];
+            var match = items.Find(x => x.Slot == current && !x.IsNew);
+            LstMkProfile.SelectedItem = match ?? items[0];
 
-            MkRegisterProfileLaunchWatchers();
+            MkRegisterProfileLaunchWatchers(existing);
         }
         finally { _mkSuppressProfile = false; }
     }
 
     /// <summary>Registers this device's profiles with K2.Core.Services.ProfileLaunchWatcher
     /// — see DpRegisterProfileLaunchWatchers (MainWindow.DisplayPad.cs) for the shared
-    /// pattern/rationale. Fixed 5 slots, same as Everest 60.</summary>
-    private void MkRegisterProfileLaunchWatchers()
+    /// pattern/rationale.</summary>
+    private void MkRegisterProfileLaunchWatchers(List<int> existing)
     {
         const string scope = "Mk:";
         var currentKeys = new HashSet<string>();
-        for (int slot = 1; slot <= 5; slot++)
+        foreach (var slot in existing)
         {
             string? exe = _mkStore.GetSetting($"profile.{slot}.launchExe");
             if (string.IsNullOrWhiteSpace(exe)) continue;
@@ -135,7 +177,7 @@ public partial class MainWindow
         try
         {
             if (LstMkProfile.ItemsSource is List<MkProfileItem> items)
-                LstMkProfile.SelectedItem = items.Find(x => x.Slot == slot) ?? items[0];
+                LstMkProfile.SelectedItem = items.Find(x => x.Slot == slot && !x.IsNew) ?? items[0];
         }
         finally { _mkSuppressProfile = false; }
     }
@@ -152,6 +194,18 @@ public partial class MainWindow
     {
         if (_mkSuppressProfile) return;
         if (LstMkProfile.SelectedItem is not MkProfileItem pi) return;
+
+        if (pi.IsNew)
+        {
+            // Create empty profile (mirrors LstEvProfile_SelectionChanged) — no
+            // placeholder Remap/Lighting rows needed, MkReloadProfile below already
+            // falls back to defaults for a slot with no saved state.
+            _mkStore.MarkProfileExists(pi.Slot);
+            LogMakalu($"[UI ] New empty Makalu profile created: slot {pi.Slot}");
+            MkRefreshProfiles();
+            MkSelectProfileSlot(pi.Slot);
+        }
+
         _mkStore.SetCurrentProfile(pi.Slot);
         LogMakalu($"[UI ] Makalu profile selected: {pi.Slot}");
         MkReloadProfile(pi.Slot);
@@ -228,6 +282,16 @@ public partial class MainWindow
     private void BtnMkDeleteProfile_Click(object sender, RoutedEventArgs e)
     {
         int slot = MkCurrentProfile();
+        // Cannot delete the last real profile — same guard as Everest/DisplayPad,
+        // needed now that the list only shows configured slots (2026-07-29): deleting
+        // down to zero would leave nothing for MkRefreshProfiles's "ensure profile 1"
+        // fallback to select.
+        if (_mkStore.GetExistingProfiles().Count <= 1)
+        {
+            MessageBox.Show(Loc.Get("delete_profile_last"),
+                Loc.Get("delete_profile"), MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         string profileName = _mkStore.GetProfileName(slot) ?? Loc.Get("profile_n", slot);
         var res = MessageBox.Show(
             Loc.Get("delete_profile_confirm", profileName),
@@ -238,13 +302,13 @@ public partial class MainWindow
         _mkStore.ClearProfile(slot);
         LogMakalu($"[UI ] Makalu profile {slot} deleted.");
         MkRefreshProfiles();
-        MkSelectProfileSlot(slot);
-        MkReloadProfile(slot);
+        int fallback = _mkStore.GetExistingProfiles().DefaultIfEmpty(1).First();
+        MkSelectProfileSlot(fallback);
+        MkReloadProfile(fallback);
     }
 
     /// <summary>Gear-icon popup for a Makalu profile row (see ProfileGear_Click in
-    /// MainWindow.xaml.cs). Fixed 5 slots, no "last profile" guard — same as
-    /// <see cref="BtnMkDeleteProfile_Click"/>, "delete" just wipes the slot in place.
+    /// MainWindow.xaml.cs). Same "last profile" guard as <see cref="BtnMkDeleteProfile_Click"/>.
     /// Also links an executable whose launch auto-switches to this profile (see
     /// K2.Core.Services.ProfileLaunchWatcher, registered from <see cref="MkRefreshProfiles"/>).</summary>
     private void MkShowProfileGear(MkProfileItem pi)
@@ -256,6 +320,12 @@ public partial class MainWindow
 
         if (dlg.DeleteRequested)
         {
+            if (_mkStore.GetExistingProfiles().Count <= 1)
+            {
+                MessageBox.Show(Loc.Get("delete_profile_last"),
+                    Loc.Get("delete_profile"), MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
             var res = MessageBox.Show(
                 Loc.Get("delete_profile_confirm", currentName),
                 Loc.Get("delete_profile"),
@@ -266,8 +336,9 @@ public partial class MainWindow
             _mkStore.SetSetting($"profile.{pi.Slot}.launchExe", "");
             LogMakalu($"[UI ] Makalu profile {pi.Slot} deleted (gear).");
             MkRefreshProfiles();
-            MkSelectProfileSlot(pi.Slot);
-            MkReloadProfile(pi.Slot);
+            int fallback = _mkStore.GetExistingProfiles().DefaultIfEmpty(1).First();
+            MkSelectProfileSlot(fallback);
+            MkReloadProfile(fallback);
             return;
         }
 
@@ -289,25 +360,31 @@ public partial class MainWindow
         MkReloadProfile(slot);
     }
 
-    /// <summary>Resets the currently selected profile's button remap, lighting, DPI and
-    /// device settings back to K2's defaults and re-applies them to the mouse if
+    /// <summary>Wipes EVERY Makalu profile back to K2's defaults: other profiles are
+    /// deleted outright (mirrors BtnMkDeleteProfile_Click, full wipe — remap/lighting/DPI/
+    /// settings/name), the current one keeps its name but has its button remap, lighting,
+    /// DPI and device settings reset to K2's defaults and re-applied to the mouse if
     /// connected (see MakaluRgbSettingsPanel.RestoreDefaults / MakaluDpiRemapPanel.
     /// MkReloadRemap, which falls back to MakaluRemapData.RemapDefaults once the stored
-    /// remap rows are gone).</summary>
+    /// remap rows are gone). User request 2026-07-29 (previously only reset the current
+    /// profile).</summary>
     private void BtnMkRestoreDefaults_Click(object sender, RoutedEventArgs e)
     {
-        int slot = MkCurrentProfile();
-        string profileName = _mkStore.GetProfileName(slot) ?? Loc.Get("profile_n", slot);
         var res = MessageBox.Show(
-            Loc.Get("restore_defaults_profile_confirm", profileName),
+            Loc.Get("restore_defaults_device_confirm", Loc.Get("tab_makalu")),
             Loc.Get("restore_defaults"),
             MessageBoxButton.OKCancel,
             MessageBoxImage.Warning);
         if (res != MessageBoxResult.OK) return;
+
+        int slot = MkCurrentProfile();
+        foreach (var s in _mkStore.GetExistingProfiles())
+            if (s != slot) _mkStore.ClearProfile(s);
+
         _mkStore.ResetKeyRemap(slot);
         MkRgbSettings.RestoreDefaults();
         MkDpiRemap.MkReloadRemap(slot);
-        LogMakalu($"[UI ] Makalu profile {slot} restored to defaults.");
+        LogMakalu($"[UI ] Makalu restored to factory defaults (all profiles, lighting, DPI and key remap).");
         MkRefreshProfiles();
     }
 
@@ -454,8 +531,25 @@ public partial class MainWindow
                 return;
             }
 
+            // Two possible shapes here (2026-07-29 fix — the old code only understood
+            // #2 below, so a genuine Base Camp XML export silently imported nothing):
+            //  1) Real Base Camp shape (confirmed via decompiled BaseCamp.Data classes,
+            //     same wrapper/item-class-name convention as every other device):
+            //     <MakaluKeyBindings><MakaluKeyBinding>.../<MakaluKeyBindings>,
+            //     <MakaluLightings><MakaluLighting> (one row per effect slot, pick
+            //     IsEffectSelected="true"), <MakaluSettings><MakaluSetting> with
+            //     DPI nested inside as <lstDPI><DPILevel>.
+            //  2) K2's own OLD flat shape (MkProfileExporter, pre-2026-07-29): the
+            //     wrapper name IS the (single, repeated-at-root) item, no nesting,
+            //     DPI as root-level <DPILevels> siblings. Kept as a fallback so
+            //     previously-exported K2 files still import (same convention as
+            //     the Everest/Everest 60 BC-XML fixes).
             int remapped = 0;
-            foreach (var b in root.Descendants("MakaluKeyBindings"))
+            var kbWrapper = root.Element("MakaluKeyBindings");
+            var kbItems = kbWrapper?.Elements("MakaluKeyBinding").ToList() is { Count: > 0 } wrapped
+                ? wrapped
+                : root.Elements("MakaluKeyBindings").ToList();
+            foreach (var b in kbItems)
             {
                 if (!int.TryParse(b.Element("KeyId")?.Value, out int btnIdx)) continue;
                 string? functionType = b.Element("FunctionType")?.Value;
@@ -469,40 +563,76 @@ public partial class MainWindow
                 remapped++;
             }
 
-            var lightingEl = root.Element("MakaluLightings");
+            var lightWrapper = root.Element("MakaluLightings");
+            var lightItems = lightWrapper?.Elements("MakaluLighting").ToList();
+            var lightingEl = lightItems is { Count: > 0 }
+                ? (lightItems.FirstOrDefault(x => (x.Element("IsEffectSelected")?.Value ?? "")
+                        .Equals("true", StringComparison.OrdinalIgnoreCase)) ?? lightItems[0])
+                : lightWrapper; // old flat K2 shape: the wrapper IS the single item
             if (lightingEl is not null)
             {
                 string effectName = lightingEl.Element("EffectName")?.Value ?? "Static";
                 bool customActive = effectName.Equals("Custom", StringComparison.OrdinalIgnoreCase);
-                var eff = Enum.TryParse<MakaluProtocol.Effect>(effectName, true, out var e2) ? e2 : MakaluProtocol.Effect.Static;
+                bool isRainbowColorMode = (lightingEl.Element("ColorType")?.Value ?? "")
+                    .Equals("RAINBOW", StringComparison.OrdinalIgnoreCase);
+                var eff = BaseCampDbImporter.TranslateMakaluEffectName(effectName, isRainbowColorMode);
                 int color1 = BaseCampDbImporter.ParseBcColor(lightingEl.Element("DualColor1")?.Value ?? lightingEl.Element("SingleColor")?.Value, 0x900000);
                 int color2 = BaseCampDbImporter.ParseBcColor(lightingEl.Element("DualColor2")?.Value, 0);
                 int speedIdx = int.TryParse(lightingEl.Element("Speed")?.Value, out var sp) ? sp : 1;
                 int dirIdx = int.TryParse(lightingEl.Element("Direction")?.Value, out var di) ? di : 0;
                 double bright = int.TryParse(lightingEl.Element("Brightness")?.Value, out var br) ? br : 100;
+                // Per-LED Custom colors (8 LEDs) — the payload was dropped here entirely
+                // until 2026-07-26, so a Custom profile imported from XML came in black.
+                // Same element name Base Camp and MkProfileExporter both write.
+                var customColors = BaseCampDbImporter.ParseMakaluCustomColors(
+                    lightingEl.Element("CustomMakaluLightings")?.Value);
                 _mkStore.SaveLighting(slot, new MakaluLightingRecord(
-                    (int)eff, color1, color2, speedIdx, dirIdx, bright, customActive, new int[8]));
+                    (int)eff, color1, color2, speedIdx, dirIdx, bright, customActive, customColors));
             }
 
-            var settingsEl = root.Element("MakaluSettings");
+            var settingsWrapper = root.Element("MakaluSettings");
+            var innerSetting = settingsWrapper?.Element("MakaluSetting");
+            var settingsEl = innerSetting ?? settingsWrapper; // old flat K2 shape: wrapper IS the item
+            var dpiItems = innerSetting?.Element("lstDPI")?.Elements("DPILevel").ToList()
+                ?? root.Elements("DPILevels").ToList(); // old flat K2 shape: root-level siblings
             if (settingsEl is not null)
             {
-                int pollHz = int.TryParse(settingsEl.Element("PollingRate")?.Value, out var ph) ? ph : 1000;
+                int pollHz = BaseCampDbImporter.NormalizeMakaluPollingHz(
+                    int.TryParse(settingsEl.Element("PollingRate")?.Value, out var ph) ? ph : 1000);
                 int debMs = int.TryParse(settingsEl.Element("ButtonResponseTime")?.Value, out var dm) ? dm : 2;
                 bool angleOn = settingsEl.Element("AngleSnapping")?.Value == "On";
-                bool liftHigh = settingsEl.Element("LiftOffDistance")?.Value == "High";
-                _mkStore.SaveSettings(slot, new MakaluDeviceSettingsRecord(pollHz, debMs, angleOn, liftHigh));
+                string liftOff = settingsEl.Element("LiftOffDistance")?.Value ?? "Low";
+                bool liftHigh = liftOff.Equals("High", StringComparison.OrdinalIgnoreCase);
+                bool liftCustom = liftOff.Equals("Custom", StringComparison.OrdinalIgnoreCase);
+                int sensitivity = int.TryParse(settingsEl.Element("Sensitivity")?.Value, out var sv)
+                    ? Math.Clamp(sv, MakaluOsMouseSettings.ScaleMin, MakaluOsMouseSettings.ScaleMax) : 10;
+                int clickSpeed = int.TryParse(settingsEl.Element("ClickSpeed")?.Value, out var cs)
+                    ? Math.Clamp(cs, MakaluOsMouseSettings.ScaleMin, MakaluOsMouseSettings.ScaleMax) : 0;
+                _mkStore.SaveSettings(slot, new MakaluDeviceSettingsRecord(
+                    pollHz, debMs, angleOn, liftHigh, liftCustom, Sensitivity: sensitivity, ClickSpeed: clickSpeed));
             }
 
-            var dpiEls = root.Elements("DPILevels").ToList();
-            if (dpiEls.Count > 0)
+            if (dpiItems.Count > 0)
             {
-                var levels = new int[5];
+                // Exactly as many levels as the file defines (1-5) — NOT padded to 5,
+                // same fix as the DB import path (user report 2026-07-29).
+                int count = Math.Clamp(dpiItems.Count, MakaluProtocol.DpiLevelCountMin, MakaluProtocol.DpiLevelCountMax);
+                // Real Base Camp shape marks the active level via the settings element's
+                // own SelectedDPILevelId (matched against each item's DPILevelId) — its
+                // <DPILevel> items have no per-item "IsSelected" at all. The old flat K2
+                // shape's <DPILevels> items DO carry "IsSelected" directly (no separate
+                // settings-level id to cross-reference) — try that first, then fall back
+                // to the id cross-reference.
+                int selectedDpiLevelId = int.TryParse(settingsEl?.Element("SelectedDPILevelId")?.Value, out var sdi) ? sdi : -1;
+                var levels = new int[count];
                 int active = 0;
-                for (int i = 0; i < dpiEls.Count && i < 5; i++)
+                for (int i = 0; i < count; i++)
                 {
-                    levels[i] = int.TryParse(dpiEls[i].Element("DPI")?.Value, out var d) ? d : levels[Math.Max(0, i - 1)];
-                    if (dpiEls[i].Element("IsSelected")?.Value == "true") active = i;
+                    levels[i] = int.TryParse(dpiItems[i].Element("DPI")?.Value, out var d) ? d : (i > 0 ? levels[i - 1] : 0);
+                    bool isSelectedFlag = (dpiItems[i].Element("IsSelected")?.Value ?? "").Equals("true", StringComparison.OrdinalIgnoreCase);
+                    bool isSelectedById = selectedDpiLevelId >= 0
+                        && int.TryParse(dpiItems[i].Element("DPILevelId")?.Value, out var lvlId) && lvlId == selectedDpiLevelId;
+                    if (isSelectedFlag || isSelectedById) active = i;
                 }
                 _mkStore.SaveDpi(slot, new MakaluDpiRecord(levels, active));
             }
@@ -532,6 +662,12 @@ public partial class MainWindow
             .ToList();
         int? currentSlot = LstMkProfile.SelectedItem is MkProfileItem pi ? pi.Slot : null;
 
+        // Real DeviceType string (confirmed 2026-07-29 against a real BaseCamp.db —
+        // see BaseCampDbImporter.ReadMakaluProfiles's doc comment), so a BC-compatible
+        // export at least tags the right model even though MakaluMax itself is still
+        // an unverified same-convention guess.
+        string deviceType = _mkInfo.Model == MakaluService.Model.MakaluMax ? "MakaluMax" : "Makalu67";
+
         ExportProfileHelper.Run(
             owner: this,
             deviceLabel: "Makalu",
@@ -540,8 +676,8 @@ public partial class MainWindow
             exportOne: (slot, name, bcCompatible, path) =>
             {
                 var result = bcCompatible
-                    ? MkProfileExporter.ExportBaseCamp(_mkStore, slot, name, path)
-                    : MkProfileExporter.ExportK2(_mkStore, slot, name, path);
+                    ? MkProfileExporter.ExportBaseCamp(_mkStore, slot, name, path, deviceType)
+                    : MkProfileExporter.ExportK2(_mkStore, slot, name, path, deviceType);
                 return (result.Exported, result.SkippedActions, result.SkipReasons);
             },
             log: LogMakalu,
@@ -582,6 +718,7 @@ public partial class MainWindow
             ShowMkSection(panel);
 
         MkUpdateMouseImage(isLighting: rb.Name == nameof(RbMkSecRgb));
+        UpdateMkCustomSquaresVisibility();
     }
 
     /// <summary>Swaps the device image per user request (2026-07-13): the
@@ -600,10 +737,11 @@ public partial class MainWindow
         // extension resolves for you — has no base to resolve against and silently
         // fails to load. The explicit "pack://application:,,,/" authority is the
         // reliable form for a Resource-build-action file inside this same assembly.
-        // Ring section hidden for now (2026-07-14, user request) — always use the
-        // opaque rainbow image so the transparent ring cutout is never exposed;
-        // the ring still renders behind it (BuildMkLedRing), just not visible.
-        string file = "makalu_mouse_rainbow.png";
+        // The 2026-07-14 "hide ring for now" detour (this used to ignore isLighting
+        // and always show the opaque rainbow photo) is over: the Custom Lighting
+        // squares added 2026-07-27 point leader lines at the ring, so it needs to
+        // actually be visible again while the Lighting section is active.
+        string file = isLighting ? "makalu_mouse.png" : "makalu_mouse_rainbow.png";
         ImgMkMouse.Source = new BitmapImage(new Uri($"pack://application:,,,/Assets/{file}"));
     }
 
@@ -650,9 +788,150 @@ public partial class MainWindow
     private Dictionary<int, (double X, double Y)> MkHotspotPos =>
         _mkInfo.Model == MakaluService.Model.MakaluMax ? MkHotspotPosMax : MkHotspotPos67;
 
+    /// <summary>Hotspot Ellipses by button index — kept around (unlike the local-only
+    /// <c>dot</c> in <see cref="BuildMkHotspots"/> before this) so a physical press
+    /// (<see cref="MkHighlightHotspot"/>) can find and fill the right circle.</summary>
+    private readonly Dictionary<int, Ellipse> _mkHotspotDots = new();
+
+    /// <summary>Resting hotspot fill — also the "un-pressed" target for
+    /// <see cref="MkHighlightHotspot"/>.</summary>
+    private static readonly SolidColorBrush s_mkHotspotRestBrush = new(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
+
+    /// <summary>Press-flash fill — same red as the keyboard devices' press highlight.</summary>
+    private static readonly SolidColorBrush s_mkHotspotPressBrush = new(Color.FromRgb(0x90, 0x00, 0x00));
+
+    /// <summary>Standard mouse button (Left/Right/Middle/Back/Forward — the five Windows
+    /// itself can identify, see RawMouseActivityWatcher) → this model's hotspot index.
+    /// Back/Forward sit at different indices per model (MkHotspotPos67 vs MkHotspotPosMax).</summary>
+    private int? MkHotspotIndexFor(RawMouseActivityWatcher.MouseButton btn)
+    {
+        bool max = _mkInfo.Model == MakaluService.Model.MakaluMax;
+        return btn switch
+        {
+            RawMouseActivityWatcher.MouseButton.Left    => 1,
+            RawMouseActivityWatcher.MouseButton.Right   => 2,
+            RawMouseActivityWatcher.MouseButton.Middle  => 3,
+            RawMouseActivityWatcher.MouseButton.Back    => max ? 8 : 4,
+            RawMouseActivityWatcher.MouseButton.Forward => max ? 7 : 5,
+            _ => null,
+        };
+    }
+
+    /// <summary>Raw Input told us a genuine Makalu click happened — see
+    /// RawMouseActivityWatcher's doc comment for why this is the only way to see a real
+    /// press (no vendor HID readback exists). Wired from MainWindow.xaml.cs's WndProc.</summary>
+    private void OnMakaluRawButton(RawMouseActivityWatcher.MouseButton btn, bool pressed)
+    {
+        if (MkHotspotIndexFor(btn) is int idx) MkHighlightHotspot(idx, pressed);
+    }
+
+    /// <summary>Fills (or restores) the on-screen hotspot circle for a physical Makalu
+    /// button press — user request 2026-07-27, "fill the circle red" mirroring the keyboard
+    /// devices' highlight. Plain direct Fill assignment is safe here: nothing else ever
+    /// touches a hotspot Ellipse's Fill after BuildMkHotspots creates it.</summary>
+    private void MkHighlightHotspot(int btnIdx, bool pressed)
+    {
+        if (!_mkHotspotDots.TryGetValue(btnIdx, out var dot)) return;
+        dot.Fill = pressed ? s_mkHotspotPressBrush : s_mkHotspotRestBrush;
+    }
+
+    /// <summary>This model's DPI-button hotspot index (see MkHotspotPos67/MkHotspotPosMax).</summary>
+    private int MkDpiHotspotIndex => _mkInfo.Model == MakaluService.Model.MakaluMax ? 4 : 6;
+
+    /// <summary>Index MkDpiFlashTimer_Tick un-highlights — set right before the timer
+    /// (re)starts in <see cref="OnMakaluDpiPressed"/>.</summary>
+    private int _mkDpiFlashIndex;
+
+    /// <summary>MakaluDpiButtonWatcher told us the DPI button fired — see that class's doc
+    /// comment for why this is a timed flash rather than a press/release pair (the button's
+    /// own HID report has no release edge).</summary>
+    private void OnMakaluDpiPressed()
+    {
+        _mkDpiFlashIndex = MkDpiHotspotIndex;
+        MkHighlightHotspot(_mkDpiFlashIndex, true);
+
+        if (_mkDpiFlashTimer is null)
+        {
+            _mkDpiFlashTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+            _mkDpiFlashTimer.Tick += MkDpiFlashTimer_Tick;
+        }
+        _mkDpiFlashTimer.Stop();
+        _mkDpiFlashTimer.Start();
+    }
+
+    private void MkDpiFlashTimer_Tick(object? sender, EventArgs e)
+    {
+        _mkDpiFlashTimer!.Stop();
+        MkHighlightHotspot(_mkDpiFlashIndex, false);
+    }
+
+    /// <summary>MakaluDpiButtonWatcher told us a button with a "software action" function
+    /// fired (see MakaluProtocol's doc comment above CategoryRunProgramOrFolder for the full
+    /// protocol). Only Run Program/Open Folder (category 0x23) is implemented — anything else
+    /// is logged so a future session has real button/category pairs to work from instead of
+    /// silently doing nothing.</summary>
+    private void OnMakaluButtonEvent(byte category, int buttonIndex1Based)
+    {
+        if (category != MakaluProtocol.CategoryRunProgramOrFolder)
+        {
+            LogMakalu($"[Makalu] button {buttonIndex1Based}: software action category 0x{category:X2} not yet implemented");
+            return;
+        }
+        System.Threading.Tasks.Task.Run(() => RunMakaluButtonAction(buttonIndex1Based));
+    }
+
+    /// <summary>Acks the notification, reads back the stored path, and launches it —
+    /// off the UI thread (blocking HID round-trip + Process.Start). Opens its own
+    /// short-lived handle on the config collection, same open-per-call pattern as
+    /// MakaluService.WithDevice; doesn't touch the DPI-button watcher's own persistent
+    /// handle (a different HID collection).</summary>
+    private void RunMakaluButtonAction(int buttonIndex1Based)
+    {
+        void Log(string msg) => Dispatcher.BeginInvoke(() => LogMakalu(msg));
+
+        var found = MakaluHidNative.FindDevice();
+        if (found is null) { Log("[Makalu] button action: device not connected"); return; }
+        using var h = MakaluHidNative.Open(found.Value.Path);
+        if (h is null || h.IsInvalid) { Log("[Makalu] button action: open failed"); return; }
+
+        if (!MakaluProtocol.AckButtonEvent(h, buttonIndex1Based))
+        {
+            Log($"[Makalu] button {buttonIndex1Based}: ack failed");
+            return;
+        }
+        System.Threading.Thread.Sleep(20);
+
+        string? path = MakaluProtocol.ReadButtonEventPayload(h);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            Log($"[Makalu] button {buttonIndex1Based}: no payload read back");
+            return;
+        }
+
+        Log($"[Makalu] button {buttonIndex1Based}: opening \"{path}\"");
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Log($"[Makalu] button {buttonIndex1Based}: failed to open \"{path}\": {ex.Message}");
+        }
+    }
+
+    /// <summary>Re-resolves every hotspot dot's Stroke after a live accent theme switch
+    /// — see the AccentCatalog.Applied subscription in InitMakaluModule.</summary>
+    private void RefreshMkHotspotAccentColors()
+    {
+        var brush = (Brush)FindResource("K2AccentBrush");
+        foreach (var dot in _mkHotspotDots.Values)
+            dot.Stroke = brush;
+    }
+
     private void BuildMkHotspots()
     {
         CvsMkHotspots.Children.Clear();
+        _mkHotspotDots.Clear();
         BuildMkLedRing();
         var names = MakaluRemapData.BtnNames(_mkInfo.Model);
         foreach (var kv in MkHotspotPos)
@@ -662,7 +941,7 @@ public partial class MainWindow
             var dot = new Ellipse
             {
                 Width = 22, Height = 22,
-                Fill = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF)),
+                Fill = s_mkHotspotRestBrush,
                 Stroke = (Brush)FindResource("K2AccentBrush"),
                 StrokeThickness = 1.5,
                 Cursor = Cursors.Hand,
@@ -672,6 +951,7 @@ public partial class MainWindow
             Canvas.SetLeft(dot, x - dot.Width / 2);
             Canvas.SetTop(dot, y - dot.Height / 2);
             CvsMkHotspots.Children.Add(dot);
+            _mkHotspotDots[btnIdx] = dot;
         }
     }
 
@@ -799,7 +1079,216 @@ public partial class MainWindow
         Canvas.SetTop(_mkLedRingHost, MkRingTop);
         CvsMkRingBack.Children.Add(_mkLedRingHost);
 
+        BuildMkCustomSquares();
         MkUpdateLedRingPreview();
+    }
+
+    // ------------------------------------------------------------
+    // Custom Lighting squares — 8 clickable swatches placed beside the ring on
+    // the device image, each with a leader line to its physical LED's ring
+    // sector (user request 2026-07-27, matches Base Camp's own reference photo:
+    // colored squares flanking the ring, connected to their sector by a line).
+    // Data (selection/colors/persistence/device-apply) is owned by
+    // MkRgbSettings (MakaluRgbSettingsPanel); this file only owns the VISUAL
+    // overlay + click routing — same split as Everest 60's border squares
+    // (MainWindow.Everest60.cs) vs. its own RGB panel.
+    // ------------------------------------------------------------
+
+    /// <summary>CvsMkDeviceHost's own width (MainWindow.xaml) — wide enough to flank the
+    /// 190px mouse image (offset by <see cref="MkDeviceImageOffsetX"/>) with squares on
+    /// both sides.</summary>
+    private const double MkDeviceHostWidth = 330;
+
+    /// <summary>CvsMkRingBack/ImgMkMouse/CvsMkHotspots' shared Canvas.Left within
+    /// CvsMkDeviceHost (MainWindow.xaml) — <see cref="MkRingLeft"/>/<see cref="MkRingTop"/>
+    /// are in THEIR local space, so this offset converts a ring coordinate into
+    /// CvsMkCustomSquares' host-wide space for the leader lines below.</summary>
+    private const double MkDeviceImageOffsetX = 70;
+
+    private const double MkCustomSquareSize = 26;
+    private const double MkCustomSquareMarginX = 8; // gap from the host's own left/right edge to each square
+
+    /// <summary>One square Button per physical LED (0-7), indexed by LED id.</summary>
+    private readonly Button[] _mkCustomSquares = new Button[8];
+
+    /// <summary>Builds the 8 squares + their leader lines into CvsMkCustomSquares, 4 on
+    /// each side, in the same visual top-to-bottom order as the ring's own cells
+    /// (<see cref="MkCellLed"/>) so both always agree. Rebuilt whenever the ring itself
+    /// is (called from <see cref="BuildMkLedRing"/>) — cheap, and the geometry never
+    /// actually changes per model (ring position isn't model-dependent, see
+    /// MkRingLeft/Top's doc), so this is just "rebuild alongside", not a real need.</summary>
+    private void BuildMkCustomSquares()
+    {
+        CvsMkCustomSquares.Children.Clear();
+        for (int c = 0; c < 8; c++)
+        {
+            bool left = c < 4;
+            int row = left ? c : c - 4; // 0=top row of that column .. 3=bottom row, matches MkCellLed
+            BuildMkCustomSquareAndLine(led: MkCellLed[c], row: row, left: left);
+        }
+    }
+
+    private void BuildMkCustomSquareAndLine(int led, int row, bool left)
+    {
+        double cellHeight = MkRingHeight / 4;
+        double yCenter = MkRingTop + (row + 0.5) * cellHeight;
+        double squareY = yCenter - MkCustomSquareSize / 2;
+        double squareX = left
+            ? MkCustomSquareMarginX
+            : MkDeviceHostWidth - MkCustomSquareMarginX - MkCustomSquareSize;
+        double ringEdgeX = MkDeviceImageOffsetX + (left ? MkRingLeft : MkRingLeft + MkRingWidth);
+        double lineStartX = left ? squareX + MkCustomSquareSize : squareX;
+
+        var line = new Line
+        {
+            X1 = lineStartX, Y1 = yCenter, X2 = ringEdgeX, Y2 = yCenter,
+            Stroke = (Brush)FindResource("K2TextMutedBrush"),
+            StrokeThickness = 1,
+            IsHitTestVisible = false,
+        };
+        CvsMkCustomSquares.Children.Add(line);
+
+        // Plain default Button style (CornerRadius 7, tuned for ~30px swatches) —
+        // NOT K2ColorSquareButton, which is tuned for the ~12px border-LED squares
+        // (see K2Theme.xaml's doc comment). Fixed muted border always — no
+        // "selected" state to highlight any more (2026-07-27, user feedback: these
+        // are plain click-to-paint targets, not a select-then-apply flow).
+        var btn = new Button
+        {
+            Width = MkCustomSquareSize,
+            Height = MkCustomSquareSize,
+            BorderThickness = new Thickness(2),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x45, 0x45, 0x4F)),
+            Tag = led,
+        };
+        btn.Click += MkCustomSquare_Click;
+        Canvas.SetLeft(btn, squareX);
+        Canvas.SetTop(btn, squareY);
+        CvsMkCustomSquares.Children.Add(btn);
+        _mkCustomSquares[led] = btn;
+    }
+
+    /// <summary>Paints one LED with the settings panel's current brush color and commits
+    /// it (persist + device apply) right away — a plain click, no selection step.</summary>
+    private void MkCustomSquare_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: int led }) return;
+        MkRgbSettings.PaintLed(led);
+        MkRgbSettings.CommitCustomPaint();
+    }
+
+    /// <summary>Repaints one square's fill from MkRgbSettings' current custom colors.</summary>
+    private void MkUpdateCustomSquareVisual(int led)
+    {
+        var btn = _mkCustomSquares[led];
+        if (btn is null) return;
+        var (r, g, b) = MkRgbSettings.GetPreviewState().CustomColors[led];
+        btn.Background = new SolidColorBrush(Color.FromRgb(r, g, b));
+    }
+
+    private void MkUpdateAllCustomSquareVisuals()
+    {
+        for (int i = 0; i < 8; i++) MkUpdateCustomSquareVisual(i);
+    }
+
+    /// <summary>Shows the square overlay only while Custom is the active Lighting effect
+    /// AND the Lighting section itself is on screen (mirrors Everest 60's
+    /// UpdateEv60BorderOverlayVisibility) — called from MkSection_Changed and from
+    /// MkUpdateLedRingPreview (MkRgbSettings.PreviewChanged), so it stays correct across
+    /// both a section switch and a color/effect change.</summary>
+    private void UpdateMkCustomSquaresVisibility()
+    {
+        if (CvsMkCustomSquares is null || MkRgbSettings is null) return;
+        bool show = MkRgbSettings.IsCustomActive && ReferenceEquals(_activeMkSection, MkRgbSettings.SecRgb);
+        CvsMkCustomSquares.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (show) MkUpdateAllCustomSquareVisuals();
+    }
+
+    // ------------------------------------------------------------
+    // Rubber-band multi-select over the squares — drag a rectangle across
+    // several to paint every one it touches with the current brush color in one
+    // go (user request 2026-07-27, "enable multi-selection"), mirrors Everest
+    // Max/60's rubber-band paint (MainWindow.CustomLighting.cs's
+    // EvDeviceBox_MouseDown/Move/Up). Wired to BdrMkDeviceBox (the outer,
+    // opaque-background Border) rather than CvsMkCustomSquares itself: a Canvas
+    // with no Background isn't hit-testable on its own empty area (only its
+    // children are), so a drag starting between squares — not exactly on one —
+    // never reached it. The Border's real Background makes the whole device box
+    // hit-testable regardless of what's underneath at any given point.
+    // ------------------------------------------------------------
+
+    private Point _mkRubberStart;
+    private bool _mkRubberTracking;
+    private bool _mkRubberActive;
+
+    private void BdrMkDeviceBox_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (MkRgbSettings is null || !MkRgbSettings.IsCustomActive) return;
+        _mkRubberStart = e.GetPosition(CvsMkCustomSquares);
+        _mkRubberTracking = true;
+        _mkRubberActive = false;
+    }
+
+    private void BdrMkDeviceBox_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_mkRubberTracking) return;
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            CancelMkRubberBand();
+            return;
+        }
+        var p = e.GetPosition(CvsMkCustomSquares);
+        if (!_mkRubberActive)
+        {
+            if (Math.Abs(p.X - _mkRubberStart.X) < 5 && Math.Abs(p.Y - _mkRubberStart.Y) < 5) return;
+            _mkRubberActive = true;
+            RectMkRubberBand.Visibility = Visibility.Visible;
+            // Steal capture from whatever square Button the drag started on, so it
+            // neither clicks on release nor keeps eating our move events.
+            CvsMkCustomSquares.CaptureMouse();
+        }
+        var r = new Rect(_mkRubberStart, p);
+        Canvas.SetLeft(RectMkRubberBand, r.X);
+        Canvas.SetTop(RectMkRubberBand, r.Y);
+        RectMkRubberBand.Width = r.Width;
+        RectMkRubberBand.Height = r.Height;
+    }
+
+    private void BdrMkDeviceBox_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_mkRubberTracking) return;
+        bool wasActive = _mkRubberActive;
+        var rect = wasActive ? new Rect(_mkRubberStart, e.GetPosition(CvsMkCustomSquares)) : Rect.Empty;
+        CancelMkRubberBand();
+        if (!wasActive) return; // plain click: let the Button handle it normally
+        e.Handled = true;       // suppress the click that would otherwise fire on release
+        PaintMkSquaresInRect(rect);
+    }
+
+    private void CancelMkRubberBand()
+    {
+        _mkRubberTracking = false;
+        _mkRubberActive = false;
+        RectMkRubberBand.Visibility = Visibility.Collapsed;
+        if (CvsMkCustomSquares.IsMouseCaptured) CvsMkCustomSquares.ReleaseMouseCapture();
+    }
+
+    /// <summary>Paints every square whose bounds intersect <paramref name="rect"/> (in
+    /// CvsMkCustomSquares' own coordinate space) with the current brush color, then
+    /// commits once for all of them — SetLightingCustom always sends all 8 LED colors
+    /// in one packet anyway, so there's no benefit to committing per-square.</summary>
+    private void PaintMkSquaresInRect(Rect rect)
+    {
+        bool any = false;
+        foreach (var btn in _mkCustomSquares)
+        {
+            if (btn is null || btn.Tag is not int led) continue;
+            var bounds = new Rect(Canvas.GetLeft(btn), Canvas.GetTop(btn), btn.Width, btn.Height);
+            if (!rect.IntersectsWith(bounds)) continue;
+            MkRgbSettings.PaintLed(led);
+            any = true;
+        }
+        if (any) MkRgbSettings.CommitCustomPaint();
     }
 
     private static readonly double[] MkRingSpeedSeconds = { 2.6, 1.6, 0.9 }; // slow/medium/fast
@@ -867,6 +1356,66 @@ public partial class MainWindow
         _mkRainbowChaseTimer = null;
     }
 
+    /// <summary>Single-color Breathing: the ring fades from black up to Color1 and back
+    /// down to black, repeating — "colore scelto al nero" (user request 2026-07-27). A
+    /// single WPF ColorAnimation with AutoReverse does the whole pulse for free, same
+    /// technique the old Color1↔Color2 crossfade used, just with black as the other
+    /// endpoint instead of a second user color (Breathing's Double option was dropped in
+    /// the same request — see MakaluRgbSettingsPanel.CapsFor's doc).</summary>
+    private void StartMkBreathingSingle(double dur, int color1, double brightnessPct)
+    {
+        var brush = new SolidColorBrush(Colors.Black);
+        foreach (var cell in _mkLedCells) cell!.Background = brush;
+        var anim = new ColorAnimation(Colors.Black, MkScaleColor(color1, brightnessPct), TimeSpan.FromSeconds(dur))
+            { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever };
+        brush.BeginAnimation(SolidColorBrush.ColorProperty, anim);
+    }
+
+    /// <summary>Whether a <see cref="StartMkBreathingRainbow"/> chain is still supposed to
+    /// keep going — checked by each animation's Completed handler before queuing the next
+    /// one, since there's no RepeatBehavior.Forever equivalent when the target color
+    /// changes every cycle (see that method's doc).</summary>
+    private bool _mkBreathingRainbowActive;
+
+    /// <summary>Rainbow Breathing (the old separate "RGB Breathing" effect, now reached via
+    /// the Rainbow radio under Breathing — see MakaluRgbSettingsPanel.ResolveMkWireEffect):
+    /// identical technique to <see cref="StartMkBreathingSingle"/> (a black↔peak
+    /// ColorAnimation, AutoReverse) — user feedback 2026-07-27 that an earlier
+    /// DispatcherTimer-driven version "didn't work very well" (visibly less smooth than the
+    /// native animation). The only difference: each full cycle picks a NEW peak hue instead
+    /// of repeating the same one forever, chained via the animation's Completed event since
+    /// RepeatBehavior.Forever can't target an ever-changing color — "un colore unico al
+    /// nero, a un altro colore, al nero, e così via".</summary>
+    private void StartMkBreathingRainbow(double dur, double brightnessPct)
+    {
+        StopMkBreathingRainbow();
+        _mkBreathingRainbowActive = true;
+        var brush = new SolidColorBrush(Colors.Black);
+        foreach (var cell in _mkLedCells) cell!.Background = brush;
+
+        double hue = 0;
+        void PlayNext()
+        {
+            if (!_mkBreathingRainbowActive) return;
+            var peak = MkHueColor(hue, brightnessPct);
+            var anim = new ColorAnimation(Colors.Black, peak, TimeSpan.FromSeconds(dur)) { AutoReverse = true };
+            anim.Completed += (_, _) =>
+            {
+                // Golden-angle-ish step so consecutive breaths land on visually distinct
+                // hues instead of a slow, barely-noticeable drift around the wheel.
+                hue = (hue + 137.5) % 360;
+                PlayNext();
+            };
+            brush.BeginAnimation(SolidColorBrush.ColorProperty, anim);
+        }
+        PlayNext();
+    }
+
+    private void StopMkBreathingRainbow()
+    {
+        _mkBreathingRainbowActive = false;
+    }
+
     /// <summary>Reapplies the 8 cells' brushes/animations from
     /// MkRgbSettings' current state — called on effect/color/speed/
     /// direction/brightness change (MkRgbSettings.PreviewChanged) and
@@ -879,7 +1428,9 @@ public partial class MainWindow
         if (_mkLedRingHost is null || _mkLedCells[0] is null || MkRgbSettings is null) return;
         var s = MkRgbSettings.GetPreviewState();
 
+        UpdateMkCustomSquaresVisibility();
         StopMkRainbowChase();
+        StopMkBreathingRainbow();
         _mkLedRingHost.BeginAnimation(UIElement.OpacityProperty, null);
         _mkLedRingHost.Opacity = 1;
         _mkLedRingHost.Visibility = Visibility.Visible;
@@ -901,8 +1452,24 @@ public partial class MainWindow
             return;
         }
 
-        var caps = MakaluRgbSettingsPanel.CapsFor(s.Effect);
         double dur = MkRingSpeedSeconds[Math.Clamp(s.SpeedIdx, 0, MkRingSpeedSeconds.Length - 1)];
+
+        // Breathing/RgbBreathing are handled explicitly here (not via the caps-based
+        // dispatch below) since 2026-07-27's merge (RgbBreathing folded into Breathing's
+        // own Rainbow radio) gave them bespoke black-based pulse animations — see
+        // StartMkBreathingSingle/StartMkBreathingRainbow's doc comments.
+        if (s.Effect == MakaluProtocol.Effect.Breathing)
+        {
+            StartMkBreathingSingle(dur, s.Color1, s.Brightness);
+            return;
+        }
+        if (s.Effect == MakaluProtocol.Effect.RgbBreathing)
+        {
+            StartMkBreathingRainbow(dur, s.Brightness);
+            return;
+        }
+
+        var caps = MakaluRgbSettingsPanel.CapsFor(s.Effect);
 
         if (caps.Direction) // Rainbow / Color Wave: chase sequence across the 8 discrete LEDs
         {
@@ -910,21 +1477,13 @@ public partial class MainWindow
             _mkRainbowBrightness = s.Brightness;
             StartMkRainbowChase();
         }
-        else if (caps.Color2) // Breathing / Yeti: all 8 cells pulse between the two colors in sync
+        else if (caps.Color2) // Yeti: all 8 cells pulse between the two colors in sync
         {
             var brush = new SolidColorBrush(MkScaleColor(s.Color1, s.Brightness));
             foreach (var cell in _mkLedCells) cell!.Background = brush;
             var anim = new ColorAnimation(MkScaleColor(s.Color1, s.Brightness), MkScaleColor(s.Color2, s.Brightness), TimeSpan.FromSeconds(dur))
                 { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever };
             brush.BeginAnimation(SolidColorBrush.ColorProperty, anim);
-        }
-        else if (caps.Speed) // RGB Breathing: fixed rainbow spread across the 8 LEDs, whole ring breathing in/out
-        {
-            for (int c = 0; c < 8; c++)
-                _mkLedCells[c]!.Background = new SolidColorBrush(MkHueColor(MkCellLed[c] * 45.0, s.Brightness));
-            var anim = new DoubleAnimation(1.0, 0.25, TimeSpan.FromSeconds(dur))
-                { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever };
-            _mkLedRingHost.BeginAnimation(UIElement.OpacityProperty, anim);
         }
         else // Static / Responsive: solid color, no animation
         {
@@ -942,6 +1501,13 @@ public partial class MainWindow
         bool wasConnected = _mkConnected;
         bool connected = _makalu.IsConnected(out var info);
         _mkConnected = connected;
+
+        // Retried every tick (cheap no-op once running) rather than only on the
+        // disconnected->connected edge, so a background read thread that died from a
+        // transient error (see MakaluDpiButtonWatcher.ReadLoop) gets restarted without
+        // needing a full unplug/replug cycle.
+        if (connected) _mkDpiWatcher?.Start();
+        else _mkDpiWatcher?.Stop();
 
         // _mkInfo (and the tab header) must be current BEFORE SetDeviceTabVisible below,
         // since that call triggers RefreshHomeTiles() -> MkHomeImageFile(), which reads
