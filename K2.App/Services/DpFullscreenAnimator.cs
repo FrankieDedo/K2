@@ -11,6 +11,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using K2.Core;
 
 namespace K2.App.Services;
 
@@ -147,6 +148,99 @@ internal static class DpFullscreenAnimator
         }
     }
 
+    /// <summary>
+    /// DEBUG-ONLY: streams a synthetic animated test pattern straight to the raw 800×240 panel
+    /// via <see cref="IDisplayPadClient.TryUploadRawPanel"/>, generating each frame on the fly
+    /// instead of decoding a GIF from disk — used to measure the real sustained frame rate of
+    /// the panel wire protocol (see <c>DpHidNative.StreamLocked</c>'s ~250µs-per-chunk pacing,
+    /// which is a firmware FIFO limit, not a software choice). Shares the same session table as
+    /// <see cref="Start"/>/<see cref="Stop"/>, so this IS the fullscreen slot for the device —
+    /// starting it cancels any playing fullscreen GIF, and <see cref="Stop"/> stops it too.
+    /// Logs a measured fps figure every ~2s via <paramref name="log"/>.
+    /// </summary>
+    public static void StartLiveTest(IDisplayPadClient client, Action<string> log, int deviceId)
+    {
+        if (!client.SupportsRawPanel)
+        {
+            log($"[DP-FS] dev {deviceId}: live test needs the native raw-panel backend — not available here");
+            return;
+        }
+        lock (_lock)
+        {
+            if (_running.TryGetValue(deviceId, out var existing)) existing.Cts.Cancel();
+            var cts = new CancellationTokenSource();
+            _running[deviceId] = new Session { Cts = cts, SourceKey = "__live_test__" };
+            var token = cts.Token;
+            Task.Run(() => RunLiveTestLoop(client, log, deviceId, token), token);
+        }
+    }
+
+    private static void RunLiveTestLoop(IDisplayPadClient client, Action<string> log, int deviceId, CancellationToken token)
+    {
+        int w = DpHidNative.PanelW, h = DpHidNative.PanelH;
+        log($"[DP-FS] dev {deviceId}: LIVE TEST panel stream starting ({w}x{h} synthetic pattern)");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        int frame = 0;
+        long windowStartMs = 0, lastFrameMs = 0;
+        int windowFrames = 0;
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                byte[] panel = BuildTestPatternBgr(w, h, frame);
+                long t0 = sw.ElapsedMilliseconds;
+                if (!client.TryUploadRawPanel(deviceId, panel))
+                {
+                    log($"[DP-FS] dev {deviceId}: live test upload failed, stopping");
+                    return;
+                }
+                lastFrameMs = sw.ElapsedMilliseconds - t0;
+                frame++;
+                windowFrames++;
+                if (sw.ElapsedMilliseconds - windowStartMs >= 2000)
+                {
+                    double fps = windowFrames * 1000.0 / Math.Max(1, sw.ElapsedMilliseconds - windowStartMs);
+                    log($"[DP-FS] dev {deviceId}: live test ~{fps:0.0} fps (last frame {lastFrameMs} ms)");
+                    windowStartMs = sw.ElapsedMilliseconds;
+                    windowFrames = 0;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            log($"[DP-FS] dev {deviceId}: live test stopped ({ex.Message})");
+        }
+    }
+
+    /// <summary>Sweeping vertical bar over a diagonal gradient — cheap to generate, and moving
+    /// content makes dropped/stalled frames visually obvious on the real panel.</summary>
+    private static byte[] BuildTestPatternBgr(int w, int h, int frame)
+    {
+        var buf = new byte[w * h * 3];
+        int barX = (frame * 8) % w;
+        for (int y = 0; y < h; y++)
+        {
+            int rowOff = y * w * 3;
+            byte gradV = (byte)(y * 255 / Math.Max(1, h - 1));
+            for (int x = 0; x < w; x++)
+            {
+                int off = rowOff + x * 3;
+                bool onBar = Math.Abs(x - barX) < 20;
+                if (onBar)
+                {
+                    buf[off] = 255; buf[off + 1] = 255; buf[off + 2] = 255;   // white sweep bar
+                }
+                else
+                {
+                    buf[off] = (byte)(x * 255 / Math.Max(1, w - 1));   // B: horizontal gradient
+                    buf[off + 1] = gradV;                              // G: vertical gradient
+                    buf[off + 2] = (byte)(255 - gradV);                // R: inverse vertical
+                }
+            }
+        }
+        return buf;
+    }
+
     /// <summary>Stops every fullscreen playback on every device — app shutdown / client dispose.</summary>
     public static void StopAll()
     {
@@ -245,9 +339,7 @@ internal static class DpFullscreenAnimator
     private static List<FsFrame>? LoadFrames(string sourcePath, int userRotation, int deviceRotation)
     {
         string cacheKey = ComputeCacheKey(sourcePath, userRotation, deviceRotation);
-        string cacheDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "K2.DisplayPad", "fullscreen_frames", cacheKey);
+        string cacheDir = Path.Combine(K2Paths.For("K2.DisplayPad"), "fullscreen_frames", cacheKey);
         string manifestPath = Path.Combine(cacheDir, "frames.json");
 
         if (File.Exists(manifestPath))

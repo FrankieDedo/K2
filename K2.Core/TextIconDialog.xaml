@@ -10,6 +10,36 @@
         ResizeMode="NoResize"
         Style="{DynamicResource K2WindowStyle}">
 
+    <Window.Resources>
+        <!-- Small square toggle used by the 3x3 text-position anchor grid below. -->
+        <Style x:Key="TxtAnchorButtonStyle" TargetType="RadioButton">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Margin" Value="1"/>
+            <Setter Property="Foreground" Value="#CCC"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="#26262E" BorderBrush="#3A3A40" BorderThickness="1" CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource K2AccentBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource K2AccentHoverBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#777"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
     <Grid Margin="14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>  <!-- header -->
@@ -23,6 +53,8 @@
             <RowDefinition Height="Auto"/>  <!-- background mode -->
             <RowDefinition Height="8"/>
             <RowDefinition Height="Auto"/>  <!-- colors -->
+            <RowDefinition Height="10"/>
+            <RowDefinition Height="Auto"/>  <!-- text position anchor -->
             <RowDefinition Height="14"/>
             <RowDefinition Height="Auto"/>  <!-- buttons -->
         </Grid.RowDefinitions>
@@ -96,7 +128,23 @@
                     Click="BtnTextColor_Click"/>
         </WrapPanel>
 
-        <StackPanel Grid.Row="12"
+        <StackPanel Grid.Row="12">
+            <TextBlock Text="{loc:Get txt_position_label}"
+                       Foreground="#AAA" FontSize="11" Margin="0,0,0,4"/>
+            <UniformGrid Rows="3" Columns="3" Width="90" HorizontalAlignment="Left">
+                <RadioButton GroupName="TxtAnchor" Tag="TopLeft"      Content="&#x2196;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+                <RadioButton GroupName="TxtAnchor" Tag="TopCenter"    Content="&#x2191;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+                <RadioButton GroupName="TxtAnchor" Tag="TopRight"     Content="&#x2197;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+                <RadioButton GroupName="TxtAnchor" Tag="MiddleLeft"   Content="&#x2190;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+                <RadioButton GroupName="TxtAnchor" Tag="MiddleCenter" Content="&#x25CF;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked" IsChecked="True"/>
+                <RadioButton GroupName="TxtAnchor" Tag="MiddleRight"  Content="&#x2192;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+                <RadioButton GroupName="TxtAnchor" Tag="BottomLeft"   Content="&#x2199;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+                <RadioButton GroupName="TxtAnchor" Tag="BottomCenter" Content="&#x2193;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+                <RadioButton GroupName="TxtAnchor" Tag="BottomRight"  Content="&#x2198;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+            </UniformGrid>
+        </StackPanel>
+
+        <StackPanel Grid.Row="14"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right">
             <Button Content="{loc:Get ok}"

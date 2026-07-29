@@ -68,6 +68,7 @@
   <string name="dlg_action_type">Tipo di azione:</string>
   <string name="dlg_value">Valore:</string>
   <string name="act_none">Nessuna</string>
+  <string name="act_disable">Tasto disabilitato</string>
   <string name="act_url">Apri URL</string>
   <string name="act_exec">Apri programma / file</string>
   <string name="act_folder">Apri cartella</string>
@@ -80,11 +81,135 @@
   <string name="act_oscmd">Comando di sistema</string>
   <string name="act_media">Tasto multimediale</string>
   <string name="act_mouse">Azione mouse</string>
-  <string name="act_keys">Tasti (Ctrl+Shift+A)</string>
+  <string name="act_keys">Combinazione di tasti</string>
+  <string name="act_hotkeyswitch">Cambio tasto rapido</string>
+  <string name="hotkey_shortcut_a">Combinazione A</string>
+  <string name="hotkey_shortcut_b">Combinazione B</string>
+  <string name="hotkey_hint">Ogni pressione alterna le due combinazioni sopra indicate.</string>
+  <string name="act_multi">Azione multipla</string>
+  <string name="multi_steps_label">Passaggi:</string>
+  <string name="multi_add_step">Aggiungi passaggio</string>
+  <string name="multi_delay_ms">Ritardo (ms)</string>
+  <string name="act_multi_summary">{0} passaggi</string>
+  <string name="act_adobe">Adobe</string>
+  <string name="act_davinci">DaVinci Resolve</string>
+  <string name="act_zoom">Zoom</string>
+  <string name="act_obs">OBS Studio</string>
+  <string name="act_twitch">Twitch</string>
+  <string name="act_spotify">Spotify</string>
+  <string name="act_youtube">YouTube</string>
+  <string name="appshortcut_app_label">Applicazione:</string>
+  <string name="appshortcut_action_label">Azione:</string>
+  <string name="appshortcut_custom">Personalizzato…</string>
+  <string name="obs_settings_title">Impostazioni OBS Studio</string>
+  <string name="obs_host_label">Host:</string>
+  <string name="obs_port_label">Porta:</string>
+  <string name="obs_password_label">Password:</string>
+  <string name="obs_test_connection">Prova connessione</string>
+  <string name="obs_connected">Connesso</string>
+  <string name="obs_not_connected">Non connesso</string>
+  <string name="obs_settings_button">Impostazioni OBS…</string>
+  <string name="obs_arg_hint">Nome di scena/profilo/sorgente/transizione, oppure un numero (durata in ms, volume in dB)</string>
+  <string name="obs_cmd_start_streaming">Avvia streaming</string>
+  <string name="obs_cmd_stop_streaming">Ferma streaming</string>
+  <string name="obs_cmd_start_recording">Avvia registrazione</string>
+  <string name="obs_cmd_stop_recording">Ferma registrazione</string>
+  <string name="obs_cmd_pause_recording">Metti in pausa registrazione</string>
+  <string name="obs_cmd_resume_recording">Riprendi registrazione</string>
+  <string name="obs_cmd_next_profile">Profilo successivo</string>
+  <string name="obs_cmd_previous_profile">Profilo precedente</string>
+  <string name="obs_cmd_set_current_profile">Imposta profilo</string>
+  <string name="obs_cmd_next_scene">Scena successiva</string>
+  <string name="obs_cmd_previous_scene">Scena precedente</string>
+  <string name="obs_cmd_set_current_scene">Imposta scena</string>
+  <string name="obs_cmd_set_current_source">Attiva/disattiva sorgente</string>
+  <string name="obs_cmd_next_transition">Transizione successiva</string>
+  <string name="obs_cmd_previous_transition">Transizione precedente</string>
+  <string name="obs_cmd_set_transition_duration">Imposta durata transizione</string>
+  <string name="obs_cmd_set_current_transition">Imposta transizione</string>
+  <string name="obs_cmd_mic_volume_up">Volume microfono +</string>
+  <string name="obs_cmd_mic_volume_down">Volume microfono -</string>
+  <string name="obs_cmd_mute_mic">Silenzia microfono</string>
+  <string name="obs_cmd_unmute_mic">Riattiva microfono</string>
+  <string name="obs_cmd_set_mic_volume">Imposta volume microfono</string>
+  <string name="obs_cmd_desktop_volume_up">Volume desktop +</string>
+  <string name="obs_cmd_desktop_volume_down">Volume desktop -</string>
+  <string name="obs_cmd_mute_desktop">Silenzia audio desktop</string>
+  <string name="obs_cmd_unmute_desktop">Riattiva audio desktop</string>
+  <string name="obs_cmd_set_desktop_volume">Imposta volume desktop</string>
+  <string name="obs_cmd_enable_studio_mode">Attiva modalità studio</string>
+  <string name="obs_cmd_disable_studio_mode">Disattiva modalità studio</string>
+  <string name="obs_cmd_start_replay_buffer">Avvia replay buffer</string>
+  <string name="obs_cmd_stop_replay_buffer">Ferma replay buffer</string>
+  <string name="obs_cmd_save_replay_buffer">Salva replay buffer</string>
+  <string name="obs_cmd_next_media">Media successivo</string>
+  <string name="obs_cmd_previous_media">Media precedente</string>
+  <string name="obs_cmd_play_media">Riproduci media</string>
+  <string name="obs_cmd_pause_media">Metti in pausa media</string>
+  <string name="obs_cmd_stop_media">Ferma media</string>
+  <string name="obs_cmd_open_projector">Apri proiettore</string>
+  <string name="twitch_settings_title">Impostazioni Twitch</string>
+  <string name="twitch_hint">Registra una tua app su dev.twitch.tv con URL di reindirizzamento OAuth "http://localhost:17563/callback", poi incolla qui il Client ID/Secret.</string>
+  <string name="twitch_setup_guide">1. Vai su dev.twitch.tv/console/apps e clicca "Register Your Application".
+2. OAuth Redirect URL: http://localhost:17563/callback
+3. Categoria: una qualsiasi (es. "Application Integration").
+4. Salva, copia il Client ID, poi clicca "New Secret" per il Client Secret.</string>
+  <string name="twitch_client_id_label">Client ID:</string>
+  <string name="twitch_client_secret_label">Client Secret:</string>
+  <string name="twitch_connect">Connetti</string>
+  <string name="twitch_connecting">Connessione in corso…</string>
+  <string name="twitch_disconnect">Disconnetti</string>
+  <string name="twitch_connected_as">Connesso come</string>
+  <string name="twitch_settings_button">Impostazioni Twitch…</string>
+  <string name="twitch_cmd_chat_message">Invia messaggio in chat</string>
+  <string name="twitch_cmd_clear_chat">Pulisci chat</string>
+  <string name="twitch_cmd_emote_only">Attiva/disattiva chat solo emote</string>
+  <string name="twitch_cmd_followers_only">Imposta chat solo follower</string>
+  <string name="twitch_cmd_slow_mode">Imposta modalità lenta</string>
+  <string name="twitch_cmd_subscribers_only">Attiva/disattiva chat solo iscritti</string>
+  <string name="twitch_cmd_play_ad">Avvia pubblicità</string>
+  <string name="twitch_cmd_stream_title">Imposta titolo stream</string>
+  <string name="twitch_cmd_stream_marker">Crea marcatore stream</string>
+  <string name="twitch_cmd_create_clip">Crea clip</string>
+  <string name="twitch_cmd_open_last_clip">Apri ultima clip</string>
+  <string name="spotify_settings_title">Impostazioni Spotify</string>
+  <string name="spotify_hint">Registra una tua app su developer.spotify.com/dashboard con Redirect URI "http://127.0.0.1:17564/callback", poi incolla qui il Client ID/Secret.</string>
+  <string name="spotify_setup_guide">1. Vai su developer.spotify.com/dashboard e clicca "Create app".
+2. Redirect URI: http://127.0.0.1:17564/callback
+3. Which API/SDKs are you planning to use: Web API.
+4. Salva, poi copia il Client ID e clicca "View client secret" per il Client Secret.</string>
+  <string name="spotify_client_id_label">Client ID:</string>
+  <string name="spotify_client_secret_label">Client Secret:</string>
+  <string name="spotify_connected_as">Connesso come</string>
+  <string name="spotify_settings_button">Impostazioni Spotify…</string>
+  <string name="spotify_cmd_play_pause">Play/Pausa</string>
+  <string name="spotify_cmd_next">Brano successivo</string>
+  <string name="spotify_cmd_previous">Brano precedente</string>
+  <string name="spotify_cmd_like_toggle">Metti/Togli Mi Piace al brano</string>
+  <string name="spotify_cmd_shuffle_toggle">Attiva/disattiva riproduzione casuale</string>
+  <string name="spotify_cmd_repeat_cycle">Cambia modalità ripeti</string>
+  <string name="spotify_cmd_mute_toggle">Silenzia/Riattiva</string>
+  <string name="spotify_cmd_volume_up">Alza volume</string>
+  <string name="spotify_cmd_volume_down">Abbassa volume</string>
+  <string name="spotify_cmd_volume_set">Imposta volume</string>
+  <string name="spotify_cmd_save_playlist">Salva brano in playlist</string>
+  <string name="spotify_cmd_remove_playlist">Rimuovi brano da playlist</string>
+  <string name="youtube_settings_title">Impostazioni YouTube</string>
+  <string name="youtube_hint">Crea un client OAuth per app desktop su console.cloud.google.com con l'API YouTube Data v3 abilitata, poi incolla qui il Client ID/Secret.</string>
+  <string name="youtube_setup_guide">1. Vai su console.cloud.google.com, crea/seleziona un progetto, poi abilita "YouTube Data API v3" (APIs &amp; Services -&gt; Library).
+2. Apri "Google Auth Platform" -&gt; Branding: imposta un App name + email di supporto (al primo accesso appare la procedura guidata "Get Started").
+3. Scheda Audience: User type "External", poi aggiungi il tuo account Google sotto "Test users".
+4. Scheda Clients -&gt; Create Client -&gt; Application type: Desktop app -&gt; Create. Copia subito Client ID/Secret — il secret viene mostrato una sola volta.
+5. Al primo login vedrai "Google hasn't verified this app" (normale, scope sensibile) — clicca Advanced -&gt; Go to your app (unsafe). In stato Testing il login potrebbe richiedere di essere ripetuto ogni ~7 giorni; "Publish app" in Audience evita il problema.</string>
+  <string name="youtube_client_id_label">Client ID:</string>
+  <string name="youtube_client_secret_label">Client Secret:</string>
+  <string name="youtube_settings_button">Impostazioni YouTube…</string>
+  <string name="youtube_chat_message_label">Messaggio in chat live:</string>
   <string name="act_command">Comando shell</string>
   <string name="act_text">Incolla testo</string>
   <string name="act_macro">Riproduci macro</string>
   <string name="act_macro_unresolved">Riproduci macro (non assegnata)</string>
+  <string name="act_googlehome">Google Home</string>
   <string name="act_pyscript">Script Python</string>
   <string name="act_unrecognized">Non riconosciuto</string>
   <string name="py_file">File .py</string>
@@ -132,6 +257,26 @@
   <string name="keys_modifiers_label">Modificatori:</string>
   <string name="keys_key_label">Tasto:</string>
   <string name="keys_win_hint">Il tasto Windows è selezionabile ma non viene inviato dal backend tastiera attuale (SendKeys) — viene ignorato silenziosamente.</string>
+  <string name="gh_manage">Gestisci dispositivi Google Home…</string>
+  <string name="gh_summary_missing">Google Home (associazione rimossa)</string>
+  <string name="gh_setup_title">Dispositivi Google Home</string>
+  <string name="gh_capture_name_prompt">Assegna un nome a questa associazione…</string>
+  <string name="gh_bindings_header">Associazioni salvate</string>
+  <string name="gh_no_bindings">Nessun dispositivo trovato ancora — accedi qui sopra per importarli automaticamente.</string>
+  <string name="gh_rename">Rinomina</string>
+  <string name="gh_delete">Elimina</string>
+  <string name="gh_login_hint">Accedi qui sopra — ogni dispositivo viene importato automaticamente una volta effettuato l'accesso.</string>
+  <string name="gh_status_connected">Connesso</string>
+  <string name="gh_status_disconnected">Disconnesso — accedi qui sopra per ricollegarti</string>
+  <string name="gh_force_refresh">Forza aggiornamento</string>
+  <string name="gh_disconnect">Disconnetti</string>
+  <string name="gh_advanced_hint">Modalità debug attiva (Impostazioni) — a sinistra sono mostrati gli strumenti avanzati di registrazione Foyer.</string>
+  <string name="gh_record_start">Registra azione</string>
+  <string name="gh_record_alt">Registra azione opposta</string>
+  <string name="gh_record_hint">Accedi qui sopra, poi clicca Registra azione ed esegui l'azione sulla pagina (accendi, regola la luminosità, cambia colore…): K2 cattura il comando che Google Home invia e lo rigioca alla pressione del tasto. "Registra azione opposta" aggiunge quella inversa all'associazione selezionata, così un solo tasto alterna tra le due.</string>
+  <string name="gh_record_armed">Registrazione in corso — esegui ora l'azione sulla pagina.</string>
+  <string name="gh_record_alt_armed">Registrazione dell'azione opposta — eseguila ora sulla pagina.</string>
+  <string name="close">Chiudi</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
        TAB IMPOSTAZIONI GENERALI
@@ -178,9 +323,24 @@
   <string name="settings_bc_dll_found">trovata</string>
   <string name="settings_bc_dll_missing">mancante</string>
   <!-- Ripristina impostazioni predefinite -->
+  <!-- Update checker -->
+  <string name="settings_update_group">Aggiornamenti</string>
+  <string name="settings_update_current_version">Versione K2 {0}</string>
+  <string name="settings_update_check_btn">Controlla aggiornamenti</string>
+  <string name="settings_update_checking">Controllo aggiornamenti in corso…</string>
+  <string name="settings_update_uptodate">K2 è aggiornato.</string>
+  <string name="settings_update_check_failed">Controllo aggiornamenti non riuscito: {0}</string>
+  <string name="settings_update_available">È disponibile una nuova versione: {0}</string>
+  <string name="settings_update_install_btn">Scarica e installa</string>
+  <string name="settings_update_zip_btn">Scarica ZIP…</string>
+  <string name="settings_update_view_release_btn">Vedi note di rilascio</string>
+  <string name="settings_update_downloading">Download in corso…</string>
+  <string name="settings_update_install_confirm">Scaricare la versione {0} e avviare l'installer? K2 si chiuderà non appena l'installer parte, per permettere l'aggiornamento.</string>
+  <string name="settings_update_zip_done">Salvato in {0}</string>
   <string name="settings_danger_zone">Zona pericolosa</string>
   <string name="restore_defaults">Ripristina predefiniti</string>
   <string name="restore_defaults_profile_confirm">Ripristinare il profilo '{0}' ai valori predefiniti di K2 su questo dispositivo (tasti assegnati, illuminazione e impostazioni, dove applicabile)? L'operazione non può essere annullata.</string>
+  <string name="restore_defaults_device_confirm">Ripristinare TUTTI i profili di questo {0} ai valori predefiniti di K2? Verranno cancellati ogni profilo, i tasti assegnati e le impostazioni di illuminazione salvati sul dispositivo. L'operazione non può essere annullata.</string>
   <string name="restore_defaults_app">Ripristina tutti i predefiniti</string>
   <string name="restore_defaults_app_hint">Ripristina tutte le preferenze dell'app sopra elencate E cancella ogni profilo, tasto assegnato, impostazione di illuminazione e macro salvati per ogni dispositivo (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). L'operazione non può essere annullata.</string>
   <string name="restore_defaults_app_confirm">Questo ripristina TUTTE le preferenze dell'app e CANCELLA ogni profilo, tasto assegnato, impostazione di illuminazione e macro salvati per ogni dispositivo (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). L'operazione non può essere annullata. Continuare?</string>
@@ -193,6 +353,14 @@
   <string name="settings_start_min_tray_hint">K2 si avvia con i driver attivi ma la finestra nascosta nella tray — riaprila in qualsiasi momento dall'icona.</string>
   <string name="settings_font_family">Carattere</string>
   <string name="settings_font_family_hint">Cambia subito il carattere dell'interfaccia in tutta l'app, senza riavvio.</string>
+  <string name="settings_accent_color">Colore accento</string>
+  <string name="settings_accent_color_hint">Cambia subito il colore d'accento in tutta l'app, senza riavvio.</string>
+  <string name="settings_accent_k2red">Rosso K2</string>
+  <string name="settings_accent_mountainblue">Blu Mountain</string>
+  <string name="settings_icon_style">Stile icona predefinita</string>
+  <string name="settings_icon_style_black">Nero</string>
+  <string name="settings_icon_style_color">Colore</string>
+  <string name="settings_icon_style_hint">Quale pacchetto icone di Base Camp usano "Icona predefinita" e le icone automatiche. Ha effetto sulla prossima icona generata — i tasti già impostati mantengono l'immagine attuale.</string>
   <string name="tray_show">Mostra K2</string>
   <string name="tray_exit">Esci</string>
 
@@ -259,11 +427,8 @@
   <string name="ev60_status_connected">Connesso: {0}</string>
   <string name="ev60_status_disconnected">Non connesso</string>
   <string name="ev60_refresh">Aggiorna</string>
-  <string name="ev60_side_ring">Anello laterale</string>
-  <string name="ev60_side_apply">Applica all'anello laterale</string>
-  <string name="ev60_side_hint">Applicare un colore all'anello laterale porta i tasti principali in modalità Custom (si spengono) — il dispositivo indirizza l'anello solo tramite quella modalità.</string>
-  <string name="ev60_key_lighting">Illuminazione tasti</string>
-  <string name="ev60_key_lighting_hint">Attiva la modalità pennello, scegli un colore e clicca sui tasti della tastiera qui sopra per colorarli. È solo una preview software — questa scheda raw-HID non ha un readback live. Applicare spegne l'anello laterale (stesso limite di modalità Custom del pannello anello).</string>
+  <string name="ev60_key_lighting">Illuminazione Custom (per-tasto)</string>
+  <string name="ev60_key_lighting_hint">Scegli un colore e clicca sui tasti (tastiera principale o numpad), oppure sui quadratini dell'anello del bordo, per colorarli, poi premi "Applica".</string>
   <string name="ev60_numpad_decorative_tip">Solo decorativo — nessun protocollo di illuminazione/remap noto per questo accessorio.</string>
   <string name="ev60_key_binding">Key Binding</string>
   <string name="ev60_key_binding_hint">Clicca su un tasto della tastiera qui sopra per selezionarlo, poi scegli cosa deve fare.</string>
@@ -277,14 +442,11 @@
   <string name="makalu_status_disconnected">Non connesso</string>
   <string name="makalu_refresh">Aggiorna</string>
   <string name="makalu_apply">Applica</string>
-  <string name="makalu_applied">Applicato</string>
   <string name="makalu_failed">Fallito</string>
   <string name="makalu_close">Chiudi</string>
   <string name="makalu_log">Log</string>
 
-  <string name="makalu_custom_open">Personalizza per-LED…</string>
-  <string name="makalu_custom_title">RGB personalizzato — Makalu</string>
-  <string name="makalu_custom_hint">Clicca un LED per scegliere il colore, poi Applica. Layout fisico: 4 LED a sinistra, 4 a destra.</string>
+  <string name="makalu_custom_hint">Scegli un colore, poi clicca un LED (o trascina un rettangolo su più LED) sull'immagine del mouse per colorarlo.</string>
 
   <string name="makalu_dpi_title">DPI</string>
   <string name="makalu_dpi_prev">Livello precedente</string>
@@ -293,6 +455,7 @@
   <string name="makalu_dpi_remove_level">Rimuovi livello</string>
 
   <string name="makalu_remap_title">Rimappatura tasti</string>
+  <string name="makalu_remap_configure_title">{0} — Configura</string>
   <string name="makalu_remap_category">Categoria:</string>
   <string name="makalu_remap_function">Funzione:</string>
   <string name="makalu_remap_sniper_dpi">DPI Sniper:</string>
@@ -305,6 +468,8 @@
   <string name="makalu_remap_cat_dpi">DPI</string>
   <string name="makalu_remap_cat_scroll">Scroll</string>
   <string name="makalu_remap_cat_sniper">Sniper</string>
+  <string name="makalu_remap_cat_profile">Profilo</string>
+  <string name="makalu_remap_cat_lighting">Illuminazione</string>
   <string name="makalu_remap_fn_left">Click sinistro</string>
   <string name="makalu_remap_fn_right">Click destro</string>
   <string name="makalu_remap_fn_middle">Click centrale</string>
@@ -316,12 +481,16 @@
   <string name="makalu_remap_fn_scroll_down">Scroll giù</string>
   <string name="makalu_remap_fn_disabled">Disabilitato</string>
   <string name="makalu_remap_fn_sniper">Sniper</string>
-  <string name="makalu_remap_btn_left">Tasto Sx</string>
-  <string name="makalu_remap_btn_right">Tasto Dx</string>
+  <string name="makalu_remap_fn_profile_next">Profilo successivo</string>
+  <string name="makalu_remap_fn_profile_prev">Profilo precedente</string>
+  <string name="makalu_remap_fn_brightness_cycle">Ciclo luminosità</string>
+  <string name="makalu_remap_fn_effect_cycle">Ciclo effetti</string>
+  <string name="makalu_remap_btn_left">Tasto Sinistro</string>
+  <string name="makalu_remap_btn_right">Tasto Destro</string>
   <string name="makalu_remap_btn_middle">Tasto Centrale</string>
-  <string name="makalu_remap_btn_back">Indietro</string>
-  <string name="makalu_remap_btn_forward">Avanti</string>
-  <string name="makalu_remap_btn_dpi">DPI+</string>
+  <string name="makalu_remap_btn_back">Tasto Indietro</string>
+  <string name="makalu_remap_btn_forward">Tasto Avanti</string>
+  <string name="makalu_remap_btn_dpi">Tasto DPI</string>
   <string name="makalu_remap_btn_5">Tasto 5</string>
   <string name="makalu_remap_btn_6">Tasto 6</string>
 
@@ -334,6 +503,17 @@
   <string name="makalu_setting_liftoff">Distanza lift-off:</string>
   <string name="makalu_setting_liftoff_low">Bassa</string>
   <string name="makalu_setting_liftoff_high">Alta</string>
+  <string name="makalu_setting_liftoff_custom">Custom</string>
+  <string name="makalu_setting_sensitivity">Sensibilità:</string>
+  <string name="makalu_setting_clickspeed">Velocità click:</string>
+
+  <!-- Makalu calibrazione superficie custom (LOD/lift-off) -->
+  <string name="makalu_lod_title">Calibrazione superficie custom</string>
+  <string name="makalu_lod_hint">Alcune superfici traggono beneficio dalla calibrazione custom. Per iniziare clicca Start, poi clicca e tieni premuta l'icona qui sotto muovendo il mouse nella finestra finché la barra di progresso non si riempie.</string>
+  <string name="makalu_lod_start">Start</string>
+  <string name="makalu_lod_reset">Reset</string>
+  <string name="makalu_lod_done">Fatto</string>
+  <string name="makalu_lod_progress">PROGRESSO</string>
 
   <!-- Display Dial -->
   <string name="display_dial">Display Dial</string>
@@ -414,7 +594,8 @@
   <string name="settings_keycap_translucent_legend">Legende traslucide (la legenda segue il colore LED live)</string>
   <string name="settings_keycap_hint">Solo estetico — cambia come l'anteprima a schermo qui in K2 abbina i colori LED ai tasti, non modifica l'effetto RGB inviato alla tastiera.</string>
   <string name="settings_keycap_edit_individual">Personalizza singoli keycap</string>
-  <string name="settings_keycap_edit_individual_hint">Quando attivo, clicca un tasto sulla tastiera qui sopra per personalizzarne colore o immagine.</string>
+  <string name="settings_keycap_edit_individual_hint">Quando attivo, clicca un tasto sulla tastiera qui sopra per personalizzarne colore o immagine, oppure trascina un riquadro di selezione su più tasti per personalizzarli tutti insieme.</string>
+  <string name="settings_keycap_edit_multi_label">{0} tasti</string>
   <string name="keycap_customize_title">Personalizza keycap — {0}</string>
   <string name="keycap_customize_override_color">Sovrascrivi colore keycap</string>
   <string name="keycap_customize_custom_image">Immagine personalizzata…</string>
@@ -537,6 +718,24 @@
   <string name="dp_delete_page_title">Elimina pagina</string>
   <string name="dp_delete_page_confirm">Eliminare la pagina "{0}"? I tasti che la aprono smetteranno di funzionare.</string>
   <string name="dp_add_text">Aggiungi testo…</string>
+  <string name="dp_gallery_icon">Icona predefinita</string>
+  <string name="gallery_dialog_title">Galleria icone</string>
+  <string name="gallery_category_label">Categoria:</string>
+  <string name="gallery_tint_accent">Colora con l'accento</string>
+  <string name="gallery_empty">Nessuna icona in questa categoria.</string>
+  <string name="gallery_cat_default">Predefinite</string>
+  <string name="gallery_cat_obs">OBS</string>
+  <string name="gallery_cat_obs_profile">OBS (comandi)</string>
+  <string name="gallery_cat_twitch">Twitch</string>
+  <string name="gallery_cat_youtube">YouTube</string>
+  <string name="gallery_cat_zoom">Zoom</string>
+  <string name="gallery_cat_spotify">Spotify</string>
+  <string name="gallery_cat_davinci">DaVinci Resolve</string>
+  <string name="gallery_cat_illustrator">Illustrator</string>
+  <string name="gallery_cat_photoshop">Photoshop</string>
+  <string name="gallery_cat_premiere">Premiere Pro</string>
+  <string name="gallery_cat_pcinfo_clock">Info PC / Orologio</string>
+  <string name="gallery_cat_pcinfo_icons">Icone Info PC</string>
   <string name="txt_dialog_title">Inserisci testo</string>
   <string name="txt_label">Testo:</string>
   <string name="txt_font_label">Carattere:</string>
@@ -545,6 +744,7 @@
   <string name="txt_bg_image">Sopra l'immagine caricata</string>
   <string name="txt_bg_color">Sfondo:</string>
   <string name="txt_color">Testo:</string>
+  <string name="txt_position_label">Posizione:</string>
   <string name="txt_generate_failed">Impossibile generare l'immagine di testo.</string>
   <string name="dp_open_bc_profile">Apri profilo BaseCamp</string>
   <string name="dp_filter_bc_xml">Profilo BaseCamp (*.xml)|*.xml|Tutti i file|*.*</string>
@@ -572,17 +772,21 @@
   <string name="export_select_at_least_one">Seleziona almeno un profilo.</string>
   <string name="export_pick_folder">Scegli una cartella per i profili esportati</string>
   <!-- Fullscreen -->
-  <string name="dp_fullscreen_group">Schermo intero</string>
-  <string name="dp_fullscreen_set">Imposta immagine schermo intero…</string>
-  <string name="dp_fullscreen_clear">Rimuovi schermo intero</string>
-  <string name="dp_fullscreen_dialog_title">Immagine schermo intero</string>
+  <string name="dp_fullscreen_group">Screensaver</string>
+  <string name="dp_fullscreen_set">Imposta screensaver…</string>
+  <string name="dp_fullscreen_clear">Rimuovi screensaver</string>
+  <string name="dp_fullscreen_dialog_title">Screensaver</string>
   <string name="dp_fullscreen_prompt">Scegli un'immagine o una GIF da mostrare su tutti e 12 i tasti di questa pagina:</string>
+  <string name="dp_screensaver_delay_enable">Attiva screensaver dopo</string>
+  <string name="dp_screensaver_delay_hint">Se attivo, l'immagine compare solo dopo questi secondi senza pressioni di tasti; alla prima pressione le icone del profilo tornano visibili prima che l'azione del tasto venga eseguita. Se disattivo, l'immagine resta sempre visibile finché è mostrata questa pagina.</string>
   <string name="dp_fullscreen_rotation">Rotazione</string>
   <string name="dp_fullscreen_rotation_hint">Ruota l'intera immagine prima che venga adattata al pannello. L'anteprima sopra non riflette questa scelta — viene applicata al momento della visualizzazione sul dispositivo.</string>
   <string name="dp_fullscreen_current">Attuale: {0}</string>
   <string name="dp_fullscreen_none_set">Nessuna immagine selezionata.</string>
-  <string name="dp_fullscreen_set_ok">Immagine schermo intero impostata per questa pagina.</string>
-  <string name="dp_fullscreen_cleared">Immagine schermo intero rimossa — icone singole ripristinate.</string>
+  <string name="dp_fullscreen_set_ok">Screensaver impostato per questa pagina.</string>
+  <string name="dp_fullscreen_cleared">Screensaver rimosso — icone singole ripristinate.</string>
+  <string name="dp_live_test">Test pannello live</string>
+  <string name="dp_live_test_icon">Test icona live (1° tasto)</string>
   <!-- Rename device -->
   <string name="rename_device">Rinomina dispositivo</string>
   <string name="rename_device_title">Rinomina dispositivo</string>

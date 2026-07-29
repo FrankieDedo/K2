@@ -76,6 +76,9 @@ internal static class EverestSideLedProtocol
     public const byte ZoneKeycaps = 0x02;
     /// <summary>Zone byte for <see cref="BuildZoneSwitchPacket"/>: 45-LED side ring.</summary>
     public const byte ZoneSideRing = 0x05;
+    /// <summary>Zone byte for the per-region dynamic-effect assignment (Wave/Breathing/
+    /// Reactive/etc. on a painted subset of keys) — see <see cref="BuildEffectZoneSwitchPacket"/>.</summary>
+    public const byte ZoneEffects = 0x03;
 
     /// <summary>Switches a lighting zone to the Custom effect: <c>11 01 00 zone 02 02</c>.
     /// Base Camp sends this before every keycap page burst (zone 02) and before every
@@ -88,6 +91,22 @@ internal static class EverestSideLedProtocol
         var pkt = new byte[64];
         pkt[0] = 0x11; pkt[1] = 0x01; pkt[2] = 0x00; pkt[3] = zone;
         pkt[4] = 0x02; pkt[5] = 0x02;
+        return pkt;
+    }
+
+    /// <summary>Switches to the dynamic-effects zone: <c>11 01 00 03 01 02</c> — same
+    /// shape as <see cref="BuildZoneSwitchPacket"/> but byte[4]=0x01, not 0x02 (BaseCamp
+    /// sends this exact byte pattern every time, capture-confirmed 2026-07-22 in
+    /// evmax_fxwave_bc.pcapng/evmax_fxmix_bc.pcapng — painting a subset of keys with
+    /// Wave/Breathing/Reactive and applying). The response is a 3-page burst mirroring
+    /// <see cref="BuildEffectRegionPackets"/>'s own shape (the device echoing back
+    /// current region-membership state) — SendCmdAcked's echo-match on byte[0] is enough
+    /// to drain it, same as the keycap/side-ring zone switches.</summary>
+    public static byte[] BuildEffectZoneSwitchPacket()
+    {
+        var pkt = new byte[64];
+        pkt[0] = 0x11; pkt[1] = 0x01; pkt[2] = 0x00; pkt[3] = ZoneEffects;
+        pkt[4] = 0x01; pkt[5] = 0x02;
         return pkt;
     }
 
@@ -177,6 +196,136 @@ internal static class EverestSideLedProtocol
     {
         var pkt = new byte[64];
         pkt[0] = 0x13; pkt[1] = 0x55; pkt[4] = 0x06;
+        return pkt;
+    }
+
+    // ==================================================================
+    // Per-region dynamic effects (Wave/Breathing/Reactive/... on a painted
+    // subset of keys) — capture-confirmed 2026-07-22 from evmax_fxwave_bc.pcapng
+    // (Wave painted on F1-F6, single→double→rainbow→direction→speed, one Apply
+    // per step) and evmax_fxmix_bc.pcapng (Wave on F1-F6 + Breathing-dual on the
+    // whole numpad + Reactive-dual on the arrow keys, applied together). See
+    // CHANGELOG for the full byte-level trace.
+    // ==================================================================
+
+    /// <summary>Number of LED-index slots in the region-membership bitmap: 3 pages
+    /// x 60 bytes = 180, covering the whole 0-125 keycap + side-ring address space
+    /// with room to spare (matches <see cref="KeycapWireCount"/>'s domain).</summary>
+    public const int EffectRegionSlotCount = 180;
+    private const int EffectRegionPageCount = 3;
+    private const int EffectRegionPageSize = 60;
+
+    /// <summary>
+    /// Builds the 3 page packets (<c>14 A0 page 01 &lt;60 bytes&gt;</c>) that assign each
+    /// LED index to a dynamic-effect "region". <paramref name="ledEffectCode"/> is
+    /// indexed 0-179 by LED index (see <see cref="Models.LedMatrixMapping"/>/
+    /// <see cref="KeycapWireCount"/>'s domain) — each entry is 0 (no dynamic effect,
+    /// governed by the plain static-color pages instead) or an
+    /// <see cref="EverestSdkNative.EffectIndex"/> byte value (Breath=1, ReactiveA=3,
+    /// Wave=4, ...). <b>Byte-for-byte confirmed</b>: BaseCamp's own bitmap used EXACTLY
+    /// the LED's assigned effect-code byte at its position — e.g. painting F1-F6 (LED
+    /// indices 9,18,27,36,45,54) with Wave produced value 0x04 (=EffectIndex.Wave) at
+    /// exactly those 6 positions and 0 everywhere else; the whole numpad (17 LEDs) with
+    /// Breathing produced value 0x01 at those 17 positions; the 4 arrow keys with
+    /// Reactive produced value 0x03. One LED can only belong to one effect at a time
+    /// (last-write-wins if the caller double-assigns).</summary>
+    public static byte[][] BuildEffectRegionPackets(byte[] ledEffectCode)
+    {
+        var packets = new byte[EffectRegionPageCount][];
+        for (int page = 0; page < EffectRegionPageCount; page++)
+        {
+            var pkt = new byte[64];
+            pkt[0] = 0x14; pkt[1] = 0xA0; pkt[2] = (byte)page; pkt[3] = 0x01;
+            int baseIdx = page * EffectRegionPageSize;
+            for (int i = 0; i < EffectRegionPageSize; i++)
+            {
+                int idx = baseIdx + i;
+                pkt[4 + i] = idx < ledEffectCode.Length ? ledEffectCode[idx] : (byte)0;
+            }
+            packets[page] = pkt;
+        }
+        return packets;
+    }
+
+    /// <summary>Color mode byte for <see cref="BuildCustomEffectParamPacket"/>'s
+    /// idx6 — matches the SAME encoding as BaseCampLinux's global (non-custom)
+    /// <c>set_rgb</c>: Single=0x00 confirmed by the Wave color-change capture step,
+    /// Dual=0x10 confirmed by the Breathing-dual capture step, Rainbow=0x02 confirmed
+    /// by the Wave-rainbow capture step (idx6/idx8/idx10/idx14 all matched
+    /// BaseCampLinux's rainbow shape exactly).</summary>
+    public enum CustomEffectColorMode : byte { Single = 0x00, Dual = 0x10, Rainbow = 0x02 }
+
+    /// <summary>
+    /// Builds the per-effect parameter packet (<c>14 2C effectCode 01 ...</c>) that
+    /// configures speed/brightness/color(s)/direction for every LED currently assigned
+    /// that effect code via <see cref="BuildEffectRegionPackets"/>. Same byte offsets as
+    /// BaseCampLinux's global (whole-keyboard) <c>set_rgb</c> command — byte[3]=0x01 is
+    /// the only structural difference (marks "region-scoped", confirmed: brightness
+    /// stayed at idx5 with no shift in every capture). <paramref name="hwSpeed"/> is
+    /// already inverted (1=fastest, 100=slowest — <c>max(1, 101-guiSpeed)</c>, same
+    /// formula as the global command); <paramref name="direction"/> only matters for
+    /// Wave (0/2/4/6=Right/Down/Left/Up, capture only ever showed 0=Right — never
+    /// changed by the user — so untested but structurally identical to the ALREADY
+    /// hardware-validated global Wave direction byte) and Tornado (9=CW/10=CCW, by
+    /// analogy, unverified). <paramref name="color2"/> null under Single/Rainbow.
+    /// Rainbow ignores both colors. <b>Wave/Tornado Dual mode is NOT supported</b> here
+    /// — the one capture attempt at it produced an unrecognized multi-stop gradient
+    /// shape, not the simple 2-RGB layout Breathing/Reactive use; needs a dedicated
+    /// capture before it can be added.</summary>
+    public static byte[] BuildCustomEffectParamPacket(
+        byte effectCode, byte brightness, byte hwSpeed, CustomEffectColorMode colorMode, byte direction,
+        (byte r, byte g, byte b) color1, (byte r, byte g, byte b)? color2)
+    {
+        if (brightness > 100) brightness = 100;
+        var pkt = new byte[64];
+        pkt[0] = 0x14; pkt[1] = 0x2C; pkt[2] = effectCode; pkt[3] = 0x01;
+        pkt[4] = hwSpeed; pkt[5] = brightness; pkt[6] = (byte)colorMode; pkt[7] = direction;
+
+        if (colorMode == CustomEffectColorMode.Rainbow)
+        {
+            // Confirmed shape (Wave-rainbow capture): idx8=0x02, idx10=0xff, idx14=0xff,
+            // colors unused.
+            pkt[8] = 0x02; pkt[10] = 0xFF; pkt[14] = 0xFF;
+        }
+        else if (colorMode == CustomEffectColorMode.Dual)
+        {
+            // Confirmed shape (Breathing-dual capture): idx7=idx8=0xff (direction slot
+            // reused as filler — Dual effects have no direction), color1 at idx9-11,
+            // color2 at idx12-14.
+            pkt[7] = 0xFF; pkt[8] = 0xFF;
+            pkt[9] = color1.r; pkt[10] = color1.g; pkt[11] = color1.b;
+            var c2 = color2 ?? (0, 0, 0);
+            pkt[12] = c2.Item1; pkt[13] = c2.Item2; pkt[14] = c2.Item3;
+        }
+        else // Single
+        {
+            // Confirmed shape (Wave color-change capture): idx8=0x00, idx9=0x01,
+            // idx10=0x64, color1 at idx11-13, idx14=0xff.
+            pkt[8] = 0x00; pkt[9] = 0x01; pkt[10] = 0x64;
+            pkt[11] = color1.r; pkt[12] = color1.g; pkt[13] = color1.b;
+            pkt[14] = 0xFF;
+        }
+        return pkt;
+    }
+
+    /// <summary>Reactive's own two-color layout (unlike Single/Dual above): color1 at
+    /// idx9-11 and color2 at idx18-20, with idx7-8=0xff filler — matches BaseCampLinux's
+    /// global Reactive/Yeti/Matrix shape exactly and the evmax_fxmix_bc.pcapng capture's
+    /// Reactive-on-arrow-keys step byte-for-byte. <paramref name="hwSpeed"/> note: the
+    /// captured sample used 0x00 — Reactive may not meaningfully use speed (it's
+    /// keypress-triggered, not a continuous animation), so this is passed through
+    /// as-is rather than assumed identical to Wave/Breathing's inversion formula.</summary>
+    public static byte[] BuildTwoStopEffectParamPacket(
+        byte effectCode, byte brightness, byte hwSpeed,
+        (byte r, byte g, byte b) color1, (byte r, byte g, byte b) color2)
+    {
+        if (brightness > 100) brightness = 100;
+        var pkt = new byte[64];
+        pkt[0] = 0x14; pkt[1] = 0x2C; pkt[2] = effectCode; pkt[3] = 0x01;
+        pkt[4] = hwSpeed; pkt[5] = brightness; pkt[6] = 0x00;
+        pkt[7] = 0xFF; pkt[8] = 0xFF;
+        pkt[9] = color1.r; pkt[10] = color1.g; pkt[11] = color1.b;
+        pkt[18] = color2.r; pkt[19] = color2.g; pkt[20] = color2.b;
         return pkt;
     }
 }

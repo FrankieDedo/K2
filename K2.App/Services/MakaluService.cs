@@ -65,6 +65,30 @@ internal sealed class MakaluService
     public bool SetLiftOff(bool high)    => WithDevice(h => MakaluProtocol.SetLiftOff(h, high));
 
     // ---------------------------------------------------------------
+    // Lift-off "Custom" surface calibration — see MakaluProtocol's Lod*
+    // stubs for why these don't talk to real hardware yet.
+    // ---------------------------------------------------------------
+
+    public bool LodResetSurface()      => WithDevice(h => MakaluProtocol.LodResetSurface(h));
+    public bool LodCalibrationStart()  => WithDevice(h => MakaluProtocol.LodCalibrationStart(h));
+    public bool LodSetSurface(byte surfaceA, byte surfaceB) => WithDevice(h => MakaluProtocol.LodSetSurface(h, surfaceA, surfaceB));
+
+    /// <summary>Polls the sensor for calibration readiness. Returns null if not
+    /// connected/not ready yet.</summary>
+    public (byte SurfaceA, byte SurfaceB)? LodGetCalibration()
+    {
+        (byte, byte)? result = null;
+        WithDevice(h =>
+        {
+            var r = MakaluProtocol.LodGetCalibration(h);
+            if (r is not { Ready: true }) return false;
+            result = (r.Value.SurfaceA, r.Value.SurfaceB);
+            return true;
+        });
+        return result;
+    }
+
+    // ---------------------------------------------------------------
     // DPI
     // ---------------------------------------------------------------
 

@@ -74,6 +74,18 @@ public partial class MainWindow
     private readonly Dictionary<int, BacklightIdleTimer> _dpAutoOffTimers = new();
     private readonly Dictionary<int, int> _dpSavedBrightness = new();
 
+    /// <summary>Screensaver idle timers, one per physical DisplayPad — same
+    /// <see cref="BacklightIdleTimer"/> mechanism as the backlight auto-off above
+    /// (idle countdown + wake on the first key event), but wired to show/hide the
+    /// page's fullscreen image instead of touching brightness. Unlike auto-off this
+    /// is NOT a device-global setting: it is configured per device+profile+page from
+    /// whatever page is currently displayed (see <see cref="DpConfigureScreensaver"/>,
+    /// called from both repaint paths).</summary>
+    private readonly Dictionary<int, BacklightIdleTimer> _dpScreensaverTimers = new();
+    /// <summary>Per-device: the screensaver image is currently on the panel (so the next
+    /// key event must restore the profile's icons before running its action).</summary>
+    private readonly HashSet<int> _dpScreensaverShowing = new();
+
     /// <summary>
     /// Cache folder for images auto-generated from an action (exec icon / folder glyph,
     /// see <see cref="DpKeyConfigDialog.TryAutoGenerateKeyImage"/>) — generated upright,
@@ -81,8 +93,7 @@ public partial class MainWindow
     /// time (<see cref="_dpRotation"/>), no special-casing needed.
     /// </summary>
     private static readonly string DpAutoIconDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "K2.DisplayPad", "auto_icons");
+        K2Paths.For("K2.DisplayPad"), "auto_icons");
 
     /// <summary>Cache path for an auto-generated icon, under <see cref="DpAutoIconDir"/>.</summary>
     private static string DpAutoIconCachePath(string kind, string sourceValue)
@@ -184,6 +195,17 @@ public partial class MainWindow
             {
                 if (ev.PropertyName == nameof(DisplayPadKey.HasAction)) RefreshDpMappedKeys();
             };
+
+        // The Google Home account can be connected/disconnected from the setup window at any
+        // time, independently of any key's own ActionType/ActionValue — refresh the foreground
+        // tab's warning triangles (K2.Core.Services.GoogleHomeStore.ConnectionChanged) whenever
+        // that happens. Background device tabs repaint from their own stored profile on
+        // activation, which already reads the live connection flag.
+        K2.Core.Services.GoogleHomeStore.ConnectionChanged += () =>
+            Dispatcher.BeginInvoke(() =>
+            {
+                foreach (var k in _dpKeys) k.NotifyGoogleHomeConnectionChanged();
+            });
 
         LvDpDevices.ItemsSource = _dpDevices;
         // DP device tabs are added to TcDevices by DpRefreshDevices; LstDpProfile by DpRefreshProfiles
@@ -409,9 +431,7 @@ public partial class MainWindow
         if (DpSelectedDeviceId() is not int devId) return;
         int profile = DpCurrentProfile();
 
-        string cacheRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "K2.DisplayPad", "user_rotated");
+        string cacheRoot = Path.Combine(K2Paths.For("K2.DisplayPad"), "user_rotated");
         Directory.CreateDirectory(cacheRoot);
 
         var flipType = degrees switch
@@ -568,28 +588,42 @@ public partial class MainWindow
         DpSelectProfileSlot(_dpStore.GetCurrentProfile(id));
     }
 
-    /// <summary>Resets the currently selected profile's button icons/actions/pages back
-    /// to K2's defaults (empty) and repaints the device.</summary>
+    /// <summary>Wipes EVERY profile of the selected DisplayPad unit back to K2's defaults:
+    /// other profiles are deleted outright, pages/folders included (mirrors
+    /// BtnDpDeleteProfile_Click/DpDeleteProfileSlot), the current one keeps its name but
+    /// has its button icons/actions/pages cleared, then the device is repainted. User
+    /// request 2026-07-29 (previously only reset the current profile).</summary>
     private void BtnDpRestoreDefaults_Click(object sender, RoutedEventArgs e)
     {
         if (DpSelectedDeviceId() is not int id) return;
-        int slot = DpCurrentProfile();
-        string profileName = _dpStore.GetProfileName(id, slot) ?? Loc.Get("profile_n", slot);
         var res = MessageBox.Show(
-            Loc.Get("restore_defaults_profile_confirm", profileName),
+            Loc.Get("restore_defaults_device_confirm", Loc.Get("tab_displaypad")),
             Loc.Get("restore_defaults"),
             MessageBoxButton.OKCancel,
             MessageBoxImage.Warning);
         if (res != MessageBoxResult.OK) return;
-        _dpStore.ClearProfile(id, slot);
-        DpLog($"[UI] Profile {slot} restored to defaults.");
+
+        int current = DpCurrentProfile();
+        foreach (var slot in _dpStore.GetExistingProfiles(id))
+            if (slot != current) DpDeleteProfileSlot(id, slot);
+
+        _dpStore.ClearProfile(id, current);
+        DpLog($"[UI] DisplayPad device {id} restored to factory defaults (all profiles).");
         DpRefreshProfiles(id);
         ResetDpNavigation();
         DpRequestRepaint(id);
     }
 
     // ================================================================
-    // Fullscreen image (whole 2×6 panel — see DpFullscreenAnimator)
+    // Screensaver / fullscreen image (whole 2×6 panel — see DpFullscreenAnimator)
+    //
+    // Two modes share the same stored image (see DisplayPadStore.GetScreensaverDelay):
+    //   • delay disabled — the image owns the panel for as long as the page is shown
+    //     (the original always-on "fullscreen image" behaviour);
+    //   • delay enabled  — real screensaver: the profile's own per-key icons are shown,
+    //     the image only takes over after N seconds with no physical key press, and the
+    //     first press dismisses it (restoring the icons) BEFORE running that key's
+    //     action — see DpScreensaverTimeout/DpScreensaverWake and OnDpKey.
     // ================================================================
 
     private void BtnDpFullscreen_Click(object sender, RoutedEventArgs e)
@@ -599,13 +633,16 @@ public partial class MainWindow
         int pageId = _currentDpPageId;
 
         var current = _dpStore.GetFullscreenImage(id, profile, pageId);
-        var result = ShowFullscreenDialog(current?.Path, current?.Rotation ?? 0);
+        var delay = _dpStore.GetScreensaverDelay(id, profile, pageId);
+        var result = ShowFullscreenDialog(current?.Path, current?.Rotation ?? 0, delay.Enabled, delay.Seconds);
         if (result is not { } picked) return;   // cancelled
 
         _dpStore.SetFullscreenImage(id, profile, pageId, picked.Path, picked.Rotation);
-        DpLog($"[FS] device {id} profile {profile} page {pageId} <- {Path.GetFileName(picked.Path)} (rot user={picked.Rotation})");
+        _dpStore.SetScreensaverDelay(id, profile, pageId, picked.DelayEnabled, picked.DelaySeconds);
+        DpLog($"[FS] device {id} profile {profile} page {pageId} <- {Path.GetFileName(picked.Path)} " +
+              $"(rot user={picked.Rotation}, screensaver={(picked.DelayEnabled ? picked.DelaySeconds + "s" : "off")})");
         LblStatus.Text = Loc.Get("dp_fullscreen_set_ok");
-        DpRequestRepaint(id);
+        DpRequestRepaint(id);   // also (re)configures this device's screensaver timer
     }
 
     private void BtnDpFullscreenClear_Click(object sender, RoutedEventArgs e)
@@ -617,9 +654,64 @@ public partial class MainWindow
         if (_dpStore.GetFullscreenImage(id, profile, pageId) is null) return;
         _dpStore.ClearFullscreenImage(id, profile, pageId);
         DpFullscreenAnimator.Stop(id);
+        _dpScreensaverShowing.Remove(id);   // the delay setting is kept, but has nothing to show now
         DpLog($"[FS] device {id} profile {profile} page {pageId}: cleared");
         LblStatus.Text = Loc.Get("dp_fullscreen_cleared");
         DpRequestRepaint(id);
+    }
+
+    /// <summary>
+    /// DEBUG: toggles <see cref="DpFullscreenAnimator.StartLiveTest"/> — a synthetic moving
+    /// pattern streamed straight to the raw panel, used to measure real sustained fps of the
+    /// <c>SetPanelImage</c>/panel wire path instead of guessing from protocol pacing alone.
+    /// Shares the fullscreen slot, so it temporarily takes over from whatever fullscreen
+    /// image/GIF is configured for the current page; stopping it restores the normal repaint.
+    /// </summary>
+    private void BtnDpLiveTest_Click(object sender, RoutedEventArgs e)
+    {
+        if (DpSelectedDeviceId() is not int id) return;
+
+        if (_dpLiveTestActive.Contains(id))
+        {
+            DpFullscreenAnimator.Stop(id);
+            _dpLiveTestActive.Remove(id);
+            DpLog($"[DP-FS] dev {id}: live test stopped, restoring normal repaint.");
+            DpRequestRepaint(id);
+            return;
+        }
+
+        if (!_dpClient.SupportsRawPanel)
+        {
+            DpLog($"[DP-FS] dev {id}: live test needs the native raw-panel backend — not available on this connection.");
+            return;
+        }
+
+        _dpLiveTestActive.Add(id);
+        DpFullscreenAnimator.StartLiveTest(_dpClient, DpLogAsync, id);
+    }
+
+    /// <summary>
+    /// DEBUG: toggles <see cref="DpGifAnimator.StartLiveTest"/> on key #0 — same idea as
+    /// <see cref="BtnDpLiveTest_Click"/> but for a SINGLE icon instead of the whole panel, to
+    /// compare real measured fps between the two paths (single icon is ~1/18th the bytes per
+    /// frame, so it should land far above the panel's measured ~5 fps).
+    /// </summary>
+    private void BtnDpLiveTestIcon_Click(object sender, RoutedEventArgs e)
+    {
+        if (DpSelectedDeviceId() is not int id) return;
+        const int testKey = 0;
+
+        if (_dpLiveTestIconActive.Contains(id))
+        {
+            DpGifAnimator.Stop(id, testKey);
+            _dpLiveTestIconActive.Remove(id);
+            DpLog($"[DP-GIF] dev {id}: live icon test stopped, restoring normal repaint.");
+            DpRequestRepaint(id);
+            return;
+        }
+
+        _dpLiveTestIconActive.Add(id);
+        DpGifAnimator.StartLiveTest(_dpClient, DpLogAsync, id, testKey);
     }
 
     /// <summary>
@@ -629,11 +721,15 @@ public partial class MainWindow
     /// had NO image preview at all, not even for the cropped result), and pick a
     /// 0/90/180/270 user-rotation for the whole picture (independent of, and applied before,
     /// the per-tile device counter-rotation — see DpFullscreenAnimator remarks). Crop/zoom
-    /// stays in THIS window (no separate popup). Returns null if cancelled.
+    /// stays in THIS window (no separate popup). Also carries the screensaver delay
+    /// (checkbox + seconds, mirroring the Settings tab's "turn off backlight when idle"
+    /// row) — see the section header above for what the two modes mean.
+    /// Returns null if cancelled.
     /// </summary>
-    private (string Path, int Rotation)? ShowFullscreenDialog(string? currentPath, int currentRotation)
+    private (string Path, int Rotation, bool DelayEnabled, int DelaySeconds)? ShowFullscreenDialog(
+        string? currentPath, int currentRotation, bool currentDelayEnabled, int currentDelaySeconds)
     {
-        (string Path, int Rotation)? result = null;
+        (string Path, int Rotation, bool DelayEnabled, int DelaySeconds)? result = null;
         string? pendingPath = currentPath;
 
         // True full-panel crop target (native engine) vs. the 12-tile union fallback —
@@ -726,6 +822,43 @@ public partial class MainWindow
             Margin = new Thickness(12, 0, 12, 12),
         };
 
+        // Screensaver delay — same shape as the Settings tab's backlight auto-off row
+        // (CkDpAutoOffEnable / TxtDpAutoOffSeconds): checkbox + seconds entry + "s".
+        var ckDelay = new CheckBox
+        {
+            Content = Loc.Get("dp_screensaver_delay_enable"),
+            IsChecked = currentDelayEnabled,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0),
+        };
+        var txtDelay = new TextBox
+        {
+            Text = (currentDelaySeconds > 0 ? currentDelaySeconds : DisplayPadStore.DefaultScreensaverSeconds).ToString(),
+            Width = 60,
+            Height = 25,
+            TextAlignment = TextAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Padding = new Thickness(5, 2, 5, 0),
+        };
+        var delayPanel = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(12, 0, 12, 4) };
+        delayPanel.Children.Add(ckDelay);
+        delayPanel.Children.Add(txtDelay);
+        delayPanel.Children.Add(new TextBlock
+        {
+            Text = Loc.Get("unit_seconds"),
+            Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
+            Margin = new Thickness(6, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        var delayHint = new TextBlock
+        {
+            Text = Loc.Get("dp_screensaver_delay_hint"),
+            Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
+            FontSize = 10,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(12, 0, 12, 12),
+        };
+
         var btnOk = new Button
         {
             Content = Loc.Get("ok"), IsDefault = true, Width = 80,
@@ -754,6 +887,8 @@ public partial class MainWindow
         panel.Children.Add(rotLabel);
         panel.Children.Add(rotPanel);
         panel.Children.Add(rotHint);
+        panel.Children.Add(delayPanel);
+        panel.Children.Add(delayHint);
         panel.Children.Add(buttons);
 
         var dlg = new Window
@@ -795,7 +930,10 @@ public partial class MainWindow
             string finalPath = cropEditor.GetResultPath() ?? pendingPath;
 
             int rotation = radios.FirstOrDefault(r => r.IsChecked == true)?.Tag as int? ?? 0;
-            result = (finalPath, rotation);
+            bool delayOn = ckDelay.IsChecked == true;
+            if (!int.TryParse(txtDelay.Text, out int delaySeconds) || delaySeconds <= 0)
+                delaySeconds = DisplayPadStore.DefaultScreensaverSeconds;
+            result = (finalPath, rotation, delayOn, delaySeconds);
             dlg.Close();
         };
         btnCancel.Click += (_, _) => dlg.Close();
@@ -816,6 +954,76 @@ public partial class MainWindow
             _dpAutoOffTimers[id] = t;
         }
         return t;
+    }
+
+    private BacklightIdleTimer DpGetScreensaverTimer(int id)
+    {
+        if (!_dpScreensaverTimers.TryGetValue(id, out var t))
+        {
+            t = new BacklightIdleTimer(Dispatcher, () => DpScreensaverTimeout(id), () => DpScreensaverWake(id));
+            _dpScreensaverTimers[id] = t;
+        }
+        return t;
+    }
+
+    /// <summary>Which page a device is currently showing — the foreground tab's navigation
+    /// state for the visible device, the per-device background one for every other.</summary>
+    private int DpCurrentPageIdFor(int id) =>
+        DpSelectedDeviceId() == id ? _currentDpPageId : _dpBgPageId.GetValueOrDefault(id, 0);
+
+    /// <summary>
+    /// (Re)arms the screensaver countdown for a device after a repaint. Always called with
+    /// the settings of the page that was just painted; <paramref name="enabled"/> is false
+    /// when that page has no screensaver image or the delay is switched off (the image then
+    /// behaves like the old always-on fullscreen mode, painted by the repaint itself).
+    /// <see cref="BacklightIdleTimer.RegisterActivity"/> at the end clears any latched
+    /// "already fired" state left over from the previous page/profile — without it the
+    /// timer would refuse to fire again after the first time.
+    /// </summary>
+    private void DpConfigureScreensaver(int id, bool enabled, int seconds)
+    {
+        _dpScreensaverShowing.Remove(id);
+        var t = DpGetScreensaverTimer(id);
+        t.Configure(enabled, seconds);
+        t.RegisterActivity();
+    }
+
+    /// <summary>Idle timeout: the page's image takes over the whole panel.</summary>
+    private void DpScreensaverTimeout(int id)
+    {
+        if (!_dpDeviceIds.Contains(id)) return;
+        int profile = _dpStore.GetCurrentProfile(id);
+        int pageId = DpCurrentPageIdFor(id);
+        var image = _dpStore.GetFullscreenImage(id, profile, pageId);
+        if (image is null || !File.Exists(image.Value.Path)) return;
+        if (!_dpStore.GetScreensaverDelay(id, profile, pageId).Enabled) return;
+
+        _dpScreensaverShowing.Add(id);
+        // Same flag the always-on fullscreen mode sets: it suppresses the per-key
+        // press-bounce re-uploads that would otherwise punch holes in the image.
+        _dpFullscreenByDevice[id] = true;
+        // Per-key GIF loops would keep repainting their own tiles over the screensaver.
+        DpGifAnimator.StopAllForDevice(id);
+
+        int rotation = _dpStore.GetRotation(id);
+        var (path, userRotation) = image.Value;
+        DpLog($"[FS] device {id}: screensaver on ({Path.GetFileName(path)})");
+        var previous = _dpUploadChain.TryGetValue(id, out var p) ? p : Task.CompletedTask;
+        _dpUploadChain[id] = previous.ContinueWith(
+            _ => DpFullscreenAnimator.Start(_dpClient, DpLogAsync, id, path, userRotation, rotation),
+            TaskScheduler.Default);
+    }
+
+    /// <summary>First key event after the screensaver kicked in: drop the image and repaint
+    /// the page's own icons. The key's action still runs — see <see cref="OnDpKey"/>, which
+    /// calls this (via the timer) BEFORE dispatching the action.</summary>
+    private void DpScreensaverWake(int id)
+    {
+        if (!_dpScreensaverShowing.Remove(id)) return;
+        DpFullscreenAnimator.Stop(id);
+        _dpFullscreenByDevice[id] = false;
+        DpLog($"[FS] device {id}: screensaver dismissed — restoring page icons");
+        DpRequestRepaint(id);
     }
 
     private void DpAutoOffTimeout(int id)
@@ -984,7 +1192,17 @@ public partial class MainWindow
             nextSlot = real[(curIdx - 1 + real.Count) % real.Count];
         else if (int.TryParse(t, out var n))
             nextSlot = real.Contains(n) ? n : null;
-        else { DpLog($"[EXEC] profile: target \"{t}\" not resolved"); return; }
+        else
+        {
+            // Named-profile target — see MainWindow.Everest.cs's EvSwitchProfile for the
+            // rationale (Base Camp XML/DB can carry a destination profile NAME instead of
+            // Next/Previous/a slot number).
+            int? byName = null;
+            foreach (var s in real)
+                if (string.Equals(_dpStore.GetProfileName(id, s), t, StringComparison.OrdinalIgnoreCase)) { byName = s; break; }
+            if (byName is null) { DpLog($"[EXEC] profile: target \"{t}\" not resolved"); return; }
+            nextSlot = byName;
+        }
 
         if (nextSlot is not int slot || slot == cur) return;
 
@@ -1298,9 +1516,7 @@ public partial class MainWindow
                 return;
             }
 
-            string iconsDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "K2.DisplayPad", "imported_xml", profileName);
+            string iconsDir = Path.Combine(K2Paths.For("K2.DisplayPad"), "imported_xml", profileName);
             Directory.CreateDirectory(iconsDir);
 
             _dpStore.ClearProfile(id, slot);
@@ -1356,6 +1572,7 @@ public partial class MainWindow
                 string? funcType  = b.Element("FunctionType")?.Value;
                 string? subType   = b.Element("SubFunctionType")?.Value;
                 string? funcValue = b.Element("FunctionValue")?.Value;
+                string? customUrl = b.Element("CustomURL")?.Value;
 
                 string? actionType, actionValue;
                 if (funcType == "K2Action")
@@ -1415,7 +1632,7 @@ public partial class MainWindow
                 }
                 else
                 {
-                    (actionType, actionValue) = BaseCampDbImporter.TranslateAction(funcType, subType, funcValue, macroNames);
+                    (actionType, actionValue) = BaseCampDbImporter.TranslateAction(funcType, subType, funcValue, macroNames, customUrl);
                 }
 
                 _dpStore.SaveButton(id, slot, pageId, btnIndex, imagePath, actionType, actionValue);
@@ -1895,19 +2112,18 @@ public partial class MainWindow
             && cm.PlacementTarget is FrameworkElement fe
             && fe.DataContext is DisplayPadKey key ? key : null;
 
+    /// <summary>Routes through the same unified image+action dialog as clicking the key
+    /// itself (<see cref="DpOpenKeyConfigDialog"/>) — previously opened a bare
+    /// <see cref="ButtonActionDialog"/> directly, which skipped auto-icon generation
+    /// entirely (a fresh "Page"/exec/folder action got no default picture, and there was
+    /// no way back into the image step short of "Cambia immagine") and never showed the
+    /// image/action config screen "other actions" land on after being configured.</summary>
     private void DpMnuConfigureAction_Click(object sender, RoutedEventArgs e)
     {
         if (!IsDpKeyBindingSectionActive) return;
         if (DpKeyFromMenu(sender) is not DisplayPadKey key) return;
         if (DpSelectedDeviceId() is not int id) return;
-        var dlg = new ButtonActionDialog(key.Index, key.ActionType, key.ActionValue, _dpActionHost) { Owner = this };
-        if (dlg.ShowDialog() == true)
-        {
-            key.ActionType = string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none" ? null : dlg.ActionType;
-            key.ActionValue = key.ActionType is null ? null : dlg.ActionValue;
-            _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, key.ImagePath, key.ActionType, key.ActionValue);
-            DpLog($"[ACT] key #{key.Index} <- {key.ActionType ?? "none"}");
-        }
+        DpOpenKeyConfigDialog(key, id);
     }
 
     /// <summary>Removing the action also clears the key's picture — a picture with no
@@ -2153,8 +2369,7 @@ public partial class MainWindow
     private static string DpBlackIconPath()
     {
         if (_dpBlackIconPath is string cached && File.Exists(cached)) return cached;
-        string dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "K2.DisplayPad");
+        string dir = K2Paths.For("K2.DisplayPad");
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, "blank_black_102.png");
         if (!File.Exists(path))
@@ -2202,6 +2417,8 @@ public partial class MainWindow
             _dpBgPageId.Remove(goneId);
             _dpBgPageHistory.Remove(goneId);
             if (_dpAutoOffTimers.Remove(goneId, out var goneTimer)) goneTimer.Dispose();
+            if (_dpScreensaverTimers.Remove(goneId, out var goneSs)) goneSs.Dispose();
+            _dpScreensaverShowing.Remove(goneId);
             _dpSavedBrightness.Remove(goneId);
         }
         var items = new List<DpDeviceItem>();
@@ -2331,7 +2548,13 @@ public partial class MainWindow
         // anonymous-method boundary (CS0170 "use of unassigned field"), even though
         // `fullscreenActive` makes it always-safe at runtime. Using `fullscreen.Value`
         // directly (guarded by the plain bool) sidesteps that entirely.
-        bool fullscreenActive = fullscreen.HasValue && File.Exists(fullscreen.Value.Path);
+        // In screensaver mode (delay enabled) the image is deliberately NOT painted here:
+        // the page shows its normal icons and the image only takes over after the idle
+        // timeout — see DpScreensaverTimeout.
+        var screensaver = _dpStore.GetScreensaverDelay(id, profile, pageId);
+        bool hasFullscreenImage = fullscreen.HasValue && File.Exists(fullscreen.Value.Path);
+        bool fullscreenActive = hasFullscreenImage && !screensaver.Enabled;
+        DpConfigureScreensaver(id, hasFullscreenImage && screensaver.Enabled, screensaver.Seconds);
         _dpFullscreenByDevice[id] = fullscreenActive;
         if (!fullscreenActive) DpFullscreenAnimator.Stop(id);
 
@@ -2431,6 +2654,12 @@ public partial class MainWindow
     private readonly Dictionary<int, bool> _dpRepaintBusy = new();
     /// <summary>Per-device: a repaint was requested while one was running — run another when done.</summary>
     private readonly HashSet<int> _dpRepaintPending = new();
+    /// <summary>Per-device: debug live-panel-test (<see cref="DpFullscreenAnimator.StartLiveTest"/>)
+    /// is currently running — see <see cref="BtnDpLiveTest_Click"/>.</summary>
+    private readonly HashSet<int> _dpLiveTestActive = new();
+    /// <summary>Per-device: debug live-SINGLE-ICON-test (<see cref="DpGifAnimator.StartLiveTest"/>,
+    /// always key #0) is currently running — see <see cref="BtnDpLiveTestIcon_Click"/>.</summary>
+    private readonly HashSet<int> _dpLiveTestIconActive = new();
     /// <summary>Per-device: whether a fullscreen image currently owns the hardware's 12 icons
     /// (set by <see cref="DpReloadCurrentProfile"/>) — checked by <see cref="DpUploadPressVisual"/>
     /// to skip the per-key press-bounce while the fullscreen panel is in control.</summary>
@@ -2543,8 +2772,14 @@ public partial class MainWindow
         int rotation = _dpStore.GetRotation(id);
         var rows = _dpStore.LoadPage(id, profile, pageId);
         var fullscreen = _dpStore.GetFullscreenImage(id, profile, pageId);
-        bool fullscreenActive = fullscreen.HasValue && File.Exists(fullscreen.Value.Path);
+        // Screensaver mode: painted later by DpScreensaverTimeout, not now — see
+        // DpReloadCurrentProfile (the foreground counterpart) for the full reasoning.
+        var screensaver = _dpStore.GetScreensaverDelay(id, profile, pageId);
+        bool hasFullscreenImage = fullscreen.HasValue && File.Exists(fullscreen.Value.Path);
+        bool fullscreenActive = hasFullscreenImage && !screensaver.Enabled;
+        DpConfigureScreensaver(id, hasFullscreenImage && screensaver.Enabled, screensaver.Seconds);
         _dpFullscreenByDevice[id] = fullscreenActive;
+        if (!fullscreenActive) DpFullscreenAnimator.Stop(id);
 
         var keysWithImage = new HashSet<int>(
             rows.Where(r => !string.IsNullOrEmpty(r.ImagePath) && File.Exists(r.ImagePath))
@@ -2711,6 +2946,10 @@ public partial class MainWindow
             bool pressed = e.GetBool("pressed");
 
             DpGetAutoOffTimer(evtDevId).RegisterActivity();
+            // Dismisses the screensaver (restoring this page's icons) if it is showing, and
+            // restarts its countdown. Deliberately BEFORE the action dispatch below, so the
+            // key that wakes the panel still does its job — just on top of the real icons.
+            DpGetScreensaverTimer(evtDevId).RegisterActivity();
 
             // The foreground tab (_activeDpDeviceId) uses the UI-bound state (_dpKeys,
             // _dpMatrixToIndex, _currentDpPageId, remap mode, press-bounce visual). Any OTHER

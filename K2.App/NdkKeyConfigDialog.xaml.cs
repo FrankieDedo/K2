@@ -2,7 +2,9 @@ using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using K2.App.Services;
 using K2.Core;
+using K2.Core.Services;
 using Microsoft.Win32;
 
 namespace K2.App;
@@ -51,6 +53,11 @@ public partial class NdkKeyConfigDialog : Window
 
         LblHeader.Text = $"Display Key {keyIndex + 1}  —  Configure";
 
+        // Hide "Default icon" entirely when no gallery folder exists on disk — see the
+        // equivalent note in DpKeyConfigDialog's constructor.
+        BtnGalleryIcon.Visibility = IconGalleryDefaults.HasGallery()
+            ? Visibility.Visible : Visibility.Collapsed;
+
         RefreshImagePreview();
         RefreshActionSummary();
     }
@@ -95,6 +102,10 @@ public partial class NdkKeyConfigDialog : Window
         _pendingPath = dlg.NewImagePath;
         RefreshImagePreview();
     }
+
+    /// <summary>Instantly (re)generates the auto icon for the current action, no dialog — see
+    /// the equivalent note in <c>DpKeyConfigDialog.BtnGalleryIcon_Click</c>.</summary>
+    private void BtnGalleryIcon_Click(object sender, RoutedEventArgs e) => TryAutoGenerateImage();
 
     private void RefreshImagePreview()
     {
@@ -157,19 +168,25 @@ public partial class NdkKeyConfigDialog : Window
     }
 
     /// <summary>
-    /// When the action just assigned/changed is "exec" or "folder", auto-generate the
-    /// key's picture (the executable's own icon, or a folder glyph + name) instead of
-    /// requiring the user to manually pick+crop an image.
+    /// When the action just assigned/changed is "exec", "folder" or "googlehome",
+    /// auto-generate the key's picture (the executable's own icon, a folder glyph + name, or
+    /// the Google Home device's own Material icon + name) instead of requiring the user to
+    /// manually pick+crop an image. Any OTHER action type falls through to
+    /// <see cref="IconGalleryDefaults"/> — see the equivalent note in
+    /// <c>DpKeyConfigDialog.TryAutoGenerateKeyImage</c>.
     /// </summary>
     private void TryAutoGenerateImage()
     {
         if (string.IsNullOrWhiteSpace(ActionValue)) return;
-        if (ActionType != "exec" && ActionType != "folder") return;
 
         string dest = AutoIconCachePath(ActionType!, ActionValue!);
-        bool ok = ActionType == "exec"
-            ? IconImageGenerator.TryGenerateExecIcon(ActionValue!, IconSize, dest)
-            : IconImageGenerator.TryGenerateDiskFolderIcon(ActionValue!, IconSize, dest);
+        bool ok = ActionType switch
+        {
+            "exec"       => IconImageGenerator.TryGenerateExecIcon(ActionValue!, IconSize, dest),
+            "folder"     => IconImageGenerator.TryGenerateDiskFolderIcon(ActionValue!, IconSize, dest),
+            "googlehome" => GoogleHomeIconCatalog.TryGenerateKeyIcon(ActionValue!, IconSize, dest),
+            _            => IconGalleryDefaults.TryGenerateKeyIcon(ActionType!, ActionValue!, IconSize, dest),
+        };
         if (!ok) return;
 
         _pendingPath = dest;
@@ -178,9 +195,7 @@ public partial class NdkKeyConfigDialog : Window
 
     private static string AutoIconCachePath(string kind, string sourceValue)
     {
-        string cacheRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "K2.App", "auto_icons");
+        string cacheRoot = Path.Combine(K2Paths.For("K2.App"), "auto_icons");
         Directory.CreateDirectory(cacheRoot);
 
         long mtime = 0;
@@ -208,12 +223,14 @@ public partial class NdkKeyConfigDialog : Window
             "browser"  => $"Browser: {val}",
             "profile"  => $"Profile: {val}",
             "oscmd"    => $"Shell: {val}",
-            "media"    => $"Media: {val}",
+            "media"    => $"Media: {ActionTypeHelper.MediaSummary(val)}",
             "mouse"    => $"Mouse: {val}",
             "text"     => $"Text: {val}",
             "command"  => $"Command: {val}",
             "macro"    => ActionTypeHelper.MacroSummary(val),
+            "googlehome" => ActionTypeHelper.GoogleHomeSummary(val),
             "pyscript" => "Python script",
+            "disable"  => Loc.Get("act_disable"),
             _          => ActionTypeHelper.IsUnrecognized(ActionType) ? Loc.Get("act_unrecognized") : $"{ActionType}: {val}",
         };
     }

@@ -4,13 +4,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using K2.Core;
 using K2.DisplayPad.Dialogs;
 
 namespace K2.DisplayPad;
 
 public partial class App : Application
 {
-    // %LocalAppData%\K2.DisplayPad\, not next to the exe: K2 installs to Program
+    // %LocalAppData%\K2\K2.DisplayPad\, not next to the exe: K2 installs to Program
     // Files by default (admin-write-protected), so writing there without elevation
     // used to fail silently and drop all logging. Matches the convention already
     // used by StateStore/CellConfigDialog/etc. in this project.
@@ -18,8 +19,7 @@ public partial class App : Application
 
     private static string EnsureLogPath()
     {
-        var dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "K2.DisplayPad");
+        var dir = K2Paths.For("K2.DisplayPad");
         try { Directory.CreateDirectory(dir); } catch { /* best-effort, same as the writers below */ }
         return Path.Combine(dir, "K2.DisplayPad.log");
     }
@@ -89,6 +89,10 @@ public partial class App : Application
         // AppSettings.AppFontFamily / Settings > Font in K2.App) before the
         // StartupUri window is created below.
         Core.Services.FontCatalog.Apply(Core.AppSettings.AppFontFamily);
+
+        // Same idea for the app-wide accent color theme (Settings > Accent color
+        // in K2.App: K2 Red vs Mountain Blue) — see AccentCatalog.Apply.
+        Core.Services.AccentCatalog.Apply(Core.AppSettings.AccentTheme);
 
         base.OnStartup(e); // creates/shows the StartupUri window (MainWindow.xaml)
     }

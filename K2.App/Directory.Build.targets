@@ -1,0 +1,12 @@
+<Project>
+  <!-- .targets (not .props) imports LAST in the MSBuild pipeline — needed
+       because something in the WindowsDesktop/WinForms SDK targets resets
+       NoWarn after a plain <NoWarn> in K2.App.csproj's PropertyGroup, so that
+       set alone never survived to the actual Csc invocation (confirmed: only
+       -p:NoWarn=WFAC010 on the command line worked, since global properties
+       can't be overwritten by a later target). See K2.App.csproj for why
+       WFAC010 is a false positive here. -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
+  </PropertyGroup>
+</Project>

@@ -21,7 +21,7 @@ namespace K2.App;
 public partial class App : Application
 {
     /// <summary>
-    /// Per-user, always-writable data folder (%LocalAppData%\K2.App\), shared by all
+    /// Per-user, always-writable data folder (%LocalAppData%\K2\K2.App\), shared by all
     /// modules. NOT next to the executable: K2 installs to Program Files by default,
     /// which is admin-write-protected — writing there without elevation used to fail
     /// silently and drop all logging.
@@ -30,8 +30,7 @@ public partial class App : Application
 
     private static string EnsureDataDir()
     {
-        var dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "K2.App");
+        var dir = K2Paths.For("K2.App");
         try { Directory.CreateDirectory(dir); } catch { /* best-effort, same as the writers below */ }
         return dir;
     }
@@ -261,6 +260,10 @@ public partial class App : Application
         // K2Theme.xaml merge (which declares the K2AppFontFamily resource this
         // overrides) already ran as part of base.OnStartup() above.
         FontCatalog.Apply(AppSettings.AppFontFamily);
+
+        // Same idea for the app-wide accent color theme (Settings > Accent color:
+        // K2 Red vs Mountain Blue) — see AccentCatalog.Apply.
+        AccentCatalog.Apply(AppSettings.AccentTheme);
 
         if (!_singleInstanceGranted)
         {
@@ -1005,15 +1008,28 @@ public partial class App : Application
         catch (Exception ex) { WriteLog("[Crash] TryWriteMiniDump threw: " + ex.Message); }
     }
 
+    private static readonly object _logLock = new();
+
+    // Kept open for the process lifetime instead of re-opening the file on every call:
+    // some raw-HID readers (e.g. EverestHidNative's ReaderLoop) can log 100+ lines/sec
+    // at Verbose, and File.AppendAllText's per-call open/write/close was expensive enough
+    // under that load to make the shared _logLock a bottleneck for every other thread
+    // trying to log at the same time (2026-07-28 report: app froze while Verbose logging
+    // was on and an Everest Max was streaming continuous LED telemetry over raw HID).
+    private static FileStream? _logStream;
+
     /// <summary>Thread-safe append to the log file next to the executable.</summary>
     public static void WriteLog(string text)
     {
         try
         {
-            lock (LogPath)
+            lock (_logLock)
             {
-                File.AppendAllText(LogPath,
+                _logStream ??= new FileStream(LogPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+                var bytes = System.Text.Encoding.UTF8.GetBytes(
                     $"[{DateTime.Now:HH:mm:ss.fff}] {text}{Environment.NewLine}");
+                _logStream.Write(bytes, 0, bytes.Length);
+                _logStream.Flush();
             }
         }
         catch { /* never throw inside the logger */ }

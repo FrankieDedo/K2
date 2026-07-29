@@ -35,9 +35,16 @@ echo [1] Cleaning previous publish/output ...
 if exist "%PUB%" rd /s /q "%PUB%"
 if exist "%OUT%" rd /s /q "%OUT%"
 
+REM Stamps K2.App's own AssemblyVersion with the release version being built, so
+REM the Settings tab's update-checker (Services/UpdateChecker.cs) compares itself
+REM against the right number. Falls back to K2.App.csproj's default <Version> when
+REM no VER arg was passed (e.g. a double-click test build).
+set "VERARG="
+if not "%VER%"=="" set "VERARG=-p:Version=%VER%"
+
 echo.
 echo [2/4] Publishing K2.App (win-x86, self-contained) ...
-dotnet publish "%ROOT%\K2.App\K2.App.csproj" -c Release -r win-x86 --self-contained true -p:Platform=x86 -o "%PUB%\K2.App"
+dotnet publish "%ROOT%\K2.App\K2.App.csproj" -c Release -r win-x86 --self-contained true -p:Platform=x86 %VERARG% -o "%PUB%\K2.App"
 if errorlevel 1 goto :fail
 
 echo.

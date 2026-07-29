@@ -19,11 +19,13 @@
 // runtime like Everest's layout-dependent canvas), so — unlike the Everest half — there is no
 // "canvas rebuild" case to re-apply after.
 
+using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using K2.App.Services;
+using K2.Core;
 
 namespace K2.App;
 
@@ -67,14 +69,15 @@ public partial class MainWindow
         var dlg = new KeycapCustomizeDialog(label, isEscKey: false, current?.ColorHex, current?.ImagePath) { Owner = this };
         dlg.Changed += () =>
         {
+            int profile = CurrentProfile();
             if (dlg.ColorHex is null && dlg.ImagePath is null)
             {
-                _store.ClearKeycapOverride(keyId);
+                _store.ClearKeycapOverride(profile, keyId);
                 _mpKeycapOverrides.Remove(keyId);
             }
             else
             {
-                _store.SetKeycapOverride(keyId, dlg.ColorHex, dlg.ImagePath);
+                _store.SetKeycapOverride(profile, keyId, dlg.ColorHex, dlg.ImagePath);
                 _mpKeycapOverrides[keyId] = new KeycapOverrideRecord(keyId, dlg.ColorHex, dlg.ImagePath);
             }
             ApplyMacroKeycapAppearanceToAllKeys();
@@ -82,8 +85,139 @@ public partial class MainWindow
         dlg.ShowDialog();
     }
 
+    /// <summary>Opens a single key's dialog unchanged for a 1-key selection (identical to
+    /// a plain click); for 2+ keys, opens ONE dialog (blank starting color/image) and
+    /// applies whatever the user picks to every key in the selection — mirrors
+    /// <see cref="OpenMpKeycapCustomizeDialog"/>'s persistence, just looped. See the
+    /// Everest Max equivalent (OpenEvKeycapCustomizeDialogBatch) for the full doc.</summary>
+    private void OpenMpKeycapCustomizeDialogBatch(IReadOnlyList<(int KeyId, string Label)> keys)
+    {
+        if (keys.Count == 0) return;
+        if (keys.Count == 1) { OpenMpKeycapCustomizeDialog(keys[0].KeyId, keys[0].Label); return; }
+
+        string label = Loc.Get("settings_keycap_edit_multi_label", keys.Count);
+        var dlg = new KeycapCustomizeDialog(label, isEscKey: false, currentColorHex: null, currentImagePath: null) { Owner = this };
+        dlg.Changed += () =>
+        {
+            int profile = CurrentProfile();
+            foreach (var (keyId, _) in keys)
+            {
+                if (dlg.ColorHex is null && dlg.ImagePath is null)
+                {
+                    _store.ClearKeycapOverride(profile, keyId);
+                    _mpKeycapOverrides.Remove(keyId);
+                }
+                else
+                {
+                    _store.SetKeycapOverride(profile, keyId, dlg.ColorHex, dlg.ImagePath);
+                    _mpKeycapOverrides[keyId] = new KeycapOverrideRecord(keyId, dlg.ColorHex, dlg.ImagePath);
+                }
+            }
+            ApplyMacroKeycapAppearanceToAllKeys();
+        };
+        dlg.ShowDialog();
+    }
+
+    // ─────────────────── Rectangular multi-key selection ───────────────────
+    // Drag a rubber-band square over the device box to select multiple keys at
+    // once. Two mutually-exclusive uses (only one gate is ever true at a time,
+    // same as Everest Max's EvDeviceBox_*/MainWindow.CustomLighting.cs, the
+    // pattern this follows): batch keycap editing (Settings' "Edit individual
+    // keycaps") — original 2026-07-26 use — and, since the same day's later
+    // addition of MacroPad Custom Lighting, painting every key the rectangle
+    // touches with the current paint effect (MainWindow.MpCustomLighting.cs's
+    // PaintMpKeysInRect). Wired to BdrMpDeviceBox's Preview mouse events
+    // (MainWindow.xaml) so the drag can start on top of a key Button; a plain
+    // click (below the 5px threshold) falls through to the normal single-key
+    // click (KeyButton_Click, MainWindow.Keys.cs).
+
+    private Point _mpRubberStart;
+    private bool _mpRubberTracking;
+    private bool _mpRubberActive;
+
+    private void MpDeviceBox_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (!_mpCustomPaintMode && !(_mpKeycapEditMode && IsMpSettingsSectionActive)) return;
+        _mpRubberStart = e.GetPosition(CvsMpRubberBand);
+        _mpRubberTracking = true;
+        _mpRubberActive = false;
+    }
+
+    private void MpDeviceBox_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (!_mpRubberTracking) return;
+        if (e.LeftButton != System.Windows.Input.MouseButtonState.Pressed)
+        {
+            CancelMpRubberBand();
+            return;
+        }
+        var p = e.GetPosition(CvsMpRubberBand);
+        if (!_mpRubberActive)
+        {
+            if (Math.Abs(p.X - _mpRubberStart.X) < 5 && Math.Abs(p.Y - _mpRubberStart.Y) < 5) return;
+            _mpRubberActive = true;
+            RectMpRubberBand.Visibility = Visibility.Visible;
+            BdrMpDeviceBox.CaptureMouse();
+        }
+        var r = new Rect(_mpRubberStart, p);
+        Canvas.SetLeft(RectMpRubberBand, r.X);
+        Canvas.SetTop(RectMpRubberBand, r.Y);
+        RectMpRubberBand.Width  = r.Width;
+        RectMpRubberBand.Height = r.Height;
+    }
+
+    private void MpDeviceBox_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (!_mpRubberTracking) return;
+        bool wasActive = _mpRubberActive;
+        var rect = wasActive ? new Rect(_mpRubberStart, e.GetPosition(CvsMpRubberBand)) : Rect.Empty;
+        CancelMpRubberBand();
+        if (!wasActive) return;
+        e.Handled = true;
+        if (_mpCustomPaintMode)
+            PaintMpKeysInRect(rect);
+        else if (_mpKeycapEditMode && IsMpSettingsSectionActive)
+            MpOpenKeycapDialogForRect(rect);
+    }
+
+    private void CancelMpRubberBand()
+    {
+        _mpRubberTracking = false;
+        _mpRubberActive = false;
+        RectMpRubberBand.Visibility = Visibility.Collapsed;
+        if (BdrMpDeviceBox.IsMouseCaptured) BdrMpDeviceBox.ReleaseMouseCapture();
+    }
+
+    /// <summary>Collects every key Button whose on-screen bounds intersect
+    /// <paramref name="rect"/> (CvsMpRubberBand coordinate space) and opens ONE batch
+    /// KeycapCustomizeDialog for them. Iterates _mpKeyVisuals directly, same KeyId
+    /// space KeyButton_Click (MainWindow.Keys.cs) already uses for a single click.</summary>
+    private void MpOpenKeycapDialogForRect(Rect rect)
+    {
+        var matches = new List<(int KeyId, string Label)>();
+        foreach (var (keyId, v) in _mpKeyVisuals)
+        {
+            if (!v.Button.IsVisible) continue;
+            var bounds = v.Button.TransformToVisual(CvsMpRubberBand)
+                .TransformBounds(new Rect(0, 0, v.Button.ActualWidth, v.Button.ActualHeight));
+            if (!rect.IntersectsWith(bounds)) continue;
+            matches.Add((keyId, (v.Button.Content as TextBlock)?.Text ?? $"#{keyId}"));
+        }
+        OpenMpKeycapCustomizeDialogBatch(matches);
+    }
+
+    /// <summary>
+    /// Key namespace for the Settings section — reuses <c>CkMacroSync</c>/<c>macroled.sync</c>,
+    /// the same device-wide "sync across profiles" flag as the LED panel (see
+    /// <see cref="MacroLedPrefix"/>'s doc comment and Everest Max's EvSettingsPrefix, which
+    /// does the same thing for its own RGB/Settings/Dial). User request 2026-07-25.
+    /// </summary>
+    private string MpSettingsPrefix() =>
+        CkMacroSync.IsChecked == true ? "settings." : $"settings.p{CurrentProfile()}.";
+
     /// <summary>One-time control setup (ItemsSource) + persisted-value load, guarded by
-    /// _mpSettingsSuppress. Called once from the constructor.</summary>
+    /// _mpSettingsSuppress. Called once from the constructor, and again on every profile
+    /// switch (see ReloadCurrentProfile, MainWindow.Keys.cs).</summary>
     private void InitMpSettingsPanel()
     {
         CbMpKeycapStyle.ItemsSource       = KeycapStyleChoices;
@@ -98,15 +232,23 @@ public partial class MainWindow
     /// Settings-section controls.</summary>
     private void LoadMpKeycapAppearanceFromStore()
     {
-        _mpKeycapColorMode = ParseColorMode(_store.GetSetting("settings.keycap_color_mode"), KeycapColorMode.Black);
-        _mpKeycapCustomHex = _store.GetSetting("settings.keycap_custom_hex") is { Length: > 0 } hex ? hex : "#404040";
-        _mpKeycapTextColorMode = ParseColorMode(_store.GetSetting("settings.keycap_text_color_mode"), KeycapColorMode.White);
-        _mpKeycapTextCustomHex = _store.GetSetting("settings.keycap_text_custom_hex") is { Length: > 0 } txt ? txt : "#FFFFFF";
+        CkMpSettingsSync.IsChecked = CkMacroSync.IsChecked;
+
+        // Profile-scoped (or shared, if synced) namespace first, falling back to the legacy
+        // always-global "settings.keycap_*" keys — one-time seeding for existing installs/
+        // profiles that never had their own per-profile value saved yet.
+        string prefix = MpSettingsPrefix();
+        string? Get(string key) => _store.GetSetting(prefix + key) ?? _store.GetSetting("settings." + key);
+
+        _mpKeycapColorMode = ParseColorMode(Get("keycap_color_mode"), KeycapColorMode.Black);
+        _mpKeycapCustomHex = Get("keycap_custom_hex") is { Length: > 0 } hex ? hex : "#404040";
+        _mpKeycapTextColorMode = ParseColorMode(Get("keycap_text_color_mode"), KeycapColorMode.White);
+        _mpKeycapTextCustomHex = Get("keycap_text_custom_hex") is { Length: > 0 } txt ? txt : "#FFFFFF";
 
         // Migration — see the Everest Max equivalent in LoadKeycapAppearanceFromStore
         // (MainWindow.KeycapAppearance.cs) for the full explanation of the old 4-value scheme.
-        int rawStyle = int.TryParse(_store.GetSetting("settings.keycap_style"), out var s) ? s : 0;
-        if (_store.GetSetting("settings.keycap_translucent_legend") is not { } translucentRaw)
+        int rawStyle = int.TryParse(Get("keycap_style"), out var s) ? s : 0;
+        if (Get("keycap_translucent_legend") is not { } translucentRaw)
         {
             _mpKeycapTranslucentLegend = rawStyle == 1; // old Translucent
             _mpKeycapStyleValue = rawStyle switch
@@ -115,8 +257,8 @@ public partial class MainWindow
                 3 => KeycapStyle.ReversePudding,
                 _ => KeycapStyle.Normal,
             };
-            _store.SetSetting("settings.keycap_style", ((int)_mpKeycapStyleValue).ToString());
-            _store.SetSetting("settings.keycap_translucent_legend", _mpKeycapTranslucentLegend ? "1" : "0");
+            _store.SetSetting(prefix + "keycap_style", ((int)_mpKeycapStyleValue).ToString());
+            _store.SetSetting(prefix + "keycap_translucent_legend", _mpKeycapTranslucentLegend ? "1" : "0");
         }
         else
         {
@@ -126,7 +268,7 @@ public partial class MainWindow
         CkMpKeycapTranslucentLegend.IsChecked = _mpKeycapTranslucentLegend;
 
         _mpKeycapOverrides.Clear();
-        foreach (var (keyId, rec) in _store.LoadAllKeycapOverrides())
+        foreach (var (keyId, rec) in _store.LoadAllKeycapOverrides(CurrentProfile()))
             _mpKeycapOverrides[keyId] = rec;
 
         switch (_mpKeycapColorMode)
@@ -155,13 +297,38 @@ public partial class MainWindow
         ApplyMacroKeycapAppearanceToAllKeys();
     }
 
+    /// <summary>Re-saves the currently cached Keycap Appearance values under
+    /// <see cref="MpSettingsPrefix"/>'s current namespace — used when "sync across
+    /// profiles" is toggled (see CkMpSettingsSync_Click), same reasoning as Everest
+    /// Max's SaveKeycapAppearanceToStore. User request 2026-07-25.</summary>
+    private void SaveMpKeycapAppearanceToStore()
+    {
+        string prefix = MpSettingsPrefix();
+        _store.SetSetting(prefix + "keycap_color_mode", ColorModeToString(_mpKeycapColorMode));
+        _store.SetSetting(prefix + "keycap_custom_hex", _mpKeycapCustomHex);
+        _store.SetSetting(prefix + "keycap_text_color_mode", ColorModeToString(_mpKeycapTextColorMode));
+        _store.SetSetting(prefix + "keycap_text_custom_hex", _mpKeycapTextCustomHex);
+        _store.SetSetting(prefix + "keycap_style", ((int)_mpKeycapStyleValue).ToString());
+        _store.SetSetting(prefix + "keycap_translucent_legend", _mpKeycapTranslucentLegend ? "1" : "0");
+    }
+
+    /// <summary>Mirrors CkMacroSync (the LED panel's own checkbox) — same underlying
+    /// device flag, see MpSettingsPrefix's doc comment.</summary>
+    private void CkMpSettingsSync_Click(object sender, RoutedEventArgs e)
+    {
+        if (_mpSettingsSuppress) return;
+        CkMacroSync.IsChecked = CkMpSettingsSync.IsChecked;
+        CkMacroSync_Click(sender, e);
+        SaveMpKeycapAppearanceToStore();
+    }
+
     private void RbMpKeycapColor_Checked(object sender, RoutedEventArgs e)
     {
         if (_mpSettingsSuppress) return;
         _mpKeycapColorMode = sender == RbMpKeycapWhite  ? KeycapColorMode.White
                            : sender == RbMpKeycapCustom ? KeycapColorMode.Custom
                            :                              KeycapColorMode.Black;
-        _store.SetSetting("settings.keycap_color_mode", ColorModeToString(_mpKeycapColorMode));
+        _store.SetSetting(MpSettingsPrefix() + "keycap_color_mode", ColorModeToString(_mpKeycapColorMode));
         BtnMpKeycapCustomColor.IsEnabled = _mpKeycapColorMode == KeycapColorMode.Custom;
         ApplyMacroKeycapAppearanceToAllKeys();
     }
@@ -172,7 +339,7 @@ public partial class MainWindow
         _mpKeycapTextColorMode = sender == RbMpKeycapTextBlack  ? KeycapColorMode.Black
                                 : sender == RbMpKeycapTextCustom ? KeycapColorMode.Custom
                                 :                                  KeycapColorMode.White;
-        _store.SetSetting("settings.keycap_text_color_mode", ColorModeToString(_mpKeycapTextColorMode));
+        _store.SetSetting(MpSettingsPrefix() + "keycap_text_color_mode", ColorModeToString(_mpKeycapTextColorMode));
         BtnMpKeycapTextColor.IsEnabled = _mpKeycapTextColorMode == KeycapColorMode.Custom;
         ApplyMacroKeycapAppearanceToAllKeys();
     }
@@ -191,7 +358,7 @@ public partial class MainWindow
         if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
         _mpKeycapCustomHex = $"#{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
-        _store.SetSetting("settings.keycap_custom_hex", _mpKeycapCustomHex);
+        _store.SetSetting(MpSettingsPrefix() + "keycap_custom_hex", _mpKeycapCustomHex);
         BtnMpKeycapCustomColor.Background = new SolidColorBrush(Color.FromRgb(dlg.Color.R, dlg.Color.G, dlg.Color.B));
 
         if (RbMpKeycapCustom.IsChecked != true)
@@ -214,7 +381,7 @@ public partial class MainWindow
         if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
         _mpKeycapTextCustomHex = $"#{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
-        _store.SetSetting("settings.keycap_text_custom_hex", _mpKeycapTextCustomHex);
+        _store.SetSetting(MpSettingsPrefix() + "keycap_text_custom_hex", _mpKeycapTextCustomHex);
         BtnMpKeycapTextColor.Background = new SolidColorBrush(Color.FromRgb(dlg.Color.R, dlg.Color.G, dlg.Color.B));
 
         if (RbMpKeycapTextCustom.IsChecked != true)
@@ -228,7 +395,7 @@ public partial class MainWindow
         if (_mpSettingsSuppress) return;
         if (CbMpKeycapStyle.SelectedItem is not KeycapStyleChoice pick) return;
         _mpKeycapStyleValue = pick.Style;
-        _store.SetSetting("settings.keycap_style", ((int)pick.Style).ToString());
+        _store.SetSetting(MpSettingsPrefix() + "keycap_style", ((int)pick.Style).ToString());
         ApplyMacroKeycapAppearanceToAllKeys();
     }
 
@@ -236,7 +403,7 @@ public partial class MainWindow
     {
         if (_mpSettingsSuppress) return;
         _mpKeycapTranslucentLegend = CkMpKeycapTranslucentLegend.IsChecked == true;
-        _store.SetSetting("settings.keycap_translucent_legend", _mpKeycapTranslucentLegend ? "1" : "0");
+        _store.SetSetting(MpSettingsPrefix() + "keycap_translucent_legend", _mpKeycapTranslucentLegend ? "1" : "0");
         ApplyMacroKeycapAppearanceToAllKeys();
     }
 
@@ -261,44 +428,69 @@ public partial class MainWindow
     /// </summary>
     private void ApplyMacroKeycapAppearanceToAllKeys()
     {
+        foreach (int keyId in _mpKeyVisuals.Keys)
+        {
+            // A key currently mid-physical-press has its IsHighlighted style trigger
+            // (MacroKeyStyle) active, which outranks whatever Background/BorderBrush we'd
+            // write here via SetCurrentValue — but the value we DO write still becomes the
+            // new baseline the trigger reverts to on release, same hazard
+            // OnMacroPadColorsUpdated already guards against for the LED-color path (see
+            // UpdateMpLedPreviewActive's doc comment). Left unguarded here, a settings
+            // change/profile switch landing mid-press (e.g. a macro key bound to "switch
+            // profile") silently rewrote that baseline to the new profile's default
+            // color, which only became visible once released — reading as the key
+            // "turning gray and staying gray" after a tap (user report 2026-07-27).
+            // Skipped keys are caught up the instant they're released, see
+            // ApplyMacroKeycapAppearanceToKey's call in HandleKeyEvent (MainWindow.Keys.cs).
+            if (keyId < _keys.Length && _keys[keyId].IsHighlighted) continue;
+            ApplyMacroKeycapAppearanceToKey(keyId);
+        }
+    }
+
+    /// <summary>Applies the static (non-LED) keycap appearance to a single MacroPad key —
+    /// see <see cref="ApplyMacroKeycapAppearanceToAllKeys"/> for the full doc, this is just
+    /// its per-key body pulled out so a key can be refreshed on its own right after a
+    /// physical release, bypassing the IsHighlighted skip above (the key is no longer
+    /// highlighted by the time this runs, so there's nothing left to protect).</summary>
+    private void ApplyMacroKeycapAppearanceToKey(int keyId)
+    {
+        if (!_mpKeyVisuals.TryGetValue(keyId, out var v)) return;
+
         var defaultKeycapBrush = new SolidColorBrush(ResolveMpKeycapColor());
         var ledOffBrush        = new SolidColorBrush(LedOffColor);
         var textBrush          = new SolidColorBrush(ResolveMpKeycapTextColor());
 
-        foreach (var (keyId, v) in _mpKeyVisuals)
+        _mpKeycapOverrides.TryGetValue(keyId, out var ov);
+        var keycapBrush = ov?.ColorHex is { Length: > 0 } hex && TryParseHexColor(hex, out var c)
+            ? new SolidColorBrush(c)
+            : defaultKeycapBrush;
+
+        switch (_mpKeycapStyleValue)
         {
-            _mpKeycapOverrides.TryGetValue(keyId, out var ov);
-            var keycapBrush = ov?.ColorHex is { Length: > 0 } hex && TryParseHexColor(hex, out var c)
-                ? new SolidColorBrush(c)
-                : defaultKeycapBrush;
-
-            switch (_mpKeycapStyleValue)
-            {
-                case KeycapStyle.Pudding:
-                    // Center/Background = keycap color (static); border (+ Mount, which mirrors it
-                    // via TemplateBinding) gets the live LED color per-tick — this is just the
-                    // "LED off" baseline (slightly-gray white).
-                    SetKeyBackground(v.Button, keycapBrush);
-                    SetKeyBorderBrush(v.Button, ledOffBrush);
-                    break;
-                case KeycapStyle.ReversePudding:
-                    // Border (+ Mount) = the static keycap color; center/Background gets the live
-                    // LED color per-tick — this is just the "LED off" baseline.
-                    SetKeyBackground(v.Button, ledOffBrush);
-                    SetKeyBorderBrush(v.Button, keycapBrush);
-                    break;
-                default: // Normal — border (+ Mount) = the static keycap color.
-                    SetKeyBackground(v.Button, keycapBrush);
-                    SetKeyBorderBrush(v.Button, keycapBrush);
-                    break;
-            }
-
-            v.Halo.Background = Brushes.Transparent;
-            SetLegendForeground(v.Button, _mpKeycapTranslucentLegend ? Brushes.White : textBrush);
-
-            _mpOriginalKeyContent.TryGetValue(keyId, out var original);
-            ApplyKeycapImageOverride(v.Button, original, ov?.ImagePath);
+            case KeycapStyle.Pudding:
+                // Center/Background = keycap color (static); border (+ Mount, which mirrors it
+                // via TemplateBinding) gets the live LED color per-tick — this is just the
+                // "LED off" baseline (slightly-gray white).
+                SetKeyBackground(v.Button, keycapBrush);
+                SetKeyBorderBrush(v.Button, ledOffBrush);
+                break;
+            case KeycapStyle.ReversePudding:
+                // Border (+ Mount) = the static keycap color; center/Background gets the live
+                // LED color per-tick — this is just the "LED off" baseline.
+                SetKeyBackground(v.Button, ledOffBrush);
+                SetKeyBorderBrush(v.Button, keycapBrush);
+                break;
+            default: // Normal — border (+ Mount) = the static keycap color.
+                SetKeyBackground(v.Button, keycapBrush);
+                SetKeyBorderBrush(v.Button, keycapBrush);
+                break;
         }
+
+        v.Halo.Background = Brushes.Transparent;
+        SetLegendForeground(v.Button, _mpKeycapTranslucentLegend ? Brushes.White : textBrush);
+
+        _mpOriginalKeyContent.TryGetValue(keyId, out var original);
+        ApplyKeycapImageOverride(v.Button, original, ov?.ImagePath);
     }
 
     /// <summary>Applies one LED-poll tick's live color to a single MacroPad key, routed to the

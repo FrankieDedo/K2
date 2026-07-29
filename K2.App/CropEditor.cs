@@ -102,6 +102,13 @@ internal sealed class CropEditor
     /// <summary>True once <see cref="Load"/> has succeeded and hasn't been cleared since.</summary>
     public bool HasImage => _sourcePath is not null;
 
+    /// <summary>True when the currently loaded source is an animated GIF being played live
+    /// (only possible when constructed with <c>animateGifs: true</c>) — <see cref="GetResultPath"/>
+    /// returns a <see cref="CroppedGifRef"/> sidecar path in that case, not a PNG, so callers
+    /// that need an actual image file (e.g. handing the "current icon" to <c>TextIconDialog</c>'s
+    /// "on top of image" mode) should fall back to the original source path instead.</summary>
+    public bool IsGif => _isGif;
+
     /// <param name="targetW">Crop output width in pixels.</param>
     /// <param name="targetH">Crop output height in pixels.</param>
     /// <param name="maxViewportPx">Cap on the on-screen viewport's longer side — callers
@@ -411,11 +418,22 @@ internal sealed class CropEditor
         catch { return null; }
     }
 
+    /// <summary>
+    /// Resets pan/zoom for a freshly loaded (or re-targeted) source: default/minimum zoom is
+    /// now "contain" (<c>Math.Min</c>) — the whole icon always visible, letterboxed with black
+    /// bars on whichever axis doesn't match the target aspect — NOT "cover" (<c>Math.Max</c>),
+    /// which used to be both the default AND the floor, so a non-square icon could never be
+    /// zoomed out far enough to see the cropped-off edges (2026-07-25, user request: "zoom
+    /// should always start at minimum regardless of the icon's size"). The zoom range still
+    /// reaches up to a full "cover" crop and beyond (×4 past it) for anyone who wants to fill
+    /// the tile with no bars, same ceiling as before.
+    /// </summary>
     private void FitCover()
     {
         double vw = _viewport.Width, vh = _viewport.Height;
-        _minScale = Math.Max(vw / _srcW, vh / _srcH);
-        _maxScale = _minScale * 4;
+        double coverScale = Math.Max(vw / _srcW, vh / _srcH);
+        _minScale = Math.Min(vw / _srcW, vh / _srcH);
+        _maxScale = coverScale * 4;
         _scale = _minScale;
         _tx = (vw - _srcW * _scale) / 2;
         _ty = (vh - _srcH * _scale) / 2;
@@ -455,11 +473,21 @@ internal sealed class CropEditor
         Canvas.SetTop(_img, _ty);
     }
 
+    /// <summary>Keeps the image covering the viewport on each axis where it does (normal
+    /// crop-drag clamp); when "contain" zoom leaves an axis letterboxed (image smaller than
+    /// the viewport there), centers that axis instead — <c>Math.Clamp</c> would otherwise be
+    /// called with min &gt; max (the old cover-only clamp assumed the image always covered
+    /// both axes, which no longer holds now that the default/minimum zoom is "contain").</summary>
     private void ClampTranslate()
     {
-        _tx = Math.Clamp(_tx, _viewport.Width - _srcW * _scale, 0);
-        _ty = Math.Clamp(_ty, _viewport.Height - _srcH * _scale, 0);
+        _tx = ClampAxis(_tx, _viewport.Width, _srcW * _scale);
+        _ty = ClampAxis(_ty, _viewport.Height, _srcH * _scale);
     }
+
+    private static double ClampAxis(double translate, double viewportSize, double contentSize) =>
+        contentSize <= viewportSize
+            ? (viewportSize - contentSize) / 2
+            : Math.Clamp(translate, viewportSize - contentSize, 0);
 
     private void Viewport_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -536,22 +564,33 @@ internal sealed class CropEditor
         {
             g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
             g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+            // Always clear first now (not just for roundCorners) — the "contain" zoom range
+            // (see FitCover) can leave `rect` letterboxed below, which needs a background to
+            // show through; same key-housing black as key_button.png/the live viewport.
+            g.Clear(System.Drawing.Color.Black);
 
             if (roundCorners)
             {
                 // The physical key screen is a square LCD with no mechanical bezel crop —
-                // paint the corners the same key-housing black as key_button.png (matches
-                // MainWindow.xaml's DpKeyButtonStyle) and clip the drawn icon to the same
-                // KeyCornerRadiusRatio rounded rect used by the live preview (UpdateViewportClip).
+                // clip the drawn icon to the same KeyCornerRadiusRatio rounded rect used by
+                // the live preview (UpdateViewportClip); corners fall through to the black
+                // cleared above.
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                g.Clear(System.Drawing.Color.Black);
                 float radius = (float)(Math.Min(_targetW, _targetH) * KeyCornerRadiusRatio);
                 using var clipPath = RoundedRectPath(0, 0, _targetW, _targetH, radius);
                 g.SetClip(clipPath);
             }
 
-            g.DrawImage(srcBmp, new System.Drawing.Rectangle(0, 0, _targetW, _targetH),
-                        rect.X, rect.Y, rect.Width, rect.Height, System.Drawing.GraphicsUnit.Pixel);
+            // Normally `rect` already matches the target aspect (the viewport is built to
+            // that aspect, and ClampTranslate keeps the crop window inside the source once
+            // zoomed to "cover" or beyond) — but at the new "contain" end of the zoom range
+            // (see FitCover) it can be letterboxed on one axis, clipped to the source bounds
+            // and no longer matching the target aspect. Draw into an aspect-correct, centered
+            // sub-rect there instead of stretching to fill (which would distort the icon).
+            var dest = noCrop
+                ? new System.Drawing.Rectangle(0, 0, _targetW, _targetH)
+                : FitRect(rect.Width, rect.Height, _targetW, _targetH);
+            g.DrawImage(srcBmp, dest, rect.X, rect.Y, rect.Width, rect.Height, System.Drawing.GraphicsUnit.Pixel);
         }
 
         string cacheDir = System.IO.Path.Combine(
@@ -566,6 +605,20 @@ internal sealed class CropEditor
         string outPath = System.IO.Path.Combine(cacheDir, name);
         result.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
         return outPath;
+    }
+
+    /// <summary>Centers a <paramref name="srcW"/>×<paramref name="srcH"/>-aspect rect inside
+    /// a <paramref name="dstW"/>×<paramref name="dstH"/> canvas without cropping ("contain" —
+    /// letterboxed on whichever axis doesn't match) — used by <see cref="GetResultPath"/> when
+    /// the crop window ends up smaller than the target aspect (the "contain" end of the zoom
+    /// range, see <see cref="FitCover"/>).</summary>
+    private static System.Drawing.Rectangle FitRect(double srcW, double srcH, int dstW, int dstH)
+    {
+        double srcAspect = srcW / srcH, dstAspect = (double)dstW / dstH;
+        int w, h;
+        if (srcAspect > dstAspect) { w = dstW; h = Math.Max(1, (int)Math.Round(dstW / srcAspect)); }
+        else { h = dstH; w = Math.Max(1, (int)Math.Round(dstH * srcAspect)); }
+        return new System.Drawing.Rectangle((dstW - w) / 2, (dstH - h) / 2, w, h);
     }
 
     /// <summary>Builds a rounded-rectangle path for <see cref="GetResultPath"/>'s corner

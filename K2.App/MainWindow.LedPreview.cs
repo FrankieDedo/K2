@@ -267,6 +267,11 @@ public partial class MainWindow
 
     private void OnMacroPadColorsUpdated(MacroPadSdkNative.FWColor[] colors)
     {
+        // While Custom paint mode is on, the key visuals show the user's UNSAVED
+        // paint overlays — same guard as Everest Max's OnEverestColorsUpdated
+        // (MainWindow.CustomLighting.cs's _customPaintMode), see that comment for
+        // the full rationale (a poll tick would otherwise stomp the painted preview).
+        if (_mpCustomPaintMode) return;
         if (_mpColorLogCount < 3)
         {
             _mpColorLogCount++;

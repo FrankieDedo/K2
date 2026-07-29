@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using K2.Core;
 using Microsoft.Data.Sqlite;
 
 namespace K2.App.Services;
@@ -33,16 +34,15 @@ public sealed class Everest60Store : IDisposable
 
     public static string DefaultDbPath()
     {
-        var dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "K2.App");
+        var dir = K2Paths.For("K2.App");
         return Path.Combine(dir, "everest60.db");
     }
 
     private void EnsureSchema()
     {
-        using var cmd = _conn.CreateCommand();
-        cmd.CommandText = @"
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = @"
 CREATE TABLE IF NOT EXISTS Keys (
     Profile     INTEGER NOT NULL,
     LedIndex    INTEGER NOT NULL,
@@ -58,22 +58,75 @@ CREATE TABLE IF NOT EXISTS Settings (
 );
 
 CREATE TABLE IF NOT EXISTS KeycapOverrides (
-    KeyId     INTEGER PRIMARY KEY,
+    Profile   INTEGER NOT NULL,
+    KeyId     INTEGER NOT NULL,
     ColorHex  TEXT,
-    ImagePath TEXT
+    ImagePath TEXT,
+    PRIMARY KEY (Profile, KeyId)
 );";
-        cmd.ExecuteNonQuery();
+            cmd.ExecuteNonQuery();
+        }
+        MigrateKeycapOverridesToPerProfile();
+    }
+
+    /// <summary>One-time migration (2026-07-25) — see EverestStore.cs's identical method
+    /// for the full rationale. Ev60 uses the same 5 fixed profile slots (Ev60ProfileCount,
+    /// MainWindow.Everest60.cs).</summary>
+    private void MigrateKeycapOverridesToPerProfile()
+    {
+        bool hasProfileColumn = false;
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA table_info(KeycapOverrides)";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                if (string.Equals(r.GetString(1), "Profile", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasProfileColumn = true;
+                    break;
+                }
+            }
+        }
+        if (hasProfileColumn) return;
+
+        using var tx = _conn.BeginTransaction();
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+            cmd.CommandText = "ALTER TABLE KeycapOverrides RENAME TO KeycapOverrides_old";
+            cmd.ExecuteNonQuery();
+        }
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+            cmd.CommandText = @"
+CREATE TABLE KeycapOverrides (
+    Profile   INTEGER NOT NULL,
+    KeyId     INTEGER NOT NULL,
+    ColorHex  TEXT,
+    ImagePath TEXT,
+    PRIMARY KEY (Profile, KeyId)
+);
+INSERT INTO KeycapOverrides (Profile, KeyId, ColorHex, ImagePath)
+SELECT p.value, o.KeyId, o.ColorHex, o.ImagePath
+FROM KeycapOverrides_old o, (SELECT 1 AS value UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5) p;
+DROP TABLE KeycapOverrides_old;";
+            cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
     }
 
     // ---------- per-key appearance overrides (color / custom image, incl. Esc Mountain logo) ----------
-    // Global (not per-profile) like the rest of Keycap Appearance — see MainWindow.Everest60.cs.
+    // Per-profile (2026-07-25, migrated from device-wide) — see MainWindow.Everest60.cs.
     // KeyId = LED index (same identity as _ev60KeyVisuals); Esc is LED index 0.
 
-    public Dictionary<int, KeycapOverrideRecord> LoadAllKeycapOverrides()
+    public Dictionary<int, KeycapOverrideRecord> LoadAllKeycapOverrides(int profile)
     {
         var result = new Dictionary<int, KeycapOverrideRecord>();
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "SELECT KeyId, ColorHex, ImagePath FROM KeycapOverrides";
+        cmd.CommandText = "SELECT KeyId, ColorHex, ImagePath FROM KeycapOverrides WHERE Profile=$p";
+        cmd.Parameters.AddWithValue("$p", profile);
         using var r = cmd.ExecuteReader();
         while (r.Read())
         {
@@ -83,22 +136,24 @@ CREATE TABLE IF NOT EXISTS KeycapOverrides (
         return result;
     }
 
-    public void SetKeycapOverride(int keyId, string? colorHex, string? imagePath)
+    public void SetKeycapOverride(int profile, int keyId, string? colorHex, string? imagePath)
     {
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = @"
-INSERT INTO KeycapOverrides(KeyId, ColorHex, ImagePath) VALUES ($k, $c, $i)
-ON CONFLICT(KeyId) DO UPDATE SET ColorHex=excluded.ColorHex, ImagePath=excluded.ImagePath";
+INSERT INTO KeycapOverrides(Profile, KeyId, ColorHex, ImagePath) VALUES ($p, $k, $c, $i)
+ON CONFLICT(Profile, KeyId) DO UPDATE SET ColorHex=excluded.ColorHex, ImagePath=excluded.ImagePath";
+        cmd.Parameters.AddWithValue("$p", profile);
         cmd.Parameters.AddWithValue("$k", keyId);
         cmd.Parameters.AddWithValue("$c", (object?)colorHex ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$i", (object?)imagePath ?? DBNull.Value);
         cmd.ExecuteNonQuery();
     }
 
-    public void ClearKeycapOverride(int keyId)
+    public void ClearKeycapOverride(int profile, int keyId)
     {
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM KeycapOverrides WHERE KeyId=$k";
+        cmd.CommandText = "DELETE FROM KeycapOverrides WHERE Profile=$p AND KeyId=$k";
+        cmd.Parameters.AddWithValue("$p", profile);
         cmd.Parameters.AddWithValue("$k", keyId);
         cmd.ExecuteNonQuery();
     }
@@ -300,9 +355,22 @@ ON CONFLICT(Profile, LedIndex) DO UPDATE SET
 
 public sealed record Ev60LightingRecord(
     int Effect, int Color1, int Color2, int SpeedPct, int DirIndex, bool Rainbow,
-    double Brightness, int SideColor, double CustomBrightness,
+    double Brightness, double CustomBrightness,
     string ActiveMode, Dictionary<int, int> CustomKeyColors,
-    bool ColorDouble = false);
+    bool ColorDouble = false,
+    // Border-ring per-LED paint (wire index 0-43, Everest60Protocol.SideLedIndex) —
+    // added 2026-07-24 alongside the Custom Lighting port from Everest Max. Nullable
+    // (not just empty-default) so old JSON blobs saved before this field existed
+    // deserialize cleanly via System.Text.Json's default-on-missing-property behavior.
+    // NB: the old standalone uniform-color "SideColor" field (int, positioned right
+    // after Brightness) was removed the same session — that section's superseded by
+    // painting every border square the same color via "Fill all" under Custom.
+    Dictionary<int, int>? CustomSideColors = null,
+    // Numpad-ring per-LED paint (wire index 0-21, Everest60Protocol.NumpadSideLedIndex)
+    // — added 2026-07-24 once the numpad ring's own addresses (170-191) were
+    // confirmed via USBPcap capture. Same nullable-for-old-JSON reasoning as
+    // CustomSideColors above.
+    Dictionary<int, int>? CustomNumpadRingColors = null);
 
 public sealed record Ev60KeyRecord(
     int     Profile,

@@ -4,10 +4,28 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <UseWPF>true</UseWPF>
+    <!-- Fallback for dev/debug builds (Visual Studio, plain "dotnet build"): real
+         releases overwrite this via "dotnet publish -p:Version=X.Y.Z" from
+         build-installer.bat, so the shipped exe's AssemblyVersion always matches the
+         GitHub release tag the Settings tab's update-checker compares itself against
+         (see Services/UpdateChecker.cs). Bump this alongside a release if it drifts
+         too far, but it only matters for unstamped local builds. -->
+    <Version>1.0.3</Version>
     <!-- ColorDialog nativo (System.Windows.Forms.ColorDialog) usato dal
          pannello "Illuminazione RGB" del tab Everest Max: WPF non ne include
          uno e introdurre una libreria NuGet sarebbe overkill. -->
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- Il DPI awareness impostato in app.manifest (dpiAware/dpiAwareness,
+         PerMonitorV2 — 2026-07-28, per il testo sfocato/"pixellato" delle tab
+         a scaling non-100%) fa scattare il warning WFAC010 in compilazione:
+         presuppone un'app WinForms "pura" che chiama Application.Run, dove
+         ApplicationHighDpiMode/Application.SetHighDpiMode avrebbero davvero
+         effetto. Qui invece WinForms c'e' solo per il ColorDialog nativo,
+         mostrato modale dentro il message loop di WPF: quell'API non farebbe
+         nulla, mentre il manifest (approccio corretto per il DPI in WPF)
+         funziona davvero — falso positivo innocuo, soppresso in
+         Directory.Build.targets (un <NoWarn> qui nel PropertyGroup non basta:
+         un target SDK successivo lo resetta). -->
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <!-- Le struct effetto firmware (EffData) sono dichiarate BLITTABILI con
@@ -62,6 +80,16 @@
     </Content>
   </ItemGroup>
 
+  <!-- Config esterna della mappatura azione -> icona di default (galleria Base Camp):
+       stesso pattern di everest_rgb.json sopra, letta a runtime da IconMappingConfig.
+       Modificabile dall'utente/utenti finali senza ricompilare — vedi i commenti nel
+       file stesso. -->
+  <ItemGroup>
+    <Content Include="icon_mapping.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <!-- Immagini dispositivi (sfondo tab + overlay tasti) -->
   <ItemGroup>
     <Resource Include="Assets\K2_logo.png" />
@@ -102,6 +130,16 @@
     <Resource Include="Assets\Home\makalu_max.png" />
     <Resource Include="Assets\Home\macropad.png" />
     <Resource Include="Assets\Home\displaypad.png" />
+  </ItemGroup>
+
+  <!-- Icon gallery: Base Camp's own pre-made key-icon art (default-profile + per-app
+       sets), extracted 1:1 from Mountain Base Camp/resources/bin/wwwroot/images/ — see
+       DISTRIBUTION.md. Loose Content (not a WPF Resource) so IconGalleryCatalog can
+       enumerate the folder at runtime instead of listing ~530 files by hand here. -->
+  <ItemGroup>
+    <Content Include="Assets\IconGallery\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\..\_reference\native\MacroPadSDK.dll')">

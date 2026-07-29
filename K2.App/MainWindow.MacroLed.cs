@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
@@ -55,6 +55,7 @@ public partial class MainWindow
         new(MacroPadService.Effect.Tornado,   "Tornado"),
         new(MacroPadService.Effect.Matrix,    "Matrix"),
         new(MacroPadService.Effect.Off,       "Off"),
+        new(MacroPadService.Effect.Custom,    "Custom"),
     };
 
     // ------------------------------------------------------------
@@ -169,6 +170,19 @@ public partial class MainWindow
                 RbMacroColorSingle.IsChecked = true;
 
             UpdateMacroColorRowVisibility();
+
+            // "Custom" swaps the whole-device preset controls for the per-key Custom
+            // Lighting panel — mirrors Everest Max's UpdateEvCapabilities/
+            // PnlEvNormalControls+PnlEvCustomLighting (MainWindow.Everest.cs).
+            bool isCustom = pick.Eff == MacroPadService.Effect.Custom;
+            PnlMpNormalControls.Visibility = isCustom ? Visibility.Collapsed : Visibility.Visible;
+            PnlMpCustomLighting.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed;
+            // Only touch paint-mode state if LED Lighting is actually the visible
+            // section right now — otherwise this can fire during startup init
+            // (restoring a persisted "Custom" effect) while another section is shown.
+            // MainWindow.SectionNav.cs's ShowMpSection re-syncs on section changes.
+            if (_activeMpSection == PnlMpSecLed)
+                SetMpCustomPaintModeActive(isCustom);
         }
         finally
         {
@@ -204,6 +218,8 @@ public partial class MainWindow
             _macroLedSuppress = false;
         }
         _macroLedInitialized = true;
+
+        InitMpCustomLightingPanel(); // MainWindow.MpCustomLighting.cs
     }
 
     /// <summary>
@@ -315,6 +331,29 @@ public partial class MainWindow
         _store.SetSetting("macroled.sync", CkMacroSync.IsChecked == true ? "1" : "0");
     }
 
+    /// <summary>Sets the LED panel back to the same factory defaults <see cref="InitMacroLedPanel"/>
+    /// seeds a brand-new install with (Wave, K2 teal, 50% speed, 100% brightness, single
+    /// color) and saves them under the current profile's namespace — used by "Restore
+    /// defaults" (<see cref="BtnMpRestoreDefaults_Click"/>); <see cref="ReloadMacroLedForProfileSwitch"/>
+    /// (called right after by the caller) then reads them back and pushes them to the
+    /// device, same path as any normal effect change.</summary>
+    private void MpResetLedToDefaults()
+    {
+        bool prev = _macroLedSuppress;
+        _macroLedSuppress = true;
+        try
+        {
+            CbMacroEffect.SelectedIndex = 2; // Wave
+            SldMacroSpeed.Value         = 50;
+            SldMacroBrightness.Value    = 100;
+            _macroDirIndex              = 0;
+            RbMacroColorSingle.IsChecked = true;
+            _macroColor1 = 0x900000; _macroColor2 = 0; _macroColor3 = 0;
+        }
+        finally { _macroLedSuppress = prev; }
+        SaveMacroLedToStore();
+    }
+
     /// <summary>
     /// Re-loads the LED panel for the profile that just became active and resends
     /// the effect (targets that profile explicitly via SetEffect's own
@@ -331,6 +370,7 @@ public partial class MainWindow
         try
         {
             LoadMacroLedFromStore();
+            LoadMpCustomColorsFromStore();
             UpdateMpCapabilities();
             LblMacroBrightness.Text = $"{(int)SldMacroBrightness.Value}%";
             ApplyColorButton(BtnMacroColor1, _macroColor1);
@@ -356,9 +396,18 @@ public partial class MainWindow
     }
 
     private void CbMacroEffect_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        => MpReapplySelectedEffect();
+
+    /// <summary>The effect-dropdown handler's body, callable directly — Everest Max's
+    /// EvReapplySelectedEffect twin, called after an import so the imported lighting
+    /// (Custom board included) reaches the pad and the preview without the user having
+    /// to touch the dropdown.</summary>
+    private void MpReapplySelectedEffect()
     {
+        if (!_macroLedInitialized) return;
         _macroEffectChangedWhileOpen = true;
-        UpdateMpCapabilities();   // realign the controls to the new effect
+        UpdateMpCapabilities();   // realign the controls to the new effect (also turns
+                                  // paint mode + the overlays back on for Custom)
         ApplyCurrentMacroEffect();
     }
 
@@ -430,7 +479,11 @@ public partial class MainWindow
 
     private void CkMacroSync_Click(object sender, RoutedEventArgs e)
     {
+        // Same device flag mirrored by the Settings section's own checkbox
+        // (CkMpSettingsSync) — see MpSettingsPrefix's doc comment.
+        CkMpSettingsSync.IsChecked = CkMacroSync.IsChecked;
         SaveMacroLedToStore();
+        if (!_mpSettingsSuppress) SaveMpKeycapAppearanceToStore();
         if (CurrentDeviceId() is not int id) { Log("[LED ] sync: no device selected"); return; }
         bool ok = _macroPad.SetSyncAcrossProfiles((uint)id, CkMacroSync.IsChecked == true);
         Log($"[LED ] SetSyncAcrossProfiles({CkMacroSync.IsChecked == true}) -> {ok}");
@@ -466,6 +519,18 @@ public partial class MainWindow
         if (CbMacroEffect.SelectedItem is not MacroEffectChoice pick) return;
 
         var effect = pick.Eff;
+
+        // Custom (per-key) mode is applied via a completely different SDK sequence
+        // (SwitchToCustomizeEffect/ChangeCustomizeStatic/SetCustomizeTable, see
+        // MainWindow.MpCustomLighting.cs) — reapplies the remembered per-key paint
+        // state, same "selecting Custom re-sends what was already painted" behavior
+        // as Everest Max's own Custom effect.
+        if (effect == MacroPadService.Effect.Custom)
+        {
+            ApplyMpCustomLighting(id, (int)SldMacroBrightness.Value);
+            return;
+        }
+
         var caps   = CapsFor(effect);
 
         // Speed: slider already snaps to 0/25/50/75/100 (scale 0..100, 0=slow, 100=fast).

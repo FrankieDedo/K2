@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;   // Thread.Sleep — APEnable/EnableKeyFunc retry in DoOpenAndInit
 
 namespace K2.App.Services;
 
@@ -64,6 +65,11 @@ internal sealed class Everest60SdkService : IDisposable
 
     public bool IsOpen => _opened;
 
+    /// <summary>Whether the firmware is actually delivering key presses to the SDK
+    /// callback — <see cref="IsOpen"/> only means <c>OpenUSBDriver</c> succeeded, which is
+    /// NOT the same thing (see <see cref="EnsureKeyFuncEnabled"/>'s doc comment).</summary>
+    public bool KeyFuncEnabled { get; private set; }
+
     /// <summary>Opens the SDK driver and registers the key callback.
     /// <paramref name="hWnd"/> MUST be a real top-level window handle, not
     /// IntPtr.Zero — 2026-07-12, real-hardware log showed OpenUSBDriver
@@ -93,8 +99,40 @@ internal sealed class Everest60SdkService : IDisposable
         }
         catch (Exception ex) { log?.Invoke("[Ev60SDK] SetKeyCallBack threw: " + ex); }
 
-        _opened = DoOpenAndInit(log);
+        var (opened, keyFuncEnabled) = DoOpenAndInit(log);
+        _opened = opened;
+        KeyFuncEnabled = keyFuncEnabled;
         return _opened;
+    }
+
+    /// <summary>
+    /// Re-attempts the APEnable/EnableKeyFunc handshake when the persistent session is
+    /// already open but it never succeeded — <see cref="DoOpenAndInit"/>'s own 4-attempt/
+    /// 600ms retry window can still lose the race when Everest Max/MacroPad/Ev60 all open
+    /// at once on K2 startup (real-hardware log, 2026-07-27: EnableKeyFunc stayed False for
+    /// the WHOLE session, main-board key presses never fired even once, because <see
+    /// cref="Open"/> only calls <see cref="DoOpenAndInit"/> once — a "true" OpenUSBDriver
+    /// already satisfies <see cref="IsOpen"/> regardless of whether EnableKeyFunc ever
+    /// landed, so nothing ever retried it again). Cheap and idempotent (a bare APEnable/
+    /// EnableKeyFunc pair, no OpenUSBDriver) — call from a periodic tick (MainWindow.
+    /// Everest60.cs's Ev60RefreshStatus) until it reports true.
+    /// </summary>
+    public bool EnsureKeyFuncEnabled(Action<string>? log = null)
+    {
+        if (KeyFuncEnabled || !_opened) return KeyFuncEnabled;
+        try
+        {
+            bool ap = Everest60SdkNative.APEnable(true);
+            bool ek = Everest60SdkNative.EnableKeyFunc(true);
+            log?.Invoke($"[Ev60SDK] EnsureKeyFuncEnabled retry: APEnable={ap} EnableKeyFunc={ek}");
+            if (ek)
+            {
+                KeyFuncEnabled = true;
+                log?.Invoke("[Ev60SDK] EnableKeyFunc succeeded on retry — main-board key presses will report from now on");
+            }
+        }
+        catch (Exception ex) { log?.Invoke("[Ev60SDK] EnsureKeyFuncEnabled threw: " + ex); }
+        return KeyFuncEnabled;
     }
 
     /// <summary>
@@ -107,7 +145,7 @@ internal sealed class Everest60SdkService : IDisposable
     /// when opened bare (no APEnable/EnableKeyFunc) — same class of bug as
     /// the Everest Max's ChangeEffect/GetColorData issues this mirrors.
     /// </summary>
-    private bool DoOpenAndInit(Action<string>? log)
+    private (bool Opened, bool KeyFuncEnabled) DoOpenAndInit(Action<string>? log)
     {
         bool opened;
         try
@@ -117,20 +155,37 @@ internal sealed class Everest60SdkService : IDisposable
         catch (Exception ex)
         {
             log?.Invoke("[Ev60SDK] OpenUSBDriver threw: " + ex);
-            return false;
+            return (false, false);
         }
         log?.Invoke($"[Ev60SDK] OpenUSBDriver(0x{_hWnd.ToInt64():X}) -> {opened}");
-        if (!opened) return false;
+        if (!opened) return (false, false);
 
-        try
+        // EnableKeyFunc is what makes the firmware deliver key presses to the SDK
+        // callback, i.e. the ONLY reason a main-board Key Binding ever runs. Both calls
+        // are retried because they genuinely come back false right after a successful
+        // OpenUSBDriver and then succeed moments later — a real-hardware log showed the
+        // same machine getting True on one run and False on the next, with the whole
+        // Everest 60 Key Binding feature silently dead in the second case (user report
+        // 2026-07-27, "the mapped key does nothing"). Same transient-firmware family as
+        // the numpad presence stall documented in MainWindow.Everest60.cs.
+        bool ap = false, ek = false;
+        for (int attempt = 1; attempt <= 4 && !(ap && ek); attempt++)
         {
-            bool ap = Everest60SdkNative.APEnable(true);
-            bool ek = Everest60SdkNative.EnableKeyFunc(true);
-            log?.Invoke($"[Ev60SDK] APEnable={ap} EnableKeyFunc={ek}");
+            if (attempt > 1) Thread.Sleep(150);
+            try
+            {
+                if (!ap) ap = Everest60SdkNative.APEnable(true);
+                if (!ek) ek = Everest60SdkNative.EnableKeyFunc(true);
+            }
+            catch (Exception ex) { log?.Invoke("[Ev60SDK] APEnable/EnableKeyFunc threw: " + ex); break; }
         }
-        catch (Exception ex) { log?.Invoke("[Ev60SDK] APEnable/EnableKeyFunc threw: " + ex); }
+        log?.Invoke($"[Ev60SDK] APEnable={ap} EnableKeyFunc={ek}");
+        if (!ek)
+            log?.Invoke("[Ev60SDK] WARNING: EnableKeyFunc stayed false — the firmware won't "
+                      + "report key presses yet; EnsureKeyFuncEnabled will keep retrying "
+                      + "from the status poll until it does");
 
-        return true;
+        return (true, ek);
     }
 
     public void Close()
@@ -162,7 +217,7 @@ internal sealed class Everest60SdkService : IDisposable
         {
             if (!_opened)
             {
-                weOpened = DoOpenAndInit(log);
+                weOpened = DoOpenAndInit(log).Opened;
                 if (!weOpened)
                 {
                     log?.Invoke("[Ev60SDK] QueryNumpadPosition: open+init failed, skipping GetSubDeviceInfo");

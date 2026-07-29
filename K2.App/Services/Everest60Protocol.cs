@@ -55,10 +55,26 @@ internal static class Everest60Protocol
     public const int NumKeys = 64;
 
     /// <summary>Logical key index (row-major, ANSI 60%) → firmware LED hardware
-    /// address. Ported from controller.py's LEDIDX (per-row comment there).</summary>
+    /// address. Ported from controller.py's LEDIDX (per-row comment there), EXCEPT
+    /// index 0 (ESC): controller.py's own comment claims ESC is really 21 because
+    /// "address 0 has no physical LED... the firmware never lit it" (their issue
+    /// #15) — that turned out to be wrong. A real USBPcap capture of official Base
+    /// Camp painting ESC red (2026-07-25, <c>_reference/usb_dumps/ev60_red.pcapng</c>,
+    /// frame 433: Map entry hw=0x00 r=0xFF g=0x00 b=0x00) shows ESC's true hardware
+    /// address is 0 — and every one of the OTHER 63 addresses in this table matches
+    /// the capture exactly (diffed programmatically, not eyeballed), so this is a
+    /// single-value correction, not a re-derivation. controller.py's own "fix" was
+    /// almost certainly masking a DIFFERENT bug (see <see cref="SendCustom"/>'s
+    /// <c>pkt[5]</c> doc comment: a hardcoded last-packet count byte, not the real
+    /// count, meant leftover zero-padding — which always lands at hw=0 — silently
+    /// blacked out ESC moments after it was correctly painted, on every Apply/Fill
+    /// All). Moving ESC to an unrelated address (21, actually the "U" key) hid the
+    /// symptom instead of fixing the padding bug, and broke ESC in the process.
+    /// User report 2026-07-25: "il tasto esc lampeggia il colore giusto e poi si
+    /// spegne" — exactly this padding stomp.</summary>
     public static readonly byte[] LedIndex =
     {
-        21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34,
+        0, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34,
         42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55,
         63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 76,
         84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 97, 99, 56,
@@ -67,6 +83,35 @@ internal static class Everest60Protocol
 
     /// <summary>Side perimeter ring: 44 RGB LEDs, clockwise starting above ESC.</summary>
     public static readonly byte[] SideLedIndex = BuildRange(126, 44);
+
+    /// <summary>
+    /// Numpad accessory's OWN perimeter ring: 22 RGB LEDs, clockwise starting
+    /// top-left (Top → Right → Bottom → Left, same convention as
+    /// <see cref="SideLedIndex"/>) — reverse-engineered 2026-07-24 from a real
+    /// USBPcap capture (<c>_reference/usb_dumps/ev60numring.pcapng</c>) of Base
+    /// Camp painting each numpad-ring LED individually (#FFFF00, one at a time,
+    /// user-confirmed clockwise-from-top-left order), NOT guessed. The 22
+    /// addresses are perfectly contiguous with <see cref="SideLedIndex"/>
+    /// (126-169) and reach exactly <see cref="ColorEntryCount"/>-1 (191, the
+    /// last valid address in the whole 192-entry color space) — every address
+    /// 0-191 is now accounted for by <see cref="LedIndex"/>/<see cref="SideLedIndex"/>/
+    /// <see cref="NumpadLedIndex"/>/this array combined, with zero gaps left,
+    /// which is strong corroborating evidence this is the true range (not
+    /// just a plausible-looking guess). The capture's first ~45 addresses
+    /// (126-170) arrived in one instantaneous burst (already-applied state
+    /// resent wholesale, as Custom mode always does) — only 171-191 showed the
+    /// ~200ms human click cadence; 170 is inferred to be the actual top-left
+    /// starting LED (perfectly contiguous with 169, and the very first click
+    /// of the capture's first Apply necessarily batches with whatever state
+    /// already existed). Per-edge split for the click overlay (5 top / 6 right
+    /// / 5 bottom / 6 left, <see cref="Models.Everest60KeyboardLayout"/>'s
+    /// numpad canvas being taller than wide) is a first-pass proportional
+    /// placement — same caveat as <see cref="SideLedIndex"/>'s own UI overlay:
+    /// total count and clockwise starting corner are confirmed, the exact
+    /// per-edge boundary isn't (the capture has no signal for where a corner
+    /// turn happens).
+    /// </summary>
+    public static readonly byte[] NumpadSideLedIndex = BuildRange(170, 22);
 
     /// <summary>
     /// Numpad accessory's 17 keys → firmware LED hardware address, same index
@@ -79,9 +124,10 @@ internal static class Everest60Protocol
     /// LedIndex's row 0): the numpad shares the same physical PCB row/column
     /// addressing as the main board, just further right — same
     /// firmware-family reasoning already confirmed for the main 64 keys and
-    /// side ring. Read-only for now (live preview only, see
-    /// MainWindow.Everest60.cs's OnEv60ColorsUpdated) — writing/painting the
-    /// numpad is a separate feature, not implemented here.
+    /// side ring. Live preview via <see cref="ReadColorData"/>/<c>GetColorData2</c>
+    /// AND paintable via <see cref="SendCustom"/>'s <c>numpadColors</c> param
+    /// (2026-07-24) — writing reuses this same confirmed address set, not a
+    /// new guess (see that param's doc comment).
     /// </summary>
     public static readonly byte[] NumpadLedIndex =
     {
@@ -113,6 +159,7 @@ internal static class Everest60Protocol
         var set = new HashSet<byte>(LedIndex);
         foreach (var a in SideLedIndex) set.Add(a);
         foreach (var a in NumpadLedIndex) set.Add(a);
+        foreach (var a in NumpadSideLedIndex) set.Add(a);
         return set;
     }
 
@@ -168,12 +215,25 @@ internal static class Everest60Protocol
     }
 
     /// <summary>
-    /// Custom per-key RGB (main 64 keys + optional 44-LED side ring). Mirrors
+    /// Custom per-key RGB (main 64 keys + optional 44-LED side ring + optional
+    /// 17-key numpad accessory + optional 22-LED numpad ring). Mirrors
     /// controller.py's <c>set_lighting_custom()</c>: Begin(0x34) → Map(0x35, 14
     /// IRGB entries per packet) → End(0x36), after activating Custom mode.
+    /// <paramref name="numpadColors"/> reuses <see cref="NumpadLedIndex"/> —
+    /// the SAME hardware address domain <see cref="ReadColorData"/> already
+    /// reads live numpad colors from (see its doc comment: "same addressing
+    /// Everest60Protocol already uses to WRITE colors"), so writing those
+    /// addresses through this already-confirmed Custom stream mechanism is not
+    /// a new guess, just reusing a known address set that was previously
+    /// read-only for lack of a UI to drive it. <paramref name="numpadRingColors"/>
+    /// reuses <see cref="NumpadSideLedIndex"/> (170-191), confirmed via a real
+    /// USBPcap capture (see its doc comment) of Base Camp doing exactly this —
+    /// painting the numpad ring through this same Custom stream.
     /// </summary>
     public static void SendCustom(SafeFileHandle h, IReadOnlyList<(byte r, byte g, byte b)> colors,
         int brightnessPct = 100, IReadOnlyList<(byte r, byte g, byte b)>? sideColors = null,
+        IReadOnlyList<(byte r, byte g, byte b)>? numpadColors = null,
+        IReadOnlyList<(byte r, byte g, byte b)>? numpadRingColors = null,
         Action<string>? log = null)
     {
         SendMode(h, Effect.Custom, brightnessPct: brightnessPct, colorMode: ColorMode.Single, log: log);
@@ -190,6 +250,22 @@ internal static class Everest60Protocol
             {
                 (byte r, byte g, byte b) c = i < sideColors.Count ? sideColors[i] : ((byte)0, (byte)0, (byte)0);
                 stream.Add((SideLedIndex[i], c.r, c.g, c.b));
+            }
+        }
+        if (numpadColors != null)
+        {
+            for (int i = 0; i < NumpadLedIndex.Length; i++)
+            {
+                (byte r, byte g, byte b) c = i < numpadColors.Count ? numpadColors[i] : ((byte)0, (byte)0, (byte)0);
+                stream.Add((NumpadLedIndex[i], c.r, c.g, c.b));
+            }
+        }
+        if (numpadRingColors != null)
+        {
+            for (int i = 0; i < NumpadSideLedIndex.Length; i++)
+            {
+                (byte r, byte g, byte b) c = i < numpadRingColors.Count ? numpadRingColors[i] : ((byte)0, (byte)0, (byte)0);
+                stream.Add((NumpadSideLedIndex[i], c.r, c.g, c.b));
             }
         }
 
@@ -210,12 +286,29 @@ internal static class Everest60Protocol
                 pkt[pos] = hw; pkt[pos + 1] = r; pkt[pos + 2] = g; pkt[pos + 3] = b;
                 pos += 4; idx++; count++;
             }
-            pkt[5] = idx == stream.Count ? (byte)0x0A : (byte)0x0E; // 0x0A=last, 0x0E=more
+            // pkt[5] is the number of VALID entries in this packet, not a binary
+            // more/last flag — confirmed 2026-07-25 from a real USBPcap capture of
+            // official Base Camp (_reference/usb_dumps/ev60_red.pcapng): every
+            // full packet used 0x0E (=14, matching perPacket) and the one partial
+            // final packet used 0x0A (=10, matching its exact 10 real entries out
+            // of 192 total addresses), with the packet's OWN trailing bytes past
+            // that count left as genuine zero padding the firmware evidently
+            // ignores. The previous code hardcoded 0x0A for ANY final packet
+            // regardless of its real count — harmless for Base Camp's own 192-entry
+            // stream (which always ends with exactly 10 left over) but wrong for
+            // K2's shorter ~147-entry stream (ends with 7), so the firmware read 3
+            // phantom zero-padded entries as real, hw=0 among them — stomping
+            // ESC's LED (address 0, see LedIndex's doc comment) back to black
+            // moments after Custom correctly painted it.
+            pkt[5] = (byte)count;
             Everest60HidNative.SendFeature(h, pkt);
         }
 
         Everest60HidNative.SendFeature(h, MakeBuf(0x36));
-        log?.Invoke($"[Ev60] SendCustom: {stream.Count} LEDs ({(sideColors != null ? "keys+side" : "keys only")})");
+        log?.Invoke($"[Ev60] SendCustom: {stream.Count} LEDs (keys" +
+                    (sideColors != null ? "+side" : "") +
+                    (numpadColors != null ? "+numpad" : "") +
+                    (numpadRingColors != null ? "+numpadRing" : "") + ")");
     }
 
     /// <summary>Number of RGB entries in a <see cref="ReadColorData"/> buffer —
@@ -285,68 +378,65 @@ internal static class Everest60Protocol
     }
 
     /// <summary>
-    /// Numpad accessory presence (opcode 0x20) — reverse-engineered
-    /// 2026-07-13 from two real Base Camp USB captures with the accessory
-    /// unplugged then plugged (<c>_reference/usb_dumps/ev60stacca.pcapng</c>),
-    /// found the same session as <see cref="ReadColorData"/> after
-    /// <c>Everest60SdkNative.GetSubDeviceInfo</c> was confirmed to reliably
-    /// fail whenever a Makalu is also connected (see CHANGELOG). Request:
-    /// cmd 0x20 + magic + int32 LE <c>1</c> at byte 4 (sub-device index,
-    /// same convention <c>GetSubDeviceInfo(1, ...)</c> uses). Response
-    /// echoes cmd+magic+the same int32, followed by a 52-byte data region
-    /// that is ALL ZERO with no numpad attached and full of RGB-triplet-
-    /// shaped bytes (matching the numpad's own live LED preview, same
-    /// gradient pattern as <see cref="ReadColorData"/>'s output) once
-    /// attached — confirmed by diffing the exact same request/response
-    /// shape before vs. after the user plugged the accessory mid-capture,
-    /// not guessed. A trailing 4-byte tail (<c>05 05 01 02</c>) is constant
-    /// in EITHER state (some general status/checksum unrelated to the
-    /// accessory) and is deliberately excluded from the presence check —
-    /// including it would make every response look "present".
+    /// Numpad accessory position (opcode 0x08) — reverse-engineered
+    /// 2026-07-25 from three real Base Camp USB captures
+    /// (<c>_reference/usb_dumps/ev60_detach.pcapng</c>, <c>ev60_detach_2.pcapng</c>,
+    /// <c>ev60_slow.pcapng</c> — the last one an 8-step attach/detach sequence
+    /// at known ~8-10s intervals, right×4 then left×4). This is the SAME
+    /// heartbeat Base Camp itself polls every ~200ms (far faster than the
+    /// old opcode 0x20 presence check this replaces, which K2 only polled
+    /// every 3s). Request: cmd 0x08 + magic, no other payload. Response
+    /// echoes cmd+magic, then wire byte 4 (<c>resp[5]</c> — cmd echo at
+    /// <c>resp[1]</c>, magic at <c>resp[2..4]</c>) is the position: matched
+    /// 1:1, zero exceptions, against all 8 steps of the known sequence
+    /// (2/0/2/0/1/0/1/0 for right-attach/detach ×2, left-attach/detach ×2),
+    /// flipping on the very next ~200ms poll after each physical action —
+    /// which is also exactly <see cref="Ev60NumpadPosition"/>'s own
+    /// numbering (None=0/Left=1/Right=2), not a coincidence. The rest of the
+    /// response (byte 8 onward) rotates through a few unrelated states every
+    /// ~10s regardless of numpad state — some other Base Camp telemetry
+    /// sharing this opcode, not numpad data, and deliberately ignored here.
     /// <para>
-    /// <b>Left/right side NOT yet determined</b> (only a right-side unit was
-    /// available across the sessions that captured this): callers should
-    /// treat the returned bool as presence-only and keep whatever side was
-    /// last known/assumed until a differential capture with the accessory on
-    /// the left is available — see MainWindow.Everest60.cs's caller.
+    /// <b>Not yet tested</b>: whether this opcode stays responsive through
+    /// the ~20+s firmware stall a numpad Key Binding write causes on opcode
+    /// 0x2C/0x20 (see <c>MainWindow.Everest60.cs</c>'s
+    /// <c>_ev60NumpadAbsentStreak</c> doc comment) — the three captures above
+    /// were all physical attach/detach, none exercised a binding write. Until
+    /// confirmed, the caller keeps the same debounce+grace-period mitigation.
     /// </para>
     /// </summary>
-    public static bool? ReadNumpadPresent(SafeFileHandle h, Action<string>? log = null)
+    public static Ev60NumpadPosition? ReadNumpadPosition(SafeFileHandle h, Action<string>? log = null)
     {
-        var req = MakeBuf(0x20);
-        BitConverter.GetBytes(1).CopyTo(req, 5);
+        var req = MakeBuf(0x08);
         var resp = Everest60HidNative.SendFeature(h, req, delayMs: 15, log: log);
-        // Diagnostic (2026-07-22, see Everest60Service.WithDevice's doc comment):
-        // distinguish WHY a caller sees "not present" — SendFeature giving up
-        // (null), a well-formed reply for the wrong command (retries all
-        // landed on stale/interleaved traffic — echo mismatch), vs a
-        // genuinely all-zero data region. All three currently collapse to
-        // the same bool/null from here, which was hiding which one is
-        // actually happening on real hardware.
         if (resp is null)
         {
-            log?.Invoke("[Ev60] ReadNumpadPresent: SendFeature returned null (no response at all)");
+            log?.Invoke("[Ev60] ReadNumpadPosition: SendFeature returned null (no response at all)");
             return null;
         }
         if (resp.Length != Everest60HidNative.ReportSize)
         {
-            log?.Invoke($"[Ev60] ReadNumpadPresent: unexpected response length {resp.Length}");
+            log?.Invoke($"[Ev60] ReadNumpadPosition: unexpected response length {resp.Length}");
             return null;
         }
-        if (resp[1] != 0x20)
+        if (resp[1] != 0x08)
         {
-            log?.Invoke($"[Ev60] ReadNumpadPresent: echo mismatch, got cmd=0x{resp[1]:X2} instead of 0x20 " +
+            log?.Invoke($"[Ev60] ReadNumpadPosition: echo mismatch, got cmd=0x{resp[1]:X2} instead of 0x08 " +
                         "(another poller's response landed here — contention, not this call failing outright)");
             return null;
         }
-        for (int i = 9; i < 61; i++) // wire bytes [8..59]: data region, excludes the constant trailer
-            if (resp[i] != 0)
-            {
-                log?.Invoke("[Ev60] ReadNumpadPresent: present (non-zero data region)");
-                return true;
-            }
-        log?.Invoke("[Ev60] ReadNumpadPresent: not present (data region genuinely all-zero)");
-        return false;
+        Ev60NumpadPosition? pos = resp[5] switch
+        {
+            0 => Ev60NumpadPosition.None,
+            1 => Ev60NumpadPosition.Left,
+            2 => Ev60NumpadPosition.Right,
+            _ => null,
+        };
+        if (pos is null)
+            log?.Invoke($"[Ev60] ReadNumpadPosition: unexpected position byte 0x{resp[5]:X2}");
+        else
+            log?.Invoke($"[Ev60] ReadNumpadPosition: {pos}");
+        return pos;
     }
 
     /// <summary>Sentinel value for "no action"/disabled — confirmed
@@ -363,6 +453,77 @@ internal static class Everest60Protocol
     /// <summary>Fixed action-type value K2 writes for any bound numpad key —
     /// arbitrary from K2's point of view (see class doc below).</summary>
     public const int NumpadBoundMarker = 1;
+
+    /// <summary>
+    /// Main-board (64-key) Key Binding writes — the counterpart of
+    /// <see cref="NumpadKeyBinding"/> for the keyboard itself. Reverse-engineered
+    /// 2026-07-27 from two USBPcap captures of Base Camp itself
+    /// (<c>_reference/usb_dumps/ev60_disable.pcapng</c> setting the key "3" to Disable,
+    /// <c>ev60_def.pcapng</c> putting it back to Default), cross-checked against the
+    /// <c>Everest60KeyBidings</c> rows Base Camp wrote at the same instant — which is
+    /// what pins the key identity down: the disabled key's DLLKeyId (4) and
+    /// DLLMatrixIndex (3) are both small integers, and only the DB row proves the
+    /// value on the wire is the <b>DLLKeyId</b>. Same feature-report channel and
+    /// <c>46 23 ea</c> magic as everything else in this class; both captures were
+    /// otherwise nothing but the cmd 0x08 background poll, so the sequences below are
+    /// complete, not excerpts.
+    ///
+    /// <para><b>Disable</b>: cmd 0x30 (no parameters) as a prologue, then cmd 0x29 with
+    /// (int32 DLLKeyId, int32 11) — 11 being Base Camp's own action-type code for
+    /// "Disable". Both acked with 1. No commit (cmd 0x2C) and no string parameter
+    /// (cmd 0x2B), unlike a numpad binding write.</para>
+    ///
+    /// <para><b>Restore</b>: cmd 0x30 again, then cmd 0x22 with (int32 DLLKeyId, 255).
+    /// This is byte for byte the command <see cref="NumpadKeyBinding.UnassignKey"/>
+    /// already sends for the accessory — confirming cmd 0x22 with
+    /// <see cref="NumpadUnassignedMarker"/> is one device-wide "reset this key to
+    /// factory" call, and settling the older ambiguity around
+    /// <see cref="Everest60RemapData.DisabledKeyId"/>: 255 means RESET, never disable
+    /// (which is why K2 must not reuse it to switch a key off — a previous session
+    /// nearly did).</para>
+    ///
+    /// <para>Neither sequence is followed by a flash save, so the writes are live-only:
+    /// unplugging the keyboard restores factory behaviour regardless of what K2 left
+    /// behind. That's the safety net behind <c>MainWindow.Everest60.cs</c>'s
+    /// disabled-key bookkeeping.</para>
+    /// </summary>
+    public static class MainKeyBinding
+    {
+        /// <summary>Base Camp's action-type code for "Disable", captured as the second
+        /// int32 of the cmd 0x29 write.</summary>
+        private const int DisableActionCode = 11;
+
+        /// <summary>Prologue both sequences open with (cmd 0x30, no parameters). Base
+        /// Camp sends it before every key write; its meaning is unknown and K2 doesn't
+        /// need it to be known, only to be reproduced.</summary>
+        private static void Prologue(SafeFileHandle h, Action<string>? log)
+            => Everest60HidNative.SendFeature(h, MakeBuf(0x30), log: log);
+
+        /// <summary>Switches a main-board key off in firmware: it stops emitting its
+        /// keystroke entirely (this is what Base Camp's own "Disable" does).</summary>
+        public static void DisableKey(SafeFileHandle h, int dllKeyId, Action<string>? log = null)
+        {
+            Prologue(h, log);
+            var req = MakeBuf(0x29);
+            BitConverter.GetBytes(dllKeyId).CopyTo(req, 5);
+            BitConverter.GetBytes(DisableActionCode).CopyTo(req, 9);
+            var resp = Everest60HidNative.SendFeature(h, req, log: log);
+            log?.Invoke($"[Ev60] MainKeyBinding.DisableKey: dllKeyId={dllKeyId} " +
+                        $"-> {(resp is { Length: > 1 } && resp[1] == 0x29 ? "ack" : "no-ack")}");
+        }
+
+        /// <summary>Puts a main-board key back to its factory function.</summary>
+        public static void RestoreKey(SafeFileHandle h, int dllKeyId, Action<string>? log = null)
+        {
+            Prologue(h, log);
+            var req = MakeBuf(0x22);
+            BitConverter.GetBytes(dllKeyId).CopyTo(req, 5);
+            BitConverter.GetBytes(NumpadUnassignedMarker).CopyTo(req, 9);
+            var resp = Everest60HidNative.SendFeature(h, req, log: log);
+            log?.Invoke($"[Ev60] MainKeyBinding.RestoreKey: dllKeyId={dllKeyId} " +
+                        $"-> {(resp is { Length: > 1 } && resp[1] == 0x22 ? "ack" : "no-ack")}");
+        }
+    }
 
     /// <summary>
     /// Numpad Key Binding protocol (query/write/commit/event-poll) —

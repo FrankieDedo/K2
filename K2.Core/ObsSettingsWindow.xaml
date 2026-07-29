@@ -1,0 +1,43 @@
+<Window x:Class="K2.Core.ObsSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core"
+        Title="{loc:Get obs_settings_title}"
+        Width="420" Height="320"
+        MinWidth="360" MinHeight="280"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Style="{DynamicResource K2WindowStyle}">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="{loc:Get obs_settings_title}" FontSize="16" FontWeight="Bold" Margin="0,0,0,10"/>
+
+        <TextBlock Grid.Row="1" Text="{loc:Get obs_host_label}" Margin="0,0,0,4"/>
+        <TextBox   x:Name="TxtObsHost" Grid.Row="2" Height="25" Margin="0,0,0,10" VerticalContentAlignment="Center"/>
+
+        <TextBlock Grid.Row="3" Text="{loc:Get obs_port_label}" Margin="0,0,0,4"/>
+        <TextBox   x:Name="TxtObsPort" Grid.Row="4" Height="25" Margin="0,0,0,10" VerticalContentAlignment="Center"/>
+
+        <TextBlock Grid.Row="5" Text="{loc:Get obs_password_label}" Margin="0,0,0,4"/>
+        <PasswordBox x:Name="PwdObsPassword" Grid.Row="6" Height="25" Margin="0,0,0,10" VerticalContentAlignment="Center"/>
+
+        <TextBlock x:Name="TxtObsStatus" Grid.Row="7" TextWrapping="Wrap" Foreground="#9A9AA2" VerticalAlignment="Top"/>
+
+        <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="{loc:Get obs_test_connection}" Padding="10,4" Margin="0,0,8,0" Click="BtnObsTest_Click"/>
+            <Button Content="{loc:Get save}" Width="90" Padding="6,2" IsDefault="True" Click="BtnObsSave_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

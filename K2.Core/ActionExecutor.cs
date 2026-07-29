@@ -30,7 +30,7 @@ public static class ActionExecutor
                 Start("taskmgr.exe"); log("[EXEC] oscmd -> taskmgr"); break;
             case "calculator":
             case "calc":
-                Start("calc.exe"); log("[EXEC] oscmd -> calc"); break;
+                StartCalculator(log); break;
             case "run explorer":
             case "explorer":
                 Start("explorer.exe"); log("[EXEC] oscmd -> explorer"); break;
@@ -49,6 +49,43 @@ public static class ActionExecutor
             default:
                 log($"[EXEC] oscmd: sub-command \"{cmd}\" not handled"); break;
         }
+    }
+
+    /// <summary>
+    /// Launches the Windows Calculator, working around the fact that K2 runs elevated
+    /// (<c>app.manifest</c>, <c>requestedExecutionLevel=requireAdministrator</c>) while
+    /// Windows refuses to activate a packaged/Store app from an elevated process. The
+    /// <c>System32\calc.exe</c> stub is exactly such an activation: <see cref="Start"/>
+    /// returns perfectly happily and no Calculator ever appears — reported 2026-07-27
+    /// with "[EXEC] oscmd -> calc" in the log and nothing on screen. Handing the
+    /// AppsFolder entry to <c>explorer.exe</c> instead makes the desktop shell open it
+    /// at its own (medium) integrity level, which works from an elevated caller.
+    /// Non-elevated runs keep the plain stub — a direct launch that surfaces real
+    /// failures as exceptions, unlike the explorer hand-off which always "succeeds".
+    /// </summary>
+    private static void StartCalculator(Action<string> log)
+    {
+        if (!IsProcessElevated())
+        {
+            Start("calc.exe");
+            log("[EXEC] oscmd -> calc");
+            return;
+        }
+
+        // Stable AUMID of the inbox Calculator package (verified via Get-StartApps).
+        Start("explorer.exe", @"shell:appsFolder\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App");
+        log("[EXEC] oscmd -> calc (via explorer: K2 is elevated, direct UWP activation is blocked)");
+    }
+
+    private static bool IsProcessElevated()
+    {
+        try
+        {
+            using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            return new System.Security.Principal.WindowsPrincipal(identity)
+                .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+        }
+        catch { return false; }
     }
 
     private static void Start(string file, string args = "")
@@ -139,6 +176,35 @@ public static class ActionExecutor
         log($"[EXEC] mouse -> {action}");
     }
 
+    // ── Adobe/DaVinci/Zoom special values ──────────
+
+    /// <summary>Handles the two special non-modifier values real Base Camp uses for
+    /// Adobe/DaVinci/Zoom shortcuts: "Alt + click"/"Ctrl + click" (hold the modifier, left-click
+    /// the mouse) — <see cref="SendKeysTranslator"/> has no concept of a mouse click, so these
+    /// bypass it entirely (mirrors the decompiled reference,
+    /// <c>OtherDeviceOperations.CallKeyPressFunctionForOtherDevice</c>'s Adobe/DaVinci/Zoom arm).
+    /// "Tab + Shift" is NOT special-cased here — it parses fine as Shift+Tab through the normal
+    /// <see cref="SendKeysTranslator"/> path. Returns true if it handled a special value, false
+    /// if the caller should fall through to the normal keys/SendKeys.SendWait path.</summary>
+    public static bool TryRunAppShortcutSpecial(string value, Action<string> log)
+    {
+        const byte VK_CONTROL = 0x11, VK_MENU = 0x12;
+        const uint LEFTDOWN = 0x0002, LEFTUP = 0x0004;
+
+        var v = (value ?? "").Trim();
+        byte modVk = string.Equals(v, "Alt + click", StringComparison.OrdinalIgnoreCase) ? VK_MENU
+            : string.Equals(v, "Ctrl + click", StringComparison.OrdinalIgnoreCase) ? VK_CONTROL
+            : (byte)0;
+        if (modVk == 0) return false;
+
+        User32.keybd_event(modVk, 0, 0, UIntPtr.Zero);
+        User32.mouse_event(LEFTDOWN, 0, 0, 0u, UIntPtr.Zero);
+        User32.mouse_event(LEFTUP, 0, 0, 0u, UIntPtr.Zero);
+        User32.keybd_event(modVk, 0, User32.KEYEVENTF_KEYUP, UIntPtr.Zero);
+        log($"[EXEC] {v} -> modifier+click");
+        return true;
+    }
+
     // ── Multi Action ──────────────────────────────
 
     public static void RunMultiAction(string jsonPayload, Action<string> log,
@@ -184,12 +250,27 @@ public static class ActionExecutor
             case "Keyboard Shortcuts":
                 return ("keys", s.FunctionValue, null);
             case "OS Commands":      return ("oscmd", ActionTypeHelper.NormalizeOsCommand(string.IsNullOrEmpty(s.SubFunctionType) ? s.FunctionValue : s.SubFunctionType), null);
-            case "Media":            return ("media", string.IsNullOrEmpty(s.SubFunctionType) ? s.FunctionValue : s.SubFunctionType, null);
+            case "Media":            return ("media", ActionTypeHelper.NormalizeMediaKey(string.IsNullOrEmpty(s.SubFunctionType) ? s.FunctionValue : s.SubFunctionType), null);
             case "Mouse":            return ("mouse", string.IsNullOrEmpty(s.SubFunctionType) ? s.FunctionValue : s.SubFunctionType, null);
             case "Profile":          return ("profile", s.FunctionValue, null);
-            default:                 return (null, null, $"FunctionType \"{s.FunctionType}\" not handled");
+            default:
+                // Steps built natively by K2's own Multi Action editor (ButtonActionDialog.Multi.cs)
+                // already store one of ButtonActionEngine.ExecuteSub's own tags in FunctionType
+                // (e.g. "url", "keys") instead of a Base Camp label — pass those straight through
+                // instead of rejecting them, so native and BC-imported Multi Action data share the
+                // exact same execution path with no duplicated translation.
+                return NativeSubActionTypes.Contains(s.FunctionType ?? "")
+                    ? (s.FunctionType, s.FunctionValue, null)
+                    : (null, null, $"FunctionType \"{s.FunctionType}\" not handled");
         }
     }
+
+    /// <summary>The native K2 action tags <see cref="ButtonActionEngine"/>'s <c>ExecuteSub</c>
+    /// recognizes directly — see <see cref="MapSubAction"/>'s default arm.</summary>
+    private static readonly HashSet<string> NativeSubActionTypes = new(StringComparer.Ordinal)
+    {
+        "url", "exec", "folder", "browser", "profile", "keys", "text", "oscmd", "media", "mouse",
+    };
 
     /// <summary>Same "Run browser" -> native browser action mapping as
     /// BaseCampDbImporter/BaseCampProfileImporter — pre-selects the first detected browser

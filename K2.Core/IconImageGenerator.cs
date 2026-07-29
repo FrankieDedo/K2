@@ -23,7 +23,54 @@ public static class IconImageGenerator
 {
     private static readonly Color BackgroundColor = ColorTranslator.FromHtml("#1A1A1E");
     private static readonly Color FolderBackgroundColor = Color.Black;
-    private static readonly Color AccentColor     = ColorTranslator.FromHtml("#900000");
+
+    /// <summary>Read live (not cached) so newly-generated icons follow the current
+    /// Settings &gt; Accent color theme (K2 Red / Mountain Blue) — see AccentCatalog.
+    /// Icons generated before a theme switch are not retroactively repainted, same as
+    /// every other one-shot GDI+ render in this class.</summary>
+    private static Color AccentColor
+    {
+        get
+        {
+            var c = Services.AccentCatalog.Resolve(AppSettings.AccentTheme).Accent;
+            return Color.FromArgb(c.A, c.R, c.G, c.B);
+        }
+    }
+
+    /// <summary>Same ratio as CropEditor's KeyCornerRadiusRatio (kept independent rather than
+    /// shared since the two classes live in different projects/assemblies) — the physical
+    /// DisplayPad tile/Everest numpad display key is a square LCD with no mechanical bezel
+    /// crop, so Base Camp's rounded-icon look only exists if the corner pixels themselves are
+    /// painted over with the background color. Every auto-generated icon below clips its
+    /// drawing to this rounded rect (right after clearing the full square) so it matches the
+    /// same baked-corner look CropEditor already applies to user-picked/cropped images.</summary>
+    private const float KeyCornerRadiusRatio = 0.18f;
+
+    /// <summary>Clips <paramref name="g"/>'s subsequent drawing to a centered size×size
+    /// rounded rect — call right after <see cref="Graphics.Clear"/> (which ignores the
+    /// clip region and always fills the whole bitmap) so the cut corners fall through to
+    /// the background color already painted there.</summary>
+    private static void ClipToRoundedTile(Graphics g, int size)
+    {
+        float radius = size * KeyCornerRadiusRatio;
+        using var path = RoundedRectPath(0, 0, size, size, radius);
+        g.SetClip(path);
+    }
+
+    /// <summary>Builds a rounded-rectangle path — same construction as CropEditor's own
+    /// private helper of the same name (GDI+ has no RadiusX/RadiusY shorthand like WPF's
+    /// RectangleGeometry).</summary>
+    private static GraphicsPath RoundedRectPath(float x, float y, float w, float h, float radius)
+    {
+        float d = radius * 2;
+        var path = new GraphicsPath();
+        path.AddArc(x, y, d, d, 180, 90);
+        path.AddArc(x + w - d, y, d, d, 270, 90);
+        path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
+        path.AddArc(x, y + h - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
 
     /// <summary>
     /// Renders <paramref name="execPath"/>'s associated icon centered on a size×size
@@ -44,6 +91,7 @@ public static class IconImageGenerator
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.Clear(BackgroundColor);
+                ClipToRoundedTile(g, size);
 
                 int iconSize = (int)(size * 0.72);
                 int offset = (size - iconSize) / 2;
@@ -80,6 +128,7 @@ public static class IconImageGenerator
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
                 g.Clear(FolderBackgroundColor);
+                ClipToRoundedTile(g, size);
 
                 DrawFolderTemplate(g, size);
                 DrawCaption(g, size, name);
@@ -117,6 +166,7 @@ public static class IconImageGenerator
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
                 g.Clear(FolderBackgroundColor);
+                ClipToRoundedTile(g, size);
 
                 DrawBackGlyph(g, size);
                 DrawCaption(g, size, caption);
@@ -149,6 +199,7 @@ public static class IconImageGenerator
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
                 g.Clear(FolderBackgroundColor);
+                ClipToRoundedTile(g, size);
 
                 using var font = new Font("Segoe UI", size * 0.16f, FontStyle.Regular, GraphicsUnit.Pixel);
                 using var brush = new SolidBrush(Color.White);
@@ -169,6 +220,260 @@ public static class IconImageGenerator
         catch
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Renders a Google Home device tile: the device's own Material icon, rasterized from
+    /// home.google.com itself and cached by <see cref="Services.GoogleHomeIconCatalog"/>
+    /// (already white-on-transparent, and drawn as-is — unlike the folder template it is NOT
+    /// tinted to the K2 accent), plus <paramref name="caption"/> below — same <see cref="IconBox"/>/
+    /// <see cref="DrawCaption"/> layout as the folder and back tiles, so a Google Home key
+    /// lines up with the rest of the grid. Falls back to a caption-only tile when no glyph has
+    /// been cached for the device (it never was captured, or the ligature failed to render —
+    /// see <c>GoogleHomeJs.renderIcons</c>), which is why this takes an icon NAME rather than a
+    /// path: "no icon" is an expected, non-exceptional case here.
+    /// </summary>
+    public static bool TryGenerateGoogleHomeIcon(string? iconName, string caption, int size, string outputPngPath)
+    {
+        string? glyphPath = Services.GoogleHomeIconCatalog.TryGetCachedPng(iconName);
+        if (glyphPath is null) return TryGenerateCaptionIcon(caption, size, outputPngPath);
+
+        try
+        {
+            using var canvas = new Bitmap(size, size);
+            using (var g = Graphics.FromImage(canvas))
+            {
+                g.SmoothingMode = SmoothingMode.HighQuality;
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                g.Clear(FolderBackgroundColor);
+                ClipToRoundedTile(g, size);
+
+                using (var glyph = LoadDetached(glyphPath))
+                {
+                    if (glyph is null) return TryGenerateCaptionIcon(caption, size, outputPngPath);
+                    var (boxLeft, boxTop, boxSize) = IconBox(size);
+                    g.DrawImage(glyph, boxLeft, boxTop, boxSize, boxSize);
+                }
+
+                DrawCaption(g, size, caption);
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
+            canvas.Save(outputPngPath, ImageFormat.Png);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Renders one of Base Camp's own pre-made gallery icons (<c>K2.App/Assets/IconGallery/**</c>,
+    /// extracted from Mountain's <c>wwwroot/images/</c> — see DISTRIBUTION.md) onto a size×size
+    /// tile. Unlike <see cref="TryGenerateFolderIcon"/>, the source art already IS the full
+    /// tile (Mountain's own background baked in edge-to-edge, no separate caption needed) — this
+    /// just letterbox-fills it and clips the baked rounded corners like every other generator.
+    /// <paramref name="tintToAccent"/> runs <see cref="TintBlueHueToAccent"/> first, best-effort
+    /// on every source image regardless of whether it's flat blue-on-white or mixed black/white/
+    /// blue art: every gallery folder sampled during this feature's investigation shares
+    /// Mountain's brand blue (#0044FF, coincidentally identical to the "Mountain Blue" accent
+    /// theme) as either the background or an accent detail, so the same hue-based recolor works
+    /// across the whole set instead of needing a per-folder special case.
+    /// </summary>
+    public static bool TryGenerateGalleryIcon(string sourceImagePath, int size, string outputPngPath, bool tintToAccent = true)
+    {
+        try
+        {
+            using var source = LoadBitmapWithRetry(sourceImagePath);
+            if (source is null) return false;
+            using var tinted = tintToAccent ? TintBlueHueToAccent(source, AccentColor) : new Bitmap(source);
+
+            using var canvas = new Bitmap(size, size);
+            using (var g = Graphics.FromImage(canvas))
+            {
+                g.SmoothingMode = SmoothingMode.HighQuality;
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.Clear(BackgroundColor);
+                ClipToRoundedTile(g, size);
+                g.DrawImage(tinted, 0, 0, size, size);
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
+            canvas.Save(outputPngPath, ImageFormat.Png);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Loads a bitmap from a file path, retrying briefly on failure — <c>new Bitmap(path)</c>
+    /// can transiently throw a generic <see cref="ArgumentException"/> ("Parameter is not
+    /// valid") when the file is momentarily locked by something else touching it (observed
+    /// while stress-testing this method against freshly-copied files: antivirus/indexer
+    /// scanning a just-written file is the usual cause). The gallery's own shipped assets are
+    /// long-settled by the time a real user clicks anything, so this is mostly a defensive
+    /// safety net for edge cases (a fresh install, a file the user just dropped in) rather
+    /// than something expected to fire often.
+    /// </summary>
+    private static Bitmap? LoadBitmapWithRetry(string path, int attempts = 3, int delayMs = 30)
+    {
+        for (int i = 0; i < attempts; i++)
+        {
+            try { return new Bitmap(path); }
+            catch when (i < attempts - 1) { System.Threading.Thread.Sleep(delayMs); }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Converts a source bitmap of ANY pixel format to a fresh 32bppArgb copy via
+    /// <see cref="Graphics.DrawImage(Image, int, int, int, int)"/> — deliberately NOT
+    /// <c>Bitmap.Clone(Rectangle, PixelFormat)</c>, which is documented to be unreliable when
+    /// converting FROM an indexed/palette format (several of the gallery's own source PNGs
+    /// decode as 8bpp-indexed, e.g. "1_calc.png") and was the root cause of a fatal
+    /// (uncatchable) CLR crash the first time this feature was tried against a real gallery
+    /// folder — Clone-based format conversion corrupted the native heap instead of throwing a
+    /// normal, catchable exception. DrawImage's blit-based conversion is the standard safe
+    /// path for this.
+    /// </summary>
+    private static Bitmap NormalizeTo32bppArgb(Bitmap source)
+    {
+        var copy = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(copy);
+        g.DrawImage(source, 0, 0, source.Width, source.Height);
+        return copy;
+    }
+
+    /// <summary>Circular distance in degrees between two hues (0..360), e.g. 350° and 10°
+    /// are 20° apart, not 340°.</summary>
+    private static float HueDistance(float a, float b)
+    {
+        float d = Math.Abs(a - b) % 360f;
+        return d > 180f ? 360f - d : d;
+    }
+
+    /// <summary>HSL -&gt; RGB, alpha passed through unchanged. <see cref="Color.GetHue"/>/
+    /// <see cref="Color.GetSaturation"/>/<see cref="Color.GetBrightness"/> are HSL-space in
+    /// System.Drawing (despite "Brightness" in the name) — this is their inverse, needed
+    /// because .NET has no built-in HSL constructor for <see cref="Color"/>.</summary>
+    private static Color FromAhsl(byte alpha, float h, float s, float l)
+    {
+        static byte ToByte(float v01) => (byte)Math.Clamp(MathF.Round(v01 * 255f), 0f, 255f);
+
+        if (s <= 0f)
+        {
+            byte gray = ToByte(l);
+            return Color.FromArgb(alpha, gray, gray, gray);
+        }
+
+        float c = (1f - Math.Abs(2f * l - 1f)) * s;
+        float hp = h / 60f;
+        float x = c * (1f - Math.Abs(hp % 2f - 1f));
+        (float r1, float g1, float b1) = hp switch
+        {
+            < 1f => (c, x, 0f),
+            < 2f => (x, c, 0f),
+            < 3f => (0f, c, x),
+            < 4f => (0f, x, c),
+            < 5f => (x, 0f, c),
+            _    => (c, 0f, x),
+        };
+        float m = l - c / 2f;
+        return Color.FromArgb(alpha, ToByte(r1 + m), ToByte(g1 + m), ToByte(b1 + m));
+    }
+
+    /// <summary>
+    /// Remaps a source pixel's HSL lightness so the "pure blue" core of an antialiased blue↔white
+    /// or blue↔black blend (source L=0.5 — confirmed by construction: lightening/darkening pure
+    /// Mountain blue #0044FF toward white or black keeps hue AND saturation exactly constant at
+    /// 224°/1.0, only L moves) lands EXACTLY on <paramref name="accentL"/> instead of staying at
+    /// 0.5 — piecewise-linear through (0→0), (0.5→accentL), (1→1) so the true white/black
+    /// endpoints (and the antialiased gradient toward them) are untouched, only the "how blue"
+    /// axis in between is rescaled. This is what makes a flat-blue background render as the
+    /// EXACT accent RGB (e.g. K2 Red's own #900000, not a brighter same-lightness red) — a
+    /// direct user request ("come rosso delle icone puoi usare proprio il #900000 di K2?").
+    /// </summary>
+    private static float RemapLightness(float sourceL, float accentL) =>
+        sourceL <= 0.5f ? sourceL / 0.5f * accentL : accentL + (sourceL - 0.5f) / 0.5f * (1f - accentL);
+
+    /// <summary>
+    /// Recolors the blue hue band of <paramref name="source"/> to <paramref name="accent"/>'s
+    /// exact hue/saturation/lightness (see <see cref="RemapLightness"/> for why lightness is
+    /// remapped rather than copied verbatim) — a generalization of <see cref="TintFromBlueChannel"/>
+    /// for gallery art that mixes blue with black/white line art or other brand colors, not just
+    /// flat blue-on-black. Grayscale pixels (the black/white part of the art — near-zero
+    /// saturation) are naturally left untouched by the saturation gate below, no explicit
+    /// black/white detection needed. See <see cref="TryGenerateGalleryIcon"/>.
+    /// </summary>
+    private static Bitmap TintBlueHueToAccent(Bitmap source, Color accent)
+    {
+        const float BlueHueCenter = 224f;   // hue of Mountain's brand blue #0044FF
+        const float BlueHueTolerance = 45f; // covers anti-aliased drift toward white/black
+        const float MinSaturation = 0.15f;  // gates out near-gray (black/white) pixels
+
+        var result = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
+        var rect = new Rectangle(0, 0, source.Width, source.Height);
+        var src32 = source.PixelFormat == PixelFormat.Format32bppArgb
+            ? source : NormalizeTo32bppArgb(source);
+        try
+        {
+            float accentHue = accent.GetHue();
+            float accentSat = accent.GetSaturation();
+            float accentL = accent.GetBrightness();
+            var srcData = src32.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            var dstData = result.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                int bytes = Math.Abs(srcData.Stride) * source.Height;
+                var buf = new byte[bytes];
+                Marshal.Copy(srcData.Scan0, buf, 0, bytes);
+                for (int i = 0; i < bytes; i += 4)
+                {
+                    // Format32bppArgb byte order: B,G,R,A
+                    var px = Color.FromArgb(buf[i + 3], buf[i + 2], buf[i + 1], buf[i]);
+                    float sat = px.GetSaturation();
+                    if (sat < MinSaturation || HueDistance(px.GetHue(), BlueHueCenter) > BlueHueTolerance)
+                        continue; // leave this pixel's bytes as copied from source
+
+                    float remappedL = RemapLightness(px.GetBrightness(), accentL);
+                    var recolored = FromAhsl(buf[i + 3], accentHue, accentSat, remappedL);
+                    buf[i]     = recolored.B;
+                    buf[i + 1] = recolored.G;
+                    buf[i + 2] = recolored.R;
+                }
+                Marshal.Copy(buf, 0, dstData.Scan0, bytes);
+            }
+            finally
+            {
+                src32.UnlockBits(srcData);
+                result.UnlockBits(dstData);
+            }
+        }
+        finally
+        {
+            if (!ReferenceEquals(src32, source)) src32.Dispose();
+        }
+        return result;
+    }
+
+    /// <summary>Loads a PNG fully into memory — <c>Bitmap(string)</c> keeps the file locked for
+    /// the bitmap's lifetime, which would block re-rendering the same cached glyph later.</summary>
+    private static Bitmap? LoadDetached(string path)
+    {
+        try
+        {
+            using var lazy = new Bitmap(path);
+            return new Bitmap(lazy);
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -208,6 +513,7 @@ public static class IconImageGenerator
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
                 g.Clear(FolderBackgroundColor);
+                ClipToRoundedTile(g, size);
 
                 var (offsetX, offsetY, iconSize) = IconBox(size);
                 g.DrawImage(icon, offsetX, offsetY, iconSize, iconSize);

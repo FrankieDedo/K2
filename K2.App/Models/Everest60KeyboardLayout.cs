@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using K2.App.Services;
 
 namespace K2.App.Models;
 
@@ -169,6 +170,99 @@ public static class Everest60KeyboardLayout
         { 38,186 },{ 39,222 },
         // Row 3: Z-M , . /
         { 42,90 },{ 43,88 },{ 44,67 },{ 45,86 },{ 46,66 },{ 47,78 },{ 48,77 },{ 49,188 },{ 50,190 },{ 51,191 },
+    };
+
+    // ======================================================================
+    // PS/2 Set-1 scan code (MakeCode, +0x100 if E0-extended) -> LED index
+    // (0-63), for translating physical main-board key presses reported by
+    // Raw Input (see K2.App.Services.RawEv60KeyWatcher — the vendor SDK's
+    // KEY_CALLBACK was found 2026-07-28 to never fire on real hardware even
+    // when properly initialized, and a follow-up attempt to read the board's
+    // own raw HID boot-keyboard reports directly hit a hard OS wall: Windows
+    // reserves read/write access to a keyboard's HID collection for its own
+    // class driver, so opening it returns ACCESS_DENIED — Raw Input is the
+    // sanctioned way around exactly that restriction).
+    //
+    // Keyed by scan code, NOT by Raw Input's own VKey field: VKey is derived
+    // from the scan code via the CURRENTLY ACTIVE keyboard layout, and for
+    // the OEM/punctuation keys that translation genuinely varies by locale
+    // (an Italian layout's physical ";" position reports a different VKey
+    // than a US layout's) — user report 2026-07-28, "pressing an ITA-layout
+    // key lights up a different key", same class of bug already solved for
+    // Everest Max by keying off raw HID usage ids instead of anything
+    // OS-translated (see EverestWMatrixMap.HidUsageToMatrixId's doc comment).
+    // The scan code is the Raw-Input equivalent of that same fixed, physical,
+    // locale-independent identity — standard PS/2 Set 1, unchanged since the
+    // original IBM PC/AT, not vendor- or OS-version-specific, so this needed
+    // no new capture to build. As a side benefit this also makes the L/R
+    // Shift/Ctrl/Alt distinction (previously RawEv60KeyWatcher.NormalizeVKey,
+    // now deleted) and the numpad-vs-main-board Enter/nav-cluster ambiguity
+    // (previously RawEv60KeyWatcher.IsAmbiguousWithNumpad, now also deleted)
+    // trivial: scan codes already distinguish both natively — the numpad's
+    // own Enter/arrow-equivalent keys physically differ from the main
+    // board's regardless of Num Lock state, unlike their OS-translated VKeys.
+    // Fn (idx 60) has no entry: it's a pure firmware-side layer switch with
+    // no host-visible signal at all, same as Everest Max's own
+    // un-observable Fn key.
+    //
+    // The numpad accessory's 17 keys are included too (LED indices
+    // Everest60Protocol.NumpadLedIndexBase + 0..16, same order as
+    // Everest60Protocol.NumpadLedIndex / this class's own Numpad array) —
+    // 2026-07-28, user question "why is the numpad on a slow 100ms poll when
+    // typing on it is instant?" was the right challenge: the accessory
+    // speaks the exact same standard boot-keyboard reports as the main
+    // board (same USB device/interface, confirmed by the ev60_allkeys.pcapng
+    // capture that grounded the whole main-board scan-code table above), so
+    // it gets the same instant, event-driven Raw Input path instead of
+    // Everest60NumpadKeyPoller's Feature-Report polling (retired from the
+    // highlight/execution role — see MainWindow.Everest60.cs's history for
+    // why that poller existed and why it's no longer wired up). Zero
+    // collisions with the main-board codes above: every numpad-cluster key
+    // that has a main-board homonym (Enter, arrows-when-NumLock-off) uses a
+    // DIFFERENT combined code specifically because the main board's own
+    // version of each is E0-extended and the numpad's own physical scan code
+    // never is, regardless of Num Lock state.
+    // ======================================================================
+    internal static readonly IReadOnlyDictionary<int, int> ScanCodeToLedIndex = new Dictionary<int, int>
+    {
+        // Row 0: Esc 1-0 - = Backspace
+        { 0x01, 0 }, { 0x02, 1 }, { 0x03, 2 }, { 0x04, 3 }, { 0x05, 4 },
+        { 0x06, 5 }, { 0x07, 6 }, { 0x08, 7 }, { 0x09, 8 }, { 0x0A, 9 },
+        { 0x0B, 10 }, { 0x0C, 11 }, { 0x0D, 12 }, { 0x0E, 13 },
+        // Row 1: Tab Q-P [ ] \
+        { 0x0F, 14 }, { 0x10, 15 }, { 0x11, 16 }, { 0x12, 17 }, { 0x13, 18 },
+        { 0x14, 19 }, { 0x15, 20 }, { 0x16, 21 }, { 0x17, 22 }, { 0x18, 23 },
+        { 0x19, 24 }, { 0x1A, 25 }, { 0x1B, 26 }, { 0x2B, 27 },
+        // Row 2: Caps A-L ; ' Enter
+        { 0x3A, 28 }, { 0x1E, 29 }, { 0x1F, 30 }, { 0x20, 31 }, { 0x21, 32 },
+        { 0x22, 33 }, { 0x23, 34 }, { 0x24, 35 }, { 0x25, 36 }, { 0x26, 37 },
+        { 0x27, 38 }, { 0x28, 39 }, { 0x1C, 40 },
+        // Row 3: Shift Z-M , . / Shift Up Del
+        { 0x2A, 41 }, { 0x2C, 42 }, { 0x2D, 43 }, { 0x2E, 44 }, { 0x2F, 45 },
+        { 0x30, 46 }, { 0x31, 47 }, { 0x32, 48 }, { 0x33, 49 }, { 0x34, 50 },
+        { 0x35, 51 }, { 0x36, 52 }, { 0x148, 53 }, { 0x153, 54 },
+        // Row 4: Ctrl Win Alt Space Alt(Gr) Left Down Right — Fn has no scan code
+        { 0x1D, 55 }, { 0x15B, 56 }, { 0x38, 57 }, { 0x39, 58 }, { 0x138, 59 },
+        { 0x14B, 61 }, { 0x150, 62 }, { 0x14D, 63 },
+        // Numpad accessory (idx 0-16, order matches BuildNumpad/NumpadIndex above):
+        // Num Lock, /, *, -, 7, 8, 9, +, 4, 5, 6, 1, 2, 3, Enter, 0, .
+        { 0x45, Everest60Protocol.NumpadLedIndexBase + 0 },
+        { 0x135, Everest60Protocol.NumpadLedIndexBase + 1 },
+        { 0x37, Everest60Protocol.NumpadLedIndexBase + 2 },
+        { 0x4A, Everest60Protocol.NumpadLedIndexBase + 3 },
+        { 0x47, Everest60Protocol.NumpadLedIndexBase + 4 },
+        { 0x48, Everest60Protocol.NumpadLedIndexBase + 5 },
+        { 0x49, Everest60Protocol.NumpadLedIndexBase + 6 },
+        { 0x4E, Everest60Protocol.NumpadLedIndexBase + 7 },
+        { 0x4B, Everest60Protocol.NumpadLedIndexBase + 8 },
+        { 0x4C, Everest60Protocol.NumpadLedIndexBase + 9 },
+        { 0x4D, Everest60Protocol.NumpadLedIndexBase + 10 },
+        { 0x4F, Everest60Protocol.NumpadLedIndexBase + 11 },
+        { 0x50, Everest60Protocol.NumpadLedIndexBase + 12 },
+        { 0x51, Everest60Protocol.NumpadLedIndexBase + 13 },
+        { 0x11C, Everest60Protocol.NumpadLedIndexBase + 14 },
+        { 0x52, Everest60Protocol.NumpadLedIndexBase + 15 },
+        { 0x53, Everest60Protocol.NumpadLedIndexBase + 16 },
     };
 
     // ======================================================================

@@ -10,8 +10,13 @@ using K2.Core;
 namespace K2.App;
 
 /// <summary>
-/// RGB Lighting + Side Ring section content for the Everest 60 tab — see
-/// Everest60RgbPanel.xaml for why this is its own UserControl.
+/// RGB Lighting section content for the Everest 60 tab — see
+/// Everest60RgbPanel.xaml for why this is its own UserControl. The old
+/// standalone "Side Ring" (uniform-color) section was removed 2026-07-24:
+/// selecting "Custom" from the effect dropdown below now activates the same
+/// per-key + per-border-LED painting system Everest Max uses, which
+/// supersedes it (a uniform ring color is just "paint every border square
+/// the same color" via "Fill all").
 /// </summary>
 public partial class Everest60RgbPanel : UserControl
 {
@@ -31,9 +36,8 @@ public partial class Everest60RgbPanel : UserControl
 
     private int _ev60Color1 = 0x900000;
     private int _ev60Color2 = 0x000000;
-    private int _ev60SideColor = 0x900000;
 
-    /// <summary>Backs the main effect/side-ring brightness — the Slider itself
+    /// <summary>Backs the main effect/custom brightness — the Slider itself
     /// lives in MainWindow's shared top-right bar (BrEverest60), not in this
     /// panel (see MainWindow.SectionNav.cs). Updated via <see cref="SetBrightness"/>.</summary>
     internal double Brightness { get; private set; } = 100;
@@ -44,7 +48,7 @@ public partial class Everest60RgbPanel : UserControl
     private Func<int>? _ev60Slot;
     private int CurrentSlot => _ev60Slot?.Invoke() ?? 1;
 
-    /// <summary>Which of the three mutually-exclusive lighting modes was last
+    /// <summary>Which of the two mutually-exclusive lighting modes was last
     /// sent to hardware (mirrors Ev60PersistLighting's activeMode tag) — used
     /// by <see cref="SetBacklightForcedOff"/> to know what to resend on wake.</summary>
     private string _ev60ActiveMode = "preset";
@@ -83,6 +87,7 @@ public partial class Everest60RgbPanel : UserControl
         new(Everest60Protocol.Effect.Reactive,  "Reactive"),
         new(Everest60Protocol.Effect.Yeti,      "Yeti"),
         new(Everest60Protocol.Effect.Off,       "Off"),
+        new(Everest60Protocol.Effect.Custom,    "Custom"),
     };
 
     private sealed record Ev60Caps(int MaxColors, bool Rainbow, bool Speed, Ev60DirChoice[] Directions);
@@ -129,7 +134,6 @@ public partial class Everest60RgbPanel : UserControl
             UpdateEv60Capabilities();
             ApplyColorButton(BtnEv60Color1, _ev60Color1);
             ApplyColorButton(BtnEv60Color2, _ev60Color2);
-            ApplyColorButton(BtnEv60SideColor, _ev60SideColor);
 
             // Backlight auto-off — moved here from MainWindow's Settings panel
             // (user request 2026-07-21), same "settings.*" keys as before so
@@ -199,6 +203,15 @@ public partial class Everest60RgbPanel : UserControl
                 RbEv60ColorSingle.IsChecked = true;
 
             UpdateEv60ColorRowVisibility();
+
+            // "Custom" swaps the normal effect controls (direction/color-mode) for
+            // the Key Lighting paint panel — mirrors Everest Max's UpdateEvCapabilities
+            // (PnlEvNormalControls/PnlEvCustomLighting), 2026-07-24: paint mode is no
+            // longer a separate checkbox, it's implicit whenever this effect is picked.
+            bool isCustom = pick.Eff == Everest60Protocol.Effect.Custom;
+            PnlEv60NormalControls.Visibility = isCustom ? Visibility.Collapsed : Visibility.Visible;
+            PnlEv60KeyLightingSection.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed;
+            SetEv60CustomPaintModeActive(isCustom);
         }
         finally
         {
@@ -279,11 +292,11 @@ public partial class Everest60RgbPanel : UserControl
         ApplyCurrentEv60Effect();
     }
 
-    /// <summary>Snapshots ALL lighting state (preset effect + side ring color +
-    /// per-key custom colors) into the current profile slot in one combined
-    /// record, tagging which of the three mutually-exclusive modes was the one
-    /// just sent to hardware. Called unconditionally (even while disconnected)
-    /// so a profile edited with the keyboard unplugged is still saved.</summary>
+    /// <summary>Snapshots ALL lighting state (preset effect + per-key/border
+    /// custom colors) into the current profile slot in one combined record,
+    /// tagging which of the two mutually-exclusive modes was the one just sent
+    /// to hardware. Called unconditionally (even while disconnected) so a
+    /// profile edited with the keyboard unplugged is still saved.</summary>
     private void Ev60PersistLighting(string activeMode)
     {
         _ev60ActiveMode = activeMode;
@@ -295,11 +308,18 @@ public partial class Everest60RgbPanel : UserControl
         var customDict = new Dictionary<int, int>();
         foreach (var kv in _ev60CustomKeyColors)
             customDict[kv.Key] = (kv.Value.R << 16) | (kv.Value.G << 8) | kv.Value.B;
+        var sideDict = new Dictionary<int, int>();
+        foreach (var kv in _ev60CustomSideColors)
+            sideDict[kv.Key] = (kv.Value.R << 16) | (kv.Value.G << 8) | kv.Value.B;
+        var numpadRingDict = new Dictionary<int, int>();
+        foreach (var kv in _ev60CustomNumpadRingColors)
+            numpadRingDict[kv.Key] = (kv.Value.R << 16) | (kv.Value.G << 8) | kv.Value.B;
 
         _ev60Store.SaveLighting(CurrentSlot, new Ev60LightingRecord(
             (int)eff, _ev60Color1, _ev60Color2, speedPct, _ev60DirIndex, rainbow,
-            Brightness, _ev60SideColor, customBrightPct, activeMode, customDict,
-            ColorDouble: RbEv60ColorDouble.IsChecked == true));
+            Brightness, customBrightPct, activeMode, customDict,
+            ColorDouble: RbEv60ColorDouble.IsChecked == true, CustomSideColors: sideDict,
+            CustomNumpadRingColors: numpadRingDict));
     }
 
     /// <summary>Reads the panel and sends the effect to the firmware. No-op
@@ -309,6 +329,18 @@ public partial class Everest60RgbPanel : UserControl
         if (!_ev60Initialized || _ev60Suppress) return;
         if (CbEv60Effect.SelectedItem is not Ev60EffectChoice pick)
             return;
+
+        if (pick.Eff == Everest60Protocol.Effect.Custom)
+        {
+            // Selecting Custom applies the remembered per-key/border/numpad colors
+            // right away — all-off if nothing was ever painted (mirrors Everest
+            // Max's ApplyCurrentEffect Custom special-case, 2026-07-24).
+            // BtnEv60CustomApply_Click already persists activeMode="custom" and
+            // sends the full combined apply, so it fully replaces the code below.
+            BtnEv60CustomApply_Click(this, new RoutedEventArgs());
+            return;
+        }
+
         Ev60PersistLighting(activeMode: "preset");
         if (!_ev60Connected)
         {
@@ -340,8 +372,8 @@ public partial class Everest60RgbPanel : UserControl
     /// <summary>Backlight-off-when-idle timer callback (see MainWindow.Everest60.cs's
     /// BacklightIdleTimer). Sends the "Off" preset directly to hardware without
     /// touching persisted state or <see cref="_ev60ActiveMode"/> (so whichever of
-    /// preset/side/custom was actually active survives); waking resends that
-    /// same mode via the exact dispatch <see cref="Ev60ReloadProfile"/> uses.</summary>
+    /// preset/custom was actually active survives); waking resends that same mode
+    /// via the exact dispatch <see cref="Ev60ReloadProfile"/> uses.</summary>
     internal void SetBacklightForcedOff(bool off)
     {
         if (off == _ev60BacklightForcedOff) return;
@@ -359,63 +391,68 @@ public partial class Everest60RgbPanel : UserControl
         _log($"[RGB ] auto-off wake: resend active mode -> {_ev60ActiveMode}");
         switch (_ev60ActiveMode)
         {
-            case "side":   BtnEv60SideApply_Click(this, new RoutedEventArgs()); break;
             case "custom": BtnEv60CustomApply_Click(this, new RoutedEventArgs()); break;
             default:       ApplyCurrentEv60Effect(); break;
         }
     }
 
     // ------------------------------------------------------------
-    // Side ring
-    // ------------------------------------------------------------
-
-    private void BtnEv60SideColor_Click(object sender, RoutedEventArgs e)
-    {
-        using var dlg = new System.Windows.Forms.ColorDialog
-        {
-            FullOpen = true,
-            AnyColor = true,
-            SolidColorOnly = true,
-            Color = System.Drawing.Color.FromArgb((_ev60SideColor >> 16) & 0xFF, (_ev60SideColor >> 8) & 0xFF, _ev60SideColor & 0xFF),
-        };
-        if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
-        _ev60SideColor = (dlg.Color.R << 16) | (dlg.Color.G << 8) | dlg.Color.B;
-        ApplyColorButton(BtnEv60SideColor, _ev60SideColor);
-    }
-
-    private void BtnEv60SideApply_Click(object sender, RoutedEventArgs e)
-    {
-        Ev60PersistLighting(activeMode: "side");
-        if (!_ev60Connected) { _log("[RGB ] skip: Everest 60 not connected"); return; }
-        (byte r, byte g, byte b) c = ((byte)((_ev60SideColor >> 16) & 0xFF),
-                                       (byte)((_ev60SideColor >> 8) & 0xFF),
-                                       (byte)(_ev60SideColor & 0xFF));
-        int brightPct = (int)Brightness;
-        _log($"[RGB ] apply side ring color=#{_ev60SideColor:X6} bright={brightPct}%");
-        bool ok = _ev60.SetSideRing(c, brightPct);
-        _log($"[RGB ] SetSideRing -> {ok}");
-    }
-
-    // ------------------------------------------------------------
-    // Key Lighting — per-key custom paint editor (64 main-board keys).
+    // Key Lighting — per-key + per-border-LED + numpad custom paint editor,
+    // active whenever CbEv60Effect="Custom" is selected (2026-07-24, mirrors
+    // Everest Max's Custom Lighting — see SetEv60CustomPaintModeActive below;
+    // was previously a main-board-only, always-visible section gated by its
+    // own checkbox, and the ring had a separate uniform-color "Side Ring"
+    // section — both superseded by this).
     //
-    // The keyboard overlay itself (CvsEv60Keyboard, the actual Buttons) lives
-    // in MainWindow.xaml/MainWindow.Everest60.cs — this panel only owns the
-    // paint state + device Apply/Clear, and bridges to MainWindow via
-    // TryPaintKey() (called on every key click) and the CustomKeysCleared
-    // event (so MainWindow can reset its Button visuals on Clear). No live
-    // readback exists for this raw-HID board, so there is nothing to
-    // "reapply on reconnect" — a painted key keeps its Background for the
-    // Canvas's lifetime, same as Everest Max's Custom Lighting overlay.
+    // The keyboard/border overlays themselves (CvsEv60Keyboard/CvsEv60Numpad/
+    // CvsEv60BorderMain, the actual Buttons) live in MainWindow.xaml/
+    // MainWindow.Everest60.cs — this panel only owns the paint state + device
+    // Apply/Clear, and bridges to MainWindow via TryPaintKey()/TryPaintSide()
+    // (called on every click) and the CustomKeysCleared/RequestReapplyOverlays
+    // events (so MainWindow can reset/repaint its Button visuals).
     // ------------------------------------------------------------
 
     private bool _ev60PaintMode;
     private Color _ev60BrushColor = Color.FromRgb(0x5B, 0xBE, 0xC3); // teal accent
+
+    /// <summary>Keyed by LED index (0-63 main board, or
+    /// <see cref="Everest60Protocol.NumpadLedIndexBase"/>+NumpadIndex for the 17
+    /// numpad keys — same offset-reuse convention as Everest60Store's Keys table
+    /// for Key Binding identity, 2026-07-24) — MainWindow calls
+    /// <see cref="TryPaintKey"/> with either domain, this dictionary doesn't care
+    /// which.</summary>
     private readonly Dictionary<int, Color> _ev60CustomKeyColors = new();
 
+    /// <summary>Border-ring paint state, keyed by wire index (0-43, see
+    /// <see cref="Everest60Protocol.SideLedIndex"/>) — separate from
+    /// <see cref="_ev60CustomKeyColors"/> since it's a distinct wire array in
+    /// <see cref="Everest60Protocol.SendCustom"/>, mirrors Everest Max's
+    /// _customSideColors (MainWindow.CustomLighting.cs).</summary>
+    private readonly Dictionary<int, Color> _ev60CustomSideColors = new();
+
+    /// <summary>Numpad-ring paint state, keyed by wire index (0-21, see
+    /// <see cref="Everest60Protocol.NumpadSideLedIndex"/>) — its own dictionary
+    /// for the same reason as <see cref="_ev60CustomSideColors"/> (a distinct
+    /// wire array), added 2026-07-24 once the numpad ring's addresses were
+    /// confirmed via USBPcap capture.</summary>
+    private readonly Dictionary<int, Color> _ev60CustomNumpadRingColors = new();
+
     /// <summary>Raised when "Clear" is pressed, so MainWindow can reset the
-    /// on-screen key Buttons it owns.</summary>
+    /// on-screen key Buttons it owns (main board + numpad + border squares).</summary>
     internal event Action? CustomKeysCleared;
+
+    /// <summary>Raised whenever the Key Lighting paint-mode checkbox changes, so
+    /// MainWindow can show/hide the border-square overlay and widen the numpad
+    /// gap (mirrors Everest Max's SetCustomPaintModeActive, just split across two
+    /// classes here since MainWindow — not this panel — owns the keyboard/border
+    /// Canvases).</summary>
+    internal event Action<bool>? PaintModeChanged;
+
+    /// <summary>Raised after "Fill all" (and after a profile reload) so MainWindow
+    /// can repaint every key/numpad-key/border-square Button from this panel's
+    /// current paint state (<see cref="TryGetPaintedColor"/>/<see cref="TryGetSideColor"/>)
+    /// — mirrors Everest Max's ReapplyCustomOverlays.</summary>
+    internal event Action? RequestReapplyOverlays;
 
     /// <summary>Raised on every manual click of the backlight switch, so
     /// MainWindow can keep its BacklightIdleTimer's countdown/forced-off state
@@ -479,14 +516,68 @@ public partial class Everest60RgbPanel : UserControl
     internal bool TryGetPaintedColor(int ledIndex, out Color color) =>
         _ev60CustomKeyColors.TryGetValue(ledIndex, out color);
 
-    /// <summary>Whether the Key Lighting paint-mode checkbox is currently
-    /// checked — used by MainWindow's live LED-color poll (OnEv60ColorsUpdated)
-    /// to avoid overwriting an unsaved paint preview with the hardware's actual
+    /// <summary>Whether "Custom" is the currently-selected effect — used by
+    /// MainWindow's live LED-color poll (OnEv60ColorsUpdated) to avoid
+    /// overwriting an unsaved paint preview with the hardware's actual
     /// (pre-Apply) colors while the user is actively painting keys.</summary>
     internal bool IsPaintModeActive => _ev60PaintMode;
 
-    private void CkEv60CustomPaint_Checked(object sender, RoutedEventArgs e) =>
-        _ev60PaintMode = CkEv60CustomPaint.IsChecked == true;
+    /// <summary>Whether "Off" is the currently-selected effect — used by
+    /// MainWindow's live LED-color poll (OnEv60ColorsUpdated) to force the
+    /// on-screen preview dark instead of showing whatever GetColorData2
+    /// reads back. Needed because the poll runs continuously while the
+    /// Lighting section is open regardless of which effect is selected, and
+    /// a stale/residual readback from the previous effect (or from the
+    /// firmware not zeroing every address on "Off") would otherwise leave
+    /// keys looking lit even though the user picked "Off".</summary>
+    internal bool IsEffectOff =>
+        CbEv60Effect.SelectedItem is Ev60EffectChoice pick && pick.Eff == Everest60Protocol.Effect.Off;
+
+    /// <summary>Turns Key Lighting's paint mode on/off — called from
+    /// UpdateEv60Capabilities whenever CbEv60Effect's selection changes
+    /// to/from "Custom" (2026-07-24: no longer a separate checkbox, mirrors
+    /// Everest Max's SetCustomPaintModeActive). Raises PaintModeChanged (so
+    /// MainWindow shows/hides the border-square overlay + widens the numpad
+    /// gap) and RequestReapplyOverlays (so it repaints — or, when turning
+    /// off, clears — every key/numpad/border Button from this panel's
+    /// current paint state).</summary>
+    private void SetEv60CustomPaintModeActive(bool active)
+    {
+        _ev60PaintMode = active;
+        PaintModeChanged?.Invoke(active);
+        RequestReapplyOverlays?.Invoke();
+    }
+
+    /// <summary>Border-square paint (44-LED side ring) — MainWindow calls this on
+    /// every border-square click, mirrors <see cref="TryPaintKey"/>.</summary>
+    internal bool TryPaintSide(int wireIndex, out Color color)
+    {
+        color = _ev60BrushColor;
+        if (!_ev60PaintMode || wireIndex < 0) return false;
+        _ev60CustomSideColors[wireIndex] = _ev60BrushColor;
+        return true;
+    }
+
+    /// <summary>Read-only lookup of a border square's current painted color —
+    /// mirrors <see cref="TryGetPaintedColor"/>, used to repaint the overlay when
+    /// re-entering the Lighting section or after a profile reload.</summary>
+    internal bool TryGetSideColor(int wireIndex, out Color color) =>
+        _ev60CustomSideColors.TryGetValue(wireIndex, out color);
+
+    /// <summary>Numpad-ring square paint (22-LED numpad ring) — MainWindow calls
+    /// this on every numpad-ring-square click, mirrors <see cref="TryPaintSide"/>.</summary>
+    internal bool TryPaintNumpadRing(int wireIndex, out Color color)
+    {
+        color = _ev60BrushColor;
+        if (!_ev60PaintMode || wireIndex < 0) return false;
+        _ev60CustomNumpadRingColors[wireIndex] = _ev60BrushColor;
+        return true;
+    }
+
+    /// <summary>Read-only lookup of a numpad-ring square's current painted
+    /// color — mirrors <see cref="TryGetSideColor"/>.</summary>
+    internal bool TryGetNumpadRingColor(int wireIndex, out Color color) =>
+        _ev60CustomNumpadRingColors.TryGetValue(wireIndex, out color);
 
     private void BtnEv60CustomBrushColor_Click(object sender, RoutedEventArgs e)
     {
@@ -514,34 +605,75 @@ public partial class Everest60RgbPanel : UserControl
         if (!_ev60Connected) { _log("[KEYS] skip: Everest 60 not connected"); return; }
 
         var colors = new (byte r, byte g, byte b)[Everest60Protocol.NumKeys];
+        var numpadColors = new (byte r, byte g, byte b)[Everest60Protocol.NumpadLedIndex.Length];
         foreach (var kv in _ev60CustomKeyColors)
         {
-            if (kv.Key < 0 || kv.Key >= colors.Length) continue;
-            colors[kv.Key] = (kv.Value.R, kv.Value.G, kv.Value.B);
+            if (kv.Key >= Everest60Protocol.NumpadLedIndexBase)
+            {
+                int npIdx = kv.Key - Everest60Protocol.NumpadLedIndexBase;
+                if (npIdx >= 0 && npIdx < numpadColors.Length)
+                    numpadColors[npIdx] = (kv.Value.R, kv.Value.G, kv.Value.B);
+            }
+            else if (kv.Key >= 0 && kv.Key < colors.Length)
+            {
+                colors[kv.Key] = (kv.Value.R, kv.Value.G, kv.Value.B);
+            }
         }
 
+        var sideColors = new (byte r, byte g, byte b)[Everest60Protocol.SideLedIndex.Length];
+        foreach (var kv in _ev60CustomSideColors)
+            if (kv.Key >= 0 && kv.Key < sideColors.Length)
+                sideColors[kv.Key] = (kv.Value.R, kv.Value.G, kv.Value.B);
+
+        var numpadRingColors = new (byte r, byte g, byte b)[Everest60Protocol.NumpadSideLedIndex.Length];
+        foreach (var kv in _ev60CustomNumpadRingColors)
+            if (kv.Key >= 0 && kv.Key < numpadRingColors.Length)
+                numpadRingColors[kv.Key] = (kv.Value.R, kv.Value.G, kv.Value.B);
+
         int brightPct = (int)SldEv60CustomBrightness.Value;
-        _log($"[KEYS] apply {_ev60CustomKeyColors.Count} painted key(s) bright={brightPct}%");
-        bool ok = _ev60.SetCustomKeys(colors, brightPct);
-        _log($"[KEYS] SetCustomKeys -> {ok}");
+        _log($"[KEYS] apply {_ev60CustomKeyColors.Count} painted key(s) + {_ev60CustomSideColors.Count} border LED(s) + " +
+             $"{_ev60CustomNumpadRingColors.Count} numpad-ring LED(s) bright={brightPct}%");
+        bool ok = _ev60.SetCustomLighting(colors, sideColors, numpadColors, numpadRingColors, brightPct);
+        _log($"[KEYS] SetCustomLighting -> {ok}");
     }
 
     private void BtnEv60CustomClear_Click(object sender, RoutedEventArgs e)
     {
         _ev60CustomKeyColors.Clear();
+        _ev60CustomSideColors.Clear();
+        _ev60CustomNumpadRingColors.Clear();
         CustomKeysCleared?.Invoke();
+    }
+
+    /// <summary>Fills every main-board key + numpad key + border-ring LED +
+    /// numpad-ring LED with the brush color — mirrors Everest Max's
+    /// BtnCustomFillAll_Click.</summary>
+    private void BtnEv60CustomFillAll_Click(object sender, RoutedEventArgs e)
+    {
+        for (int i = 0; i < Everest60Protocol.NumKeys; i++)
+            _ev60CustomKeyColors[i] = _ev60BrushColor;
+        for (int i = 0; i < Everest60Protocol.NumpadLedIndex.Length; i++)
+            _ev60CustomKeyColors[Everest60Protocol.NumpadLedIndexBase + i] = _ev60BrushColor;
+        for (int i = 0; i < Everest60Protocol.SideLedIndex.Length; i++)
+            _ev60CustomSideColors[i] = _ev60BrushColor;
+        for (int i = 0; i < Everest60Protocol.NumpadSideLedIndex.Length; i++)
+            _ev60CustomNumpadRingColors[i] = _ev60BrushColor;
+        RequestReapplyOverlays?.Invoke();
+        _log($"[KEYS] Fill all: {Everest60Protocol.NumKeys} keys + {Everest60Protocol.NumpadLedIndex.Length} numpad keys + " +
+             $"{Everest60Protocol.SideLedIndex.Length} border LEDs + {Everest60Protocol.NumpadSideLedIndex.Length} numpad-ring LEDs " +
+             $"set to #{_ev60BrushColor.R:X2}{_ev60BrushColor.G:X2}{_ev60BrushColor.B:X2}");
     }
 
     // ------------------------------------------------------------
     // Profile switch: push a stored slot's lighting into this panel's
-    // controls, then re-apply whichever of the three modes (preset/side/
-    // custom) was active for that profile. Called by
-    // MainWindow.Everest60.cs on combo switch, module init, and the
-    // disconnected->connected poll transition.
+    // controls, then re-apply whichever of the two modes (preset/custom)
+    // was active for that profile. Called by MainWindow.Everest60.cs on
+    // combo switch, module init, and the disconnected->connected poll
+    // transition.
     // ------------------------------------------------------------
 
-    /// <summary>Resets this profile's lighting (preset effect + side ring + any painted
-    /// per-key colors) to K2's factory defaults — the same values Init() sets up for a
+    /// <summary>Resets this profile's lighting (preset effect + any painted
+    /// per-key/border colors) to K2's factory defaults — the same values Init() sets up for a
     /// brand-new profile — and re-applies them to the keyboard if connected. Seeds the
     /// store with an explicit default record rather than clearing it, since
     /// <see cref="Ev60ReloadProfile"/> no-ops on a missing (null) record. Called by
@@ -551,7 +683,9 @@ public partial class Everest60RgbPanel : UserControl
         if (_ev60Store is null) return;
         _ev60Store.SaveLighting(CurrentSlot, new Ev60LightingRecord(
             (int)Everest60Protocol.Effect.Wave, 0x900000, 0x000000, 50, 0, false,
-            100, 0x900000, 100, "preset", new Dictionary<int, int>()));
+            100, 100, "preset", new Dictionary<int, int>(),
+            CustomSideColors: new Dictionary<int, int>(),
+            CustomNumpadRingColors: new Dictionary<int, int>()));
         Ev60ReloadProfile(CurrentSlot);
         CustomKeysCleared?.Invoke();
     }
@@ -577,10 +711,8 @@ public partial class Everest60RgbPanel : UserControl
 
             _ev60Color1 = lighting.Color1;
             _ev60Color2 = lighting.Color2;
-            _ev60SideColor = lighting.SideColor;
             ApplyColorButton(BtnEv60Color1, _ev60Color1);
             ApplyColorButton(BtnEv60Color2, _ev60Color2);
-            ApplyColorButton(BtnEv60SideColor, _ev60SideColor);
 
             SldEv60Speed.Value = lighting.SpeedPct;
             if (LblEv60Speed != null) LblEv60Speed.Text = $"{lighting.SpeedPct}%";
@@ -602,8 +734,25 @@ public partial class Everest60RgbPanel : UserControl
             foreach (var kv in lighting.CustomKeyColors)
                 _ev60CustomKeyColors[kv.Key] = Color.FromRgb(
                     (byte)((kv.Value >> 16) & 0xFF), (byte)((kv.Value >> 8) & 0xFF), (byte)(kv.Value & 0xFF));
+
+            _ev60CustomSideColors.Clear();
+            if (lighting.CustomSideColors is not null)
+                foreach (var kv in lighting.CustomSideColors)
+                    _ev60CustomSideColors[kv.Key] = Color.FromRgb(
+                        (byte)((kv.Value >> 16) & 0xFF), (byte)((kv.Value >> 8) & 0xFF), (byte)(kv.Value & 0xFF));
+
+            _ev60CustomNumpadRingColors.Clear();
+            if (lighting.CustomNumpadRingColors is not null)
+                foreach (var kv in lighting.CustomNumpadRingColors)
+                    _ev60CustomNumpadRingColors[kv.Key] = Color.FromRgb(
+                        (byte)((kv.Value >> 16) & 0xFF), (byte)((kv.Value >> 8) & 0xFF), (byte)(kv.Value & 0xFF));
         }
         finally { _ev60Suppress = wasSuppress; }
+
+        // Repaint MainWindow's key/numpad/border Buttons from the just-loaded paint
+        // state regardless of connection — same "software preview always reflects
+        // the stored state" rule as the rest of this panel's paint mode.
+        RequestReapplyOverlays?.Invoke();
 
         if (!_ev60Connected)
         {
@@ -613,9 +762,6 @@ public partial class Everest60RgbPanel : UserControl
 
         switch (lighting.ActiveMode)
         {
-            case "side":
-                BtnEv60SideApply_Click(this, new RoutedEventArgs());
-                break;
             case "custom":
                 BtnEv60CustomApply_Click(this, new RoutedEventArgs());
                 break;

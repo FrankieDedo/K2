@@ -12,6 +12,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using K2.Core;
 
 namespace K2.App.Services;
 
@@ -171,6 +172,97 @@ internal static class DpGifAnimator
         }
     }
 
+    /// <summary>
+    /// DEBUG-ONLY: streams a synthetic animated test pattern to ONE key via
+    /// <see cref="IDisplayPadClient.TryUploadRawBgr"/> as fast as the wire allows (no
+    /// per-frame delay), to measure the real sustained fps of a single-icon transfer —
+    /// counterpart to <see cref="DpFullscreenAnimator.StartLiveTest"/> for the whole panel.
+    /// Per <c>DpHidNative.StreamLocked</c>'s remarks, a single icon is ~1/18th the bytes of
+    /// the full panel (31212 B vs 576000 B) for the same fixed per-frame handshake cost, so
+    /// this should land far above the panel's measured ~5 fps. Shares the same session table
+    /// as <see cref="StartOrUpdate"/>/<see cref="Stop"/> — this IS that key's animation slot.
+    /// Logs a measured fps figure every ~2s via <paramref name="log"/>.
+    /// </summary>
+    public static void StartLiveTest(IDisplayPadClient client, Action<string> log, int deviceId, int btn)
+    {
+        var id = new KeyId(deviceId, btn);
+        lock (_lock)
+        {
+            if (_running.TryGetValue(id, out var existing)) existing.Cts.Cancel();
+            var cts = new CancellationTokenSource();
+            _running[id] = new Animation { Cts = cts, SourcePath = "__live_test__", Rotation = 0 };
+            var token = cts.Token;
+            Task.Run(() => RunLiveTestLoop(client, log, deviceId, btn, token), token);
+        }
+    }
+
+    private static void RunLiveTestLoop(IDisplayPadClient client, Action<string> log,
+                                         int deviceId, int btn, CancellationToken token)
+    {
+        int size = DpHidNative.IconSize;
+        log($"[DP-GIF] dev {deviceId} key #{btn}: LIVE TEST icon stream starting ({size}x{size} synthetic pattern)");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        int frame = 0;
+        long windowStartMs = 0, lastFrameMs = 0;
+        int windowFrames = 0;
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                byte[] bgr = BuildTestPatternBgr(size, size, frame);
+                long t0 = sw.ElapsedMilliseconds;
+                if (!client.TryUploadRawBgr(deviceId, bgr, btn))
+                {
+                    log($"[DP-GIF] dev {deviceId} key #{btn}: live test upload failed, stopping");
+                    return;
+                }
+                lastFrameMs = sw.ElapsedMilliseconds - t0;
+                frame++;
+                windowFrames++;
+                if (sw.ElapsedMilliseconds - windowStartMs >= 2000)
+                {
+                    double fps = windowFrames * 1000.0 / Math.Max(1, sw.ElapsedMilliseconds - windowStartMs);
+                    log($"[DP-GIF] dev {deviceId} key #{btn}: live test ~{fps:0.0} fps (last frame {lastFrameMs} ms)");
+                    windowStartMs = sw.ElapsedMilliseconds;
+                    windowFrames = 0;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            log($"[DP-GIF] dev {deviceId} key #{btn}: live test stopped ({ex.Message})");
+        }
+    }
+
+    /// <summary>Sweeping vertical bar over a diagonal gradient — same pattern as
+    /// <see cref="DpFullscreenAnimator"/>'s live test, sized down to one icon here.</summary>
+    private static byte[] BuildTestPatternBgr(int w, int h, int frame)
+    {
+        var buf = new byte[w * h * 3];
+        int barX = (frame * 4) % w;
+        for (int y = 0; y < h; y++)
+        {
+            int rowOff = y * w * 3;
+            byte gradV = (byte)(y * 255 / Math.Max(1, h - 1));
+            for (int x = 0; x < w; x++)
+            {
+                int off = rowOff + x * 3;
+                bool onBar = Math.Abs(x - barX) < 8;
+                if (onBar)
+                {
+                    buf[off] = 255; buf[off + 1] = 255; buf[off + 2] = 255;
+                }
+                else
+                {
+                    buf[off] = (byte)(x * 255 / Math.Max(1, w - 1));
+                    buf[off + 1] = gradV;
+                    buf[off + 2] = (byte)(255 - gradV);
+                }
+            }
+        }
+        return buf;
+    }
+
     // ================================================================
     // Playback loop
     // ================================================================
@@ -228,9 +320,7 @@ internal static class DpGifAnimator
         if (_memCache.TryGetValue(cacheKey, out var mem) && mem.All(f => File.Exists(f.PngPath)))
             return mem;
 
-        string cacheDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "K2.DisplayPad", "gif_frames", cacheKey);
+        string cacheDir = Path.Combine(K2Paths.For("K2.DisplayPad"), "gif_frames", cacheKey);
         string manifestPath = Path.Combine(cacheDir, "frames.json");
 
         // A cached PNG (already device-rotated, from a previous session) still needs its

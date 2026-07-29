@@ -4,6 +4,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using K2.Core;
 
 namespace K2.DisplayPad.Services;
 
@@ -133,9 +134,7 @@ public static class DisplayPadLayout
 /// </summary>
 public static class IconRotator
 {
-    private static readonly string CacheDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "K2.DisplayPad", "rotated");
+    private static readonly string CacheDir = Path.Combine(K2Paths.For("K2.DisplayPad"), "rotated");
 
     /// <summary>Clockwise angle to apply TO THE IMAGE to compensate for the
     /// device's mounting.</summary>

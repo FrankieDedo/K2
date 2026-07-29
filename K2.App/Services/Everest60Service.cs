@@ -82,7 +82,7 @@ internal sealed class Everest60Service
 
     /// <summary>Diagnostic addition 2026-07-22: logs how long each call spent
     /// WAITING for <see cref="_hidLock"/> vs actually doing HID I/O, tagged
-    /// by <paramref name="op"/> (e.g. "TryGetNumpadPresent") — added to
+    /// by <paramref name="op"/> (e.g. "NumpadPosition") — added to
     /// narrow down a real-hardware report that the numpad still disappears
     /// from the UI (and, once, took several seconds to appear at startup)
     /// even after serializing HID access. If <c>lockWaitMs</c> is
@@ -161,31 +161,19 @@ internal sealed class Everest60Service
         });
 
     /// <summary>
-    /// Lights the 44-LED perimeter ring in a single solid color. NOTE: the
-    /// device only addresses the side ring through Custom mode, so this also
-    /// switches the main 64 keys to Custom (dark, unless a future per-key
-    /// editor sets them) — whatever preset effect was running on the main
-    /// keyboard is replaced while the ring is active.
+    /// Full Custom-mode apply: 64 main-board keys + 44 border-ring LEDs + 17
+    /// numpad accessory keys + 22 numpad-ring LEDs, all in one combined wire
+    /// command — the "Custom Lighting" system ported from Everest Max
+    /// (2026-07-24), which paints keycaps and the side ring together. Any
+    /// array may be all-black (unpainted positions), same convention as
+    /// Everest Max's ApplyEverestCustomLighting.
     /// </summary>
-    public bool SetSideRing((byte r, byte g, byte b) color, int brightnessPct) =>
-        WithDevice(h =>
-        {
-            var side = new (byte, byte, byte)[Everest60Protocol.SideLedIndex.Length];
-            for (int i = 0; i < side.Length; i++) side[i] = color;
-            var keys = new (byte, byte, byte)[Everest60Protocol.NumKeys]; // dark
-            Everest60Protocol.SendCustom(h, keys, brightnessPct, side, _log);
-        });
-
-    /// <summary>
-    /// Sets the 64 main-board keys to per-key colors (Custom mode paint
-    /// editor — see MainWindow.Everest60CustomLighting.cs). NOTE: same
-    /// firmware limitation as <see cref="SetSideRing"/> — Custom mode
-    /// addresses keys and the side ring in one combined command, so applying
-    /// per-key colors here turns the side ring dark (and vice versa). This
-    /// is a firmware behavior, not a K2 shortcut.
-    /// </summary>
-    public bool SetCustomKeys(IReadOnlyList<(byte r, byte g, byte b)> keys, int brightnessPct) =>
-        WithDevice(h => Everest60Protocol.SendCustom(h, keys, brightnessPct, sideColors: null, _log));
+    public bool SetCustomLighting(IReadOnlyList<(byte r, byte g, byte b)> keys,
+        IReadOnlyList<(byte r, byte g, byte b)> sideColors,
+        IReadOnlyList<(byte r, byte g, byte b)> numpadColors,
+        IReadOnlyList<(byte r, byte g, byte b)> numpadRingColors,
+        int brightnessPct) =>
+        WithDevice(h => Everest60Protocol.SendCustom(h, keys, brightnessPct, sideColors, numpadColors, numpadRingColors, _log));
 
     /// <summary>
     /// Live LED-color readback, over the SAME raw-HID channel as the lighting
@@ -201,19 +189,17 @@ internal sealed class Everest60Service
         return ok;
     }
 
-    /// <summary>Numpad accessory presence, over raw HID (see
-    /// Everest60Protocol.ReadNumpadPresent's doc comment for why — the SDK's
+    /// <summary>Numpad accessory position, over raw HID (see
+    /// Everest60Protocol.ReadNumpadPosition's doc comment — the SDK's
     /// GetSubDeviceInfo was found to reliably fail with a Makalu also
-    /// connected). Returns null if the main keyboard itself isn't reachable.
-    /// Logs the raw tri-state result every call (diagnostic, 2026-07-22 —
-    /// see WithDevice's doc comment) since a bare bool return can't tell a
-    /// caller whether "false" meant a clean empty reading or something else.</summary>
-    public bool? TryGetNumpadPresent()
+    /// connected). Returns null if the main keyboard itself isn't reachable
+    /// or the read failed.</summary>
+    public Ev60NumpadPosition? TryGetNumpadPosition()
     {
-        bool? present = null;
-        bool reached = WithDevice(h => present = Everest60Protocol.ReadNumpadPresent(h, _log), op: "NumpadPresence");
-        _log($"[Ev60-NumpadPresence] reached={reached} present={present?.ToString() ?? "null"}");
-        return present;
+        Ev60NumpadPosition? pos = null;
+        bool reached = WithDevice(h => pos = Everest60Protocol.ReadNumpadPosition(h, _log), op: "NumpadPosition");
+        _log($"[Ev60-NumpadPosition] reached={reached} pos={pos?.ToString() ?? "null"}");
+        return pos;
     }
 
     /// <summary>Binds a numpad accessory key on the device (see
@@ -230,6 +216,18 @@ internal sealed class Everest60Service
             Everest60Protocol.NumpadKeyBinding.WriteKeyActionParam(h, label, _log);
             Everest60Protocol.NumpadKeyBinding.CommitKeyBinding(h, _log);
         }, op: "WriteNumpadKeyBinding");
+
+    /// <summary>Switches a MAIN-BOARD key off in firmware, or puts it back to its
+    /// factory function — see <see cref="Everest60Protocol.MainKeyBinding"/>. Unlike
+    /// every other Key Binding operation on this board (which execute purely in K2
+    /// software off the SDK key callback), this one has to reach the firmware: nothing
+    /// host-side can stop the keyboard from typing.</summary>
+    public bool SetMainKeyDisabled(int dllKeyId, bool disabled) =>
+        WithDevice(h =>
+        {
+            if (disabled) Everest60Protocol.MainKeyBinding.DisableKey(h, dllKeyId, _log);
+            else          Everest60Protocol.MainKeyBinding.RestoreKey(h, dllKeyId, _log);
+        }, op: disabled ? "DisableMainKey" : "RestoreMainKey");
 
     /// <summary>Restores a numpad accessory key to its factory (unassigned,
     /// literal-keystroke) state — see

@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Threading;
+using K2.App.Models;
 using K2.App.Services;
 using K2.Core;
 
@@ -26,16 +26,6 @@ public partial class MakaluDpiRemapPanel : UserControl
     private Action<string> _log = _ => { };
     private MakaluService.DeviceInfo _mkInfo =
         new(MakaluService.Model.Makalu67, "Makalu 67", 6, MakaluProtocol.DpiMin67);
-    /// <summary>Defaults to true (not false) so any event that WPF fires
-    /// synchronously WHILE InitializeComponent() is still parsing this
-    /// control's own BAML (e.g. SldMkDpi's Minimum="50" coercing Value up
-    /// from its default 0, which fires SldMkDpi_ValueChanged before
-    /// TxtMkDpi — declared later in the XAML — has been assigned) is a
-    /// no-op instead of null-refing. Root-caused via WinDbg+SOS 2026-07-10,
-    /// see CHANGELOG.md — this was the actual crash, not a JIT/CLR bug.
-    /// Cleared at the end of Init().</summary>
-    private bool _mkSuppress = true;
-
     /// <summary>Profile persistence — set once from Init, same pattern as
     /// MakaluRgbSettingsPanel._mkStore/_mkSlot.</summary>
     private MakaluStore? _mkStore;
@@ -53,31 +43,37 @@ public partial class MakaluDpiRemapPanel : UserControl
         _log = log;
         _mkStore = store;
         _mkSlot = currentSlot;
-        BuildMkRemapButtons();
-        _mkSuppress = false;
+        LvMkButtons.ItemsSource = _items;
+        BuildMkButtonList();
     }
 
     /// <summary>Called by the parent whenever the detected model/connection
-    /// state changes — rebuilds the remap button set for the new model.</summary>
+    /// state changes — rebuilds the button list for the new model.</summary>
     internal void UpdateDeviceInfo(MakaluService.DeviceInfo info)
     {
         _mkInfo = info;
-        BuildMkRemapButtons();
+        BuildMkButtonList();
     }
 
-    /// <summary>Selects the given physical button as the active one for the
-    /// Remap section — called from MakaluTabPanel when a hotspot on the
-    /// device image is clicked.</summary>
-    internal void SelectRemapButton(int btnIdx) => MkRemapSelectButton(btnIdx);
+    /// <summary>Selects the given physical button in the list and opens its
+    /// Configure dialog directly — called from MainWindow.Makalu.cs's
+    /// MkHotspotClicked when a hotspot on the device image is clicked, same
+    /// flow as Everest 60's SelectKey (click image -> select + configure).</summary>
+    internal void SelectRemapButton(int btnIdx)
+    {
+        if (!_byIdx.TryGetValue(btnIdx, out var item)) return;
+        LvMkButtons.SelectedItem = item;
+        LvMkButtons.ScrollIntoView(item);
+        OpenConfigureDialog(item);
+    }
 
     // ------------------------------------------------------------
-    // Button remap + sniper
+    // Button list + Configure/Remove — same shape as every other device's
+    // Key Binding section (see MakaluDpiRemapPanel.xaml's doc comment).
     // ------------------------------------------------------------
 
-    private readonly Dictionary<int, Button> _mkRemapButtons = new();
-    private Dictionary<int, string> _mkRemapAssignments = new();
-    private int _mkRemapActiveButton = 1;
-    private string _mkRemapCatKey = "Mouse";
+    private readonly ObservableCollection<MakaluButtonItem> _items = new();
+    private readonly Dictionary<int, MakaluButtonItem> _byIdx = new();
 
     /// <summary>Merges the current profile's saved remap rows (if any) over
     /// this model's defaults — a button with no saved row yet (never applied
@@ -92,164 +88,109 @@ public partial class MakaluDpiRemapPanel : UserControl
         return result;
     }
 
-    private void BuildMkRemapButtons()
+    private void BuildMkButtonList()
     {
-        PnlMkRemapButtons.Children.Clear();
-        _mkRemapButtons.Clear();
+        _items.Clear();
+        _byIdx.Clear();
         var names = MakaluRemapData.BtnNames(_mkInfo.Model);
-        _mkRemapAssignments = MkLoadAssignments();
+        var assignments = MkLoadAssignments();
 
         foreach (var kv in names.OrderBy(k => k.Key))
         {
             int btnIdx = kv.Key;
-            var btn = new Button
-            {
-                Width = 96, Height = 46, Margin = new Thickness(0, 0, 4, 4),
-                Content = MakaluRemapData.RemapBtnText(Loc.Get(kv.Value), _mkRemapAssignments[btnIdx]),
-            };
-            btn.Click += (_, _) => MkRemapSelectButton(btnIdx);
-            PnlMkRemapButtons.Children.Add(btn);
-            _mkRemapButtons[btnIdx] = btn;
+            var item = new MakaluButtonItem(btnIdx, kv.Value) { Assignment = assignments[btnIdx] };
+            _byIdx[btnIdx] = item;
+            RefreshMkItemVisibility(item);
         }
-        _mkRemapActiveButton = names.Keys.Min();
 
-        _mkSuppress = true;
-        try
+        UpdateListButtons();
+    }
+
+    /// <summary>Only buttons whose current assignment differs from this model's default
+    /// show up in the visible list (user request 2026-07-27: every physical button used
+    /// to always be listed — reasonable in principle, "a mouse button always does
+    /// something", but in practice every still-default button just read as clutter/an
+    /// empty row with nothing customized to show). <see cref="_byIdx"/> stays unfiltered
+    /// regardless, since MainWindow.Makalu.cs's hotspot-click-to-configure
+    /// (<see cref="SelectRemapButton"/>) needs to reach EVERY button, customized or not.
+    /// Keeps <see cref="_items"/> sorted by button index when inserting.</summary>
+    private void RefreshMkItemVisibility(MakaluButtonItem item)
+    {
+        bool customized = item.Assignment != MakaluRemapData.RemapDefaults(_mkInfo.Model).GetValueOrDefault(item.Index);
+        bool inList = _items.Contains(item);
+        if (customized && !inList)
         {
-            CbMkRemapCategory.ItemsSource = MakaluRemapData.RemapCategories.Keys.Select(MakaluRemapData.CatLabel).ToArray();
-            CbMkRemapCategory.SelectedIndex = 0;
+            int insertAt = 0;
+            while (insertAt < _items.Count && _items[insertAt].Index < item.Index) insertAt++;
+            _items.Insert(insertAt, item);
         }
-        finally { _mkSuppress = false; }
-
-        MkRemapSyncDropdowns(_mkRemapActiveButton);
-        MkUpdateRemapButtonHighlight();
-    }
-
-    private void MkUpdateRemapButtonHighlight()
-    {
-        foreach (var kv in _mkRemapButtons)
-            kv.Value.Background = kv.Key == _mkRemapActiveButton
-                ? (Brush)FindResource("K2AccentBrush")
-                : (Brush)FindResource("K2HoverBrush");
-    }
-
-    private void MkRemapSelectButton(int idx)
-    {
-        _mkRemapActiveButton = idx;
-        MkUpdateRemapButtonHighlight();
-        MkRemapSyncDropdowns(idx);
-    }
-
-    /// <summary>Aligns the category/function dropdowns (and sniper row) to the
-    /// current assignment of the given physical button.</summary>
-    private void MkRemapSyncDropdowns(int btnIdx)
-    {
-        string raw = _mkRemapAssignments.GetValueOrDefault(btnIdx, "left");
-        string fnKey = raw.StartsWith("sniper:") ? "sniper" : raw;
-        if (raw.StartsWith("sniper:") && int.TryParse(raw.Split(':')[1], out int dpi))
+        else if (!customized && inList)
         {
-            SldMkSniperDpi.Value = dpi;
-            TxtMkSniperDpi.Text = dpi.ToString();
+            _items.Remove(item);
         }
-
-        string catKey = MakaluRemapData.RemapCategories.FirstOrDefault(kv => kv.Value.Contains(fnKey)).Key ?? "Mouse";
-        _mkRemapCatKey = catKey;
-
-        bool prev = _mkSuppress;
-        _mkSuppress = true;
-        try
-        {
-            CbMkRemapCategory.SelectedItem = MakaluRemapData.CatLabel(catKey);
-            var fns = MakaluRemapData.RemapCategories[catKey];
-            CbMkRemapFunction.ItemsSource = fns.Select(MakaluRemapData.FnLabel).ToArray();
-            CbMkRemapFunction.SelectedItem = MakaluRemapData.FnLabel(fnKey);
-        }
-        finally { _mkSuppress = prev; }
-
-        PnlMkSniper.Visibility = catKey == "Sniper" ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void CbMkRemapCategory_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void UpdateListButtons()
     {
-        if (_mkSuppress) return;
-        string label = CbMkRemapCategory.SelectedItem as string ?? "";
-        string catKey = MakaluRemapData.RemapCategories.Keys.FirstOrDefault(k => MakaluRemapData.CatLabel(k) == label) ?? "Mouse";
-        _mkRemapCatKey = catKey;
-        var fns = MakaluRemapData.RemapCategories[catKey];
-        CbMkRemapFunction.ItemsSource = fns.Select(MakaluRemapData.FnLabel).ToArray();
-        CbMkRemapFunction.SelectedIndex = 0;
-        PnlMkSniper.Visibility = catKey == "Sniper" ? Visibility.Visible : Visibility.Collapsed;
+        bool hasSelection = LvMkButtons.SelectedItem is not null;
+        BtnMkConfigure.IsEnabled = hasSelection;
+        BtnMkRemove.IsEnabled = hasSelection;
     }
 
-    private void SldMkSniperDpi_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    private void LvMkButtons_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateListButtons();
+
+    private void BtnMkConfigure_Click(object sender, RoutedEventArgs e)
     {
-        if (_mkSuppress) return; // see _mkSuppress doc comment — SldMkSniperDpi's Minimum="50" hits the same load-order issue as SldMkDpi
-        int dpi = MakaluProtocol.QuantizeDpiTiered((int)e.NewValue);
-        TxtMkSniperDpi.Text = dpi.ToString();
+        if (LvMkButtons.SelectedItem is MakaluButtonItem item)
+            OpenConfigureDialog(item);
     }
 
-    private void TxtMkSniperDpi_KeyDown(object sender, KeyEventArgs e)
+    private void OpenConfigureDialog(MakaluButtonItem item)
     {
-        if (e.Key == Key.Enter) MkCommitSniperEntry();
+        var dlg = new MakaluRemapConfigDialog(item.BaseLabel, item.Assignment, _mkInfo.DpiMin)
+                  { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() != true) return;
+        ApplyAssignment(item, dlg.ResultAssignment);
     }
 
-    private void TxtMkSniperDpi_LostFocus(object sender, RoutedEventArgs e) => MkCommitSniperEntry();
-
-    private void MkCommitSniperEntry()
+    /// <summary>Resets the selected button back to this model's default
+    /// function — Makalu has no "unassigned" state (a mouse button always
+    /// does something), so "Remove" here means "restore the native
+    /// function" rather than clearing the row entirely.</summary>
+    private void BtnMkRemove_Click(object sender, RoutedEventArgs e)
     {
-        if (!int.TryParse(TxtMkSniperDpi.Text, out int dpi)) dpi = (int)SldMkSniperDpi.Value;
-        dpi = Math.Clamp(MakaluProtocol.QuantizeDpiTiered(dpi), _mkInfo.DpiMin, MakaluProtocol.DpiMax);
-        TxtMkSniperDpi.Text = dpi.ToString();
-        SldMkSniperDpi.Value = dpi;
+        if (LvMkButtons.SelectedItem is not MakaluButtonItem item) return;
+        string defaultFn = MakaluRemapData.RemapDefaults(_mkInfo.Model).GetValueOrDefault(item.Index, "left");
+        ApplyAssignment(item, defaultFn);
     }
 
-    private void BtnMkRemapApply_Click(object sender, RoutedEventArgs e)
+    /// <summary>Pushes a new assignment to the mouse, and — if it succeeds —
+    /// updates the list row and persists it. Button #1 (left click) going to
+    /// anything else risks locking the user out of clicking, so that case
+    /// shows a countdown confirm/auto-revert overlay instead of applying
+    /// silently, same as controller.py's UI reference.</summary>
+    private void ApplyAssignment(MakaluButtonItem item, string newAssignment)
     {
-        int btnIdx = _mkRemapActiveButton;
-        string fnLabel = CbMkRemapFunction.SelectedItem as string ?? "";
-        var fns = MakaluRemapData.RemapCategories[_mkRemapCatKey];
-        int fi = fns.Select(MakaluRemapData.FnLabel).ToList().IndexOf(fnLabel);
-        if (fi < 0) return;
-        string fnKey = fns[fi];
-        string oldRaw = _mkRemapAssignments.GetValueOrDefault(btnIdx, "left");
-
-        LblMkRemapStatus.Text = "...";
+        string oldRaw = item.Assignment;
         bool ok;
-        string newAssignment;
-        if (fnKey == "sniper")
-        {
-            MkCommitSniperEntry();
-            int dpi = (int)SldMkSniperDpi.Value;
-            newAssignment = $"sniper:{dpi}";
-            ok = _makalu.SetButtonSniper(btnIdx, dpi, _mkInfo.DpiMin);
-        }
+        if (newAssignment.StartsWith("sniper:") && int.TryParse(newAssignment.Split(':')[1], out int dpi))
+            ok = _makalu.SetButtonSniper(item.Index, dpi, _mkInfo.DpiMin);
         else
-        {
-            newAssignment = fnKey;
-            ok = _makalu.SetButtonRemap(btnIdx, fnKey);
-        }
-        _log($"[REMAP] button={btnIdx} fn={newAssignment} -> {ok}");
+            ok = _makalu.SetButtonRemap(item.Index, newAssignment);
+        _log($"[REMAP] button={item.Index} fn={newAssignment} -> {ok}");
 
         if (!ok)
         {
-            LblMkRemapStatus.Text = Loc.Get("makalu_failed");
-            LblMkRemapStatus.Foreground = (Brush)FindResource("K2DangerBrush");
+            MessageBox.Show(Window.GetWindow(this), Loc.Get("makalu_failed"));
             return;
         }
 
-        _mkRemapAssignments[btnIdx] = newAssignment;
-        _mkRemapButtons[btnIdx].Content = MakaluRemapData.RemapBtnText(Loc.Get(MakaluRemapData.BtnNames(_mkInfo.Model)[btnIdx]), newAssignment);
-        _mkStore?.SaveRemapButton(CurrentSlot, btnIdx, newAssignment);
+        item.Assignment = newAssignment;
+        _mkStore?.SaveRemapButton(CurrentSlot, item.Index, newAssignment);
+        RefreshMkItemVisibility(item);
 
-        // Safety: remapping the LEFT button risks locking the user out of clicking —
-        // show a countdown confirm/auto-revert, same as controller.py's UI reference.
-        if (btnIdx == 1 && fnKey != "left")
-            MkShowRemapConfirm(btnIdx, oldRaw);
-        else
-        {
-            LblMkRemapStatus.Text = Loc.Get("makalu_remap_applied");
-            LblMkRemapStatus.Foreground = (Brush)FindResource("K2AccentBrush");
-        }
+        if (item.Index == 1 && newAssignment != "left")
+            MkShowRemapConfirm(item, oldRaw);
     }
 
     // ------------------------------------------------------------
@@ -258,12 +199,12 @@ public partial class MakaluDpiRemapPanel : UserControl
 
     private DispatcherTimer? _mkConfirmTimer;
     private int _mkConfirmSeconds;
-    private int _mkConfirmButton;
+    private MakaluButtonItem? _mkConfirmItem;
     private string _mkConfirmOldFn = "left";
 
-    private void MkShowRemapConfirm(int btnIdx, string oldRaw)
+    private void MkShowRemapConfirm(MakaluButtonItem item, string oldRaw)
     {
-        _mkConfirmButton = btnIdx;
+        _mkConfirmItem = item;
         _mkConfirmOldFn = oldRaw;
         _mkConfirmSeconds = 10;
         LblMkRemapConfirmText.Text = Loc.Get("makalu_remap_keep_text", _mkConfirmSeconds);
@@ -284,8 +225,6 @@ public partial class MakaluDpiRemapPanel : UserControl
     {
         _mkConfirmTimer?.Stop();
         PnlMkRemapConfirm.Visibility = Visibility.Collapsed;
-        LblMkRemapStatus.Text = Loc.Get("makalu_remap_applied");
-        LblMkRemapStatus.Foreground = (Brush)FindResource("K2AccentBrush");
     }
 
     private void BtnMkRemapRevert_Click(object sender, RoutedEventArgs e) => MkRemapRevert();
@@ -294,23 +233,20 @@ public partial class MakaluDpiRemapPanel : UserControl
     {
         _mkConfirmTimer?.Stop();
         PnlMkRemapConfirm.Visibility = Visibility.Collapsed;
-        int btnIdx = _mkConfirmButton;
+        if (_mkConfirmItem is not MakaluButtonItem item) return;
         string oldFn = _mkConfirmOldFn;
 
         bool ok = oldFn.StartsWith("sniper:") && int.TryParse(oldFn.Split(':')[1], out int dpi)
-            ? _makalu.SetButtonSniper(btnIdx, dpi, _mkInfo.DpiMin)
-            : _makalu.SetButtonRemap(btnIdx, oldFn);
-        _log($"[REMAP] revert button={btnIdx} -> {oldFn} ok={ok}");
+            ? _makalu.SetButtonSniper(item.Index, dpi, _mkInfo.DpiMin)
+            : _makalu.SetButtonRemap(item.Index, oldFn);
+        _log($"[REMAP] revert button={item.Index} -> {oldFn} ok={ok}");
 
         if (ok)
         {
-            _mkRemapAssignments[btnIdx] = oldFn;
-            _mkRemapButtons[btnIdx].Content = MakaluRemapData.RemapBtnText(Loc.Get(MakaluRemapData.BtnNames(_mkInfo.Model)[btnIdx]), oldFn);
-            _mkStore?.SaveRemapButton(CurrentSlot, btnIdx, oldFn);
-            MkRemapSyncDropdowns(btnIdx);
+            item.Assignment = oldFn;
+            _mkStore?.SaveRemapButton(CurrentSlot, item.Index, oldFn);
+            RefreshMkItemVisibility(item);
         }
-        LblMkRemapStatus.Text = ok ? Loc.Get("makalu_remap_reverted") : Loc.Get("makalu_failed");
-        LblMkRemapStatus.Foreground = ok ? (Brush)FindResource("K2TextMutedBrush") : (Brush)FindResource("K2DangerBrush");
     }
 
     // ------------------------------------------------------------
@@ -321,24 +257,25 @@ public partial class MakaluDpiRemapPanel : UserControl
 
     internal void MkReloadRemap(int slot)
     {
-        _mkRemapAssignments = MkLoadAssignments();
-        foreach (var kv in _mkRemapAssignments)
-            if (_mkRemapButtons.TryGetValue(kv.Key, out var btn))
-                btn.Content = MakaluRemapData.RemapBtnText(Loc.Get(MakaluRemapData.BtnNames(_mkInfo.Model)[kv.Key]), kv.Value);
-        MkRemapSyncDropdowns(_mkRemapActiveButton);
-        MkUpdateRemapButtonHighlight();
+        var assignments = MkLoadAssignments();
 
         // Not connected: UI reflects the profile, hardware catches up on reconnect
         // (MainWindow.Makalu.cs calls this again on the disconnected->connected
         // poll transition).
         bool anyConnected = false;
-        foreach (var kv in _mkRemapAssignments)
+        foreach (var kv in assignments)
         {
+            if (_byIdx.TryGetValue(kv.Key, out var item))
+            {
+                item.Assignment = kv.Value;
+                RefreshMkItemVisibility(item);
+            }
+
             bool ok = kv.Value.StartsWith("sniper:") && int.TryParse(kv.Value.Split(':')[1], out int dpi)
                 ? _makalu.SetButtonSniper(kv.Key, dpi, _mkInfo.DpiMin)
                 : _makalu.SetButtonRemap(kv.Key, kv.Value);
             anyConnected |= ok;
         }
-        _log($"[PROFILE] reload remap slot={slot}: {_mkRemapAssignments.Count} button(s), hw ok={anyConnected}");
+        _log($"[PROFILE] reload remap slot={slot}: {assignments.Count} button(s), hw ok={anyConnected}");
     }
 }

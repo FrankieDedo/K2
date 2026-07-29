@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using K2.App.Models;   // EverestWMatrixMap (SetKeyDisabled's VK -> DLLKeyId lookup)
 
 namespace K2.App.Services;
 
@@ -142,6 +144,15 @@ public sealed class EverestService : IDisposable
                     int profile = _cachedProfile;
                     Task.Run(() => { try { pad.AckKeyPress(profile, wMatrix); } catch { /* best effort */ } });
                 }
+            };
+            // Ordinary keys: the vendor SDK's key callback never fires in native-engine
+            // mode, so presses come from the NKRO bitmap instead — same KeyEvent, but
+            // carrying a HID usage rather than a wMatrix, hence the flag (see
+            // EverestKeyEventArgs.FromNativeKeyReport).
+            pad.KeyUsageChanged += (usage, pressed) =>
+            {
+                try { KeyEvent?.Invoke(this, new EverestKeyEventArgs(0, (ushort)usage, pressed, fromNativeKeyReport: true)); }
+                catch (Exception ex) { App.WriteLog("[Everest.KeyUsageChanged] threw: " + ex); }
             };
             _nativePad = pad;
             _opened = true;
@@ -1001,6 +1012,36 @@ public sealed class EverestService : IDisposable
     }
 
     /// <summary>
+    /// <summary>
+    /// Sets what an ordinary keyboard key emits: nothing (a "disabled key"), its factory
+    /// function, or "claimed by the host" so K2's own action can run without the key also
+    /// typing — see <see cref="EverestHidNative.Pad.WriteKeyOutputMode"/>.
+    /// <paramref name="matrixId"/> is K2's own VK-code key identity (what
+    /// <c>EverestKeyRecord.KeyMatrix</c> stores), translated here to the DLLKeyId the
+    /// firmware wants via <see cref="EverestWMatrixMap.MatrixIdToDllKeyId"/>. Returns
+    /// false when the key isn't in that catalog or the native engine isn't running —
+    /// nothing host-side can suppress a keystroke, so a false here means the key keeps
+    /// typing and the caller must not pretend otherwise.
+    /// </summary>
+    // internal, not public: KeyOutputMode is an internal type (project rule on facade
+    // methods that expose internal types).
+    internal bool SetKeyOutputMode(int matrixId, EverestHidNative.Pad.KeyOutputMode mode)
+    {
+        if (_nativePad is null) return false;
+        if (!EverestWMatrixMap.MatrixIdToDllKeyId.TryGetValue(matrixId, out int dllKeyId))
+        {
+            App.WriteLog($"[Everest.SetKeyOutputMode] matrixId={matrixId} not in the DLLKeyId catalog");
+            return false;
+        }
+        try { return _nativePad.WriteKeyOutputMode(dllKeyId, mode); }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.SetKeyOutputMode] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Writes a display key's action binding into the firmware, flipping the key to
     /// "custom" mode so its built-in default action stops firing on press — see
     /// <see cref="EverestHidNative.Pad.WriteDisplayKeyBinding"/>. Only meaningful in
@@ -1396,7 +1437,9 @@ public sealed class EverestService : IDisposable
     /// like Base Camp does).
     /// </summary>
     public bool ApplyEverestCustomLighting(int[] keycapWireColors, int[] sideWireColors,
-                                            byte brightness = 100, bool persist = true)
+                                            byte brightness = 100, bool persist = true,
+                                            byte[]? ledEffectCode = null,
+                                            IReadOnlyList<byte[]>? effectParamPackets = null)
     {
         if (_nativePad is null) return false;
         try
@@ -1404,8 +1447,16 @@ public sealed class EverestService : IDisposable
             bool ok = _nativePad.EnableCustomLighting(brightness);
             ok &= _nativePad.SendKeycapColors(keycapWireColors, brightness);
             ok &= _nativePad.SendSideLedColors(sideWireColors);
+            // Dynamic per-region effects (Wave/Breathing/Reactive/... on a painted
+            // subset of keys) — optional third channel alongside the static keycap/
+            // side-ring colors above, see EverestSideLedProtocol's per-region-effects
+            // section (2026-07-22 captures). Only sent when the caller actually has
+            // dynamic-effect LEDs assigned.
+            if (ledEffectCode is { Length: > 0 } && effectParamPackets is { Count: > 0 })
+                ok &= _nativePad.SendCustomEffectRegions(ledEffectCode, effectParamPackets);
             if (persist) ok &= _nativePad.PersistCustomLighting();
-            App.WriteLog($"[Everest.ApplyEverestCustomLighting] persist={persist} -> {ok}");
+            App.WriteLog($"[Everest.ApplyEverestCustomLighting] persist={persist} " +
+                         $"effects={effectParamPackets?.Count ?? 0} -> {ok}");
             return ok;
         }
         catch (Exception ex)
@@ -1462,12 +1513,20 @@ public sealed class EverestService : IDisposable
 /// <summary>Arguments for the <see cref="EverestService.KeyEvent"/> event.</summary>
 public sealed class EverestKeyEventArgs : EventArgs
 {
-    public EverestKeyEventArgs(uint deviceId, ushort keyMatrix, bool pressed)
+    public EverestKeyEventArgs(uint deviceId, ushort keyMatrix, bool pressed,
+                               bool fromNativeKeyReport = false)
     {
         DeviceId = deviceId;
         KeyMatrix = keyMatrix;
         Pressed = pressed;
+        FromNativeKeyReport = fromNativeKeyReport;
     }
+
+    /// <summary>True when <see cref="KeyMatrix"/> is a HID usage id read from the native
+    /// engine's NKRO bitmap, NOT a firmware wMatrix from the vendor SDK callback — the
+    /// two are different numbering spaces that overlap in the low integers, so the
+    /// consumer must not translate one as if it were the other.</summary>
+    public bool FromNativeKeyReport { get; }
 
     /// <summary>Device id reported by the SDK.</summary>
     public uint DeviceId { get; }

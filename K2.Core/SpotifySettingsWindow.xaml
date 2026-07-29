@@ -1,0 +1,48 @@
+<Window x:Class="K2.Core.SpotifySettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core"
+        Title="{loc:Get spotify_settings_title}"
+        Width="460" Height="500"
+        MinWidth="380" MinHeight="460"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Style="{DynamicResource K2WindowStyle}">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="{loc:Get spotify_settings_title}" FontSize="16" FontWeight="Bold" Margin="0,0,0,10"/>
+
+        <TextBlock Grid.Row="1" Text="{loc:Get spotify_hint}" TextWrapping="Wrap" Foreground="#9A9AA2" Margin="0,0,0,8"/>
+
+        <Border Grid.Row="2" Background="#14FFFFFF" CornerRadius="4" Padding="10,8" Margin="0,0,0,10">
+            <TextBlock Text="{loc:Get spotify_setup_guide}" TextWrapping="Wrap" Foreground="#C7C7CE" FontSize="12"/>
+        </Border>
+
+        <TextBlock Grid.Row="3" Text="{loc:Get spotify_client_id_label}" Margin="0,0,0,4"/>
+        <TextBox   x:Name="TxtSpotifyClientId" Grid.Row="4" Height="25" Margin="0,0,0,10" VerticalContentAlignment="Center"/>
+
+        <TextBlock Grid.Row="5" Text="{loc:Get spotify_client_secret_label}" Margin="0,0,0,4"/>
+        <PasswordBox x:Name="PwdSpotifyClientSecret" Grid.Row="6" Height="25" Margin="0,0,0,10" VerticalContentAlignment="Center"/>
+
+        <TextBlock x:Name="TxtSpotifyStatus" Grid.Row="7" TextWrapping="Wrap" Foreground="#9A9AA2" Margin="0,0,0,4"/>
+
+        <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="{loc:Get twitch_disconnect}" Padding="10,4" Margin="0,0,8,0" Click="BtnSpotifyDisconnect_Click"/>
+            <Button Content="{loc:Get twitch_connect}" Padding="10,4" Margin="0,0,8,0" Click="BtnSpotifyConnect_Click"/>
+            <Button Content="{loc:Get save}" Width="90" Padding="6,2" IsDefault="True" Click="BtnSpotifySave_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

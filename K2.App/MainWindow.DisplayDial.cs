@@ -78,6 +78,14 @@ public partial class MainWindow
     // not starting at all instead of a recoverable error dialog.
     private bool _dialLoading = true;
 
+    /// <summary>False until <see cref="InitDisplayDialPanel"/> has run once — guards
+    /// <see cref="ReloadEverestDialForProfileSwitch"/> against the very first
+    /// <c>ReloadEverestProfile</c> call, which happens before this panel's own Init
+    /// (MainWindow.Everest.cs calls ReloadEverestProfile before InitDisplayDialPanel —
+    /// see the call order there). Mirrors <c>_evRgbInitialized</c>'s exact role for the
+    /// RGB panel. User request 2026-07-25.</summary>
+    private bool _dialInitialized;
+
     /// <summary>
     /// Ticks the Media Dock clock every second (<c>EverestService.UpdateClock</c>) —
     /// see that method's remarks (real Base Camp sends the format on every
@@ -190,13 +198,41 @@ public partial class MainWindow
             };
             _dialClockTimer.Start();
         }
+        _dialInitialized = true;
+    }
+
+    /// <summary>
+    /// Re-loads the Display Dial panel for the profile that just became active and
+    /// pushes it to the device (mirrors <c>ReloadEverestRgbForProfileSwitch</c>) —
+    /// called from <c>ReloadEverestProfile</c> (MainWindow.Everest.cs). ApplyDialToDevice
+    /// itself is a no-op when the driver isn't open (logs and returns). User request
+    /// 2026-07-25.
+    /// </summary>
+    private void ReloadEverestDialForProfileSwitch()
+    {
+        if (!_dialInitialized || _evStore is null) return;
+        bool prev = _dialLoading;
+        _dialLoading = true;
+        try { LoadDialSettings(); }
+        finally { _dialLoading = prev; }
+        ApplyDialToDevice();
     }
 
     // ─────────────────────── Load / Save Settings ───────────────────────
 
+    /// <summary>Fetches a Display Dial key under the profile-scoped (or shared, if
+    /// synced) namespace given by <see cref="EvDialPrefix"/>, falling back to the
+    /// legacy always-global "dial.*" key — one-time seeding for existing installs/
+    /// profiles that never had their own per-profile value saved yet (same pattern
+    /// as EvRgbPrefix/EvSettingsPrefix). User request 2026-07-25.</summary>
+    private string? GetDialSetting(string key) =>
+        _evStore?.GetSetting(EvDialPrefix() + key) ?? _evStore?.GetSetting("dial." + key);
+
     private void LoadDialSettings()
     {
-        byte pages = ParseByte(_evStore?.GetSetting("dial.pages"), (byte)DialPage.All);
+        CkDialSync.IsChecked = CkEvSync.IsChecked;
+
+        byte pages = ParseByte(GetDialSetting("pages"), (byte)DialPage.All);
         CkDialClock.IsChecked    = (pages & (byte)DialPage.Clock) != 0;
         CkDialProfile.IsChecked  = (pages & (byte)DialPage.Profile) != 0;
         CkDialVolume.IsChecked   = (pages & (byte)DialPage.Volume) != 0;
@@ -206,23 +242,23 @@ public partial class MainWindow
         CkDialAPM.IsChecked      = (pages & (byte)DialPage.APM) != 0;
         CkDialCustom.IsChecked   = (pages & (byte)DialPage.Custom) != 0;
 
-        int clockType = ParseInt(_evStore?.GetSetting("dial.clockType"), 0);
+        int clockType = ParseInt(GetDialSetting("clockType"), 0);
         (clockType == 1 ? RbDialClock12h : RbDialClock24h).IsChecked = true;
 
-        int clockStyle = ParseInt(_evStore?.GetSetting("dial.clockStyle"), 0);
+        int clockStyle = ParseInt(GetDialSetting("clockStyle"), 0);
         (clockStyle == 1 ? RbDialClockAnalog : RbDialClockDigital).IsChecked = true;
         UpdateDialClockFormatVisibility();
 
-        string ssFunction = _evStore?.GetSetting("dial.screenSaverFunction") ?? DialFunctions[0].Value;
+        string ssFunction = GetDialSetting("screenSaverFunction") ?? DialFunctions[0].Value;
         int ssIndex = Array.FindIndex(DialFunctions, f => f.Value == ssFunction);
         CbDialScreenSaverFunction.SelectedIndex = ssIndex >= 0 ? ssIndex : 0;
 
-        CkDialScreenSaverEnable.IsChecked = ParseBool(_evStore?.GetSetting("dial.screenSaverEnable"), true);
-        CkDialTurnOffEnable.IsChecked     = ParseBool(_evStore?.GetSetting("dial.turnOffEnable"), false);
-        TxtDialScreenSaver.Text = _evStore?.GetSetting("dial.screenSaver") ?? "30";
-        TxtDialTurnOff.Text     = _evStore?.GetSetting("dial.turnOff") ?? "0";
+        CkDialScreenSaverEnable.IsChecked = ParseBool(GetDialSetting("screenSaverEnable"), true);
+        CkDialTurnOffEnable.IsChecked     = ParseBool(GetDialSetting("turnOffEnable"), false);
+        TxtDialScreenSaver.Text = GetDialSetting("screenSaver") ?? "30";
+        TxtDialTurnOff.Text     = GetDialSetting("turnOff") ?? "0";
 
-        string menuColor = _evStore?.GetSetting("dial.menuColor") ?? "#F3CC23";
+        string menuColor = GetDialSetting("menuColor") ?? "#F3CC23";
         try
         {
             BtnDialMenuColor.Background = new SolidColorBrush(
@@ -242,16 +278,24 @@ public partial class MainWindow
     private void SaveDialSettings()
     {
         if (_evStore is null) return;
-        _evStore.SetSetting("dial.pages", BuildPageByte().ToString());
-        _evStore.SetSetting("dial.clockType", DialClockTypeIndex.ToString());
-        _evStore.SetSetting("dial.clockStyle", DialClockStyleIndex.ToString());
-        _evStore.SetSetting("dial.screenSaverFunction", DialFunctions[CbDialScreenSaverFunction.SelectedIndex >= 0
+        string prefix = EvDialPrefix();
+        _evStore.SetSetting(prefix + "pages", BuildPageByte().ToString());
+        _evStore.SetSetting(prefix + "clockType", DialClockTypeIndex.ToString());
+        _evStore.SetSetting(prefix + "clockStyle", DialClockStyleIndex.ToString());
+        _evStore.SetSetting(prefix + "screenSaverFunction", DialFunctions[CbDialScreenSaverFunction.SelectedIndex >= 0
             ? CbDialScreenSaverFunction.SelectedIndex : 0].Value);
-        _evStore.SetSetting("dial.screenSaverEnable", (CkDialScreenSaverEnable.IsChecked == true) ? "1" : "0");
-        _evStore.SetSetting("dial.turnOffEnable", (CkDialTurnOffEnable.IsChecked == true) ? "1" : "0");
-        _evStore.SetSetting("dial.screenSaver", TxtDialScreenSaver.Text.Trim());
-        _evStore.SetSetting("dial.turnOff", TxtDialTurnOff.Text.Trim());
-        _evStore.SetSetting("dial.menuColor", FormatColor(BtnDialMenuColor));
+        _evStore.SetSetting(prefix + "screenSaverEnable", (CkDialScreenSaverEnable.IsChecked == true) ? "1" : "0");
+        _evStore.SetSetting(prefix + "turnOffEnable", (CkDialTurnOffEnable.IsChecked == true) ? "1" : "0");
+        _evStore.SetSetting(prefix + "screenSaver", TxtDialScreenSaver.Text.Trim());
+        _evStore.SetSetting(prefix + "turnOff", TxtDialTurnOff.Text.Trim());
+        _evStore.SetSetting(prefix + "menuColor", FormatColor(BtnDialMenuColor));
+    }
+
+    private void CkDialSync_Click(object sender, RoutedEventArgs e)
+    {
+        if (_dialLoading) return;
+        CkEvSync.IsChecked = CkDialSync.IsChecked; // same device flag as RGB & Settings' checkbox
+        CkEvSync_Click(sender, e);
     }
 
     // ─────────────────────── Build / parse byte ───────────────────────

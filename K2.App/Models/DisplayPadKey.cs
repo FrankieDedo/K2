@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using K2.App.Services;
 using K2.Core;
+using K2.Core.Services;
 
 namespace K2.App.Models;
 
@@ -136,6 +137,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
             OnChanged(nameof(HasImageNoAction));
             OnChanged(nameof(HasUnresolvedAction));
             OnChanged(nameof(HasUnresolvedNamedAction));
+            OnChanged(nameof(IsGoogleHomeDisconnected));
             OnChanged(nameof(Display));
             OnChanged(nameof(ListDisplay));
         }
@@ -152,6 +154,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
             OnChanged();
             OnChanged(nameof(HasUnresolvedAction));
             OnChanged(nameof(HasUnresolvedNamedAction));
+            OnChanged(nameof(IsGoogleHomeDisconnected));
             OnChanged(nameof(Display));
             OnChanged(nameof(ListDisplay));
         }
@@ -172,6 +175,18 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
     public bool HasUnresolvedNamedAction =>
         string.Equals(_actionType, "macro", StringComparison.Ordinal)
         && ActionTypeHelper.IsUnresolvedMacroValue(_actionValue);
+
+    /// <summary>True for a "googlehome" action while the Google Home account is disconnected
+    /// (see <see cref="GoogleHomeStore.IsConnected"/>/<see cref="GoogleHomeStore.Disconnect"/>)
+    /// — the binding itself still exists and resumes working once reconnected, but every press
+    /// is a no-op meanwhile, so it gets the same warning triangle as an unresolved action.
+    /// Refreshed on demand via <see cref="NotifyGoogleHomeConnectionChanged"/> since the
+    /// connection flag can flip from elsewhere (the setup window) without this key's own
+    /// ActionType/ActionValue changing.</summary>
+    public bool IsGoogleHomeDisconnected =>
+        string.Equals(_actionType, "googlehome", StringComparison.Ordinal)
+        && !string.IsNullOrEmpty(_actionValue)
+        && !GoogleHomeStore.IsConnected;
 
     /// <summary>Label shown on the overlay button.</summary>
     public string Display
@@ -219,6 +234,10 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
 
     /// <summary>Refreshes display-related bindings after a DebugMode change.</summary>
     public void NotifyDebugModeChanged() => OnChanged(nameof(Display));
+
+    /// <summary>Refreshes the disconnected warning triangle after
+    /// <see cref="GoogleHomeStore.ConnectionChanged"/> fires.</summary>
+    public void NotifyGoogleHomeConnectionChanged() => OnChanged(nameof(IsGoogleHomeDisconnected));
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnChanged([CallerMemberName] string? name = null) =>

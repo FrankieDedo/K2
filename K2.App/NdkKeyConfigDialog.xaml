@@ -60,6 +60,11 @@
                 <Button Content="{loc:Get dp_add_text}"
                         Margin="0,4,0,0"
                         Click="BtnAddText_Click"/>
+
+                <Button x:Name="BtnGalleryIcon"
+                        Content="{loc:Get dp_gallery_icon}"
+                        Margin="0,4,0,0"
+                        Click="BtnGalleryIcon_Click"/>
             </StackPanel>
 
             <!-- ─── Action section ─── -->

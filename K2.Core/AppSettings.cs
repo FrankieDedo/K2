@@ -40,6 +40,8 @@ public static class AppSettings
         public string? MakaluDeviceName { get; set; }
         public string? Everest60DeviceName { get; set; }
         public string AppFontFamily { get; set; } = Services.FontCatalog.DefaultKey;
+        public string AccentTheme { get; set; } = Services.AccentCatalog.DefaultKey;
+        public string IconGalleryStyle { get; set; } = "color";
         public bool BcImportPromptShown { get; set; }
         public string? BaseCampDllFolder { get; set; }
         public List<string> SavedPickerColors { get; set; } = new();
@@ -268,6 +270,49 @@ public static class AppSettings
         {
             if (_data.AppFontFamily == key) return;
             _data.AppFontFamily = key;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>Key into <see cref="Services.AccentCatalog.Options"/> for the app-wide
+    /// UI accent color (Settings &gt; Accent color: "K2 Red" vs "Mountain Blue").
+    /// Applied live via <see cref="Services.AccentCatalog.Apply"/> on every K2 process
+    /// that reads this shared settings file.</summary>
+    public static string AccentTheme
+    {
+        get { EnsureLoaded(); return _data.AccentTheme; }
+    }
+
+    public static void SetAccentTheme(string key)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.AccentTheme == key) return;
+            _data.AccentTheme = key;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>Which Base Camp gallery style tree (<c>Assets/IconGallery/black|color/</c>)
+    /// <c>K2.App.Services.IconGalleryDefaults</c> sources auto-generated key icons from —
+    /// "black" or "color". Only read/written from K2.App today (the gallery assets are
+    /// K2.App-only, not shared with K2.DisplayPad/K2.Core), but lives here alongside
+    /// <see cref="AccentTheme"/> for the same "one shared settings file" reason.</summary>
+    public static string IconGalleryStyle
+    {
+        get { EnsureLoaded(); return _data.IconGalleryStyle; }
+    }
+
+    public static void SetIconGalleryStyle(string style)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.IconGalleryStyle == style) return;
+            _data.IconGalleryStyle = style;
             Save();
         }
         Changed?.Invoke();
