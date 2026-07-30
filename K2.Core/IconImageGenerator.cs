@@ -535,7 +535,7 @@ public static class IconImageGenerator
     /// between <see cref="TryGenerateFolderIcon"/> and <see cref="TryGenerateDiskFolderIcon"/>.</summary>
     private static void DrawCaption(Graphics g, int size, string name)
     {
-        float labelSize = Math.Max(9f, size * 0.13f);
+        float labelSize = Math.Max(9f, size * 0.13f) + 4f;
         using var labelFont = new Font("Segoe UI", labelSize, FontStyle.Regular, GraphicsUnit.Pixel);
         using var labelBrush = new SolidBrush(Color.White);
         var rect = new RectangleF(size * 0.06f, size * 0.68f, size * 0.88f, size * 0.28f);
