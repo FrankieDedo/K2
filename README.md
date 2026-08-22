@@ -15,12 +15,13 @@ Start as admin and keep in mind that it should close all Base Camp process autom
 <h1>Screenshots</summary></h1>
 <details>
 <summary><strong>Check it out</strong></summary>
-<img src="images/k2_a.jpg" width="800" alt="K2 screenshot" />
-<img src="images/k2_b.jpg" width="800" alt="K2 screenshot" />
-<img src="images/k2_c.jpg" width="800" alt="K2 screenshot" />
-<img src="images/k2_d.jpg" width="800" alt="K2 screenshot" />
-<img src="images/k2_e.jpg" width="800" alt="K2 screenshot" />
-<img src="images/k2_f.jpg" width="800" alt="K2 screenshot" />
+<br>
+  <img src="images/k2_a.jpg" width="800" alt="K2 screenshot" />
+  <img src="images/k2_b.jpg" width="800" alt="K2 screenshot" />
+  <img src="images/k2_c.jpg" width="800" alt="K2 screenshot" />
+  <img src="images/k2_d.jpg" width="800" alt="K2 screenshot" />
+  <img src="images/k2_e.jpg" width="800" alt="K2 screenshot" />
+  <img src="images/k2_f.jpg" width="800" alt="K2 screenshot" />
 <br>
 
 </details>
