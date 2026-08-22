@@ -1,17 +1,19 @@
 // MainWindow.KeycapAppearance.cs — partial class: Everest half of the "keycap appearance"
-// feature, in the Everest tab's own Settings section (PnlSecSettings, alongside Game Mode /
-// Indicator LED / Keyboard color — see MainWindow.Everest.cs). The MacroPad mirror of this
-// same feature (identical UX, same shared types below) lives in
-// MainWindow.MacroKeycapAppearance.cs / PnlMpSecSettings.
+// feature, in the Everest tab's own Appearance section (PnlSecAppearance, alongside Keyboard
+// color — see MainWindow.Everest.cs; Game Mode/Indicator LED stayed behind in Settings). The
+// MacroPad mirror of this same feature (identical UX, same shared types below) lives in
+// MainWindow.MacroKeycapAppearance.cs / PnlMpSecAppearance.
 //
 // Purely cosmetic: it only changes how the on-screen keyboard preview renders in K2.App. It
 // never touches the physical keycaps (fixed at manufacture) or anything sent to the device —
 // the real per-key RGB effect is the existing "Illuminazione RGB"/"Illuminazione LED" panels.
 //
 // Persisted per-device (EverestStore here, MacroPadStore for the MacroPad half — keys
-// "settings.keycap_*" in both, same store/pattern as the sibling settings.game_mode/
-// settings.keyboard_color) — loaded/saved from LoadKeycapAppearanceFromStore, guarded by
-// the shared _evSettingsSuppress flag.
+// "settings.keycap_*" in both, same store/pattern as the sibling settings.keyboard_color),
+// always the fixed global namespace — NOT per-profile, NOT affected by "sync across profiles"
+// (user request 2026-08-22: Appearance settings are disconnected from profiles entirely,
+// unlike Game Mode/Indicator LED which stayed in Settings and stayed per-profile). Loaded/
+// saved from LoadKeycapAppearanceFromStore, guarded by the shared _evSettingsSuppress flag.
 //
 // Independent choices (KeycapColorMode/KeycapStyle below, shared by both devices):
 //   - keycap color: Black / White / Custom (a picked RGB), default Black — the key's base/fill
@@ -276,17 +278,15 @@ public partial class MainWindow
     }
 
     /// <summary>Loads settings.keycap_* from the Everest store into the cache fields and the
-    /// Settings-section controls. Called from LoadEverestSettingsFromStore (MainWindow.Everest.cs),
-    /// guarded by the shared _evSettingsSuppress flag so this doesn't re-save while loading.</summary>
+    /// Appearance-section controls. Called from LoadEverestSettingsFromStore (MainWindow.Everest.cs),
+    /// guarded by the shared _evSettingsSuppress flag so this doesn't re-save while loading.
+    /// Always the fixed global "settings.keycap_*" namespace — Keycap Appearance is a cosmetic,
+    /// device-wide preference, not per-profile (user request 2026-08-22: split into its own
+    /// Appearance section, disconnected from "sync across profiles" the same way
+    /// settings.keyboard_color already was).</summary>
     private void LoadKeycapAppearanceFromStore()
     {
-        // Profile-scoped (or shared, if "sync across profiles" is on — see
-        // EvSettingsPrefix) namespace first, falling back to the legacy
-        // always-global "settings.keycap_*" keys — one-time seeding for existing
-        // installs/profiles that never had their own per-profile value saved yet
-        // (same fallback pattern as EvRgbPrefix/LoadEffectParamsIntoControls).
-        string prefix = EvSettingsPrefix();
-        string? Get(string key) => _evStore.GetSetting(prefix + key) ?? _evStore.GetSetting("settings." + key);
+        string? Get(string key) => _evStore.GetSetting("settings." + key);
 
         _evKeycapColorMode = ParseColorMode(Get("keycap_color_mode"), KeycapColorMode.Black);
         _evKeycapCustomHex = Get("keycap_custom_hex") is { Length: > 0 } hex ? hex : "#404040";
@@ -308,8 +308,8 @@ public partial class MainWindow
                 3 => KeycapStyle.ReversePudding,
                 _ => KeycapStyle.Normal, // covers old Normal (0) and old Translucent (1)
             };
-            _evStore.SetSetting(prefix + "keycap_style", ((int)_evKeycapStyleValue).ToString());
-            _evStore.SetSetting(prefix + "keycap_translucent_legend", _evKeycapTranslucentLegend ? "1" : "0");
+            _evStore.SetSetting("settings.keycap_style", ((int)_evKeycapStyleValue).ToString());
+            _evStore.SetSetting("settings.keycap_translucent_legend", _evKeycapTranslucentLegend ? "1" : "0");
         }
         else
         {
@@ -364,29 +364,13 @@ public partial class MainWindow
         _                              => "black",
     };
 
-    /// <summary>Re-saves the currently cached Keycap Appearance values under
-    /// <see cref="EvSettingsPrefix"/>'s current namespace — used when "sync across
-    /// profiles" is toggled, so the on-screen state becomes the new shared/per-profile
-    /// value instead of silently exposing whatever was last saved there. User request
-    /// 2026-07-25.</summary>
-    private void SaveKeycapAppearanceToStore()
-    {
-        string prefix = EvSettingsPrefix();
-        _evStore.SetSetting(prefix + "keycap_color_mode", ColorModeToString(_evKeycapColorMode));
-        _evStore.SetSetting(prefix + "keycap_custom_hex", _evKeycapCustomHex);
-        _evStore.SetSetting(prefix + "keycap_text_color_mode", ColorModeToString(_evKeycapTextColorMode));
-        _evStore.SetSetting(prefix + "keycap_text_custom_hex", _evKeycapTextCustomHex);
-        _evStore.SetSetting(prefix + "keycap_style", ((int)_evKeycapStyleValue).ToString());
-        _evStore.SetSetting(prefix + "keycap_translucent_legend", _evKeycapTranslucentLegend ? "1" : "0");
-    }
-
     private void RbEvKeycapColor_Checked(object sender, RoutedEventArgs e)
     {
         if (_evSettingsSuppress) return;
         _evKeycapColorMode = sender == RbEvKeycapWhite  ? KeycapColorMode.White
                            : sender == RbEvKeycapCustom ? KeycapColorMode.Custom
                            :                              KeycapColorMode.Black;
-        _evStore.SetSetting(EvSettingsPrefix() + "keycap_color_mode", ColorModeToString(_evKeycapColorMode));
+        _evStore.SetSetting("settings.keycap_color_mode", ColorModeToString(_evKeycapColorMode));
         BtnEvKeycapCustomColor.IsEnabled = _evKeycapColorMode == KeycapColorMode.Custom;
         ApplyKeycapAppearanceToAllKeys();
     }
@@ -397,7 +381,7 @@ public partial class MainWindow
         _evKeycapTextColorMode = sender == RbEvKeycapTextBlack  ? KeycapColorMode.Black
                                 : sender == RbEvKeycapTextCustom ? KeycapColorMode.Custom
                                 :                                  KeycapColorMode.White;
-        _evStore.SetSetting(EvSettingsPrefix() + "keycap_text_color_mode", ColorModeToString(_evKeycapTextColorMode));
+        _evStore.SetSetting("settings.keycap_text_color_mode", ColorModeToString(_evKeycapTextColorMode));
         BtnEvKeycapTextColor.IsEnabled = _evKeycapTextColorMode == KeycapColorMode.Custom;
         ApplyKeycapAppearanceToAllKeys();
     }
@@ -417,7 +401,7 @@ public partial class MainWindow
         if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
         _evKeycapCustomHex = $"#{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
-        _evStore.SetSetting(EvSettingsPrefix() + "keycap_custom_hex", _evKeycapCustomHex);
+        _evStore.SetSetting("settings.keycap_custom_hex", _evKeycapCustomHex);
         BtnEvKeycapCustomColor.Background = new SolidColorBrush(Color.FromRgb(dlg.Color.R, dlg.Color.G, dlg.Color.B));
 
         if (RbEvKeycapCustom.IsChecked != true)
@@ -440,7 +424,7 @@ public partial class MainWindow
         if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
         _evKeycapTextCustomHex = $"#{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
-        _evStore.SetSetting(EvSettingsPrefix() + "keycap_text_custom_hex", _evKeycapTextCustomHex);
+        _evStore.SetSetting("settings.keycap_text_custom_hex", _evKeycapTextCustomHex);
         BtnEvKeycapTextColor.Background = new SolidColorBrush(Color.FromRgb(dlg.Color.R, dlg.Color.G, dlg.Color.B));
 
         if (RbEvKeycapTextCustom.IsChecked != true)
@@ -454,7 +438,7 @@ public partial class MainWindow
         if (_evSettingsSuppress) return;
         if (CbEvKeycapStyle.SelectedItem is not KeycapStyleChoice pick) return;
         _evKeycapStyleValue = pick.Style;
-        _evStore.SetSetting(EvSettingsPrefix() + "keycap_style", ((int)pick.Style).ToString());
+        _evStore.SetSetting("settings.keycap_style", ((int)pick.Style).ToString());
         ApplyKeycapAppearanceToAllKeys();
     }
 
@@ -462,7 +446,7 @@ public partial class MainWindow
     {
         if (_evSettingsSuppress) return;
         _evKeycapTranslucentLegend = CkEvKeycapTranslucentLegend.IsChecked == true;
-        _evStore.SetSetting(EvSettingsPrefix() + "keycap_translucent_legend", _evKeycapTranslucentLegend ? "1" : "0");
+        _evStore.SetSetting("settings.keycap_translucent_legend", _evKeycapTranslucentLegend ? "1" : "0");
         ApplyKeycapAppearanceToAllKeys();
     }
 

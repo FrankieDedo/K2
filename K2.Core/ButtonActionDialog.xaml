@@ -69,6 +69,7 @@
             <ComboBoxItem Content="{loc:Get act_multi}"            Tag="multi"/>
             <ComboBoxItem Content="{loc:Get act_command}"         Tag="command"/>
             <ComboBoxItem Content="{loc:Get act_text}"            Tag="text"/>
+            <ComboBoxItem Content="{loc:Get act_emoji}"           Tag="emoji"/>
             <ComboBoxItem Content="{loc:Get act_macro}"            Tag="macro"/>
             <ComboBoxItem Content="{loc:Get act_googlehome}"       Tag="googlehome"/>
             <ComboBoxItem Content="{loc:Get act_adobe}"            Tag="adobe"/>
@@ -157,13 +158,18 @@
                                 <Button x:Name="BtnRemove" Grid.Column="1" Padding="6,2"
                                         FontFamily="Segoe MDL2 Assets" FontSize="13" Content="&#xE74D;"
                                         Background="Transparent" BorderThickness="0" Foreground="#B0B0B8"
-                                        Cursor="Hand" Visibility="Collapsed"
+                                        Cursor="Hand" Opacity="0" IsHitTestVisible="False"
                                         ToolTip="{loc:Get remove_recent}"
                                         Click="BtnExecRecentRemove_Click" Tag="{Binding}"/>
                             </Grid>
+                            <!-- Opacity (not Visibility) so the button always reserves its layout
+                                 space — toggling Visibility made the row grow taller on hover
+                                 (button chrome is taller than the plain text row), a jarring
+                                 per-row resize effect. -->
                             <DataTemplate.Triggers>
                                 <Trigger SourceName="RowRoot" Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="BtnRemove" Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="BtnRemove" Property="Opacity" Value="1"/>
+                                    <Setter TargetName="BtnRemove" Property="IsHitTestVisible" Value="True"/>
                                 </Trigger>
                             </DataTemplate.Triggers>
                         </DataTemplate>
@@ -223,13 +229,14 @@
                                 <Button x:Name="BtnRemove" Grid.Column="1" Padding="6,2"
                                         FontFamily="Segoe MDL2 Assets" FontSize="13" Content="&#xE74D;"
                                         Background="Transparent" BorderThickness="0" Foreground="#B0B0B8"
-                                        Cursor="Hand" Visibility="Collapsed"
+                                        Cursor="Hand" Opacity="0" IsHitTestVisible="False"
                                         ToolTip="{loc:Get remove_recent}"
                                         Click="BtnFolderRecentRemove_Click" Tag="{Binding}"/>
                             </Grid>
                             <DataTemplate.Triggers>
                                 <Trigger SourceName="RowRoot" Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="BtnRemove" Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="BtnRemove" Property="Opacity" Value="1"/>
+                                    <Setter TargetName="BtnRemove" Property="IsHitTestVisible" Value="True"/>
                                 </Trigger>
                             </DataTemplate.Triggers>
                         </DataTemplate>
@@ -445,6 +452,37 @@
                     <CheckBox x:Name="ChkAppWin"   Content="Win"/>
                 </StackPanel>
                 <ComboBox  x:Name="CbAppValue" Grid.Row="6" IsEditable="True"/>
+            </Grid>
+
+            <!-- Emoji panel: a preview of the picked emoji + the browser button. The emoji is
+                 typed into the focused app on press; on a display key it also becomes the key
+                 picture (see EmojiGlyphRenderer). -->
+            <Grid x:Name="EmojiPanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                    <Border Width="72" Height="72" Background="#1A1A1E"
+                            BorderBrush="#333" BorderThickness="1" CornerRadius="13">
+                        <Image x:Name="ImgEmojiPreview" Width="52" Height="52"/>
+                    </Border>
+                    <TextBlock x:Name="LblEmojiName" VerticalAlignment="Center" Margin="14,0,0,0"
+                               Text="{loc:Get emoji_none_selected}" Foreground="#CCC"
+                               TextWrapping="Wrap" MaxWidth="330"/>
+                </StackPanel>
+
+                <Button Grid.Row="1" x:Name="BtnPickEmoji"
+                        Content="{loc:Get emoji_choose_button}"
+                        HorizontalAlignment="Left" Padding="10,4"
+                        Click="BtnPickEmoji_Click"/>
+
+                <TextBlock Grid.Row="2" Margin="0,12,0,0"
+                           TextWrapping="Wrap" Foreground="#9A9AA2"
+                           Text="{loc:Get emoji_hint}"/>
             </Grid>
 
             <!-- Youtube panel: just a chat-message textbox (the only real action) + Manage button -->

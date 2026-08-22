@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   Polska lokalizacja dla K2.
   Skopiuj do tego samego folderu co plik .exe jako Strings.pl.xml.
@@ -58,6 +58,7 @@
   <string name="reset">Resetuj</string>
   <string name="new_profile">+ Nowy profil</string>
   <string name="profile_n">Profil {0}</string>
+  <string name="default_profile_name">Profil domyślny</string>
   <string name="select_device_first">Najpierw wybierz urządzenie.</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -370,6 +371,7 @@
   <string name="hw_busy_uploading_image">Przesyłanie obrazu do urządzenia, proszę czekać…</string>
   <string name="hw_busy_importing_profile">Importowanie profilu, proszę czekać…</string>
   <string name="hw_busy_importing_profiles">Importowanie profili, proszę czekać…</string>
+  <string name="hw_busy_restoring_defaults">Przywracanie ustawień domyślnych, proszę czekać…</string>
   <string name="ev_crash_recovering">Sterownik uległ awarii — próba automatycznego odzyskania za 3 s…</string>
   <string name="ev_crash_recovered">Sterownik odzyskany — podgląd LED uruchomiony ponownie.</string>
   <string name="ev_crash_recovery_failed">Odzyskanie sterownika nie powiodło się — uruchom ponownie K2.App.</string>

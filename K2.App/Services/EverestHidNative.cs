@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -385,6 +385,22 @@ internal static class EverestHidNative
         /// keystroke uses 0x00, exactly as on the Everest 60 — the key press still reaches
         /// K2 through the vendor NKRO report, so the action runs.</para>
         ///
+        /// <para><b>Sibling command, decoded but deliberately unused:</b>
+        /// <c>14 21 &lt;DLLKeyId&gt; 00 &lt;targetDLLKeyId&gt; &lt;modifierMask&gt;</c> is
+        /// <c>ChangeShortcutKey</c> — the firmware-side "this key types Ctrl/Alt/Shift/Win
+        /// + that key". ev_profile_load.pcapng (2026-08-22) carries exactly one,
+        /// <c>14 21 AC 00 13 08</c>: key 0xAC = display key D3, target 0x13 = 19 =
+        /// <c>E</c> in <see cref="K2.App.Models.EverestWMatrixMap.MatrixIdToDllKeyId"/>,
+        /// mask 0x08 = Win (<see cref="Everest60RemapData.ModWin"/>) — i.e. Win+E, the
+        /// profile's "open Explorer" binding. The same capture's
+        /// <c>14 20 AB 00 <b>C3</b></c> is the Calculator remap discussed above.
+        /// K2 does not send either: its display-key and per-key actions run host-side
+        /// (<see cref="WriteDisplayKeyBinding"/> writes a suppression marker and K2's own
+        /// executor does the work), so putting the shortcut in firmware as well would fire
+        /// the action twice — the exact regression 0xC3 already caused once. The decode
+        /// is recorded here because it is the only thing that would be needed if K2 ever
+        /// grows an opt-in "keep working with K2 closed" binding mode.</para>
+        ///
         /// <para>No flash save follows, on either device — a replug restores factory
         /// behaviour whatever K2 left behind.</para>
         /// </summary>
@@ -439,19 +455,76 @@ internal static class EverestHidNative
         }
 
         /// <summary>
-        /// Switches the keyboard's active firmware profile (1-5): wire cmd
-        /// <c>14 00 00 00 [profile] 01</c>. Captured from real Base Camp
+        /// Switches the keyboard's active firmware profile (1-5) AND selects which slot of
+        /// that profile's lighting menu is active: wire cmd
+        /// <c>14 00 00 00 [profile] [effMenuIndex]</c>. Captured from real Base Camp
         /// (evprofiles.pcapng, 2026-07-19): the user's 5 UI profile switches
         /// (3→2→3→1→2→3) appear as exactly this packet with byte4 = target profile and
         /// NOTHING else — the per-profile NDK pictures/lighting swap instantly because
         /// they already live in that profile's flash slot. Replaces the SDKDLL
         /// SwitchProfile call in native-engine mode, where SDKDLL has no OpenUSBDriver
         /// state and its True return was unverifiable.
+        ///
+        /// <para><b>byte5 is the EffMenuIndex, not a constant.</b> It was hardcoded to
+        /// <c>0x01</c> here until 2026-08-22 because every profile in the 2026-07-19
+        /// capture happened to sit on menu slot 1 (Wave, the factory default).
+        /// <c>ev_profile_load.pcapng</c> (Base Camp loading a profile into slot 2 of a
+        /// factory-clean keyboard) shows the same packet cycling byte5 through 0..8 while
+        /// byte4 stays 02, one value per lighting menu entry, and closing on
+        /// <c>14 00 00 00 02 02</c> to select the profile's active effect — the same
+        /// <c>SwitchProfile(profile, EffMenuIndex)</c> shape already confirmed on the
+        /// MacroPad (2026-07-09). See <c>EverestService.MenuIndexFor</c> for the
+        /// effect→slot table.</para>
         /// </summary>
-        public bool SwitchProfile(int profile)
+        public bool SwitchProfile(int profile, int effMenuIndex = 1)
         {
-            var ok = SendCmdAcked(Cmd(0x14, 0x00, 0x00, 0x00, (byte)profile, 0x01));
-            _log($"[EvNative] SwitchProfile({profile}) -> {ok}");
+            var ok = SendCmdAcked(Cmd(0x14, 0x00, 0x00, 0x00, (byte)profile, (byte)effMenuIndex));
+            _log($"[EvNative] SwitchProfile({profile}, menu={effMenuIndex}) -> {ok}");
+            return ok;
+        }
+
+        /// <summary>
+        /// Wipes the keyboard's flash back to factory defaults: wire cmd
+        /// <c>13 40 00 00 01</c>, the ONLY packet real Base Camp sends for its
+        /// "restore defaults" (everest_reset.pcapng, 2026-08-21 — cross-checked with
+        /// reset.pcapng 2026-07-19). Two things the SDKDLL wrapper cannot give us:
+        /// (1) <c>SDKDLL.ResetFlash</c> runs without <c>OpenUSBDriver</c> in native-engine
+        /// mode (hardcoded, see AppSettings.EverestNativeEngine) and would very likely
+        /// return True while emitting nothing, exactly like SwitchProfile above;
+        /// (2) the firmware goes COMPLETELY MUTE for ~3.5s while it erases flash and only
+        /// then echoes the command — hence the 6s ack budget instead of the 1200ms
+        /// default, which would report a false failure on every single reset.
+        /// After this returns the device is on profile 1 with factory artwork/bindings,
+        /// and every host-side cache about its contents is stale (see
+        /// EverestService.ResetFlash).
+        /// </summary>
+        public bool ResetFlash()
+        {
+            var ok = SendCmdAcked(Cmd(0x13, 0x40, 0x00, 0x00, 0x01), timeoutMs: 6000);
+            _log($"[EvNative] ResetFlash() -> {ok}");
+            return ok;
+        }
+
+        /// <summary>
+        /// The narrow sibling of <see cref="ResetFlash"/>: wire cmd
+        /// <c>13 40 00 00 <b>00</b></c> (last byte 0, not 1). Base Camp sends it right
+        /// after selecting the target profile and immediately before rewriting that
+        /// profile's whole content — all 9 lighting menu slots, the display-key bindings
+        /// and the 4 pictures (ev_profile_load.pcapng, 2026-08-22, "load a Base Camp
+        /// profile into slot 2 of a factory-clean keyboard").
+        ///
+        /// <para><b>Scope not verified on hardware.</b> The firmware goes mute for ~1.17s
+        /// (against ~3.5s for the <c>01</c> factory reset) and the packet is preceded by
+        /// <c>14 00 00 00 [profile] [menu]</c>, which is why it reads as profile-scoped
+        /// rather than device-wide — but nothing in the capture proves the other four
+        /// profiles survive it. Treat a hardware test that shows otherwise as reason to
+        /// drop the single call site (see <c>MainWindow.Everest.cs</c>,
+        /// LstEvProfile_SelectionChanged's IsNew branch) rather than this primitive.</para>
+        /// </summary>
+        public bool ResetProfileContent()
+        {
+            var ok = SendCmdAcked(Cmd(0x13, 0x40, 0x00, 0x00, 0x00), timeoutMs: 4000);
+            _log($"[EvNative] ResetProfileContent() -> {ok}");
             return ok;
         }
 

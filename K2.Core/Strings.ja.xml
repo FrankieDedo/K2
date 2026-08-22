@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   K2 ローカライズ文字列（日本語）。
     UI言語が "ja" のとき、または環境変数 K2_LANG=ja を設定したときに読み込まれます。
@@ -59,6 +59,7 @@
   <string name="reset">リセット</string>
   <string name="new_profile">+ 新規プロファイル</string>
   <string name="profile_n">プロファイル {0}</string>
+  <string name="default_profile_name">既定のプロファイル</string>
   <string name="select_device_first">最初にデバイスを選択してください。</string>
   <!-- ═══════════════════════════════════════════════════════════════
        ボタンアクション設定ダイアログ (K2.Core)
@@ -368,6 +369,7 @@
   <string name="hw_busy_uploading_image">デバイスに画像をアップロードしています。しばらくお待ちください…</string>
   <string name="hw_busy_importing_profile">プロファイルをインポートしています。しばらくお待ちください…</string>
   <string name="hw_busy_importing_profiles">プロファイルをインポートしています。しばらくお待ちください…</string>
+  <string name="hw_busy_restoring_defaults">デフォルトに戻しています。しばらくお待ちください…</string>
   <string name="ev_crash_recovering">ドライバーがクラッシュしました — 3 秒後に自動回復を試みます…</string>
   <string name="ev_crash_recovered">ドライバーが回復しました — LED プレビューを再起動しました。</string>
   <string name="ev_crash_recovery_failed">ドライバーの回復に失敗しました — K2.App を再起動してください。</string>

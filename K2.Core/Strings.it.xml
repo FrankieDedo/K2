@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   Localizzazione italiana per K2.
   Copia nella stessa cartella dell'exe come Strings.it.xml.
@@ -58,6 +58,7 @@
   <string name="reset">Ripristina</string>
   <string name="new_profile">+ Nuovo profilo</string>
   <string name="profile_n">Profilo {0}</string>
+  <string name="default_profile_name">Profilo predefinito</string>
   <string name="select_device_first">Seleziona prima un dispositivo.</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -207,7 +208,27 @@
   <string name="youtube_chat_message_label">Messaggio in chat live:</string>
   <string name="act_command">Comando shell</string>
   <string name="act_text">Incolla testo</string>
+  <string name="act_emoji">Emoji</string>
   <string name="act_macro">Riproduci macro</string>
+
+  <!-- Azione emoji + browser emoji (EmojiPickerDialog) -->
+  <string name="emoji_picker_title">Scegli un'emoji</string>
+  <string name="emoji_choose_button">Scegli emoji…</string>
+  <string name="emoji_none_selected">Nessuna emoji selezionata</string>
+  <string name="emoji_search_label">Cerca:</string>
+  <string name="emoji_category_label">Categoria:</string>
+  <string name="emoji_category_all">Tutte</string>
+  <string name="emoji_no_results">Nessuna emoji trovata</string>
+  <string name="emoji_hint">L'emoji viene digitata nell'applicazione in primo piano alla pressione del tasto. Su un tasto display (DisplayPad, tastierino Everest Max) viene usata anche come immagine del tasto.</string>
+  <string name="emoji_grp_smileys">Faccine ed emozioni</string>
+  <string name="emoji_grp_people">Persone e corpo</string>
+  <string name="emoji_grp_animals">Animali e natura</string>
+  <string name="emoji_grp_food">Cibo e bevande</string>
+  <string name="emoji_grp_travel">Viaggi e luoghi</string>
+  <string name="emoji_grp_activities">Attività</string>
+  <string name="emoji_grp_objects">Oggetti</string>
+  <string name="emoji_grp_symbols">Simboli</string>
+  <string name="emoji_grp_flags">Bandiere</string>
   <string name="act_macro_unresolved">Riproduci macro (non assegnata)</string>
   <string name="act_googlehome">Google Home</string>
   <string name="act_pyscript">Script Python</string>
@@ -351,6 +372,19 @@
   <string name="settings_k2_autostart_hint">K2 ora richiede i diritti di amministratore (per controllare BaseCampService). Windows non eleva automaticamente le app avviate dalla chiave di registro Run al login, quindi questa voce da sola potrebbe non riuscire ad avviare K2 silenziosamente — in tal caso usa Utilità di pianificazione (un'attività impostata su "Esegui con i privilegi più elevati" al login).</string>
   <string name="settings_start_min_tray">Avvia direttamente ridotto a icona (tray)</string>
   <string name="settings_start_min_tray_hint">K2 si avvia con i driver attivi ma la finestra nascosta nella tray — riaprila in qualsiasi momento dall'icona.</string>
+  <!-- Mappatura dispositivi DisplayPad -->
+  <string name="settings_dp_devicemap_group">Mappatura dispositivi DisplayPad</string>
+  <string name="settings_dp_devicemap_btn">Configura mappatura…</string>
+  <string name="settings_dp_devicemap_hint">Se hai spostato un DisplayPad su un'altra porta USB e i suoi profili salvati ora compaiono sul pannello sbagliato (es. "DisplayPad 2" e "DisplayPad 3" invertiti), usa questa opzione per riassegnare quale pannello rappresenta ogni dispositivo collegato.</string>
+  <string name="dp_devicemap_title">Mappatura dispositivi DisplayPad</string>
+  <string name="dp_devicemap_hint">Ogni pad collegato è elencato qui sotto con la sua versione firmware. Clicca "Identifica" per far lampeggiare la retroilluminazione di un pad e riconoscere la riga corrispondente, poi imposta il numero di scheda che deve usare. Due righe non possono avere lo stesso numero di scheda.</string>
+  <string name="dp_devicemap_col_current">Attualmente mostrato come</string>
+  <string name="dp_devicemap_col_firmware">Firmware</string>
+  <string name="dp_devicemap_col_board">Scheda #</string>
+  <string name="dp_devicemap_identify_btn">Identifica</string>
+  <string name="dp_devicemap_none_connected">Nessun DisplayPad è attualmente collegato — collega i pad da rimappare e riapri questa finestra.</string>
+  <string name="dp_devicemap_duplicate_error">Due pad non possono avere lo stesso numero di scheda. Assegna un numero diverso a ciascuno.</string>
+  <string name="dp_devicemap_invalid_number">I numeri di scheda devono essere numeri interi positivi.</string>
   <string name="settings_font_family">Carattere</string>
   <string name="settings_font_family_hint">Cambia subito il carattere dell'interfaccia in tutta l'app, senza riavvio.</string>
   <string name="settings_accent_color">Colore accento</string>
@@ -379,6 +413,7 @@
   <string name="hw_busy_uploading_image">Caricamento immagine sul dispositivo, attendere…</string>
   <string name="hw_busy_importing_profile">Importazione profilo in corso, attendere…</string>
   <string name="hw_busy_importing_profiles">Importazione profili in corso, attendere…</string>
+  <string name="hw_busy_restoring_defaults">Ripristino dei valori predefiniti, attendere…</string>
   <string name="ev_crash_recovering">Driver in crash — tentativo di recovery tra 3 s…</string>
   <string name="ev_crash_recovered">Driver recuperato — LED preview riavviata.</string>
   <string name="ev_crash_recovery_failed">Recovery fallita — riavviare K2.App.</string>
@@ -401,7 +436,7 @@
   <string name="rgb_single_tip">Usa un solo colore per l'effetto.</string>
   <string name="rgb_double">Doppio colore</string>
   <string name="rgb_double_tip">Usa due colori per l'effetto (non supportato da tutti gli effetti).</string>
-  <string name="rgb_sync_profiles">Sincronizza profili</string>
+  <string name="rgb_sync_profiles">Sincronizza tra profili</string>
   <string name="rgb_primary">Primario:</string>
   <string name="rgb_secondary">Secondario:</string>
   <string name="rgb_tertiary">Terziario:</string>
@@ -568,6 +603,7 @@
 
   <!-- Impostazioni (sezione sidebar Everest: selezione layout tastiera) -->
   <string name="ev_settings">Impostazioni</string>
+  <string name="appearance">Aspetto</string>
   <string name="ev_layout">Layout</string>
   <string name="settings_sync_profiles">Sincronizza tra profili</string>
   <string name="settings_game_mode">Modalità gioco</string>
@@ -603,8 +639,12 @@
   <string name="keycap_customize_use_mountain_logo">Usa logo Mountain (fisso)</string>
   <string name="keycap_customize_clear_all">Rimuovi personalizzazioni</string>
   <string name="keycap_customize_close">Chiudi</string>
-  <string name="settings_factory_reset">Ripristina impostazioni di fabbrica</string>
-  <string name="settings_factory_reset_confirm">Questo ripristina Modalità gioco, LED indicatori ed effetti di illuminazione della tastiera alle impostazioni di fabbrica. Continuare?</string>
+  <string name="settings_factory_reset">Ripristina tutte le impostazioni ai valori di fabbrica</string>
+  <string name="settings_factory_reset_hint">Cancella la memoria della tastiera — profili firmware, associazioni tasti, immagini dei tasti display e illuminazione — e azzera la configurazione salvata in K2. Non è la stessa cosa di "Ripristina predefiniti" nella barra laterale, che azzera solo i profili di K2 e non tocca il dispositivo.</string>
+  <string name="settings_factory_reset_confirm">Questo azzera la memoria della tastiera riportandola allo stato di fabbrica: ogni profilo firmware, associazione tasti, immagine dei tasti display ed effetto di illuminazione salvato sul dispositivo viene cancellato, e la configurazione di K2 per questa tastiera viene eliminata di conseguenza. Al termine K2 riaccende solo l'illuminazione con il primo effetto della lista — nient'altro viene rimandato al dispositivo. L'operazione non è reversibile. Continuare?</string>
+  <string name="settings_factory_reset_busy">Ripristino della tastiera alle impostazioni di fabbrica, attendere…</string>
+  <string name="settings_factory_reset_done">La tastiera è stata riportata alle impostazioni di fabbrica e la configurazione salvata in K2 è stata cancellata. L'illuminazione è stata riaccesa con il primo effetto della lista; nient'altro è stato rimandato al dispositivo.</string>
+  <string name="settings_factory_reset_failed">La tastiera non ha confermato il ripristino di fabbrica. Nessuna modifica è stata applicata al dispositivo né alla configurazione salvata in K2.</string>
 
   <!-- Macro tastiera -->
   <string name="keyboard_macro">Macro tastiera</string>
@@ -818,6 +858,7 @@
   <string name="bc_pick_device_none">Scegli un dispositivo da cui importare.</string>
   <string name="bc_pick_device_label">Dispositivo #{0} — {1} profilo/i: {2}</string>
   <string name="bc_import_will_wipe">Questa operazione ELIMINERÀ tutti i profili K2 esistenti su "{0}" prima di importare.</string>
+  <string name="ev_bc_import_will_wipe_firmware">Verrà inoltre RIPRISTINATA la memoria interna della tastiera: illuminazione, associazioni dei tasti e immagini dei tasti display di tutti e 5 gli slot del firmware verranno cancellate.</string>
   <string name="bc_import_read_failed">Impossibile leggere il database di Base Camp ({0}). Nessun dato importato: i profili K2 esistenti non sono stati toccati.</string>
   <string name="ev_no_profiles_in_bc">Nessun profilo Everest trovato nel database Base Camp.</string>
   <string name="ev_imported_bc">Importati {0} profili Everest ({1} tasti) da Base Camp.</string>

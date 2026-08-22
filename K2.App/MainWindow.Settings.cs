@@ -403,6 +403,18 @@ public partial class MainWindow
         _               => "settings_accent_k2red",
     };
 
+    /// <summary>"DisplayPad device mapping" button — opens the popup that lets the user
+    /// fix which stable logical id a pad's raw SDK id resolves to (see
+    /// RemappingDisplayPadClient/DisplayPadDeviceMap), needed after a USB port change
+    /// makes the SDK renumber a pad. Passes _dpDeviceLabels for the "currently shown as"
+    /// hint and DpRefreshDevices as the post-save callback so tabs/profiles reload
+    /// immediately under their corrected ids.</summary>
+    private void BtnDpDeviceMap_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new DpDeviceMapWindow(_dpClient, _dpDeviceLabels, DpRefreshDevices) { Owner = this };
+        dlg.ShowDialog();
+    }
+
     private void CkCloseToTray_Click(object sender, RoutedEventArgs e)
     {
         AppSettings.SetCloseToTray(CkCloseToTray.IsChecked == true);

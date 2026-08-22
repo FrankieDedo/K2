@@ -98,6 +98,52 @@ public static class EverestKeyboardLayout
         return built;
     }
 
+    /// <summary>
+    /// Canonical storage name for <paramref name="layout"/>, using Base Camp's OWN
+    /// vocabulary (the strings BC writes to <c>KeyboardSettings.KeyboardLayout</c> /
+    /// <c>Everest60Settings.KeyboardLayout</c>, read off everest.js's languageCode
+    /// branches: US / UK / Italian / German / French / Spanish / Nordic / Portugues —
+    /// note "Portugues" without the trailing 'e', that is BC's actual spelling; also
+    /// Hebrew / Korean, which K2 has no legend set for yet).
+    /// Sharing BC's vocabulary lets <c>BaseCampDbImporter</c> copy the value across
+    /// verbatim and keeps the setting readable in the K2 store.
+    /// </summary>
+    public static string ToStorageString(KeyboardLayoutType layout) => layout switch
+    {
+        KeyboardLayoutType.IsoIt     => "Italian",
+        KeyboardLayoutType.IsoUk     => "UK",
+        KeyboardLayoutType.IsoDe     => "German",
+        KeyboardLayoutType.IsoFr     => "French",
+        KeyboardLayoutType.IsoEs     => "Spanish",
+        KeyboardLayoutType.IsoNordic => "Nordic",
+        KeyboardLayoutType.IsoPt     => "Portugues",
+        _                            => "US",
+    };
+
+    /// <summary>
+    /// Inverse of <see cref="ToStorageString"/>. Returns null for null/blank/unknown
+    /// input (including BC's Hebrew/Korean, which K2 cannot render yet) so callers can
+    /// fall back to <see cref="DetectLayout"/> — "no layout stored" and "layout stored
+    /// but unsupported" both mean "auto-detect", exactly like BC's
+    /// <c>IsLayoutConfigured = 0</c>.
+    /// </summary>
+    public static KeyboardLayoutType? ParseStorageString(string? name) => name?.Trim() switch
+    {
+        "Italian"                => KeyboardLayoutType.IsoIt,
+        "UK"                     => KeyboardLayoutType.IsoUk,
+        "German"                 => KeyboardLayoutType.IsoDe,
+        "French"                 => KeyboardLayoutType.IsoFr,
+        "Spanish"                => KeyboardLayoutType.IsoEs,
+        "Nordic"                 => KeyboardLayoutType.IsoNordic,
+        "Portugues" or "Portuguese" => KeyboardLayoutType.IsoPt,
+        "US"                     => KeyboardLayoutType.AnsiUs,
+        _                        => null,
+    };
+
+    /// <summary>Key used for the persisted layout in the Everest / Everest 60 stores'
+    /// generic settings table (<c>GetSetting</c>/<c>SetSetting</c>).</summary>
+    public const string LayoutSettingKey = "keyboard.layout";
+
     /// <summary>Detects the keyboard layout from the current Windows locale.</summary>
     public static KeyboardLayoutType DetectLayout()
     {

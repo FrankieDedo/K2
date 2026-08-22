@@ -1050,7 +1050,7 @@ public partial class MainWindow
 
     private void EvDeviceBox_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (!_customPaintMode && !(_evKeycapEditMode && IsEvSettingsSectionActive)) return;
+        if (!_customPaintMode && !(_evKeycapEditMode && IsEvAppearanceSectionActive)) return;
         _rubberStart = e.GetPosition(CvsEvRubberBand);
         _rubberTracking = true;
         _rubberActive = false;
@@ -1091,7 +1091,7 @@ public partial class MainWindow
         e.Handled = true;       // suppress the click that would otherwise fire on release
         if (_customPaintMode)
             PaintLedsInRect(rect);
-        else if (_evKeycapEditMode && IsEvSettingsSectionActive)
+        else if (_evKeycapEditMode && IsEvAppearanceSectionActive)
             OpenKeycapDialogForRect(rect);
     }
 

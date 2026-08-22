@@ -30,6 +30,9 @@ public partial class ButtonActionDialog
         public required TextBox TxtValue { get; init; }
         public required ComboBox CbValue { get; init; }
         public required TextBox TxtDelay { get; init; }
+        /// <summary>"Choose emoji…" button, shown only while the step's type is "emoji" —
+        /// an emoji can't sensibly be typed into the plain value box.</summary>
+        public required Button BtnPickEmoji { get; init; }
     }
 
     /// <summary>The native K2 action tags a Multi Action step can be — the same set
@@ -39,7 +42,7 @@ public partial class ButtonActionDialog
         ("url", "act_url"), ("exec", "act_exec"), ("folder", "act_folder"),
         ("browser", "act_browser"), ("oscmd", "act_oscmd"), ("media", "act_media"),
         ("mouse", "act_mouse"), ("keys", "act_keys"), ("text", "act_text"),
-        ("profile", "act_profile"),
+        ("emoji", "act_emoji"), ("profile", "act_profile"),
     };
 
     private static readonly Brush MultiStepBorderBrush = new SolidColorBrush(Color.FromRgb(0x34, 0x34, 0x3C));
@@ -148,16 +151,38 @@ public partial class ButtonActionDialog
 
         var txtValue = new TextBox { VerticalContentAlignment = VerticalAlignment.Center };
         var cbValue  = new ComboBox { VerticalContentAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
+        var btnPickEmoji = new Button
+        {
+            Content = Loc.Get("emoji_choose_button"),
+            Padding = new Thickness(10, 2, 10, 2),
+            Margin  = new Thickness(6, 0, 0, 0),
+            Visibility = Visibility.Collapsed,
+        };
+
+        // Value row: the text box, plus the emoji picker button when the step type needs it.
+        var valueGrid = new Grid();
+        valueGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        valueGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(txtValue, 0);
+        Grid.SetColumn(btnPickEmoji, 1);
+        valueGrid.Children.Add(txtValue);
+        valueGrid.Children.Add(btnPickEmoji);
 
         stack.Children.Add(headerGrid);
-        stack.Children.Add(txtValue);
+        stack.Children.Add(valueGrid);
         stack.Children.Add(cbValue);
         outer.Child = stack;
 
-        var row = new MultiStepRow { Container = outer, CbType = cbType, TxtValue = txtValue, CbValue = cbValue, TxtDelay = txtDelay };
+        var row = new MultiStepRow { Container = outer, CbType = cbType, TxtValue = txtValue, CbValue = cbValue, TxtDelay = txtDelay, BtnPickEmoji = btnPickEmoji };
         outer.Tag = row;
 
         cbType.SelectionChanged += (_, _) => UpdateMultiRowValueControl(row);
+        btnPickEmoji.Click += (_, _) =>
+        {
+            var picker = new EmojiPickerDialog(txtValue.Text) { Owner = this };
+            if (picker.ShowDialog() == true && picker.SelectedEmoji is not null)
+                txtValue.Text = picker.SelectedEmoji;
+        };
         btnUp.Click     += (_, _) => MoveMultiStepRow(outer, -1);
         btnDown.Click   += (_, _) => MoveMultiStepRow(outer, 1);
         btnRemove.Click += (_, _) =>
@@ -190,6 +215,7 @@ public partial class ButtonActionDialog
         bool isCombo = tag is "oscmd" or "media" or "mouse";
         row.TxtValue.Visibility = isCombo ? Visibility.Collapsed : Visibility.Visible;
         row.CbValue.Visibility  = isCombo ? Visibility.Visible : Visibility.Collapsed;
+        row.BtnPickEmoji.Visibility = tag == "emoji" ? Visibility.Visible : Visibility.Collapsed;
         if (isCombo)
         {
             row.CbValue.Items.Clear();

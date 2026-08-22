@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -36,6 +36,50 @@ internal static class KeyboardLightingXml
         ((byte)EverestSdkNative.EffectIndex.Off,       "OFF",       "Off",       "Off"),
     };
 
+    /// <summary>
+    /// The effects K2's own dropdowns offer that Base Camp's 9-entry menu has no row for:
+    /// Reactive B/C (the Everest Max panel splits BC's single "Reactive" into three
+    /// firmware variants; the MacroPad exposes ReactiveC as "Reactive Wave") and Matrix 2
+    /// (K2's <c>byRandColor=16</c> variant of Matrix, firmware index 9 but a distinct
+    /// dropdown entry, hence its own out-of-band byte 200).
+    ///
+    /// <para><b>Why they need rows at all</b> (bug found 2026-08-22, user report "carico
+    /// un profilo XML esportato da K2 e non mi mostra l'effetto giusto"): the active
+    /// effect travels in the XML ONLY as <c>IsActive=true</c> on its own
+    /// <c>&lt;Lighting&gt;</c> row. With no row for these three, an export whose active
+    /// effect was one of them carried <c>IsActive=false</c> everywhere, so
+    /// <see cref="BaseCampDbImporter.ApplyLightingToStore"/> found no active effect, never
+    /// wrote <c>{prefix}effect</c>, and the panel kept showing whatever it had before the
+    /// import. Their per-effect speed/brightness/colors were silently dropped too.</para>
+    ///
+    /// <para>Emitted only in K2 mode (<c>includeK2Only</c>): a Base Camp-compatible export
+    /// must stay inside BC's own vocabulary, so there the active flag falls back to the
+    /// nearest BC row instead — see <see cref="BcFallbackFor"/>.</para>
+    /// </summary>
+    private static readonly (byte Eff, string Index, string MenuIndex, string Name)[] s_k2OnlyEffects =
+    {
+        ((byte)EverestSdkNative.EffectIndex.ReactiveB, "Reactiveb", "Reactive", "Reactive B"),
+        ((byte)EverestSdkNative.EffectIndex.ReactiveC, "Reactivec", "Reactive", "Reactive C"),
+        (K2Matrix2Eff,                                 "Matrix2",   "Matrix",   "Matrix 2"),
+    };
+
+    /// <summary>K2's Matrix-2 pseudo-effect byte — <c>EverestService.Effect.Matrix2</c> /
+    /// <c>MacroPadService.Effect.Matrix2</c>, deliberately outside the firmware's own
+    /// EffectIndex range (it renders as Matrix with randColor=16).</summary>
+    private const byte K2Matrix2Eff = 200;
+
+    /// <summary>The Base Camp row that stands in for a K2-only effect when exporting in
+    /// Base Camp-compatible mode: BC has one "Reactive" and one "Matrix", so the closest
+    /// honest answer is the variant they are variants OF. Returns the input unchanged for
+    /// anything BC already knows.</summary>
+    private static byte BcFallbackFor(byte eff) => eff switch
+    {
+        (byte)EverestSdkNative.EffectIndex.ReactiveB => (byte)EverestSdkNative.EffectIndex.ReactiveA,
+        (byte)EverestSdkNative.EffectIndex.ReactiveC => (byte)EverestSdkNative.EffectIndex.ReactiveA,
+        K2Matrix2Eff                                 => (byte)EverestSdkNative.EffectIndex.Matrix,
+        _                                            => eff,
+    };
+
     /// <summary>The 8 paint brushes nested inside the Custom row's own
     /// <c>CustomLightings</c> payload (Custom itself isn't one of them).</summary>
     private static readonly (byte Eff, int MenuIndex, string Name)[] s_customBrushes =
@@ -58,14 +102,25 @@ internal static class KeyboardLightingXml
     /// <paramref name="customColorsKey"/>/<paramref name="customEffectsKey"/> feed the
     /// Custom row's per-key payload; pass null to leave it empty.
     /// </summary>
+    /// <param name="includeK2Only">
+    /// True for a K2-format export: also emit a row per <see cref="s_k2OnlyEffects"/>
+    /// entry, so an effect K2 offers but Base Camp's menu doesn't survives the round trip.
+    /// False for a Base Camp-compatible export, where such an active effect is instead
+    /// reported on its nearest BC row (<see cref="BcFallbackFor"/>).
+    /// </param>
     public static XElement BuildLightings(
         Func<string, string?> getSetting, string rgbPrefix,
-        string? customColorsKey, string? customEffectsKey, int ledCount)
+        string? customColorsKey, string? customEffectsKey, int ledCount,
+        bool includeK2Only = false)
     {
         int? activeEff = int.TryParse(getSetting(rgbPrefix + "effect"), out var ae) ? ae : null;
+        // In BC-compatible mode a K2-only active effect has no row of its own to carry the
+        // flag, so it rides on the BC variant it derives from rather than vanishing.
+        if (!includeK2Only && activeEff is int a) activeEff = BcFallbackFor((byte)a);
 
         var wrapper = new XElement("EverestLightings");
-        foreach (var (eff, index, menuIndex, name) in s_effects)
+        var rows = includeK2Only ? s_effects.Concat(s_k2OnlyEffects) : s_effects;
+        foreach (var (eff, index, menuIndex, name) in rows)
         {
             string p = $"{rgbPrefix}{eff}.";
             int Int(string key, int fallback) =>
@@ -76,7 +131,10 @@ internal static class KeyboardLightingXml
                 new XElement("EffIndex", index),
                 new XElement("EffMenuIndex", menuIndex),
                 new XElement("EffectName", name),
-                new XElement("Type", 0),
+                // Color-type pill: 0 single / 1 dual / 2 rainbow — the inverse of
+                // BaseCampDbImporter.ApplyLightingToStore (was hardcoded 0, which made a
+                // K2 export -> re-import round-trip lose rainbow/dual).
+                new XElement("Type", Int("rainbow", 0) != 0 ? 2 : Int("colorDouble", 0) != 0 ? 1 : 0),
                 new XElement("Speed", Int("speed", 50)),
                 new XElement("Brightness", Int("brightness", 100)),
                 // Base Camp's Direction is a 0-based UI index, not the wire code —

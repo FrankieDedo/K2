@@ -73,7 +73,9 @@ public partial class MainWindow
     /// <summary>Ordered list of KeyDefs to remap (board_left + board_right).</summary>
     private KeyDef[] _evMapKeyDefs = Array.Empty<KeyDef>();
 
-    /// <summary>Current keyboard layout (detected at startup).</summary>
+    /// <summary>Current keyboard layout: the user's persisted choice if there is one,
+    /// otherwise auto-detected from the Windows locale at startup
+    /// (see <see cref="LoadPersistedKeyboardLayout"/>).</summary>
     private KeyboardLayoutType _evLayoutType = KeyboardLayoutType.AnsiUs;
 
     // ---- RGB effect panel state ------------------------------------------
@@ -142,7 +144,7 @@ public partial class MainWindow
         InitDisplayDialPanel();
         InitCustomLightingPanel();
         InitDockActionsPanel();
-        _evLayoutType = EverestKeyboardLayout.DetectLayout();
+        _evLayoutType = LoadPersistedKeyboardLayout();
         BuildEverestKeyboardOverlay();
         // Edge case: if "Custom" was the persisted rgb.effect, earlier calls to
         // SetCustomPaintModeActive(true)/ReapplyCustomOverlays (InitEverestRgbPanel,
@@ -494,6 +496,16 @@ public partial class MainWindow
         BuildEverestKeyVisuals(CvsEvKeyboard, LedMatrixMapping.EverestKeyboard);
         BuildEverestKeyVisuals(CvsEvNumpad,   LedMatrixMapping.EverestNumpad);
         ApplyKeycapAppearanceToAllKeys();
+
+        // The 4 display-key buttons live on CvsEvNumpad too (InitNumpadDisplayKeys adds
+        // them there), and the Clear() above took them with it. They used to be built
+        // exactly ONCE at startup, so any layout rebuild made them vanish from the UI for
+        // the rest of the session — including the one an XML import triggers when the
+        // imported profile carries IsLayoutConfigured (see BtnEvImportXml_Click), which is
+        // what the user saw as "spariscono i tasti display dall'interfaccia" right after
+        // importing a profile (2026-08-21). Rebuilding them here is safe: the method ends
+        // with LoadNdkState(), which repopulates thumbnails and actions from the store.
+        InitNumpadDisplayKeys();
     }
 
     // ---- Layout selector helpers ------------------------------------------
@@ -530,11 +542,56 @@ public partial class MainWindow
         CbEvKeyboardLayout.SelectionChanged += OnKeyboardLayoutChanged;
     }
 
+    /// <summary>
+    /// The layout the keycap legends are drawn with: the user's persisted choice when
+    /// there is one, otherwise <see cref="EverestKeyboardLayout.DetectLayout"/>'s guess
+    /// from the Windows locale.
+    ///
+    /// <para>Base Camp keeps the same distinction in its own DB — <c>KeyboardLayout</c>
+    /// plus an <c>IsLayoutConfigured</c> flag in <c>KeyboardSettings</c> — because the
+    /// locale guess is only ever a guess: an Italian-locale PC with a UK board got the
+    /// wrong legends on every launch, and before this the user's correction lasted only
+    /// until the app closed.</para>
+    ///
+    /// <para>Deliberate deviation from BC: BC stores the layout PER PROFILE (one row per
+    /// ProfileId, plus a SysncAcrossProfile flag), so its printed legends can change when
+    /// you switch profile. The physical keycaps obviously do not, so K2 stores ONE value
+    /// per device.</para>
+    ///
+    /// <para>Nothing here goes to the keyboard, and that is not an omission: the layout
+    /// is host-side on the wire too. Two captures of real BC switching layout
+    /// (everest_layout.pcapng UK→IT and ev_deutsch.pcapng IT→DE, both 2026-08-21) are
+    /// BYTE-IDENTICAL — <c>12 08 00 01</c> → <c>13 42 00 00 0f</c> →
+    /// <c>13 60 00 00 00</c> — so not one bit of the chosen layout reaches the firmware;
+    /// it only ever lands in BC's SQLite (<c>KeyboardSettings.KeyboardLayout</c>, values
+    /// US/UK/Italian/German/French/Spanish/Nordic/Portugues). K2 must NOT replay that
+    /// sequence: <c>13 42</c> with a key mask is our known display-key artwork reset
+    /// (see <c>EverestHidNative.ResetDisplayKeyPic</c>), and the mask 0x0F sits at
+    /// byte 4 = profile 1, i.e. it wipes all four display-key pictures of profile 1.</para>
+    /// </summary>
+    private KeyboardLayoutType LoadPersistedKeyboardLayout()
+    {
+        try
+        {
+            if (EverestKeyboardLayout.ParseStorageString(
+                    _evStore.GetSetting(EverestKeyboardLayout.LayoutSettingKey)) is { } stored)
+                return stored;
+        }
+        catch (Exception ex) { App.WriteLog("[Everest] LoadPersistedKeyboardLayout failed: " + ex); }
+        return EverestKeyboardLayout.DetectLayout();
+    }
+
     private void OnKeyboardLayoutChanged(object sender, SelectionChangedEventArgs e)
     {
         if (CbEvKeyboardLayout.SelectedItem is not LayoutChoice c) return;
         if (c.Layout == _evLayoutType) return;
         _evLayoutType = c.Layout;
+        try
+        {
+            _evStore.SetSetting(EverestKeyboardLayout.LayoutSettingKey,
+                                EverestKeyboardLayout.ToStorageString(c.Layout));
+        }
+        catch (Exception ex) { App.WriteLog("[Everest] Saving keyboard layout failed: " + ex); }
         RebuildEverestKeyboardForLayout();
     }
 
@@ -672,6 +729,33 @@ public partial class MainWindow
         CkEvSync_Click(sender, e);
     }
 
+    /// <summary>
+    /// TRUE hardware factory reset: wipes the keyboard's flash (<see cref="EverestService.ResetFlash"/>,
+    /// wire <c>13 40 00 00 01</c>), then deletes K2's own saved configuration for this
+    /// keyboard and RELEASES the device.
+    ///
+    /// Deliberately NOT what Base Camp does. In everest_reset.pcapng (2026-08-21) BC wipes
+    /// the flash and immediately re-pushes its active profile — settings blob
+    /// <c>11 14 00 01 …</c> carrying the user's own display-key pic slots, then
+    /// <c>14 00 00 00 01 01</c> (SwitchProfile 1) — so the device is factory-clean for all
+    /// of two seconds. Here "factory" means factory: nothing gets pushed back.
+    ///
+    /// Order matters:
+    /// (1) stop the LED preview poller — it reads the device continuously and the firmware
+    ///     is MUTE for ~3.5s while erasing (see EverestHidNative.Pad.ResetFlash);
+    /// (2) wipe the store — otherwise every host-side cache describing the device's
+    ///     contents survives the reset and lies: <c>ndk.{p}.{i}.fwBind</c> would keep K2
+    ///     from rewriting the display-key bindings (bringing back the double action),
+    ///     <c>flashOk</c>/imagePath would claim pictures that no longer exist in flash,
+    ///     and profiles/RGB/Game Mode would describe firmware slots that are now empty;
+    /// (3) restart the lighting. The wipe leaves the keyboard DARK (user report
+    ///     2026-08-21: "le luci si interrompono") — the factory flash it falls back to has
+    ///     no effect running, and K2 is still the app in charge, so it seeds the fresh
+    ///     store with the FIRST effect of the list (Static, K2's default color) and pushes
+    ///     it. This is the ONLY thing pushed back: no profiles, no bindings, no display-key
+    ///     artwork — the device stays factory-clean everywhere else, unlike Base Camp,
+    ///     which re-uploads the user's whole active profile.
+    /// </summary>
     private void BtnSettingsFactoryReset_Click(object sender, RoutedEventArgs e)
     {
         var res = MessageBox.Show(
@@ -682,7 +766,69 @@ public partial class MainWindow
         if (res != MessageBoxResult.OK) return;
 
         if (!_everest.IsOpen) { LogEverest("[WARN] Everest driver not open"); return; }
-        LogEverest($"[SET ] ResetFlash(true) -> {_everest.ResetFlash(true)}");
+
+        StopLedPreview();
+
+        // ~3.5s blocking round-trip — must not run on the UI thread (RunHwBusy pumps the
+        // overlay and runs the work on the pool).
+        bool ok = RunHwBusy(Loc.Get("settings_factory_reset_busy"), () => _everest.ResetFlash(true));
+        LogEverest($"[SET ] ResetFlash(true) -> {ok}");
+
+        if (!ok)
+        {
+            // Nothing was erased (or we cannot prove it was): leave K2's store alone and
+            // put the preview back the way it was.
+            StartLedPreview();
+            MessageBox.Show(Loc.Get("settings_factory_reset_failed"),
+                Loc.Get("settings_factory_reset"), MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var wiped = _evStore.ResetAllData();
+        LogEverest($"[SET ] factory reset: K2's Everest store wiped " +
+                   $"(keys={wiped.Keys} settings={wiped.Settings} keycaps={wiped.KeycapOverrides})");
+
+        // Rebuild the panels from the now-empty store, with the lighting seeded to the
+        // first effect of the list — ReloadEverestProfile ends in ApplyCurrentEffect,
+        // which is what actually turns the keyboard back on.
+        EvRefreshProfiles();
+        EvSelectProfileSlot(1);
+        EvSetRgbToFirstEffect();
+        ReloadEverestProfile();
+
+        // Same firmware quirk as a fresh open: the very first effect sent right after the
+        // device's config state changes underneath us can be silently dropped, and a
+        // re-apply a couple of seconds later always takes (see EvAutoOpen's call site).
+        // A dropped apply here would leave the keyboard dark — exactly the symptom this
+        // whole branch exists to fix — so pay the same 2s insurance.
+        EvScheduleStartupEffectResend();
+        StartLedPreview();
+
+        MessageBox.Show(Loc.Get("settings_factory_reset_done"),
+            Loc.Get("settings_factory_reset"), MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    /// <summary>Seeds the RGB panel + store with the FIRST effect of <see cref="EvEffectList"/>
+    /// (Static) on K2's default color, used by the hardware factory reset to bring the
+    /// keyboard's lighting back up after the wipe leaves it dark (user request 2026-08-21:
+    /// the first effect of the list is fine). Unlike the sidebar's "Restore defaults"
+    /// (<see cref="BtnEvRestoreDefaults_Click"/>), the hardware reset genuinely needs
+    /// SOME light pushed back — the wipe leaves the keyboard dark, not just unconfigured.</summary>
+    private void EvSetRgbToFirstEffect()
+    {
+        bool prev = _evRgbSuppress;
+        _evRgbSuppress = true;
+        try
+        {
+            CbEvEffect.SelectedIndex  = 0;   // Static
+            SldEvSpeed.Value          = 50;
+            SldEvBrightness.Value     = 100;
+            _evDirIndex               = 0;
+            RbEvColorSingle.IsChecked = true;
+            _evColor1 = 0x900000; _evColor2 = 0; _evColor3 = 0;
+        }
+        finally { _evRgbSuppress = prev; }
+        SaveEverestRgbToStore();
     }
 
     /// <summary>
@@ -697,7 +843,7 @@ public partial class MainWindow
         // Edit-individual-keycaps mode (Settings section): open the per-key color/image
         // customizer instead of anything else this click would normally do. _evKeyVisuals is
         // keyed by LED index (not matrixId/VK), so find this button's entry to get its KeyId.
-        if (_evKeycapEditMode && IsEvSettingsSectionActive)
+        if (_evKeycapEditMode && IsEvAppearanceSectionActive)
         {
             var match = _evKeyVisuals.FirstOrDefault(kv => ReferenceEquals(kv.Value.Button, btn0));
             if (match.Value.Button != null)
@@ -1024,10 +1170,51 @@ public partial class MainWindow
         // "Open driver" click (BtnEvOpen_Click) and on profile switch/NDK
         // hot-plug, just not unconditionally at launch.
 
+        // Resend the effect once more ~2s after the initial apply above — same
+        // "click the effect again" fix a user doing it manually already relies on
+        // (2026-08-18 hardware reports: the very first apply right after Open()/
+        // SwitchProfile() can silently be dropped by the firmware — wrong bytes were
+        // ruled out, correct bytes were confirmed on the wire via the runtime log,
+        // still not applied — while a manual re-apply moments later always works).
+        // The 150ms AP-off settle delay in EverestService.SetEffect narrows the
+        // window but doesn't fully close it; this brute-force resend is the
+        // pragmatic fix in the meantime, mirroring exactly what already reliably
+        // recovers it: doing the same apply again a bit later.
+        EvScheduleStartupEffectResend();
+
         // Restore custom device name if previously set
         var savedName = _evStore.GetSetting("device.name");
         if (!string.IsNullOrEmpty(savedName))
             TabEverest.Header = savedName;
+    }
+
+    /// <summary>One-shot timer backing <see cref="EvScheduleStartupEffectResend"/> —
+    /// field so a second EvAutoOpen (shouldn't normally happen, but mirrors the
+    /// defensive pattern of _evAutoOffTimer) doesn't stack multiple pending resends.</summary>
+    private DispatcherTimer? _evStartupResendTimer;
+
+    /// <summary>
+    /// Fires <see cref="ApplyCurrentEffect"/> once more ~2s after <see cref="EvAutoOpen"/>'s
+    /// initial apply — see the call site's comment for why. Also re-applies the
+    /// Settings panel (Game Mode/Indicator LED/Sync), same rationale, same firmware
+    /// AP-mode-transition window.
+    /// </summary>
+    private void EvScheduleStartupEffectResend()
+    {
+        _evStartupResendTimer?.Stop();
+        _evStartupResendTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(2)
+        };
+        _evStartupResendTimer.Tick += (_, _) =>
+        {
+            _evStartupResendTimer!.Stop();
+            if (!_everest.IsOpen) return;
+            LogEverest("[RGB ] startup resend: re-applying effect (see EvAutoOpen comment)");
+            ApplyCurrentEffect();
+            ApplyEverestSettingsToDevice();
+        };
+        _evStartupResendTimer.Start();
     }
 
     private void BtnEvRename_Click(object sender, RoutedEventArgs e)
@@ -1107,6 +1294,35 @@ public partial class MainWindow
     // Import XML (Base Camp-compatible or K2-only, same schema)
     // ============================================================
 
+    /// <summary>
+    /// With "sync across profiles" ON, every Everest panel reads and writes the SHARED
+    /// namespace (<c>rgb.</c>/<c>custom.</c>/<c>settings.</c>/<c>dial.</c>, no slot
+    /// segment — see <see cref="EvRgbPrefix"/> and its twins), while both import paths
+    /// always write the profile-scoped one. Without this mirror an import done with sync
+    /// on changed nothing on screen or on the keyboard: the values landed in
+    /// <c>rgb.p{slot}.*</c> and the panel kept reading <c>rgb.*</c> — one of the two
+    /// halves of "carico un profilo e non mi mostra l'effetto giusto" (2026-08-22).
+    ///
+    /// <para>Copies <paramref name="slot"/>'s per-profile rows over the shared ones, which
+    /// is what synced actually means: one look shared by all profiles, and the profile just
+    /// imported is the one that defines it. No-op when sync is off.</para>
+    /// </summary>
+    private void EvMirrorImportedProfileToSharedIfSynced(int slot)
+    {
+        if (CkEvSync.IsChecked != true) return;
+        int copied = 0;
+        foreach (var family in new[] { "rgb.", "custom.", "settings.", "dial." })
+        {
+            foreach (var kv in _evStore.GetSettingsWithPrefix($"{family}p{slot}."))
+            {
+                _evStore.SetSetting(family + kv.Key, kv.Value);
+                copied++;
+            }
+        }
+        LogEverest($"[IMP ] sync across profiles is on: mirrored {copied} setting(s) " +
+                   $"of slot {slot} into the shared namespace");
+    }
+
     private void BtnEvImportXml_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new OpenFileDialog
@@ -1158,6 +1374,9 @@ public partial class MainWindow
             // touch-key content) writes no Keys row and never shows up in
             // EverestStore.GetExistingProfiles, so it silently disappears after import.
             _evStore.SetProfileName(slot, profileName);
+            // Fresh slot = fresh display-key namespace, including the firmware markers —
+            // see EvClaimNdkSlot (and the new-profile branch of LstEvProfile_SelectionChanged).
+            EvClaimNdkSlot(slot);
 
             int regular = 0, touch = 0;
 
@@ -1262,7 +1481,10 @@ public partial class MainWindow
                 int c1 = BaseCampDbImporter.ParseBcColor(lt.Element("Color1")?.Value, 0x900000);
                 int c2 = BaseCampDbImporter.ParseBcColor(lt.Element("Color2")?.Value, 0);
                 int c3 = BaseCampDbImporter.ParseBcColor(lt.Element("Color3")?.Value, 0);
-                lightingRows.Add(new BaseCampDbImporter.BcLightingRow(effByte, speed, brightness, direction, c1, c2, c3, active));
+                // <Type> is Base Camp's color-type pill (0 single / 1 dual / 2 rainbow) —
+                // see BaseCampDbImporter.ApplyLightingToStore.
+                int colorType = int.TryParse(lt.Element("Type")?.Value, out var ct) ? ct : 0;
+                lightingRows.Add(new BaseCampDbImporter.BcLightingRow(effByte, speed, brightness, direction, c1, c2, c3, active, colorType));
 
                 // Per-key paint state of the Custom effect (126 keycap LEDs + which keys
                 // carry a dynamic effect), from the Custom row's own <CustomLightings>.
@@ -1324,12 +1546,65 @@ public partial class MainWindow
                     BaseCampDbImporter.TurnOffSecondsFromTimeSpanText(settingsEl.Element("TurnOffAfter")?.Value).ToString());
                 _evStore.SetSetting(dp2 + "clockType",
                     (int.TryParse(settingsEl.Element("ClockType")?.Value, out var ct) ? ct : 0).ToString());
+
+                // Keycap legends: only when the exporting side flagged the layout as
+                // user-chosen (IsLayoutConfigured), same gate BaseCampDbImporter applies
+                // to the DB column — an unconfirmed BC locale guess must not override
+                // this machine's own guess. Device-level, so it deliberately escapes the
+                // per-slot prefix above.
+                if (string.Equals(settingsEl.Element("IsLayoutConfigured")?.Value, "true",
+                                  StringComparison.OrdinalIgnoreCase)
+                    && EverestKeyboardLayout.ParseStorageString(
+                           settingsEl.Element("KeyboardLayout")?.Value) is { } impLayout)
+                {
+                    _evStore.SetSetting(EverestKeyboardLayout.LayoutSettingKey,
+                                        EverestKeyboardLayout.ToStorageString(impLayout));
+                    _evLayoutType = impLayout;
+                    CbEvKeyboardLayout.SelectedItem = (CbEvKeyboardLayout.ItemsSource as LayoutChoice[])
+                        ?.FirstOrDefault(x => x.Layout == impLayout) ?? CbEvKeyboardLayout.SelectedItem;
+                    RebuildEverestKeyboardForLayout();
+                }
             }
+
+            // K2-format extra: the full per-profile Settings + Display Dial namespace.
+            // AFTER the <KeyboardSetting> block above on purpose — the four values Base
+            // Camp also has a column for appear in both, and K2's own copy is the one that
+            // round-trips exactly. Absent from Base Camp files and from K2 exports made
+            // before 2026-08-22, in which case this is a no-op and the BC block above is
+            // still the only source.
+            int extraSettings = K2ProfileSettingsXml.Apply(
+                root, _evStore.SetSetting, slot, K2ProfileSettingsXml.EverestFamilies);
+            if (extraSettings > 0)
+                LogEverest($"[IMP-XML] {extraSettings} K2 profile setting(s) (Settings + Display Dial) restored");
+
+            // K2-only, device-global: the physical unit's keyboard body colour (see
+            // EvProfileExporter's matching write). Absent from Base Camp files, in
+            // which case the machine's own existing setting is left untouched.
+            // User request 2026-08-22.
+            string? kbColor = root.Element("KeyboardColor")?.Value;
+            if (kbColor is "black" or "silver")
+            {
+                _evStore.SetSetting("settings.keyboard_color", kbColor);
+                if (_evSettingsInitialized)
+                {
+                    bool black = kbColor == "black";
+                    (black ? RbEvKbColorBlack : RbEvKbColorSilver).IsChecked = true;
+                    ApplyKeyboardColor(black);
+                }
+            }
+
+            EvMirrorImportedProfileToSharedIfSynced(slot);
 
             _evStore.SetCurrentProfile(slot);
             EvRefreshProfiles();
             EvSelectProfileSlot(slot);
-            ReloadEverestProfile(); // refreshes NDK canvas thumbnails for the imported slot
+            // ReloadEverestProfile refreshes the NDK canvas thumbnails for the imported
+            // slot AND re-runs the three per-profile panel reloads — RGB, Settings and
+            // Display Dial — each of which ends by pushing its state to the device
+            // (ReloadEverestDialForProfileSwitch -> ApplyDialToDevice). That is what makes
+            // an imported profile's dial configuration actually reach the Media Dock
+            // without the user opening the panel.
+            ReloadEverestProfile();
             // Land the DEVICE on the imported profile BEFORE pushing its pictures —
             // EvSelectProfileSlot suppresses LstEvProfile_SelectionChanged, so the
             // firmware-profile alignment done there doesn't run on this path (see that
@@ -1438,6 +1713,10 @@ public partial class MainWindow
             sb.AppendLine($"  {(p.IsSelected ? "[ACTIVE] " : "")}{p.Name}");
         sb.AppendLine();
         sb.AppendLine(Loc.Get("bc_import_will_wipe", deviceLabel));
+        // The Everest import also wipes each targeted firmware slot before loading into
+        // it (see the ResetProfileContent call below) — destructive beyond K2's own
+        // database, so it has to be in the confirmation, not only in the log.
+        if (_everest.IsOpen) sb.AppendLine(Loc.Get("ev_bc_import_will_wipe_firmware"));
 
         if (MessageBox.Show(this, sb.ToString(), "Import from Base Camp",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
@@ -1460,8 +1739,32 @@ public partial class MainWindow
         }
 
         // Wipe: replace, don't append (unlike the old free-slot-seeking import).
-        foreach (var slot in _evStore.GetExistingProfiles())
-            _evStore.ClearProfile(slot);
+        //
+        // ALL FIVE slots, not just the ones GetExistingProfiles reports (changed
+        // 2026-08-22, user request "l'import da Base Camp deve pulire tutti i profili e
+        // tutti gli slot nel firmware, poi caricare"): a slot that never held a K2
+        // profile can still carry stale rgb./custom./settings./dial./ndk. rows — left by
+        // a profile deleted before ClearProfile started deleting whole namespaces
+        // (2026-08-21), or by an earlier import — and those silently become the starting
+        // point of whatever lands there next.
+        for (int wipeSlot = 1; wipeSlot <= EverestService.ProfileCount; wipeSlot++)
+            _evStore.ClearProfile(wipeSlot);
+
+        // Per-profile firmware wipe, not a whole-keyboard factory reset (changed
+        // 2026-08-22, user request "l'import non deve resettare tutta la tastiera ma
+        // solo i profili"): only the K2 slots this import actually targets get their
+        // firmware content cleared (13 40 00 00 00, see EverestHidNative.Pad.
+        // ResetProfileContent), one SwitchProfile+reset per slot inside the loop below,
+        // instead of the old ResetFlash(true) factory wipe (13 40 00 00 01) that also
+        // reset every other slot and dropped the device back on profile 1. The LED
+        // preview poller still stands down for the duration since each reset is its own
+        // ~1.17s of firmware silence; it comes back up at the end of the import.
+        bool ledPreviewPaused = false;
+        if (_everest.IsOpen)
+        {
+            StopLedPreview();
+            ledPreviewPaused = true;
+        }
 
         int totalRegular = 0, totalTouch = 0, skipped = 0;
 
@@ -1484,6 +1787,19 @@ public partial class MainWindow
                 int targetSlot = BaseCampDbImporter.FindFreeSlot(usedSlots);
                 if (targetSlot == 0) { skipped++; continue; } // more BC profiles than the 5 firmware slots allow
                 usedSlots.Add(targetSlot);
+                // Redundant with the all-slots ClearProfile sweep above (which deletes
+                // ndk.{slot}.* too) but kept as the explicit statement of intent: this
+                // profile's display-key namespace starts empty, so EvResetEmptyNdkSlots
+                // below really re-blanks all four keys instead of trusting a stale
+                // "flashOk"/"fwBind" marker. See EvClaimNdkSlot.
+                EvClaimNdkSlot(targetSlot);
+
+                if (_everest.IsOpen)
+                {
+                    _everest.SwitchProfile(targetSlot);
+                    bool slotWiped = RunHwBusy(Loc.Get("hw_busy_importing_profiles"), () => _everest.ResetProfileContent());
+                    LogEverest($"[IMP-BC] slot {targetSlot} firmware wipe: ResetProfileContent() -> {slotWiped}");
+                }
 
                 var (reg, touch) = BaseCampDbImporter.ImportEverestProfile(dbPath, profile, _evStore, targetSlot, macroNames);
                 totalRegular += reg;
@@ -1502,10 +1818,28 @@ public partial class MainWindow
             }
         }
 
+        // Blank the leftover firmware pictures of EVERY imported slot, not just the one
+        // we're about to activate: each profile owns its own 4 pictures in flash, so a
+        // profile imported into slot 2/3 with fewer than 4 icons would otherwise keep
+        // showing the previous occupant's artwork on the keys the import left empty —
+        // the "overlapping icons" of the user report. The binding sync has to follow the
+        // reset per slot (the reset restores DEFAULT key mode) and, unlike the reset, is
+        // NOT profile-addressed, hence the SwitchProfile before each pass.
+        if (_everest.IsOpen)
+        {
+            foreach (int slot in usedSlots.OrderBy(x => x))
+            {
+                _everest.SwitchProfile(slot);
+                EvResetEmptyNdkSlots(slot, Loc.Get("hw_busy_importing_profiles"));
+                EvSyncNdkBindingsToFw(slot);
+            }
+        }
+
         // Always land on the FIRST imported profile and force a reload — simpler and
         // safer than trying to restore whatever was active in Base Camp (user request:
         // a plain, predictable refresh after import beats guessing at BC's own state).
         int activateSlot = usedSlots.DefaultIfEmpty(0).Min();
+        if (activateSlot > 0) EvMirrorImportedProfileToSharedIfSynced(activateSlot);
         EvRefreshProfiles();
         if (activateSlot > 0)
         {
@@ -1523,6 +1857,7 @@ public partial class MainWindow
 
         // Same post-import apply as the XML path — see EvReapplySelectedEffect.
         EvReapplySelectedEffect();
+        if (ledPreviewPaused) StartLedPreview();
 
         LogEverest($"[IMP-BC] Done: {totalRegular} regular + {totalTouch} display keys across {allProfiles.Count} profiles");
         LblStatus.Text = Loc.Get("ev_imported_bc", allProfiles.Count, totalRegular);
@@ -1563,38 +1898,55 @@ public partial class MainWindow
                 toUpload.Add((i, path));
         }
 
-        var uploadedKeys = RunHwBusy(busyMessage ?? Loc.Get("hw_busy_uploading_image"), () =>
+        // Busy guard around the whole batch: RunHwBusy pumps the dispatcher, so the 3s
+        // accessory poll keeps ticking and would read the firmware mid-write (see
+        // UpdateKeyboardLayout).
+        NdkSetButtonsEnabled(false);
+        _ndkUploadBusy = true;
+        System.Collections.Generic.List<int> uploadedKeys;
+        try
         {
-            var okKeys = new System.Collections.Generic.List<int>();
-            foreach (var (i, path) in toUpload)
+            uploadedKeys = RunHwBusy(busyMessage ?? Loc.Get("hw_busy_uploading_image"), () =>
             {
-                // StartPicUpdate returns instantly (async) but the firmware stays "busy"
-                // writing the previous image to flash for SEVERAL seconds afterwards, and
-                // instantly rejects any StartPicUpdate received in that window (confirmed
-                // via user logs 2026-07-19: back-to-back calls fail within 4ms; even a
-                // fixed 2.2s spacing still got keys 2-4 rejected — the window is longer
-                // than one nominal ~2s transfer). A single manual upload (NdkApplyImage)
-                // never hits this because human actions are naturally paced. So: retry
-                // with a 2s backoff until accepted (max ~12s/key) instead of guessing a
-                // fixed safe delay.
-                bool ok = false;
-                // 10 attempts × 2s ≈ 20s worst case: user log 2026-07-19 12:15 showed a
-                // key exhausting the previous 6-attempt (12s) budget and being skipped.
-                for (int attempt = 0; attempt < 10 && !ok; attempt++)
+                _everest.FlushSaveFlash();   // see EvResetEmptyNdkSlots
+                var okKeys = new System.Collections.Generic.List<int>();
+                foreach (var (i, path) in toUpload)
                 {
-                    if (attempt > 0) System.Threading.Thread.Sleep(2000);
-                    try { ok = UploadNdkImage(i, path, profile); }
-                    catch (Exception ex)
+                    // StartPicUpdate returns instantly (async) but the firmware stays "busy"
+                    // writing the previous image to flash for SEVERAL seconds afterwards, and
+                    // instantly rejects any StartPicUpdate received in that window (confirmed
+                    // via user logs 2026-07-19: back-to-back calls fail within 4ms; even a
+                    // fixed 2.2s spacing still got keys 2-4 rejected — the window is longer
+                    // than one nominal ~2s transfer). A single manual upload (NdkApplyImage)
+                    // never hits this because human actions are naturally paced. So: retry
+                    // with a 2s backoff until accepted (max ~12s/key) instead of guessing a
+                    // fixed safe delay.
+                    bool ok = false;
+                    // 10 attempts × 2s ≈ 20s worst case: user log 2026-07-19 12:15 showed a
+                    // key exhausting the previous 6-attempt (12s) budget and being skipped.
+                    for (int attempt = 0; attempt < 10 && !ok; attempt++)
                     {
-                        LogEverestSafe($"[NDK] ndk.{profile}.{i} upload threw: {ex.Message}");
-                        break;
+                        if (attempt > 0) System.Threading.Thread.Sleep(2000);
+                        try { ok = UploadNdkImage(i, path, profile); }
+                        catch (Exception ex)
+                        {
+                            LogEverestSafe($"[NDK] ndk.{profile}.{i} upload threw: {ex.Message}");
+                            break;
+                        }
                     }
+                    if (!ok) LogEverestSafe($"[NDK] ndk.{profile}.{i} still rejected after retries — skipped");
+                    else okKeys.Add(i);
                 }
-                if (!ok) LogEverestSafe($"[NDK] ndk.{profile}.{i} still rejected after retries — skipped");
-                else okKeys.Add(i);
-            }
-            return okKeys;
-        });
+                return okKeys;
+            });
+        }
+        finally
+        {
+            NdkSetButtonsEnabled(true);
+            _ndkUploadBusy = false;
+            UpdateKeyboardLayout();
+            EvReArmColorStreamAfterFlashWrite();
+        }
         // Flash now holds a CUSTOM picture for these keys: clear their "flashOk"
         // marker (see EvResetEmptyNdkSlots) — store writes must stay on the UI thread.
         foreach (int i in uploadedKeys)
@@ -1614,10 +1966,40 @@ public partial class MainWindow
     /// <see cref="NdkApplyImage"/>). Must be called AFTER the device has landed on
     /// <see cref="EvCurrentProfile"/> — the native reset only acts on the active profile.
     /// </summary>
+    /// <summary>
+    /// Takes ownership of firmware profile slot <paramref name="slot"/>'s display-key
+    /// namespace on behalf of a profile that is about to be created or imported there:
+    /// drops every <c>ndk.{slot}.*</c> row from the store — image paths, actions and, most
+    /// importantly, the <c>flashOk</c>/<c>fwBind</c> caches that record what K2 believes
+    /// the keyboard's flash already holds for that slot.
+    ///
+    /// <para>The keyboard keeps each profile slot's 4 pictures (and their action bindings)
+    /// in flash forever — nothing about creating a new K2 profile erases them — so without
+    /// this the new profile inherits whatever the slot's previous occupant (an older K2
+    /// profile, or Base Camp) left on the physical keys. Clearing the markers is what makes
+    /// <see cref="EvResetEmptyNdkSlots(int, string?)"/> actually re-blank all 4 keys instead
+    /// of skipping them as "already known clean" (user report 2026-08-21: importing/creating
+    /// a second or third profile showed the old profile's icons on the display keys).</para>
+    ///
+    /// <para>Store-only: the hardware reset itself is left to the caller's
+    /// <see cref="EvResetEmptyNdkSlots(int, string?)"/> pass, which must run with the device
+    /// already landed on the slot.</para>
+    /// </summary>
+    private void EvClaimNdkSlot(int slot) => _evStore.DeleteSettingsWithPrefix($"ndk.{slot}.");
+
     private void EvResetEmptyNdkSlots(string? busyMessage = null)
+        => EvResetEmptyNdkSlots(EvCurrentProfile(), busyMessage);
+
+    /// <summary>Same as <see cref="EvResetEmptyNdkSlots(string?)"/> but on an explicit
+    /// firmware profile slot, which need NOT be the active one: the reset command
+    /// (<c>13 42</c>) carries one key-bitmask field PER profile, so it addresses any slot
+    /// (see EverestHidNative.ResetDisplayKeyPic). Its <c>14 20</c> framing packets are NOT
+    /// profile-addressed though, so callers that care about the firmware really applying
+    /// the reset should still land the device on <paramref name="profile"/> first — the
+    /// multi-profile Base Camp import does exactly that, one slot at a time.</summary>
+    private void EvResetEmptyNdkSlots(int profile, string? busyMessage)
     {
         if (!_everest.IsOpen) return;
-        int profile = EvCurrentProfile();
 
         var toReset = new System.Collections.Generic.List<int>(4);
         for (int i = 0; i < NdkCount; i++)
@@ -1640,18 +2022,51 @@ public partial class MainWindow
         // acked but the old pictures stayed on screen. So WAIT OUT the busy window inside
         // the overlay before resetting (user request 2026-07-19: after an import, keys
         // whose icon is empty must actually be cleared, not left showing stale pictures).
-        var done = RunHwBusy(busyMessage ?? Loc.Get("hw_busy_uploading_image"), () =>
+        // Same busy guard as NdkApplyImage/NdkClearDeviceImage — this IS a flash write, and
+        // without the flag the 3s accessory poll (UpdateKeyboardLayout) reads the firmware
+        // mid-write and used to collapse the numpad out of the UI. Retry each key like the
+        // upload path does: a single attempt is not reliable (see RetryNdkWrite).
+        NdkSetButtonsEnabled(false);
+        _ndkUploadBusy = true;
+        System.Collections.Generic.List<int> done;
+        try
         {
-            EvSleepUntilNdkFlashCalm();
-            var okKeys = new System.Collections.Generic.List<int>(toReset.Count);
-            foreach (int i in toReset)
-                if (_everest.ClearNumpadImage(i, (byte)profile)) okKeys.Add(i);
-            return okKeys;
-        });
+            done = RunHwBusy(busyMessage ?? Loc.Get("hw_busy_uploading_image"), () =>
+            {
+                // A profile switch reapplies the lighting, which schedules a debounced
+                // SaveFlash ~500ms later — right on top of this sequence, leaving the
+                // keyboard mute and every command timing out (user report 2026-08-21).
+                _everest.FlushSaveFlash();
+                EvSleepUntilNdkFlashCalm();
+                var okKeys = new System.Collections.Generic.List<int>(toReset.Count);
+                foreach (int i in toReset)
+                    if (RetryNdkWrite(() => _everest.ClearNumpadImage(i, (byte)profile), maxAttempts: 3))
+                        okKeys.Add(i);
+                return okKeys;
+            });
+        }
+        finally
+        {
+            NdkSetButtonsEnabled(true);
+            _ndkUploadBusy = false;
+            UpdateKeyboardLayout();
+            EvReArmColorStreamAfterFlashWrite();
+        }
         foreach (int i in done)
+        {
             _evStore.SetSetting($"ndk.{profile}.{i}.flashOk", "1");
+            // The reset's 14 20 FF framing also puts the key back in DEFAULT mode, wiping
+            // any firmware action binding (same reason NdkClearDeviceImage does this):
+            // forget what we last wrote so EvSyncNdkBindingsToFw, which runs right after
+            // every caller of this method, re-writes the binding of a key that has an
+            // action but no icon.
+            _evStore.SetSetting($"ndk.{profile}.{i}.fwBind", "");
+        }
         if (done.Count > 0)
             LogEverest($"[NDK] profile {profile}: {done.Count} empty display key(s) restored to default artwork");
+        if (done.Count < toReset.Count)
+            LogEverest($"[NDK] profile {profile}: {toReset.Count - done.Count} display key(s) FAILED to reset " +
+                       "— the keyboard rejected/ignored the sequence (firmware busy?)");
     }
 
     /// <summary>Blocks until the firmware's post-picture-upload busy window (~15s from the
@@ -1678,10 +2093,15 @@ public partial class MainWindow
     /// working by the user's remove-action test). Must run AFTER the device has landed on
     /// <see cref="EvCurrentProfile"/>.
     /// </summary>
-    private void EvSyncNdkBindingsToFw()
+    private void EvSyncNdkBindingsToFw() => EvSyncNdkBindingsToFw(EvCurrentProfile());
+
+    /// <summary>Same as <see cref="EvSyncNdkBindingsToFw()"/> for an explicit profile slot.
+    /// Unlike the picture upload/reset, the binding write (<c>17 ...</c>) is NOT
+    /// profile-addressed — it always lands on the ACTIVE firmware profile — so the caller
+    /// MUST have switched the device to <paramref name="profile"/> first.</summary>
+    private void EvSyncNdkBindingsToFw(int profile)
     {
         if (!_everest.IsOpen) return;
-        int profile = EvCurrentProfile();
 
         var toWrite = new System.Collections.Generic.List<(int Key, string Type, string Value, string Marker)>();
         for (int i = 0; i < NdkCount; i++)
@@ -1695,14 +2115,28 @@ public partial class MainWindow
         }
         if (toWrite.Count == 0) return;
 
-        var done = RunHwBusy(Loc.Get("hw_busy_uploading_image"), () =>
+        NdkSetButtonsEnabled(false);
+        _ndkUploadBusy = true;
+        System.Collections.Generic.List<(int Key, string Marker)> done;
+        try
         {
-            EvSleepUntilNdkFlashCalm();   // small writes are dropped in the busy window too
-            var ok = new System.Collections.Generic.List<(int Key, string Marker)>(toWrite.Count);
-            foreach (var (k, at, av, marker) in toWrite)
-                if (_everest.WriteNumpadBinding(k, at, av)) ok.Add((k, marker));
-            return ok;
-        });
+            done = RunHwBusy(Loc.Get("hw_busy_uploading_image"), () =>
+            {
+                _everest.FlushSaveFlash();    // see EvResetEmptyNdkSlots
+                EvSleepUntilNdkFlashCalm();   // small writes are dropped in the busy window too
+                var ok = new System.Collections.Generic.List<(int Key, string Marker)>(toWrite.Count);
+                foreach (var (k, at, av, marker) in toWrite)
+                    if (RetryNdkWrite(() => _everest.WriteNumpadBinding(k, at, av), maxAttempts: 3))
+                        ok.Add((k, marker));
+                return ok;
+            });
+        }
+        finally
+        {
+            NdkSetButtonsEnabled(true);
+            _ndkUploadBusy = false;
+            UpdateKeyboardLayout();
+        }
         foreach (var (k, marker) in done)
             _evStore.SetSetting($"ndk.{profile}.{k}.fwBind", marker);
         if (done.Count > 0)
@@ -1720,6 +2154,15 @@ public partial class MainWindow
             // Create empty profile (see EverestStore.MarkProfileExists for why this
             // doesn't use a placeholder Keys row like MacroPad/DisplayPad do).
             _evStore.MarkProfileExists(slot);
+            // Take over the slot's display-key namespace from scratch: the keyboard's
+            // flash keeps each profile slot's last-written pictures forever, so a brand
+            // new K2 profile can land on a firmware slot still full of icons from Base
+            // Camp or an earlier K2 profile. Dropping the ndk.{slot}.* rows (in
+            // particular the "flashOk"/"fwBind" markers, which may have survived a slot
+            // that lost its profile rows without going through ClearProfile) makes the
+            // EvResetEmptyNdkSlots call inside EvActivateProfileSlot below actually
+            // re-blank all 4 keys instead of trusting a stale marker.
+            EvClaimNdkSlot(slot);
             LogEverest($"[UI ] New empty Everest profile created: slot {slot}");
             EvRefreshProfiles();
             EvSelectProfileSlot(slot);
@@ -1740,13 +2183,22 @@ public partial class MainWindow
     /// Shared by LstEvProfile_SelectionChanged and BtnEvDeleteProfile_Click (which must
     /// re-activate a SURVIVING slot — see its comment).
     /// </summary>
-    private void EvActivateProfileSlot(int slot)
+    /// <param name="applyRgb">False skips re-pushing the RGB effect to the device — used by
+    /// <see cref="BtnEvRestoreDefaults_Click"/> (user request 2026-08-22: wiping profiles
+    /// shouldn't also force-relight the keyboard), true (default) for every normal
+    /// switch/delete.</param>
+    private void EvActivateProfileSlot(int slot, bool applyRgb = true)
     {
         _evStore.SetCurrentProfile(slot);
         if (_everest.IsOpen) _everest.SwitchProfile(slot);
-        ReloadEverestProfile();
+        ReloadEverestProfile(applyRgb);
         EvResetEmptyNdkSlots();
         EvSyncNdkBindingsToFw();
+        // Closes the gap where a flash write here (NDK reset) or the RGB reapply's own
+        // debounced SaveFlash leaves color streaming off and the on-screen LED preview
+        // stuck — same symptom/fix as EvReArmColorStreamAfterFlashWrite's other call sites
+        // (icon upload). Best-effort: not reproduced/verified against real hardware.
+        EvReArmColorStreamAfterFlashWrite();
     }
 
     // ============================================================
@@ -1961,6 +2413,18 @@ public partial class MainWindow
             key.IsHighlighted = e.Pressed;
             if (e.Pressed) ExecuteEverestKeyDeduped(key);
         }
+
+        if (!e.Pressed)
+            // Catch-up, same fix as Ev60's HandleEv60KeyByLed (MainWindow.Everest60.cs):
+            // EvHighlightKeyboardButton's release branch writes a plain
+            // ResolveEverestKeycapTextColor() legend unconditionally, ignoring the
+            // "Translucent legends" setting and the key's live LED tint. Normally the
+            // next LED-poll tick (OnEverestColorsUpdated) repaints the correct color
+            // within ~120ms, but that poll only runs while the RGB & Lighting section
+            // is active — outside it (or if this key's tick races the release write)
+            // the wrong plain color is left stuck forever (user report 2026-08-17:
+            // translucent legends turn white and stay white after a press).
+            ApplyKeycapAppearanceToAllKeys();
     }
 
     /// <summary>Last (matrixId, moment) actually executed, for
@@ -1993,7 +2457,9 @@ public partial class MainWindow
     private void ExecuteEverestKey(EverestKey k) =>
         _evEngine?.Execute(k.ActionType, k.ActionValue, _evKeys.IndexOf(k));
 
-    private void ReloadEverestProfile()
+    /// <param name="applyRgb">Threaded through to <see cref="ReloadEverestRgbForProfileSwitch"/> —
+    /// false skips pushing the RGB effect to the device (see <see cref="EvActivateProfileSlot"/>).</param>
+    private void ReloadEverestProfile(bool applyRgb = true)
     {
         _evKeys.Clear();
         _evByMatrix.Clear();
@@ -2021,7 +2487,7 @@ public partial class MainWindow
         // undoing) — see PushEvDisabledKeysToDevice.
         PushEvDisabledKeysToDevice();
 
-        ReloadEverestRgbForProfileSwitch();
+        ReloadEverestRgbForProfileSwitch(applyRgb);
         ReloadEverestSettingsForProfileSwitch();
         ReloadEverestDialForProfileSwitch();
     }
@@ -2034,7 +2500,11 @@ public partial class MainWindow
     /// (no-op in practice when synced: same shared keys, same values). Mirrors
     /// Everest 60/Makalu's ReloadProfile. User request 2026-07-22.
     /// </summary>
-    private void ReloadEverestRgbForProfileSwitch()
+    /// <param name="applyToDevice">False loads the panel/state as usual but skips the final
+    /// <see cref="ApplyCurrentEffect"/> push — used when reactivating a profile shouldn't
+    /// also relight the keyboard (see <see cref="EvActivateProfileSlot"/>). User request
+    /// 2026-08-22.</param>
+    private void ReloadEverestRgbForProfileSwitch(bool applyToDevice = true)
     {
         if (!_evRgbInitialized) return;
         bool prev = _evRgbSuppress;
@@ -2056,7 +2526,7 @@ public partial class MainWindow
             ApplyColorButton(BtnEvColor3, _evColor3);
         }
         finally { _evRgbSuppress = prev; }
-        ApplyCurrentEffect();
+        if (applyToDevice) ApplyCurrentEffect();
     }
 
     /// <summary>
@@ -2122,7 +2592,17 @@ public partial class MainWindow
         try
         {
             var existing = _evStore.GetExistingProfiles();
-            if (existing.Count == 0) existing.Add(1);
+            if (existing.Count == 0)
+            {
+            // No profile at all — fresh install, hardware factory reset or the Settings
+            // tab's "Restore all defaults": recreate one instead of only showing a
+            // phantom slot 1 under the generic "Profile 1" label. Named "Default
+            // profile" (localized, `default_profile_name`), the same name Base Camp
+            // gives its own starting profile. User request 2026-08-21.
+                _evStore.SetProfileName(1, Loc.Get("default_profile_name"));
+                _evStore.MarkProfileExists(1);
+                existing.Add(1);
+            }
             var items = new List<EvProfileItem>();
             foreach (var slot in existing)
             {
@@ -2315,12 +2795,24 @@ public partial class MainWindow
         EvSelectProfileSlot(pi.Slot);
     }
 
-    /// <summary>Wipes EVERY Everest Max profile back to K2's defaults: other profiles are
-    /// deleted outright (mirrors BtnEvDeleteProfile_Click), the current one keeps its
-    /// name but has its key bindings cleared and its RGB lighting reset to the factory
-    /// values (<see cref="EvResetRgbToDefaults"/>) — RGB became per-profile 2026-07-22
-    /// (see EvRgbPrefix), so "restore defaults" needs to touch it too, unlike when this
-    /// button was last documented as lighting being device-wide. User request 2026-07-29.</summary>
+    /// <summary>Wipes K2's ENTIRE saved configuration for the Everest Max — every profile,
+    /// key binding, lighting preset, custom-lighting board, Display Dial page and keycap
+    /// override — and starts over from a single fresh "Default profile" on K2's defaults.
+    ///
+    /// Until 2026-08-21 this kept the current profile alive (name and identity, content
+    /// cleared) and only deleted the others, which the confirmation text ("Every saved
+    /// profile, key binding and lighting setting will be erased") never promised and users
+    /// read as a bug: the old profile stayed in the list under its old name. User request
+    /// 2026-08-21: "anche quello deve ripulire tutto". The one profile that remains
+    /// afterwards is a NEW empty one — K2 always needs a current profile, so
+    /// <see cref="EvRefreshProfiles"/> recreates slot 1 when the list comes back empty.
+    ///
+    /// Still a K2-side reset: the keyboard's own flash is not wiped (that's the Settings
+    /// section's factory reset, <see cref="BtnSettingsFactoryReset_Click"/>). What DOES
+    /// reach the device here is what any profile switch pushes — the fresh default
+    /// lighting/settings — plus the display-key artwork of EVERY firmware profile slot
+    /// going back to factory via <see cref="EvResetAllNdkSlotsToFactory"/>, now that no
+    /// key has an icon left in the store.</summary>
     private void BtnEvRestoreDefaults_Click(object sender, RoutedEventArgs e)
     {
         var res = MessageBox.Show(
@@ -2330,38 +2822,47 @@ public partial class MainWindow
             MessageBoxImage.Warning);
         if (res != MessageBoxResult.OK) return;
 
-        int current = EvCurrentProfile();
-        foreach (var slot in _evStore.GetExistingProfiles())
-            if (slot != current) _evStore.ClearProfile(slot);
+        var wiped = _evStore.ResetAllData();
+        LogEverest($"[UI ] Everest restored to defaults: K2 store wiped " +
+                   $"(keys={wiped.Keys} settings={wiped.Settings} keycaps={wiped.KeycapOverrides})");
 
-        _evStore.ResetProfileToDefaults(current);
-        EvResetRgbToDefaults();
-        LogEverest($"[UI ] Everest restored to factory defaults (all profiles, lighting and key bindings).");
+        // Recreates slot 1 as a brand-new "Default profile" (the list is empty now) and
+        // restores factory display-key art on every firmware slot, but does NOT force/push
+        // an RGB effect (user request 2026-08-22: "Restore defaults" should only delete
+        // profiles and empty the display-key slots — the keyboard keeps whatever lighting
+        // it already had until the user picks something).
         EvRefreshProfiles();
-        EvSelectProfileSlot(current);
-        ReloadEverestProfile();
+        EvSelectProfileSlot(1);
+        EvResetAllNdkSlotsToFactory();
+        EvActivateProfileSlot(1, applyRgb: false);
     }
 
-    /// <summary>Sets the RGB panel back to the same factory defaults <see cref="InitEverestRgbPanel"/>
-    /// seeds a brand-new install with (Wave, K2 teal, 50% speed, 100% brightness, single
-    /// color) and saves them under the current profile's namespace — <see cref="ReloadEverestProfile"/>
-    /// (called right after by the caller) then reads them back and pushes them to the
-    /// keyboard, same path as any normal effect change.</summary>
-    private void EvResetRgbToDefaults()
+    /// <summary>Restores the factory display-key artwork on ALL firmware profile slots,
+    /// not just the active one — the hardware half of "restore defaults".
+    ///
+    /// <para>The keyboard keeps each profile slot's 4 pictures in flash forever and
+    /// nothing on the K2 side erases them, so wiping the store alone left slots 2..5
+    /// holding the previous profiles' icons. The next profile created or imported lands
+    /// in the first FREE slot (2, right after a reset) and the keyboard switches to it
+    /// long before the new artwork is written, showing the old occupant's icons for the
+    /// whole load — user report 2026-08-22.</para>
+    ///
+    /// <para>Each slot needs the device landed on it first: the reset's <c>14 20</c>
+    /// framing packets are not profile-addressed (see
+    /// <see cref="EvResetEmptyNdkSlots(int, string?)"/>), hence the SwitchProfile per
+    /// pass — same shape as the multi-profile Base Camp import loop. The caller lands the
+    /// device back on the profile it wants active (EvActivateProfileSlot switches again).
+    /// Skipped entirely when the numpad isn't attached: no display keys, and every reset
+    /// would just burn its retries against a missing accessory.</para></summary>
+    private void EvResetAllNdkSlotsToFactory()
     {
-        bool prev = _evRgbSuppress;
-        _evRgbSuppress = true;
-        try
+        if (!_everest.IsOpen || !_evNumpadConnected) return;
+        string busy = Loc.Get("hw_busy_restoring_defaults");
+        for (int slot = 1; slot <= EverestService.ProfileCount; slot++)
         {
-            CbEvEffect.SelectedIndex = 2; // Wave
-            SldEvSpeed.Value         = 50;
-            SldEvBrightness.Value    = 100;
-            _evDirIndex              = 0;
-            RbEvColorSingle.IsChecked = true;
-            _evColor1 = 0x900000; _evColor2 = 0; _evColor3 = 0;
+            _everest.SwitchProfile(slot);
+            EvResetEmptyNdkSlots(slot, busy);
         }
-        finally { _evRgbSuppress = prev; }
-        SaveEverestRgbToStore();
     }
 
     private int EvSdkVersion()
@@ -2725,9 +3226,26 @@ public partial class MainWindow
 
         // Rainbow/Double/Single are one mutually-exclusive radio group — Rainbow
         // wins if both were somehow persisted true (shouldn't happen going forward).
-        if ((I(p + "rainbow") ?? I(gp + "rainbow") ?? 0) != 0) RbEvRainbow.IsChecked = true;
-        else if ((I(p + "colorDouble") ?? I(gp + "colorDouble") ?? 0) != 0) RbEvColorDouble.IsChecked = true;
-        else RbEvColorSingle.IsChecked = true;
+        //
+        // All THREE are set explicitly (not just the selected one left to WPF's
+        // GroupName auto-exclusion): this panel (PnlSecRgb) stays Collapsed until
+        // the user first opens "RGB & Lighting", and a RadioButton's GroupName
+        // mutual exclusion isn't reliably enforced for a control still outside the
+        // live visual tree — only setting the winner true can leave a STALE true
+        // on one of the other two (e.g. from InitEverestRgbPanel's default
+        // RbEvColorSingle.IsChecked=true, or a previous effect's loaded state).
+        // WPF then reconciles the group for real the moment the panel is finally
+        // realized (first click into the section), silently flipping the checked
+        // radio to whichever stale one — re-firing its Checked handler and
+        // re-sending the effect with the WRONG color mode. Root-caused 2026-08-18
+        // via a temporary caller-trace log: the spurious re-apply's stack trace was
+        // a genuine RbSecRgb mouse click, always the first one after launch — see
+        // CHANGELOG.md.
+        bool rainbow = (I(p + "rainbow") ?? I(gp + "rainbow") ?? 0) != 0;
+        bool colorDouble = !rainbow && (I(p + "colorDouble") ?? I(gp + "colorDouble") ?? 0) != 0;
+        RbEvRainbow.IsChecked     = rainbow;
+        RbEvColorDouble.IsChecked = colorDouble;
+        RbEvColorSingle.IsChecked = !rainbow && !colorDouble;
 
         _evColor1 = (I(p + "color1") ?? I(gp + "color1") ?? _evColor1) & 0xFFFFFF;
         _evColor2 = (I(p + "color2") ?? I(gp + "color2") ?? _evColor2) & 0xFFFFFF;
@@ -2927,7 +3445,6 @@ public partial class MainWindow
         {
             CkGameMode_Click(sender, e);
             CkCoreIndicatorLed_Click(sender, e);
-            SaveKeycapAppearanceToStore();
         }
         if (!_dialLoading) SaveDialSettings();
         if (!_everest.IsOpen)

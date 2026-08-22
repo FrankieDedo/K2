@@ -75,12 +75,11 @@ public partial class NdkKeyConfigDialog : Window
         };
         if (dlg.ShowDialog(this) != true) return;
 
-        string picked = dlg.FileName;
-        string? cropped = ImageCropDialog.Show(this, picked, IconSize, IconSize,
+        string? cropped = ImageCropDialog.Show(this, dlg.FileName, IconSize, IconSize,
             Loc.Get("crop_title", IconSize, IconSize), bakeRoundedCorners: true);
-        if (cropped is not null) picked = cropped;
+        if (cropped is null) return;
 
-        _pendingPath = picked;
+        _pendingPath = cropped;
         RefreshImagePreview();
     }
 
@@ -185,6 +184,7 @@ public partial class NdkKeyConfigDialog : Window
             "exec"       => IconImageGenerator.TryGenerateExecIcon(ActionValue!, IconSize, dest),
             "folder"     => IconImageGenerator.TryGenerateDiskFolderIcon(ActionValue!, IconSize, dest),
             "googlehome" => GoogleHomeIconCatalog.TryGenerateKeyIcon(ActionValue!, IconSize, dest),
+            "emoji"      => EmojiGlyphRenderer.TryGenerateEmojiIcon(ActionValue!, IconSize, dest),
             _            => IconGalleryDefaults.TryGenerateKeyIcon(ActionType!, ActionValue!, IconSize, dest),
         };
         if (!ok) return;
@@ -226,6 +226,7 @@ public partial class NdkKeyConfigDialog : Window
             "media"    => $"Media: {ActionTypeHelper.MediaSummary(val)}",
             "mouse"    => $"Mouse: {val}",
             "text"     => $"Text: {val}",
+            "emoji"    => ActionTypeHelper.EmojiSummary(val),
             "command"  => $"Command: {val}",
             "macro"    => ActionTypeHelper.MacroSummary(val),
             "googlehome" => ActionTypeHelper.GoogleHomeSummary(val),

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using K2.App.Models;
 using K2.Core;
 using Microsoft.Data.Sqlite;
 
@@ -546,7 +547,7 @@ public sealed class BaseCampDbImporter
     /// <see cref="ApplyLightingToStore"/>).</summary>
     public sealed record BcLightingRow(
         byte EffectByte, int Speed, int Brightness, int RawDirection,
-        int Color1, int Color2, int Color3, bool IsActive);
+        int Color1, int Color2, int Color3, bool IsActive, int ColorType = 0);
 
     /// <summary>Resolves a lighting effect to its firmware byte from either the DB's
     /// numeric EffIndex (<paramref name="numeric"/>) or the XML's string EffIndex
@@ -564,6 +565,9 @@ public sealed class BaseCampDbImporter
             "reactiveb"                           => (byte)EverestSdkNative.EffectIndex.ReactiveB,
             "reactivec"                           => (byte)EverestSdkNative.EffectIndex.ReactiveC,
             "matrix"                              => (byte)EverestSdkNative.EffectIndex.Matrix,
+            // K2-only dropdown entry (Matrix with randColor=16), byte 200 — written by
+            // K2-format exports only, see KeyboardLightingXml.s_k2OnlyEffects.
+            "matrix2" or "matrix 2"               => 200,
             "custom"                              => (byte)EverestSdkNative.EffectIndex.Custom,
             "yeti" or "yeti mode" or "yetimode"   => (byte)EverestSdkNative.EffectIndex.Yeti,
             "off"                                 => (byte)EverestSdkNative.EffectIndex.Off,
@@ -869,7 +873,7 @@ public sealed class BaseCampDbImporter
         using var conn = OpenReadOnly(dbPath);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            SELECT EffIndex, Speed, Brightness, Direction, Color1, Color2, Color3, IsActive
+            SELECT EffIndex, Speed, Brightness, Direction, Color1, Color2, Color3, IsActive, Type
             FROM KeyboardLightings WHERE ProfileId = $pid";
         cmd.Parameters.AddWithValue("$pid", profileId);
 
@@ -886,7 +890,8 @@ public sealed class BaseCampDbImporter
                 ParseBcColor(r.IsDBNull(4) ? null : r.GetString(4), 0x900000),
                 ParseBcColor(r.IsDBNull(5) ? null : r.GetString(5), 0x000000),
                 ParseBcColor(r.IsDBNull(6) ? null : r.GetString(6), 0x000000),
-                !r.IsDBNull(7) && r.GetInt32(7) != 0));
+                !r.IsDBNull(7) && r.GetInt32(7) != 0,
+                r.IsDBNull(8) ? 0 : r.GetInt32(8)));
         }
         return result;
     }
@@ -894,13 +899,22 @@ public sealed class BaseCampDbImporter
     /// <summary>Writes lighting rows into a device store's per-effect Settings keys
     /// under <paramref name="prefix"/> (e.g. <c>"rgb.p3."</c> or <c>"macroled.p3."</c>)
     /// — same schema MainWindow's RGB/MacroLed panels read via their own
-    /// LoadEffectParamsIntoControls/LoadMacroLedFromStore. Rainbow/colorDouble are
-    /// deliberately left at the panel's own default (single color): Base Camp's
-    /// "Type" column doesn't reliably distinguish them (see BcLightingRow's absence
-    /// of a Type field) and guessing wrong would be worse than the existing default,
-    /// same call already made for Everest 60 (Ev60LightingRecord.Rainbow always
-    /// false on import). Sets <c>{prefix}effect</c> to whichever row had IsActive,
-    /// if any.</summary>
+    /// LoadEffectParamsIntoControls/LoadMacroLedFromStore. Sets <c>{prefix}effect</c>
+    /// to whichever row had IsActive, if any.
+    ///
+    /// CORRECTED 2026-08-21 (user report: a profile saved with Tornado + rainbow came
+    /// back as Tornado single-color): Rainbow/colorDouble used to be left at the
+    /// panel's own default because Base Camp's <c>Type</c> column was believed not to
+    /// distinguish them. It does — <c>Type</c> IS the color-type pill the Everest
+    /// lighting page posts, confirmed by decompiling BaseCamp.UI.dll's own
+    /// <c>SaveEverestLightingEffect</c> (<c>data.set('Type', $('.color-type a.active')
+    /// .data("id"))</c>) and the markup those anchors live in: <c>data-id="0"</c> wraps
+    /// the single-color picker <c>#dc_single</c>, <c>data-id="1"</c> the dual pair
+    /// <c>#dc_dual1</c>/<c>#dc_dual2</c>, <c>data-id="2"</c> carries no picker at all
+    /// (rainbow). Matching the shipped per-effect defaults exactly: Static/Custom/Off
+    /// Type=0, Reactive/Matrix/Yeti Type=1, Color Wave/Tornado/Breathing Type=2.
+    /// An effect that doesn't support the imported mode is harmless — the panels'
+    /// capability pass (UpdateEvCapabilities / the MacroPad twin) unchecks it.</summary>
     public static void ApplyLightingToStore(Action<string, string> setSetting, string prefix, IEnumerable<BcLightingRow> rows)
     {
         byte? active = null;
@@ -913,6 +927,9 @@ public sealed class BaseCampDbImporter
             setSetting(p + "color1", row.Color1.ToString());
             setSetting(p + "color2", row.Color2.ToString());
             setSetting(p + "color3", row.Color3.ToString());
+            // Type: 0 = single, 1 = dual, 2 = rainbow (see doc comment).
+            setSetting(p + "rainbow",     row.ColorType == 2 ? "1" : "0");
+            setSetting(p + "colorDouble", row.ColorType == 1 ? "1" : "0");
             if (row.IsActive) active = row.EffectByte;
         }
         if (active is byte a) setSetting(prefix + "effect", ((int)a).ToString());
@@ -937,7 +954,8 @@ public sealed class BaseCampDbImporter
     /// exactly one global row, no ProfileId column).</summary>
     public sealed record BcKeyboardSettings(
         int GameModeBitmask, bool IndicatorLed,
-        bool DialTurnOffEnable, int DialTurnOffSeconds, int DialClockType);
+        bool DialTurnOffEnable, int DialTurnOffSeconds, int DialClockType,
+        string? KeyboardLayout);
 
     internal static int TurnOffSecondsFromTimeSpanText(string? hms) =>
         !string.IsNullOrWhiteSpace(hms) && TimeSpan.TryParse(hms, out var ts) ? (int)ts.TotalSeconds : 0;
@@ -952,7 +970,7 @@ public sealed class BaseCampDbImporter
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             SELECT DisableShift, DisableAltF4, DisableWin, DisableAltTab, EnableCoreLED,
-                   IsTurnOffAfter, TurnOffAfter, ClockType
+                   IsTurnOffAfter, TurnOffAfter, ClockType, KeyboardLayout, IsLayoutConfigured
             FROM KeyboardSettings WHERE ProfileId = $pid";
         cmd.Parameters.AddWithValue("$pid", profileId);
 
@@ -967,8 +985,14 @@ public sealed class BaseCampDbImporter
         bool turnOffEnable = !r.IsDBNull(5) && r.GetInt32(5) != 0;
         int turnOffSeconds = TurnOffSecondsFromTimeSpanText(r.IsDBNull(6) ? null : r.GetString(6));
         int clockType = r.IsDBNull(7) ? 0 : r.GetInt32(7);
+        // Only a layout the user actually picked is worth importing: BC writes a
+        // locale-guessed default into KeyboardLayout with IsLayoutConfigured = 0, and
+        // K2 does its own guessing (EverestKeyboardLayout.DetectLayout) when nothing
+        // is stored, so importing an unconfirmed guess would just freeze BC's guess in
+        // place. Values are BC's own vocabulary — see EverestKeyboardLayout.ParseStorageString.
+        string? layout = !r.IsDBNull(8) && !r.IsDBNull(9) && r.GetInt32(9) != 0 ? r.GetString(8) : null;
 
-        return new BcKeyboardSettings(mode, led, turnOffEnable, turnOffSeconds, clockType);
+        return new BcKeyboardSettings(mode, led, turnOffEnable, turnOffSeconds, clockType, layout);
     }
 
     // =========================================================
@@ -1191,6 +1215,15 @@ public sealed class BaseCampDbImporter
             store.SetSetting(dp + "turnOffEnable", settings.DialTurnOffEnable ? "1" : "0");
             store.SetSetting(dp + "turnOff", settings.DialTurnOffSeconds.ToString());
             store.SetSetting(dp + "clockType", settings.DialClockType.ToString());
+
+            // Keycap legends. BC keys this per profile; K2 keeps ONE value per device
+            // (the physical keycaps do not change when you switch profile — see
+            // MainWindow.Everest.cs's LoadPersistedKeyboardLayout), so importing several
+            // profiles leaves the last configured one in place, which is also the only
+            // sane merge when they disagree.
+            if (EverestKeyboardLayout.ParseStorageString(settings.KeyboardLayout) is { } lay)
+                store.SetSetting(EverestKeyboardLayout.LayoutSettingKey,
+                                 EverestKeyboardLayout.ToStorageString(lay));
         }
 
         return (regular, touch);
@@ -1857,7 +1890,7 @@ public sealed class BaseCampDbImporter
 
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            SELECT EffIndex, Speed, Brightness, Direction, Color1, Color2
+            SELECT EffIndex, Speed, Brightness, Direction, Color1, Color2, Type
             FROM Everest60Lightings WHERE ProfileId = $pid ORDER BY IsActive DESC";
         cmd.Parameters.AddWithValue("$pid", profileId);
 
@@ -1870,6 +1903,9 @@ public sealed class BaseCampDbImporter
         int rawDirection = r.IsDBNull(3) ? 0 : r.GetInt32(3);
         int color1 = ParseBcColor(r.IsDBNull(4) ? null : r.GetString(4), 0x900000);
         int color2 = ParseBcColor(r.IsDBNull(5) ? null : r.GetString(5), 0x000000);
+        // Type = color-type pill (0 single / 1 dual / 2 rainbow), same column and same
+        // meaning as the shared KeyboardLightings one — see ApplyLightingToStore.
+        int colorType = r.IsDBNull(6) ? 0 : r.GetInt32(6);
 
         var eff = effIndex switch
         {
@@ -1901,9 +1937,9 @@ public sealed class BaseCampDbImporter
         var custom = ParseEverest60Custom(customJson);
 
         return new Ev60LightingRecord(
-            (int)eff, color1, color2, speedPct, dirIndex, Rainbow: false,
+            (int)eff, color1, color2, speedPct, dirIndex, Rainbow: colorType == 2,
             brightness, CustomBrightness: brightness, activeMode, custom.KeyColors,
-            ColorDouble: false, custom.SideColors, custom.NumpadRingColors);
+            ColorDouble: colorType == 1, custom.SideColors, custom.NumpadRingColors);
     }
 
     /// <summary>Reads the Everest60Settings row for a profile — a dedicated table
@@ -1911,12 +1947,14 @@ public sealed class BaseCampDbImporter
     /// Everest Max/MacroPad use, but the same DisableShift/AltF4/Win/AltTab/
     /// EnableCoreLED columns (no Display Dial fields at all — Everest 60 has no
     /// dial). Same Game Mode bit layout as <see cref="ReadKeyboardSettings"/>.</summary>
-    public static (int GameModeBitmask, bool IndicatorLed)? ReadEverest60Settings(string dbPath, int profileId)
+    public static (int GameModeBitmask, bool IndicatorLed, string? KeyboardLayout)? ReadEverest60Settings(
+        string dbPath, int profileId)
     {
         using var conn = OpenReadOnly(dbPath);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            SELECT DisableShift, DisableAltF4, DisableWin, DisableAltTab, EnableCoreLED
+            SELECT DisableShift, DisableAltF4, DisableWin, DisableAltTab, EnableCoreLED,
+                   KeyboardLayout, IsLayoutConfigured
             FROM Everest60Settings WHERE ProfileId = $pid";
         cmd.Parameters.AddWithValue("$pid", profileId);
 
@@ -1928,7 +1966,9 @@ public sealed class BaseCampDbImporter
                  | (!r.IsDBNull(2) && r.GetInt32(2) != 0 ? 0x4 : 0)
                  | (!r.IsDBNull(3) && r.GetInt32(3) != 0 ? 0x8 : 0);
         bool led = !r.IsDBNull(4) && r.GetInt32(4) != 0;
-        return (mode, led);
+        // Same IsLayoutConfigured gate as ReadKeyboardSettings above.
+        string? layout = !r.IsDBNull(5) && !r.IsDBNull(6) && r.GetInt32(6) != 0 ? r.GetString(5) : null;
+        return (mode, led, layout);
     }
 
     /// <summary>Imports an Everest 60 profile: lighting (high confidence) +
@@ -1953,6 +1993,12 @@ public sealed class BaseCampDbImporter
             string sp = $"settings.p{slot}.";
             store.SetSetting(sp + "game_mode", settings.Value.GameModeBitmask.ToString());
             store.SetSetting(sp + "indicator_led", settings.Value.IndicatorLed ? "1" : "0");
+
+            // Device-level keycap legends — see the Everest Max import for why this one
+            // setting is not per-slot.
+            if (EverestKeyboardLayout.ParseStorageString(settings.Value.KeyboardLayout) is { } lay)
+                store.SetSetting(EverestKeyboardLayout.LayoutSettingKey,
+                                 EverestKeyboardLayout.ToStorageString(lay));
         }
 
         int imported = 0;

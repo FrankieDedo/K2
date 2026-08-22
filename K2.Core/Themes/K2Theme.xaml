@@ -1106,6 +1106,16 @@
                                  does the rest. -->
                             <Setter Property="Padding" Value="0"/>
                         </Trigger>
+                        <!-- Home selected: white instead of the shared accent red, so the
+                             logo (red-on-white) stays legible instead of blending into the
+                             accent-colored tile background. -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="Tag" Value="home"/>
+                                <Condition Property="IsSelected" Value="True"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="bd" Property="Background" Value="White"/>
+                        </MultiTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -1182,7 +1192,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                <StackPanel x:Name="TitleBarBrand" Grid.Column="0" Orientation="Horizontal"
                                             Margin="11,0,0,0" VerticalAlignment="Center">
                                     <Image Source="{TemplateBinding Icon}"
                                            Width="22" Height="22" RenderOptions.BitmapScalingMode="HighQuality"/>
@@ -1217,6 +1227,12 @@
                         </Trigger>
                         <Trigger Property="ResizeMode" Value="CanMinimize">
                             <Setter TargetName="MaxButton" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                        <!-- MainWindow sets Tag="hide-titlebar-brand" to drop the icon+title
+                             from its own title bar without affecting the other windows
+                             (dialogs, DisplayPad) that share this same style. -->
+                        <Trigger Property="Tag" Value="hide-titlebar-brand">
+                            <Setter TargetName="TitleBarBrand" Property="Visibility" Value="Collapsed"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

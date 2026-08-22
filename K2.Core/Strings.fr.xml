@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   Localisation française pour K2.
   Copier dans le même dossier que l'exe sous le nom Strings.fr.xml.
@@ -59,6 +59,7 @@
   <string name="reset">Réinitialiser</string>
   <string name="new_profile">+ Nouveau profil</string>
   <string name="profile_n">Profil {0}</string>
+  <string name="default_profile_name">Profil par défaut</string>
   <string name="select_device_first">Sélectionnez d'abord un appareil.</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -371,6 +372,7 @@
   <string name="hw_busy_uploading_image">Téléversement de l'image vers l'appareil, veuillez patienter…</string>
   <string name="hw_busy_importing_profile">Importation du profil en cours, veuillez patienter…</string>
   <string name="hw_busy_importing_profiles">Importation des profils en cours, veuillez patienter…</string>
+  <string name="hw_busy_restoring_defaults">Restauration des valeurs par défaut, veuillez patienter…</string>
   <string name="ev_crash_recovering">Le pilote a planté — tentative de récupération automatique dans 3 s…</string>
   <string name="ev_crash_recovered">Pilote récupéré — aperçu LED redémarré.</string>
   <string name="ev_crash_recovery_failed">Échec de la récupération du pilote — veuillez redémarrer K2.App.</string>

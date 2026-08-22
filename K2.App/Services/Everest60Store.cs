@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -30,6 +30,20 @@ public sealed class Everest60Store : IDisposable
         _conn = new SqliteConnection($"Data Source={dbPath};Cache=Shared");
         _conn.Open();
         EnsureSchema();
+        PurgeEmptyProfileSettings();
+    }
+
+    /// <summary>One-time tidy-up (2026-08-21): before profile deletion started really
+    /// deleting its rows (see the ClearProfile/DeleteProfile change of the same date), a
+    /// deleted profile left its <c>profile.*</c> keys behind as empty strings — an empty
+    /// value already means "not set" everywhere they are read, so the rows were pure
+    /// clutter that made a wiped store look like it still had profiles in it. Drops them
+    /// on open; no-ops from then on.</summary>
+    private void PurgeEmptyProfileSettings()
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM Settings WHERE Value = '' AND substr(Key, 1, 8) = 'profile.'";
+        cmd.ExecuteNonQuery();
     }
 
     public static string DefaultDbPath()
@@ -329,13 +343,64 @@ ON CONFLICT(Profile, LedIndex) DO UPDATE SET
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>Deletes every saved setting of a profile (lighting/keys/name).</summary>
+    /// <summary>Deletes a profile completely: its keys, keycap overrides and EVERY
+    /// Settings row it owns — <c>profile.{N}.*</c> (name/lighting/exists/launchExe) and
+    /// <c>settings.p{N}.*</c> (Game Mode / Core LED). CHANGED 2026-08-21 for the same
+    /// reason as <see cref="EverestStore.ClearProfile"/>: blanking those keys with an
+    /// empty string left a deleted profile's rows behind forever.</summary>
     public void ClearProfile(int slot)
     {
         ClearKeys(slot);
-        SetSetting($"profile.{slot}.lighting", "");
-        SetSetting($"profile.{slot}.name", "");
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = "DELETE FROM KeycapOverrides WHERE Profile=$p";
+            cmd.Parameters.AddWithValue("$p", slot);
+            cmd.ExecuteNonQuery();
+        }
+        DeleteSettingsWithPrefix($"profile.{slot}.", $"settings.p{slot}.");
     }
+
+    /// <summary>Deletes every Settings row whose Key starts with one of
+    /// <paramref name="prefixes"/> — the per-profile namespaces are all
+    /// <c>&lt;something&gt;.{slot}.</c>-shaped, so an exact prefix match (no LIKE/GLOB
+    /// wildcards to escape) is enough. Used by profile deletion, which must remove the
+    /// rows rather than blank them (see <see cref="ClearProfile"/>).</summary>
+    public void DeleteSettingsWithPrefix(params string[] prefixes)
+    {
+        foreach (var prefix in prefixes)
+        {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM Settings WHERE substr(Key, 1, length($p)) = $p";
+            cmd.Parameters.AddWithValue("$p", prefix);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
+    /// Every Settings row whose Key starts with <paramref name="prefix"/>, keyed by what
+    /// FOLLOWS the prefix (<c>settings.p3.game_mode</c> under prefix <c>settings.p3.</c>
+    /// comes back as <c>game_mode</c>). Exact prefix match, no LIKE/GLOB wildcards to
+    /// escape — same shape as <see cref="DeleteSettingsWithPrefix"/>.
+    /// <para>Added 2026-08-22 for the profile exporters: a K2-format export carries the
+    /// whole per-profile settings namespace verbatim (see <c>K2ProfileSettingsXml</c>),
+    /// so panels can gain settings without every exporter needing a new hand-written
+    /// field.</para>
+    /// </summary>
+    public IReadOnlyDictionary<string, string> GetSettingsWithPrefix(string prefix)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT Key, Value FROM Settings WHERE substr(Key, 1, length($p)) = $p";
+        cmd.Parameters.AddWithValue("$p", prefix);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            string key = r.GetString(0);
+            result[key[prefix.Length..]] = r.IsDBNull(1) ? "" : r.GetString(1);
+        }
+        return result;
+    }
+
 
     /// <summary>Deletes only this profile's keys — unlike <see cref="ClearProfile"/>,
     /// keeps the profile's name. Used by "Restore defaults" (see Everest60KeyBindingPanel).</summary>

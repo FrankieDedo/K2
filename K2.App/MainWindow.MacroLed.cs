@@ -479,11 +479,7 @@ public partial class MainWindow
 
     private void CkMacroSync_Click(object sender, RoutedEventArgs e)
     {
-        // Same device flag mirrored by the Settings section's own checkbox
-        // (CkMpSettingsSync) — see MpSettingsPrefix's doc comment.
-        CkMpSettingsSync.IsChecked = CkMacroSync.IsChecked;
         SaveMacroLedToStore();
-        if (!_mpSettingsSuppress) SaveMpKeycapAppearanceToStore();
         if (CurrentDeviceId() is not int id) { Log("[LED ] sync: no device selected"); return; }
         bool ok = _macroPad.SetSyncAcrossProfiles((uint)id, CkMacroSync.IsChecked == true);
         Log($"[LED ] SetSyncAcrossProfiles({CkMacroSync.IsChecked == true}) -> {ok}");

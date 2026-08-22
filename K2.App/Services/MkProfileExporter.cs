@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Xml.Linq;
@@ -141,6 +141,12 @@ public static class MkProfileExporter
 
             root.Add(new XElement("MakaluSettings", settingEl));
         }
+
+        // K2-only: the whole per-profile Settings namespace, verbatim — see
+        // K2ProfileSettingsXml for why a generic dump beats hand-written fields.
+        if (!bcCompatible)
+            root.Add(K2ProfileSettingsXml.Build(
+                store.GetSettingsWithPrefix, slot, K2ProfileSettingsXml.SettingsOnlyFamilies));
 
         var doc = new XDocument(new XDeclaration("1.0", "utf-8", null), root);
         doc.Save(filePath);

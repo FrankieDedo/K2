@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using K2.App.Models;
@@ -146,7 +147,7 @@ public partial class MainWindow
         Ev60KeyBindingPanel.Init(_ev60Store, Ev60CurrentProfile, LogEverest60, () => _ev60LayoutType);
         InitEv60SectionNav();
 
-        _ev60LayoutType = EverestKeyboardLayout.DetectLayout();
+        _ev60LayoutType = LoadPersistedEv60KeyboardLayout();
         BuildEverest60KeyboardOverlay();
         BuildEv60BorderSquares();
         BuildEv60NumpadBorderSquares();
@@ -255,7 +256,17 @@ public partial class MainWindow
         try
         {
             var existing = _ev60Store.GetExistingProfiles();
-            if (existing.Count == 0) existing.Add(1);
+            if (existing.Count == 0)
+            {
+            // No profile at all — fresh install, hardware factory reset or the Settings
+            // tab's "Restore all defaults": recreate one instead of only showing a
+            // phantom slot 1 under the generic "Profile 1" label. Named "Default
+            // profile" (localized, `default_profile_name`), the same name Base Camp
+            // gives its own starting profile. User request 2026-08-21.
+                _ev60Store.SetProfileName(1, Loc.Get("default_profile_name"));
+                _ev60Store.MarkProfileExists(1);
+                existing.Add(1);
+            }
             var items = new List<Ev60ProfileItem>();
             foreach (var slot in existing)
             {
@@ -840,6 +851,9 @@ public partial class MainWindow
                 int rawDir = int.TryParse(activeLighting.Element("Direction")?.Value, out var di) ? di : 0;
                 int dirIdx = BaseCampDbImporter.Everest60DirIndexFor(eff, rawDir);
                 double bright = int.TryParse(activeLighting.Element("Brightness")?.Value, out var br) ? br : 100;
+                // <Type> = Base Camp's color-type pill (0 single / 1 dual / 2 rainbow) —
+                // see BaseCampDbImporter.ApplyLightingToStore for how that was established.
+                int colorType = int.TryParse(activeLighting.Element("Type")?.Value, out var ct) ? ct : 0;
                 // Per-key Custom colors: same [{Ids,KeyCode,ColorHex}] payload the DB path
                 // parses — previously dropped here entirely. Read from the Custom ROW,
                 // not from the active one, and regardless of which effect is active: the
@@ -858,8 +872,8 @@ public partial class MainWindow
                 var custom = BaseCampDbImporter.ParseEverest60Custom(
                     customEl.Element("CustomLightings")?.Value);
                 _ev60Store.SaveLighting(slot, new Ev60LightingRecord(
-                    (int)eff, color1, color2, speedPct, dirIdx, false, bright, bright, activeMode,
-                    custom.KeyColors, false, custom.SideColors, custom.NumpadRingColors));
+                    (int)eff, color1, color2, speedPct, dirIdx, colorType == 2, bright, bright, activeMode,
+                    custom.KeyColors, colorType == 1, custom.SideColors, custom.NumpadRingColors));
                 LogEverest60($"[IMP-XML] custom lighting: {custom.KeyColors.Count} key LED(s), " +
                              $"{custom.SideColors.Count} side, {custom.NumpadRingColors.Count} numpad ring");
             }
@@ -875,7 +889,29 @@ public partial class MainWindow
                 string sp2 = $"settings.p{slot}.";
                 _ev60Store.SetSetting(sp2 + "game_mode", mode.ToString());
                 _ev60Store.SetSetting(sp2 + "indicator_led", B("EnableCoreLED") ? "1" : "0");
+
+                // Keycap legends — see the Everest Max XML import for the
+                // IsLayoutConfigured gate and why this key is not per-slot.
+                if (B("IsLayoutConfigured")
+                    && EverestKeyboardLayout.ParseStorageString(
+                           settingsEl.Element("KeyboardLayout")?.Value) is { } impLayout)
+                {
+                    _ev60Store.SetSetting(EverestKeyboardLayout.LayoutSettingKey,
+                                          EverestKeyboardLayout.ToStorageString(impLayout));
+                    _ev60LayoutType = impLayout;
+                    CbEv60KeyboardLayout.SelectedItem = (CbEv60KeyboardLayout.ItemsSource as Ev60LayoutChoice[])
+                        ?.FirstOrDefault(x => x.Layout == impLayout) ?? CbEv60KeyboardLayout.SelectedItem;
+                    BuildEverest60KeyboardOverlay();
+                    ApplyEv60KeycapAppearanceToAllKeys();
+                }
             }
+
+            // K2-format extra: the whole per-profile Settings namespace (see
+            // K2ProfileSettingsXml). Absent from Base Camp files and from K2 exports made
+            // before 2026-08-22, in which case this is a no-op.
+            int k2Settings = K2ProfileSettingsXml.Apply(
+                root, _ev60Store.SetSetting, slot, K2ProfileSettingsXml.SettingsOnlyFamilies);
+            if (k2Settings > 0) LogEverest60($"[IMP-XML] {k2Settings} K2 profile setting(s) restored");
 
             _ev60Store.SetProfileName(slot, profileName);
             _ev60Store.SetCurrentProfile(slot);
@@ -973,6 +1009,12 @@ public partial class MainWindow
                 Tag = kd.MatrixId, // LED index 0-63
             };
             btn.Click += Ev60KeyboardButton_Click;
+            btn.AllowDrop = true;
+            btn.PreviewMouseLeftButtonDown += Ev60KeyboardButton_PreviewMouseLeftButtonDown;
+            btn.PreviewMouseMove += Ev60KeyboardButton_PreviewMouseMove;
+            btn.DragEnter += Ev60KeyButton_DragEnter;
+            btn.DragLeave += Ev60KeyButton_DragLeave;
+            btn.Drop += Ev60KeyboardButton_Drop;
             Canvas.SetLeft(btn, kd.X);
             Canvas.SetTop(btn, kd.Y);
             CvsEv60Keyboard.Children.Add(btn);
@@ -1004,6 +1046,12 @@ public partial class MainWindow
             // keycap customizer (OpenEv60KeycapCustomizeDialog) depending on
             // active section — see Ev60NumpadButton_Click.
             btn.Click += Ev60NumpadButton_Click;
+            btn.AllowDrop = true;
+            btn.PreviewMouseLeftButtonDown += Ev60NumpadButton_PreviewMouseLeftButtonDown;
+            btn.PreviewMouseMove += Ev60NumpadButton_PreviewMouseMove;
+            btn.DragEnter += Ev60KeyButton_DragEnter;
+            btn.DragLeave += Ev60KeyButton_DragLeave;
+            btn.Drop += Ev60NumpadButton_Drop;
             Canvas.SetLeft(btn, kd.X);
             Canvas.SetTop(btn, kd.Y);
             CvsEv60Numpad.Children.Add(btn);
@@ -1348,11 +1396,35 @@ public partial class MainWindow
         CbEv60KeyboardLayout.SelectionChanged += OnEv60KeyboardLayoutChanged;
     }
 
+    /// <summary>Everest 60 twin of <see cref="LoadPersistedKeyboardLayout"/> — persisted
+    /// choice first, Windows-locale guess as the fallback. Base Camp keeps this device's
+    /// layout in <c>Everest60Settings.KeyboardLayout</c> (same vocabulary as the Max's
+    /// <c>KeyboardSettings</c> row), host-side only: nothing about the layout is sent to
+    /// the keyboard on either device — see the Max helper's doc comment for the two
+    /// byte-identical BC captures that establish it.</summary>
+    private KeyboardLayoutType LoadPersistedEv60KeyboardLayout()
+    {
+        try
+        {
+            if (EverestKeyboardLayout.ParseStorageString(
+                    _ev60Store.GetSetting(EverestKeyboardLayout.LayoutSettingKey)) is { } stored)
+                return stored;
+        }
+        catch (Exception ex) { LogEverest60("[Ev60] LoadPersistedEv60KeyboardLayout failed: " + ex); }
+        return EverestKeyboardLayout.DetectLayout();
+    }
+
     private void OnEv60KeyboardLayoutChanged(object sender, SelectionChangedEventArgs e)
     {
         if (CbEv60KeyboardLayout.SelectedItem is not Ev60LayoutChoice c) return;
         if (c.Layout == _ev60LayoutType) return;
         _ev60LayoutType = c.Layout;
+        try
+        {
+            _ev60Store.SetSetting(EverestKeyboardLayout.LayoutSettingKey,
+                                  EverestKeyboardLayout.ToStorageString(c.Layout));
+        }
+        catch (Exception ex) { LogEverest60("[Ev60] Saving keyboard layout failed: " + ex); }
         BuildEverest60KeyboardOverlay();
         ApplyEv60KeycapAppearanceToAllKeys();
     }
@@ -1367,7 +1439,7 @@ public partial class MainWindow
 
         // Edit-individual-keycaps mode (Settings section): open the per-key color/image
         // customizer instead of anything else this click would normally do.
-        if (_ev60KeycapEditMode && IsEv60SettingsSectionActive)
+        if (_ev60KeycapEditMode && IsEv60AppearanceSectionActive)
         {
             string editLabel = (btn.Content as TextBlock)?.Text ?? $"#{ledIndex}";
             OpenEv60KeycapCustomizeDialog(ledIndex, editLabel);
@@ -1404,7 +1476,7 @@ public partial class MainWindow
         if (sender is not Button { Tag: int numpadIndex } btn) return;
         string label = (btn.Content as TextBlock)?.Text ?? $"#{numpadIndex}";
 
-        if (_ev60KeycapEditMode && IsEv60SettingsSectionActive)
+        if (_ev60KeycapEditMode && IsEv60AppearanceSectionActive)
         {
             OpenEv60KeycapCustomizeDialog(Everest60Protocol.NumpadLedIndexBase + numpadIndex, label);
             return;
@@ -1424,6 +1496,92 @@ public partial class MainWindow
         if (Ev60RgbPanel.TryPaintKey(keyId, out var color) &&
             numpadIndex >= 0 && numpadIndex < _ev60NumpadVisuals.Count)
             ApplyEv60KeyOverlay(_ev60NumpadVisuals[numpadIndex], color);
+    }
+
+    // ------------------------------------------------------------
+    // Drag & drop — swap two keys' action (Key Binding section only), across
+    // the main board AND the numpad accessory since both share one LedIndex
+    // space in Everest60KeyBindingPanel/Everest60Store. Mirrors MainWindow.
+    // Keys.cs's KeyButton_* (MacroPad), adapted for the sparse key dictionary
+    // (see Everest60KeyBindingPanel.SwapKeys's doc comment) and for having two
+    // physically distinct overlays (board Tag = LedIndex 0-63, numpad Tag =
+    // NumpadIndex 0-16) feed the same drag payload.
+    // ------------------------------------------------------------
+
+    private readonly record struct Ev60DragPayload(int LedIndex, string Label);
+    private const string Ev60KeyDragFormat = "K2.Ev60LedIndex";
+    private Point _ev60DragStartPoint;
+    private int? _ev60DragLed;
+    private string? _ev60DragLabel;
+
+    private void Ev60KeyboardButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not Button { Tag: int ledIndex } btn) return;
+        _ev60DragStartPoint = e.GetPosition(null);
+        _ev60DragLed = ledIndex;
+        _ev60DragLabel = (btn.Content as TextBlock)?.Text ?? $"#{ledIndex}";
+    }
+
+    private void Ev60NumpadButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not Button { Tag: int numpadIndex } btn) return;
+        _ev60DragStartPoint = e.GetPosition(null);
+        _ev60DragLed = Everest60Protocol.NumpadLedIndexBase + numpadIndex;
+        _ev60DragLabel = (btn.Content as TextBlock)?.Text ?? $"#{numpadIndex}";
+    }
+
+    private void Ev60KeyboardButton_PreviewMouseMove(object sender, MouseEventArgs e) => Ev60TryStartKeyDrag(sender, e);
+    private void Ev60NumpadButton_PreviewMouseMove(object sender, MouseEventArgs e) => Ev60TryStartKeyDrag(sender, e);
+
+    private void Ev60TryStartKeyDrag(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _ev60DragLed is not int ledIndex) return;
+        if (!ReferenceEquals(_activeEv60Section, Ev60KeyBindingPanel) ||
+            !(Ev60KeyBindingPanel.ByLed(ledIndex)?.HasAction ?? false))
+        {
+            _ev60DragLed = null;
+            return;
+        }
+        if (!DragDropHelper.ExceedsDragThreshold(_ev60DragStartPoint, e.GetPosition(null))) return;
+
+        var payload = new Ev60DragPayload(ledIndex, _ev60DragLabel ?? $"#{ledIndex}");
+        _ev60DragLed = null;
+        DragDrop.DoDragDrop((Button)sender, new DataObject(Ev60KeyDragFormat, payload), DragDropEffects.Move);
+    }
+
+    private void Ev60KeyButton_DragEnter(object sender, DragEventArgs e)
+    {
+        bool ok = e.Data.GetDataPresent(Ev60KeyDragFormat);
+        e.Effects = ok ? DragDropEffects.Move : DragDropEffects.None;
+        if (ok && sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, true);
+    }
+
+    private void Ev60KeyButton_DragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, false);
+    }
+
+    private void Ev60KeyboardButton_Drop(object sender, DragEventArgs e)
+    {
+        if (sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, false);
+        if (!ReferenceEquals(_activeEv60Section, Ev60KeyBindingPanel)) return;
+        if (sender is not Button { Tag: int ledIndex } targetBtn) return;
+        if (e.Data.GetData(Ev60KeyDragFormat) is not Ev60DragPayload src) return;
+
+        string targetLabel = (targetBtn.Content as TextBlock)?.Text ?? $"#{ledIndex}";
+        Ev60KeyBindingPanel.SwapKeys(src.LedIndex, src.Label, ledIndex, targetLabel);
+    }
+
+    private void Ev60NumpadButton_Drop(object sender, DragEventArgs e)
+    {
+        if (sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, false);
+        if (!ReferenceEquals(_activeEv60Section, Ev60KeyBindingPanel)) return;
+        if (sender is not Button { Tag: int numpadIndex } targetBtn) return;
+        if (e.Data.GetData(Ev60KeyDragFormat) is not Ev60DragPayload src) return;
+
+        int targetLed = Everest60Protocol.NumpadLedIndexBase + numpadIndex;
+        string targetLabel = (targetBtn.Content as TextBlock)?.Text ?? $"#{numpadIndex}";
+        Ev60KeyBindingPanel.SwapKeys(src.LedIndex, src.Label, targetLed, targetLabel);
     }
 
     // ─────────────────── Rectangular multi-LED selection ───────────────────
@@ -1450,7 +1608,7 @@ public partial class MainWindow
 
     private void Ev60DeviceBox_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (!Ev60RgbPanel.IsPaintModeActive && !(_ev60KeycapEditMode && IsEv60SettingsSectionActive)) return;
+        if (!Ev60RgbPanel.IsPaintModeActive && !(_ev60KeycapEditMode && IsEv60AppearanceSectionActive)) return;
         _ev60RubberStart = e.GetPosition(CvsEv60RubberBand);
         _ev60RubberTracking = true;
         _ev60RubberActive = false;
@@ -1491,7 +1649,7 @@ public partial class MainWindow
         e.Handled = true;       // suppress the click that would otherwise fire on release
         if (Ev60RgbPanel.IsPaintModeActive)
             Ev60PaintLedsInRect(rect);
-        else if (_ev60KeycapEditMode && IsEv60SettingsSectionActive)
+        else if (_ev60KeycapEditMode && IsEv60AppearanceSectionActive)
             Ev60OpenKeycapDialogForRect(rect);
     }
 
@@ -1974,6 +2132,7 @@ public partial class MainWindow
         {
             nameof(RbEv60SecLighting)    => Ev60RgbPanel,
             nameof(RbEv60SecKeyBinding)  => Ev60KeyBindingPanel,
+            nameof(RbEv60SecAppearance)  => PnlEv60Appearance,
             nameof(RbEv60SecSettings)    => PnlEv60Settings,
             _                            => null
         };
@@ -2314,7 +2473,7 @@ public partial class MainWindow
 
     /// <summary>True while the Everest 60 "Settings" section is active — gates whether clicking
     /// a key opens KeycapCustomizeDialog (only when "Edit individual keycaps" is also checked).</summary>
-    private bool IsEv60SettingsSectionActive => ReferenceEquals(_activeEv60Section, PnlEv60Settings);
+    private bool IsEv60AppearanceSectionActive => ReferenceEquals(_activeEv60Section, PnlEv60Appearance);
 
     /// <summary>Opens KeycapCustomizeDialog for the given key (KeyId = LED index) — see the
     /// Everest Max equivalent (OpenEvKeycapCustomizeDialog) for the full doc.</summary>
@@ -2421,11 +2580,11 @@ public partial class MainWindow
             CbEv60KeycapStyle.ItemsSource       = KeycapStyleChoices;
             CbEv60KeycapStyle.DisplayMemberPath = "Label";
 
-            // Profile-scoped namespace first, falling back to the legacy always-global
-            // "settings.keycap_*" keys — one-time seeding for existing installs/profiles
-            // that never had their own per-profile value saved yet.
-            string prefix = Ev60SettingsPrefix();
-            string? Get(string key) => _ev60Store.GetSetting(prefix + key) ?? _ev60Store.GetSetting("settings." + key);
+            // Keycap Appearance is a cosmetic, device-wide preference, not per-profile
+            // (user request 2026-08-22: split into its own Appearance section) — always the
+            // fixed global "settings.keycap_*" namespace. Game Mode/Indicator LED below stay
+            // per-profile via Ev60SettingsPrefix — this Get() only covers the keycap_* keys.
+            string? Get(string key) => _ev60Store.GetSetting("settings." + key);
 
             _ev60KeycapColorMode = ParseKeycapColorMode(Get("keycap_color_mode"), KeycapColorMode.Black);
             _ev60KeycapCustomHex = Get("keycap_custom_hex") is { Length: > 0 } hex ? hex : "#404040";
@@ -2444,8 +2603,8 @@ public partial class MainWindow
                     3 => KeycapStyle.ReversePudding,
                     _ => KeycapStyle.Normal,
                 };
-                _ev60Store.SetSetting(prefix + "keycap_style", ((int)_ev60KeycapStyleValue).ToString());
-                _ev60Store.SetSetting(prefix + "keycap_translucent_legend", _ev60KeycapTranslucentLegend ? "1" : "0");
+                _ev60Store.SetSetting("settings.keycap_style", ((int)_ev60KeycapStyleValue).ToString());
+                _ev60Store.SetSetting("settings.keycap_translucent_legend", _ev60KeycapTranslucentLegend ? "1" : "0");
             }
             else
             {
@@ -2483,12 +2642,16 @@ public partial class MainWindow
 
             // Game Mode / Core Indicator LED — ported from Everest Max, see the
             // XAML comment above these controls for why there's no ApplyToDevice call.
-            int mode = int.TryParse(Get("game_mode"), out var m) ? m : 0;
+            // Still per-profile (unlike Keycap Appearance above) via Ev60SettingsPrefix, with
+            // the same legacy-global fallback the combined Get() used to provide.
+            string settingsPrefix = Ev60SettingsPrefix();
+            string? GetSettings(string key) => _ev60Store.GetSetting(settingsPrefix + key) ?? _ev60Store.GetSetting("settings." + key);
+            int mode = int.TryParse(GetSettings("game_mode"), out var m) ? m : 0;
             CkEv60GameModeShiftTab.IsChecked = (mode & 0x1) != 0;
             CkEv60GameModeAltF4.IsChecked    = (mode & 0x2) != 0;
             CkEv60GameModeWinKey.IsChecked   = (mode & 0x4) != 0;
             CkEv60GameModeAltTab.IsChecked   = (mode & 0x8) != 0;
-            CkEv60CoreIndicatorLed.IsChecked = Get("indicator_led") == "1";
+            CkEv60CoreIndicatorLed.IsChecked = GetSettings("indicator_led") == "1";
         }
         finally { _ev60SettingsSuppress = false; }
 
@@ -2500,7 +2663,7 @@ public partial class MainWindow
         if (_ev60SettingsSuppress) return;
         if (CbEv60KeycapStyle.SelectedItem is not KeycapStyleChoice pick) return;
         _ev60KeycapStyleValue = pick.Style;
-        _ev60Store.SetSetting(Ev60SettingsPrefix() + "keycap_style", ((int)pick.Style).ToString());
+        _ev60Store.SetSetting("settings.keycap_style", ((int)pick.Style).ToString());
         ApplyEv60KeycapAppearanceToAllKeys();
     }
 
@@ -2528,7 +2691,7 @@ public partial class MainWindow
     {
         if (_ev60SettingsSuppress) return;
         _ev60KeycapTranslucentLegend = CkEv60KeycapTranslucentLegend.IsChecked == true;
-        _ev60Store.SetSetting(Ev60SettingsPrefix() + "keycap_translucent_legend", _ev60KeycapTranslucentLegend ? "1" : "0");
+        _ev60Store.SetSetting("settings.keycap_translucent_legend", _ev60KeycapTranslucentLegend ? "1" : "0");
         ApplyEv60KeycapAppearanceToAllKeys();
     }
 
@@ -2559,7 +2722,7 @@ public partial class MainWindow
         _ev60KeycapColorMode = sender == RbEv60KeycapWhite  ? KeycapColorMode.White
                               : sender == RbEv60KeycapCustom ? KeycapColorMode.Custom
                               :                                 KeycapColorMode.Black;
-        _ev60Store.SetSetting(Ev60SettingsPrefix() + "keycap_color_mode", KeycapColorModeToString(_ev60KeycapColorMode));
+        _ev60Store.SetSetting("settings.keycap_color_mode", KeycapColorModeToString(_ev60KeycapColorMode));
         BtnEv60KeycapCustomColor.IsEnabled = _ev60KeycapColorMode == KeycapColorMode.Custom;
         ApplyEv60KeycapAppearanceToAllKeys();
     }
@@ -2570,7 +2733,7 @@ public partial class MainWindow
         _ev60KeycapTextColorMode = sender == RbEv60KeycapTextBlack  ? KeycapColorMode.Black
                                    : sender == RbEv60KeycapTextCustom ? KeycapColorMode.Custom
                                    :                                    KeycapColorMode.White;
-        _ev60Store.SetSetting(Ev60SettingsPrefix() + "keycap_text_color_mode", KeycapColorModeToString(_ev60KeycapTextColorMode));
+        _ev60Store.SetSetting("settings.keycap_text_color_mode", KeycapColorModeToString(_ev60KeycapTextColorMode));
         BtnEv60KeycapTextColor.IsEnabled = _ev60KeycapTextColorMode == KeycapColorMode.Custom;
         ApplyEv60KeycapAppearanceToAllKeys();
     }
@@ -2586,7 +2749,7 @@ public partial class MainWindow
         if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
         _ev60KeycapCustomHex = $"#{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
-        _ev60Store.SetSetting(Ev60SettingsPrefix() + "keycap_custom_hex", _ev60KeycapCustomHex);
+        _ev60Store.SetSetting("settings.keycap_custom_hex", _ev60KeycapCustomHex);
         BtnEv60KeycapCustomColor.Background = new SolidColorBrush(Color.FromRgb(dlg.Color.R, dlg.Color.G, dlg.Color.B));
 
         if (RbEv60KeycapCustom.IsChecked != true)
@@ -2606,7 +2769,7 @@ public partial class MainWindow
         if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
         _ev60KeycapTextCustomHex = $"#{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
-        _ev60Store.SetSetting(Ev60SettingsPrefix() + "keycap_text_custom_hex", _ev60KeycapTextCustomHex);
+        _ev60Store.SetSetting("settings.keycap_text_custom_hex", _ev60KeycapTextCustomHex);
         BtnEv60KeycapTextColor.Background = new SolidColorBrush(Color.FromRgb(dlg.Color.R, dlg.Color.G, dlg.Color.B));
 
         if (RbEv60KeycapTextCustom.IsChecked != true)

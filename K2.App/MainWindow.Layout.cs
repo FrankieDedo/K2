@@ -1,4 +1,4 @@
-// MainWindow.Layout.cs — partial class: dynamic keyboard layout.
+﻿// MainWindow.Layout.cs — partial class: dynamic keyboard layout.
 //
 // Media Dock / Display Dial: image (keytop.png) overlaid by half on the
 // top edge of the keyboard body, horizontally centered.
@@ -50,6 +50,21 @@ public partial class MainWindow
     /// which also depends on Custom Lighting's paint mode (see UpdateDockVisibility).</summary>
     private bool _evDockPhysicallyConnected;
 
+    /// <summary>Consecutive polls that read an accessory position of 0. See
+    /// <see cref="UpdateKeyboardLayout"/>: a single 0 is NOT proof of a detach.</summary>
+    private int _evNumpadZeroReads, _evDockZeroReads;
+
+    /// <summary>How many consecutive zero reads it takes to believe an accessory really
+    /// was unplugged (3 x the 3s poll = ~9s). Detaching the numpad/dock is a physical,
+    /// non-urgent event, so paying ~9s of latency there is a good trade for never
+    /// flickering the numpad — and with it every display key — out of the UI on a
+    /// transient bad read (user report 2026-08-21, twice).</summary>
+    private const int EvAccessoryZeroReadsToDetach = 3;
+
+    /// <summary>Last positions actually applied to the UI, so a poll that reads the same
+    /// thing twice doesn't re-run the layout work.</summary>
+    private byte _evLastAppliedNumpadPos = 0xFF, _evLastAppliedDockPos = 0xFF;
+
     /// <summary>
     /// Starts the 3s dock/numpad poll (same cadence as Ev60RefreshStatus).
     /// Idempotent — safe to call every time the Everest tab is (re)selected.
@@ -82,8 +97,40 @@ public partial class MainWindow
         // until the next successful poll. NdkApplyImage re-runs this once the write settles.
         if (_ndkUploadBusy) return;
 
-        byte dockPos   = _everest.MMDockPlugPosition();
-        byte numpadPos = _everest.NumpadPlugPosition();
+        // A FAILED read is not "unplugged": GetExtendInfo returns false whenever the
+        // firmware is mid-flash-write (picture upload/reset, SaveFlash), and treating that
+        // as position 0 collapsed the whole numpad — display keys included — out of the UI
+        // for as long as the busy window lasted (user report 2026-08-21). Keep the last
+        // known layout instead and let the next tick settle it.
+        if (!_everest.TryGetAccessoryPositions(out byte numpadPos, out byte dockPos))
+        {
+            LogEverest("[LAYOUT] GetExtendInfo failed — keeping last known accessory layout");
+            return;
+        }
+
+        // A read of 0 is ALSO not trustworthy on its own. While the firmware is busy
+        // (flash writes, profile switch) GetExtendInfo can return true with a zeroed
+        // struct, which used to collapse the numpad — and every display key with it —
+        // out of the UI for as long as that lasted. Only believe a detach after
+        // EvAccessoryZeroReadsToDetach consecutive zeros; an attach is applied at once.
+        _evNumpadZeroReads = numpadPos == 0 ? _evNumpadZeroReads + 1 : 0;
+        _evDockZeroReads   = dockPos   == 0 ? _evDockZeroReads   + 1 : 0;
+        if (numpadPos == 0 && _evNumpadZeroReads < EvAccessoryZeroReadsToDetach
+            && _evLastAppliedNumpadPos is not 0 and not 0xFF)
+            numpadPos = (byte)_evLastAppliedNumpadPos;
+        if (dockPos == 0 && _evDockZeroReads < EvAccessoryZeroReadsToDetach
+            && _evLastAppliedDockPos is not 0 and not 0xFF)
+            dockPos = _evLastAppliedDockPos;
+
+        // Logged through App.WriteLog, not LogEverest, and only on a CHANGE: the Everest
+        // log level is often Off on the user's machine, and this transition is exactly
+        // what a "display keys disappeared" report needs to be diagnosable.
+        if (numpadPos != _evLastAppliedNumpadPos || dockPos != _evLastAppliedDockPos)
+            App.WriteLog($"[Everest.Layout] accessories: numpadPos={numpadPos} dockPos={dockPos} " +
+                         $"(was numpad={_evLastAppliedNumpadPos} dock={_evLastAppliedDockPos}, " +
+                         $"zeroReads numpad={_evNumpadZeroReads} dock={_evDockZeroReads})");
+        _evLastAppliedNumpadPos = numpadPos;
+        _evLastAppliedDockPos = dockPos;
 
         LogEverest($"[LAYOUT] dockPos={dockPos} numpadPos={numpadPos}");
 

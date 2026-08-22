@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -48,6 +48,17 @@ public sealed class EverestService : IDisposable
     // repeatedly (each call is a HID packet that may collide with
     // the DLL's internal polling → native crash 0xC0000005 at +0x5133).
     private int _cachedProfile = 1;
+
+    /// <summary>
+    /// EffMenuIndex of the last effect applied through <see cref="SetEffect"/> /
+    /// <see cref="ApplyEverestCustomLighting"/> — the second half of the firmware's
+    /// (profile, lighting-menu-slot) address pair. Cached because a bare
+    /// <see cref="SwitchProfile(int)"/> has to name a slot too and the caller usually
+    /// doesn't know which one yet (the UI loads the profile's effect only AFTER the
+    /// switch). Starts at 1 = Wave, the factory-default slot, which is exactly the value
+    /// hardcoded here before 2026-08-22.
+    /// </summary>
+    private int _cachedMenuIndex = 1;
 
     // Global lock to serialize all calls to SDKDLL.dll.
     // The DLL is not thread-safe: the key callback arrives on an SDK
@@ -196,10 +207,15 @@ public sealed class EverestService : IDisposable
             bool fi = EverestSdkNative.GetFWInfo(ref fwInfo);
             if (fi && fwInfo.currentlyProfileIndex >= 1)
                 _cachedProfile = fwInfo.currentlyProfileIndex;
+            // The keyboard also reports which lighting menu slot it is currently on —
+            // seed the cache with it so the first SwitchProfile of the session names the
+            // slot the device is really showing instead of the flat 1 K2 assumed.
+            if (fi && fwInfo.byEffectMenuIndex <= 8)
+                _cachedMenuIndex = fwInfo.byEffectMenuIndex;
             App.WriteLog($"[Everest.Init] GetFWInfo -> {fi}  " +
                 $"fwVer=0x{fwInfo.fwVer:X4} profile={fwInfo.currentlyProfileIndex} " +
                 $"effectMode={fwInfo.byEffectModeIndex} effectMenu={fwInfo.byEffectMenuIndex}" +
-                $" -> cachedProfile={_cachedProfile}");
+                $" -> cachedProfile={_cachedProfile} cachedMenu={_cachedMenuIndex}");
         }
         catch (Exception ex) { App.WriteLog("[Everest.Init] GetFWInfo threw: " + ex); }
 
@@ -243,10 +259,25 @@ public sealed class EverestService : IDisposable
         // Forces the firmware out of AP mode (it may have been left in AP
         // from a previous K2/BC session). Without this, ChangeEffect may
         // cause a transient rainbow flash before the effect.
+        //
+        // This call is made right after Open() — on the native-engine path
+        // (see OpenNative's comment) SDKDLL.dll is not necessarily loaded/ready
+        // yet, so it can (and on a fast machine reliably does, per a 2026-08-17
+        // hardware report: captured log showed this exact call returning False
+        // ~1ms after native open) fail here. _apEnabled must only be cleared on
+        // a CONFIRMED success: if we assumed AP was off anyway, the first
+        // SetEffect() call right after would skip its own AP-off guard (it also
+        // only fires "if (_apEnabled)"), the firmware would still be in AP mode,
+        // and ChangeEffect/ChangeBlockEffect would be silently ignored — the
+        // keyboard keeps showing whatever AP mode was rendering (observed as
+        // wrong speed / effect off / an unrelated "rainbow"-looking pattern)
+        // instead of the effect K2 just "successfully" sent. Leaving _apEnabled
+        // true on failure makes SetEffect's own guard retry the disable right
+        // before the real ChangeEffect call, by which point the DLL is up.
         try
         {
             bool ap = EverestSdkNative.APEnable(false);
-            _apEnabled = false;
+            _apEnabled = !ap;
             App.WriteLog($"[Everest.Init] APEnable(false) -> {ap}");
         }
         catch (Exception ex) { App.WriteLog("[Everest.Init] APEnable(false) threw: " + ex); }
@@ -385,24 +416,43 @@ public sealed class EverestService : IDisposable
     /// captured wire command directly (see <see cref="EverestHidNative.Pad.SwitchProfile"/>
     /// — evprofiles.pcapng, 2026-07-19) instead of going through SDKDLL, whose
     /// SwitchProfile returned True in this mode without a verifiable hardware effect
-    /// (no OpenUSBDriver state). SDKDLL fallback kept for the non-native path; its
-    /// second parameter is unconfirmed by metadata, we pass 0.
+    /// (no OpenUSBDriver state). SDKDLL fallback kept for the non-native path.
     /// </summary>
-    public bool SwitchProfile(int profile)
+    /// <param name="profile">Firmware profile slot, 1-5.</param>
+    /// <param name="effMenuIndex">
+    /// Lighting menu slot to make active inside that profile (see
+    /// <see cref="MenuIndexFor"/>). -1 (the default) reuses the slot of the last effect
+    /// K2 applied — the honest answer when the caller is switching profiles and hasn't
+    /// loaded the new profile's effect yet, and never worse than the flat <c>0x01</c>
+    /// this argument replaced.
+    /// </param>
+    public bool SwitchProfile(int profile, int effMenuIndex = -1)
     {
+        int menu = effMenuIndex >= 0 ? effMenuIndex : _cachedMenuIndex;
         if (_nativePad is not null)
         {
-            bool nok = _nativePad.SwitchProfile(profile);
-            if (nok) _cachedProfile = profile;   // keeps AckKeyPress's profile byte honest
-            App.WriteLog($"[Everest.SwitchProfile] (native) profile={profile} -> {nok}");
-            return nok;
+            // Under _sdkLock even though this doesn't touch SDKDLL: there is only ONE
+            // firmware behind the two transports, and a concurrent SDKDLL call — in
+            // particular the DEBOUNCED SaveFlash, which fires ~500ms after any lighting
+            // change on its own thread — leaves the keyboard mute for seconds, so raw-HID
+            // commands issued in that window time out. See FlushSaveFlash.
+            lock (_sdkLock)
+            {
+                bool nok = _nativePad.SwitchProfile(profile, menu);
+                if (nok) _cachedProfile = profile;   // keeps AckKeyPress's profile byte honest
+                App.WriteLog($"[Everest.SwitchProfile] (native) profile={profile} menu={menu} -> {nok}");
+                return nok;
+            }
         }
 
         lock (_sdkLock)
         try
         {
-            bool ok = EverestSdkNative.SwitchProfile(profile, 0);
-            App.WriteLog($"[Everest.SwitchProfile] profile={profile} -> {ok}");
+            // The DLL's second parameter is the same EffMenuIndex byte the native wire
+            // command carries (SwitchProfile(profile, EffMenuIndex, id) on the MacroPad,
+            // confirmed 2026-07-09); it was passed as 0 while its meaning was unknown.
+            bool ok = EverestSdkNative.SwitchProfile(profile, menu);
+            App.WriteLog($"[Everest.SwitchProfile] profile={profile} menu={menu} -> {ok}");
             return ok;
         }
         catch (Exception ex)
@@ -476,6 +526,41 @@ public sealed class EverestService : IDisposable
         Custom    = (byte)EverestSdkNative.EffectIndex.Custom,
     }
 
+    /// <summary>
+    /// Effect → <b>EffMenuIndex</b>, the slot of the firmware's per-profile lighting menu
+    /// the effect lives in. The firmware addresses lighting as a (profile, menu slot) pair:
+    /// <c>14 00 00 00 [profile] [menuIndex]</c> selects it and <c>13 55 00 00 [menuIndex]</c>
+    /// persists it — the 5th byte of the save is the MENU SLOT, never the profile.
+    ///
+    /// <para><b>Capture-confirmed</b> (ev_profile_load.pcapng, 2026-08-22): Base Camp
+    /// loading a profile into slot 2 writes all nine slots in the order 0,1,3,4,5,6,7,8,2,
+    /// and the effect index carried by each <c>14 2C</c> pins the table down exactly —
+    /// 0=Static(0) 1=Wave(4) 2=Tornado(7) 3=Breath(1) 4=ReactiveA(3) 5=Matrix(9)
+    /// 6=Custom(10) 7=Yeti(6) 8=Off(12). Identical to the MacroPad's own menu order
+    /// (MacroPadService.MenuIndexFor, confirmed 2026-07-09), which is why the same class
+    /// of bug — saving to a slot that has nothing to do with the effect just sent —
+    /// existed on both devices.</para>
+    ///
+    /// <para>The three Reactive variants share slot 4: Base Camp's menu has a single
+    /// "Reactive" entry, the A/B/C split is K2's own. Matrix2 is K2's visual variant of
+    /// Matrix and shares slot 5 for the same reason.</para>
+    /// </summary>
+    public static int MenuIndexFor(Effect effect) => effect switch
+    {
+        Effect.Static    => 0,
+        Effect.Wave      => 1,
+        Effect.Tornado   => 2,
+        Effect.Breath    => 3,
+        Effect.ReactiveA => 4,
+        Effect.ReactiveB => 4,
+        Effect.ReactiveC => 4,
+        Effect.Matrix    => 5,
+        Effect.Matrix2   => 5,
+        Effect.Custom    => 6,
+        Effect.Yeti      => 7,
+        _                => 8,   // Off
+    };
+
     /// <summary>Effect speed.</summary>
     public enum Speed : byte { Slow = 0, Normal = 1, Fast = 2 }
 
@@ -529,13 +614,42 @@ public sealed class EverestService : IDisposable
             {
                 bool offOk = EverestSdkNative.APEnable(false);
                 App.WriteLog($"[Everest.SetEffect] forcing APEnable(false) before ChangeEffect -> {offOk}");
-                _apEnabled = false;
+                // Only trust a confirmed success (see InitDllState's APEnable comment) —
+                // a failed call here must keep retrying on the NEXT SetEffect, not silently
+                // give up while the firmware may still be in AP mode.
+                _apEnabled = !offOk;
+
+                // A CONFIRMED-True APEnable(false) only means the DLL/USB round-trip
+                // acked the command — not that the firmware has actually finished
+                // leaving AP/software mode internally. Sending ChangeEffect/
+                // ChangeBlockEffect immediately after (previously 0 delay — confirmed
+                // ~4ms apart in a 2026-08-18 hardware log) can still land while the
+                // firmware is mid-transition, so it "listens but doesn't apply" it
+                // (same failure mode this whole block exists to avoid) and the keyboard
+                // keeps showing its AP-mode idle pattern even though every call here
+                // reports success and the bytes we sent were correct. Give the firmware
+                // a moment to actually settle before the real command goes out.
+                if (offOk) Thread.Sleep(150);
             }
             catch (Exception ex2) { App.WriteLog("[Everest.SetEffect] APEnable(false) prep threw: " + ex2); }
         }
 
         EverestSdkNative.FWColor C((byte, byte, byte) c) => new(c.Item1, c.Item2, c.Item3);
         var bright = QuantizeBrightness(brightness);
+
+        // Base Camp names the (profile, lighting menu slot) pair before EVERY effect
+        // apply, not just when the user switches profile — confirmed on the MacroPad
+        // (2026-07-09) and now on the Everest Max (ev_profile_load.pcapng, 2026-08-22:
+        // 14 00 00 00 02 <menu> → 14 2C <EffData> → 13 55 00 00 <menu>, nine times).
+        // K2 sent neither the switch nor the right save slot here: ChangeEffect landed
+        // in whatever slot the firmware happened to be on and the debounced SaveFlash
+        // then persisted the PROFILE number as if it were a menu slot. Prime suspect for
+        // "the first apply after Open()/SwitchProfile() is silently dropped even though
+        // the bytes on the wire are correct" (2026-08-18 reports, currently worked around
+        // by EvScheduleStartupEffectResend's brute-force 2s re-apply).
+        int menuIndex = MenuIndexFor(effect);
+        _cachedMenuIndex = menuIndex;
+        SwitchProfile(_cachedProfile, menuIndex);
 
         // Per-effect parameters from the external config (everest_rgb.json), re-read
         // on EVERY apply: byAll/bySpeed/byDirection/byWidth/color count can be
@@ -587,7 +701,7 @@ public sealed class EverestService : IDisposable
                 // Small delay to give the DLL's internal HID queue time
                 // to process the command before SaveFlash arrives.
                 Thread.Sleep(50);
-                DebouncedSaveFlash();
+                DebouncedSaveFlash(menuIndex);
                 return okB;
             }
             catch (Exception exB)
@@ -626,7 +740,7 @@ public sealed class EverestService : IDisposable
             App.WriteLog("[Everest.SetEffect] DUMP EffData(62B): " + DumpEffData(data));
 
             Thread.Sleep(50);
-            DebouncedSaveFlash();
+            DebouncedSaveFlash(menuIndex);
 
             return ok;
         }
@@ -644,12 +758,50 @@ public sealed class EverestService : IDisposable
     /// or speed rapidly, only one SaveFlash is sent at the end
     /// of the burst — avoids overloading the DLL's HID queue.
     /// </summary>
-    private void DebouncedSaveFlash()
+    /// <summary>
+    /// Runs any PENDING debounced <see cref="EverestSdkNative.SaveFlash"/> right now and
+    /// returns once the keyboard is done with it, so a caller about to send a long
+    /// firmware sequence (display-key picture upload/reset, binding writes) can be sure a
+    /// flash write won't start underneath it.
+    ///
+    /// <para>Why this exists: a lighting change schedules SaveFlash 500ms later on a
+    /// background task, and while the firmware writes flash it answers NOTHING on the
+    /// raw-HID channel. Selecting a profile does both — reapply lighting, then push the
+    /// display keys — so on 2026-08-21 every one of the reset sequence's 8 commands timed
+    /// out (1.2s each, 9.6s per key, all False) while SaveFlash was in flight.</para>
+    ///
+    /// <para>Taking <see cref="_sdkLock"/> is what actually does the waiting: the
+    /// debounced task holds it for the whole SaveFlash call.</para>
+    /// </summary>
+    public void FlushSaveFlash()
+    {
+        var cts = _saveFlashCts;
+        if (cts is null) return;
+        cts.Cancel();                    // stop the pending 500ms delay from firing later
+        _saveFlashCts = null;
+        var slot = _cachedMenuIndex;     // menu slot, not the profile — see DebouncedSaveFlash
+        lock (_sdkLock)                  // blocks until an already-started SaveFlash ends
+        {
+            try
+            {
+                bool ok = EverestSdkNative.SaveFlash(slot);
+                App.WriteLog($"[Everest] SaveFlash(menu={slot}) flushed -> {ok}");
+            }
+            catch (Exception ex) { App.WriteLog("[Everest] SaveFlash flush threw: " + ex); }
+        }
+    }
+
+    private void DebouncedSaveFlash(int effMenuIndex)
     {
         _saveFlashCts?.Cancel();
         var cts = new CancellationTokenSource();
         _saveFlashCts = cts;
-        var profile = _cachedProfile;
+        // 5th byte of "13 55 00 00 xx" is the EffMenuIndex, NOT the profile: the profile
+        // was already named by the SwitchProfile that preceded the effect. Passing
+        // _cachedProfile here (as this did until 2026-08-22) saved the effect into a
+        // menu slot picked by coincidence — same bug fixed on the MacroPad 2026-07-09,
+        // now capture-confirmed for the Everest Max too (see MenuIndexFor).
+        var slot = effMenuIndex;
         _ = Task.Run(async () =>
         {
             try
@@ -662,8 +814,8 @@ public sealed class EverestService : IDisposable
             {
                 try
                 {
-                    bool ok = EverestSdkNative.SaveFlash(profile);
-                    App.WriteLog($"[Everest] SaveFlash({profile}) debounced -> {ok}");
+                    bool ok = EverestSdkNative.SaveFlash(slot);
+                    App.WriteLog($"[Everest] SaveFlash(menu={slot}) debounced -> {ok}");
 
                     // (2026-06-09: removed color stream re-activation post-SaveFlash
                     //  because it caused flickering. To investigate whether SaveFlash
@@ -788,18 +940,90 @@ public sealed class EverestService : IDisposable
         }
     }
 
-    /// <summary>Resets the keyboard to factory defaults.</summary>
+    /// <summary>
+    /// Wipes the keyboard's flash back to factory defaults (profiles, key bindings,
+    /// display-key artwork, lighting) and drops every host-side cache describing what
+    /// the device holds. BLOCKS for ~3.5s: the firmware goes mute while erasing and
+    /// only then echoes the command (everest_reset.pcapng, 2026-08-21) — call it from a
+    /// background/RunHwBusy thread, never inline on the UI thread.
+    ///
+    /// Native-engine path sends the captured wire command directly (see
+    /// <see cref="EverestHidNative.Pad.ResetFlash"/>): SDKDLL's ResetFlash runs without
+    /// OpenUSBDriver state in that mode and would very likely return True while emitting
+    /// nothing, the same failure mode already proven for SwitchProfile. SDKDLL fallback
+    /// kept for the non-native path.
+    ///
+    /// This is a TRUE factory reset: unlike Base Camp, which re-pushes its active profile
+    /// right after the wipe, K2 leaves the hardware factory-clean — wiping K2's own store
+    /// to match is the caller's job (see MainWindow.BtnSettingsFactoryReset_Click).
+    /// Afterwards the device is on profile 1 with factory artwork and no bindings, and
+    /// AP mode is off.
+    /// </summary>
     public bool ResetFlash(bool full = true)
     {
+        // A SaveFlash scheduled seconds ago (effect/speed edit) would otherwise land
+        // right after the wipe and re-persist exactly what we just erased.
+        _saveFlashCts?.Cancel();
+
+        bool ok;
         try
         {
-            bool ok = EverestSdkNative.ResetFlash(full);
-            App.WriteLog($"[Everest.ResetFlash] full={full} -> {ok}");
-            return ok;
+            ok = _nativePad is not null
+                ? _nativePad.ResetFlash()
+                : EverestSdkNative.ResetFlash(full);
+            App.WriteLog($"[Everest.ResetFlash] full={full} native={_nativePad is not null} -> {ok}");
         }
         catch (Exception ex)
         {
             App.WriteLog("[Everest.ResetFlash] threw: " + ex);
+            return false;
+        }
+
+        if (!ok) return false;
+
+        // The wipe reboots the firmware's config state: AP mode is gone (leaving
+        // _apEnabled true would make EnsureApMode/SetEffect skip their own AP guard and
+        // every later lighting command would be silently ignored — same trap documented
+        // in InitDllState), and the active profile is back to 1 — on the factory
+        // lighting menu slot 1 (Wave), which is what the post-reset read in
+        // everest_reset.pcapng shows.
+        _apEnabled = false;
+        _cachedProfile = 1;
+        _cachedMenuIndex = 1;
+
+        // Re-run Base Camp's post-open init, exactly like BC does after its own reset
+        // (everest_reset.pcapng: 11 00 / 11 14 / 11 12 / 11 01 reads before it touches
+        // the device again) — without it the DLL/device state is stale for the next
+        // lighting call.
+        InitDllState();
+        return true;
+    }
+
+    /// <summary>
+    /// Clears the ACTIVE profile's stored content (lighting menu slots, display-key
+    /// bindings/pictures) without touching the rest of the keyboard — the
+    /// <c>13 40 00 00 00</c> command Base Camp sends right before repopulating a profile
+    /// it is loading, see <see cref="EverestHidNative.Pad.ResetProfileContent"/> for the
+    /// capture and for what is NOT yet verified about its scope. Native-engine only
+    /// (SDKDLL has no export for it); the caller must already have switched the device to
+    /// the profile it wants wiped.
+    /// </summary>
+    public bool ResetProfileContent()
+    {
+        if (_nativePad is null) return false;
+        // Same one-firmware-two-transports serialization as SwitchProfile: a debounced
+        // SaveFlash in flight leaves the keyboard mute and this command would time out.
+        FlushSaveFlash();
+        lock (_sdkLock)
+        try
+        {
+            bool ok = _nativePad.ResetProfileContent();
+            App.WriteLog($"[Everest.ResetProfileContent] -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.ResetProfileContent] threw: " + ex);
             return false;
         }
     }
@@ -826,15 +1050,20 @@ public sealed class EverestService : IDisposable
 
     /// <summary>
     /// Saves the current state (effects/colors) to the keyboard's flash.
-    /// Profile 1..5 or 6 = ALL_PROFILE. Without a SaveFlash, effects
-    /// applied via AP-mode are lost on the next unplug.
+    /// Without a SaveFlash, effects applied via AP-mode are lost on the next unplug.
+    /// <para>The argument is the <b>EffMenuIndex</b> (see <see cref="MenuIndexFor"/>) —
+    /// the lighting menu slot to commit, addressed inside whatever profile the last
+    /// <see cref="SwitchProfile(int,int)"/> selected. It is NOT a profile number, despite
+    /// the DLL export naming it one: <c>13 55 00 00 xx</c> carries the menu slot on the
+    /// wire (ev_profile_load.pcapng, 2026-08-22). The default 6 is Custom's slot, which
+    /// is what <see cref="EverestSideLedProtocol"/>'s persist packet has always used.</para>
     /// </summary>
-    public bool SaveFlash(int profile = 6)
+    public bool SaveFlash(int effMenuIndex = 6)
     {
         try
         {
-            bool ok = EverestSdkNative.SaveFlash(profile);
-            App.WriteLog($"[Everest.SaveFlash] profile={profile} -> {ok}");
+            bool ok = EverestSdkNative.SaveFlash(effMenuIndex);
+            App.WriteLog($"[Everest.SaveFlash] menu={effMenuIndex} -> {ok}");
             return ok;
         }
         catch (Exception ex)
@@ -965,6 +1194,27 @@ public sealed class EverestService : IDisposable
     }
 
     /// <summary>
+    /// Accessory positions with an explicit "couldn't read" answer, unlike
+    /// <see cref="NumpadPlugPosition"/>/<see cref="MMDockPlugPosition"/>, which report a
+    /// failed GetExtendInfo as 0 = "not connected". That conflation made the numpad (and
+    /// with it every display key) vanish from the UI whenever the 3s accessory poll
+    /// happened to land inside a firmware-busy window — user report 2026-08-21,
+    /// "spariscono i tasti display dall'interfaccia". Callers keep their previous state
+    /// when this returns false.
+    /// </summary>
+    public bool TryGetAccessoryPositions(out byte numpadPos, out byte dockPos)
+    {
+        if (TryGetExtendInfo(out var info))
+        {
+            numpadPos = info.byNumpadPlug;
+            dockPos   = info.byMMDockPlug;
+            return true;
+        }
+        numpadPos = dockPos = 0;
+        return false;
+    }
+
+    /// <summary>
     /// Raw value of byMMDockPlug (0=not connected, 1=left, 2=right — hypothesis to verify).
     /// </summary>
     public byte MMDockPlugPosition()
@@ -1066,7 +1316,9 @@ public sealed class EverestService : IDisposable
         {
             type = 0x01; payload = "K2:" + actionType;   // synthetic — see doc comment
         }
-        try { return _nativePad.WriteDisplayKeyBinding(keyIndex, type, payload); }
+        // Serialized against SDKDLL traffic like every other native-transport call —
+        // see SwitchProfile's comment.
+        try { lock (_sdkLock) return _nativePad.WriteDisplayKeyBinding(keyIndex, type, payload); }
         catch (Exception ex)
         {
             App.WriteLog("[Everest.WriteNumpadBinding] threw: " + ex);
@@ -1117,9 +1369,15 @@ public sealed class EverestService : IDisposable
     {
         if (_nativePad is not null)
         {
-            bool nok = _nativePad.ResetDisplayKeyPic(keyIndex, picSlot);
-            App.WriteLog($"[Everest.ClearNumpadImage] (native reset) key={keyIndex} profile={picSlot} -> {nok}");
-            return nok;
+            // Same one-firmware-two-transports serialization as SwitchProfile: this
+            // 8-command sequence took 9.6s of pure timeouts on 2026-08-21 because a
+            // debounced SaveFlash was writing flash at the same moment.
+            lock (_sdkLock)
+            {
+                bool nok = _nativePad.ResetDisplayKeyPic(keyIndex, picSlot);
+                App.WriteLog($"[Everest.ClearNumpadImage] (native reset) key={keyIndex} profile={picSlot} -> {nok}");
+                return nok;
+            }
         }
 
         lock (_sdkLock)
@@ -1410,6 +1668,13 @@ public sealed class EverestService : IDisposable
         if (_nativePad is null) return false;
         try
         {
+            // Base Camp names the target lighting slot before the Custom burst too:
+            // 14 00 00 00 <profile> 06 precedes the whole 11 01/14 2C/14 2D/14 A0
+            // sequence in ev_profile_load.pcapng (2026-08-22). Without it the burst and
+            // its "13 55 00 00 06" persist address a slot the firmware was never told to
+            // select — they only agreed by luck, because 6 IS Custom's menu index.
+            _cachedMenuIndex = MenuIndexFor(Effect.Custom);
+            SwitchProfile(_cachedProfile, _cachedMenuIndex);
             bool ok = _nativePad.EnableCustomLighting(brightness);
             ok &= _nativePad.SendSideLedColors(wireColors, brightness);
             if (persist) ok &= _nativePad.PersistCustomLighting();
@@ -1444,6 +1709,13 @@ public sealed class EverestService : IDisposable
         if (_nativePad is null) return false;
         try
         {
+            // Base Camp names the target lighting slot before the Custom burst too:
+            // 14 00 00 00 <profile> 06 precedes the whole 11 01/14 2C/14 2D/14 A0
+            // sequence in ev_profile_load.pcapng (2026-08-22). Without it the burst and
+            // its "13 55 00 00 06" persist address a slot the firmware was never told to
+            // select — they only agreed by luck, because 6 IS Custom's menu index.
+            _cachedMenuIndex = MenuIndexFor(Effect.Custom);
+            SwitchProfile(_cachedProfile, _cachedMenuIndex);
             bool ok = _nativePad.EnableCustomLighting(brightness);
             ok &= _nativePad.SendKeycapColors(keycapWireColors, brightness);
             ok &= _nativePad.SendSideLedColors(sideWireColors);

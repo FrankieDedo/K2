@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   K2 한국어 현지화 파일.
   실행 파일과 같은 폴더에 Strings.ko.xml로 복사하세요.
@@ -58,6 +58,7 @@
   <string name="reset">초기화</string>
   <string name="new_profile">+ 새 프로파일</string>
   <string name="profile_n">프로파일 {0}</string>
+  <string name="default_profile_name">기본 프로파일</string>
   <string name="select_device_first">먼저 장치를 선택하세요.</string>
   <!--═══════════════════════════════════════════════════════════════
        버튼 동작 설정 대화상자 (K2.Core)
@@ -367,6 +368,7 @@
   <string name="hw_busy_uploading_image">장치에 이미지를 업로드하는 중입니다. 잠시만 기다려 주세요…</string>
   <string name="hw_busy_importing_profile">프로파일을 가져오는 중입니다. 잠시만 기다려 주세요…</string>
   <string name="hw_busy_importing_profiles">프로파일을 가져오는 중입니다. 잠시만 기다려 주세요…</string>
+  <string name="hw_busy_restoring_defaults">기본값으로 복원하는 중입니다. 잠시만 기다려 주세요…</string>
   <string name="ev_crash_recovering">드라이버가 충돌했습니다 — 3초 후 자동 복구를 시도합니다…</string>
   <string name="ev_crash_recovered">드라이버가 복구되었습니다 — LED 미리보기가 다시 시작되었습니다.</string>
   <string name="ev_crash_recovery_failed">드라이버 복구에 실패했습니다 — K2.App을 다시 시작하세요.</string>

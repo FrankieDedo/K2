@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   Localização portuguesa (Portugal) para K2.
   Copia para a mesma pasta do executável como Strings.pt.xml.
@@ -58,6 +58,7 @@
   <string name="reset">Repor</string>
   <string name="new_profile">+ Novo perfil</string>
   <string name="profile_n">Perfil {0}</string>
+  <string name="default_profile_name">Perfil predefinido</string>
   <string name="select_device_first">Selecione primeiro um dispositivo.</string>
   <!-- ═══════════════════════════════════════════════════════════════
        DIÁLOGO DE AÇÃO DE BOTÃO (K2.Core)
@@ -367,6 +368,7 @@
   <string name="hw_busy_uploading_image">A carregar imagem para o dispositivo, aguarde…</string>
   <string name="hw_busy_importing_profile">A importar perfil, aguarde…</string>
   <string name="hw_busy_importing_profiles">A importar perfis, aguarde…</string>
+  <string name="hw_busy_restoring_defaults">A restaurar as predefinições, aguarde…</string>
   <string name="ev_crash_recovering">O driver falhou — a tentar recuperação automática em 3 s…</string>
   <string name="ev_crash_recovered">Driver recuperado — pré-visualização LED reiniciada.</string>
   <string name="ev_crash_recovery_failed">Falha na recuperação do driver — reinicie o K2.App.</string>

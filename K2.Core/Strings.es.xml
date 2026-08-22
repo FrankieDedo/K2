@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   Cadenas de localización de K2 (español).
   Copia este archivo junto al ejecutable como Strings.es.xml.
@@ -60,6 +60,7 @@
   <string name="reset">Restablecer</string>
   <string name="new_profile">+ Nuevo perfil</string>
   <string name="profile_n">Perfil {0}</string>
+  <string name="default_profile_name">Perfil predeterminado</string>
   <string name="select_device_first">Selecciona primero un dispositivo.</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -372,6 +373,7 @@
   <string name="hw_busy_uploading_image">Subiendo imagen al dispositivo, espera…</string>
   <string name="hw_busy_importing_profile">Importando perfil, espera…</string>
   <string name="hw_busy_importing_profiles">Importando perfiles, espera…</string>
+  <string name="hw_busy_restoring_defaults">Restaurando los valores predeterminados, espera…</string>
   <string name="ev_crash_recovering">El driver ha fallado — intentando recuperación automática en 3 s…</string>
   <string name="ev_crash_recovered">Driver recuperado — vista previa LED reiniciada.</string>
   <string name="ev_crash_recovery_failed">La recuperación del driver ha fallado — reinicia K2.App.</string>

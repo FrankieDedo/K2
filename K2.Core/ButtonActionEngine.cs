@@ -129,6 +129,14 @@ public sealed class ButtonActionEngine : IDisposable
                 break;
             }
 
+            case "emoji":
+            {
+                if (string.IsNullOrEmpty(value)) { Log("[EXEC] emoji without payload"); break; }
+                // Unicode injection, not SendKeys — see ActionExecutor.SendUnicodeText.
+                ActionExecutor.SendUnicodeText(value, Log);
+                break;
+            }
+
             case "hotkeyswitch":
             {
                 var spec = HotkeySwitchPayload.Parse(value);
@@ -343,6 +351,7 @@ public sealed class ButtonActionEngine : IDisposable
             }
             case "text":
                 System.Windows.Forms.SendKeys.SendWait(EscapeSendKeysLiteral(value)); break;
+            case "emoji": ActionExecutor.SendUnicodeText(value, Log); break;
             case "oscmd": ActionExecutor.RunOsCommand(value, Log); break;
             case "media": ActionExecutor.SendMediaKey(value, Log); break;
             case "mouse": ActionExecutor.DoMouse(value, Log); break;

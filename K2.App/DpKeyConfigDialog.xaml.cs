@@ -279,6 +279,7 @@ public partial class DpKeyConfigDialog : Window
             "folder"     => IconImageGenerator.TryGenerateDiskFolderIcon(ActionValue!, DpHidNative.IconSize, dest),
             "dp_folder"  => IconImageGenerator.TryGenerateFolderIcon(pageName ?? ActionValue!, DpHidNative.IconSize, dest),
             "googlehome" => GoogleHomeIconCatalog.TryGenerateKeyIcon(ActionValue!, DpHidNative.IconSize, dest),
+            "emoji"      => EmojiGlyphRenderer.TryGenerateEmojiIcon(ActionValue!, DpHidNative.IconSize, dest),
             _            => IconGalleryDefaults.TryGenerateKeyIcon(ActionType!, ActionValue!, DpHidNative.IconSize, dest),
         };
         if (!ok) return;

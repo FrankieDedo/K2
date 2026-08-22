@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using K2.App.Models;
@@ -33,9 +34,15 @@ namespace K2.App;
 public partial class MainWindow
 {
     // ---- DisplayPad backend (satellite SDK or native USB) ----
-    private readonly IDisplayPadClient _dpClient = AppSettings.DisplayPadNativeEngine
-        ? new DisplayPadNativeClient()
-        : new DisplayPadSatelliteClient();
+    // Wrapped in RemappingDisplayPadClient so every id used below (and by DpGifAnimator/
+    // DpFullscreenAnimator/SpotifyCoverService/DisplayPadStore keys) is a STABLE logical
+    // id, immune to the SDK renumbering a pad when its USB port changes — see
+    // RemappingDisplayPadClient/DisplayPadDeviceMap and the "DisplayPad device mapping"
+    // popup in General Settings (DpDeviceMapWindow).
+    private readonly IDisplayPadClient _dpClient = new RemappingDisplayPadClient(
+        AppSettings.DisplayPadNativeEngine
+            ? new DisplayPadNativeClient()
+            : new DisplayPadSatelliteClient());
     /// <summary>Internal (not private): read directly by <see cref="DisplayPadBackgroundActionHost"/>,
     /// which executes actions for connected pads other than the foreground tab (see
     /// <see cref="DpActivateBackgroundDevice"/>) and cannot go through the UI-bound fields.</summary>
@@ -146,6 +153,12 @@ public partial class MainWindow
     private const double DpGapH = 8;
     private const double DpGapV = 10;
 
+    // ---- Drag & drop (swap two keys' action + icon) — mirrors K2.DisplayPad's
+    // standalone MainWindow (CellButton_*/SwapCells) and MacroPad's KeyButton_* ----
+    private const string DpKeyDragFormat = "K2.DpKeyIndex";
+    private Point _dpDragStartPoint;
+    private DisplayPadKey? _dpDragCandidate;
+
     // ================================================================
     // Initialization (called from MainWindow constructor)
     // ================================================================
@@ -183,6 +196,12 @@ public partial class MainWindow
                 ContextMenu = BuildDpKeyContextMenu(),
             };
             btn.Click += DpKeyButton_Click;
+            btn.AllowDrop = true;
+            btn.PreviewMouseLeftButtonDown += DpKeyButton_PreviewMouseLeftButtonDown;
+            btn.PreviewMouseMove += DpKeyButton_PreviewMouseMove;
+            btn.DragEnter += DpKeyButton_DragEnter;
+            btn.DragLeave += DpKeyButton_DragLeave;
+            btn.Drop += DpKeyButton_Drop;
             _dpButtons[i] = btn;
         }
 
@@ -543,9 +562,7 @@ public partial class MainWindow
     /// including the last one, since fresh profiles replace them right after.</summary>
     private void DpDeleteProfileSlot(int deviceId, int slot)
     {
-        _dpStore.ClearProfile(deviceId, slot);
-        _dpStore.SetSetting($"profile.{deviceId}.{slot}.name", "");
-        _dpStore.SetSetting($"profile.{deviceId}.{slot}.launchExe", "");
+        _dpStore.DeleteProfile(deviceId, slot);
     }
 
     /// <summary>Gear-icon popup for a DisplayPad profile row (see ProfileGear_Click in
@@ -1327,8 +1344,17 @@ public partial class MainWindow
         try
         {
             var existing = _dpStore.GetExistingProfiles(deviceId);
-            // Ensure at least profile 1 is present
-            if (existing.Count == 0) existing.Add(1);
+            if (existing.Count == 0)
+            {
+            // No profile at all — fresh install, hardware factory reset or the Settings
+            // tab's "Restore all defaults": recreate one instead of only showing a
+            // phantom slot 1 under the generic "Profile 1" label. Named "Default
+            // profile" (localized, `default_profile_name`), the same name Base Camp
+            // gives its own starting profile. User request 2026-08-21.
+                if (_dpStore.GetProfileName(deviceId, 1) is null)
+                    _dpStore.SetProfileName(deviceId, 1, Loc.Get("default_profile_name"));
+                existing.Add(1);
+            }
             var items = new List<DpProfileItem>();
             foreach (var slot in existing)
             {
@@ -1648,6 +1674,13 @@ public partial class MainWindow
                 imported++;
             }
 
+            // K2-format extra: the whole per-profile Settings namespace (see
+            // K2ProfileSettingsXml). Absent from Base Camp files and from K2 exports made
+            // before 2026-08-22, in which case this is a no-op.
+            int k2Settings = K2ProfileSettingsXml.Apply(
+                root, _dpStore.SetSetting, slot, K2ProfileSettingsXml.SettingsOnlyFamilies);
+            if (k2Settings > 0) DpLog($"[IMP-XML] {k2Settings} K2 profile setting(s) restored");
+
             // No native SwitchProfile — see DpSwitchProfile.
             _dpStore.SetCurrentProfile(id, slot);
             ResetDpNavigation();
@@ -1795,9 +1828,17 @@ public partial class MainWindow
             return;
         }
 
-        // Wipe: replace, don't append (see DpDeleteProfileSlot's doc comment).
-        foreach (var slot in _dpStore.GetExistingProfiles(k2DeviceId))
-            DpDeleteProfileSlot(k2DeviceId, slot);
+        // Wipe: replace, don't append (see DpDeleteProfileSlot's doc comment) — every slot
+        // that exists PLUS the first five, which is where an import lands (2026-08-22, same
+        // change as the Everest Max import). A slot with no key rows is invisible to
+        // GetExistingProfiles yet can still hold stale settings./page rows that would
+        // become the starting point of whatever the import puts there. Unlike the other
+        // devices the DisplayPad has no firmware slot cap, hence the union rather than a
+        // fixed count.
+        foreach (var wipeSlot in _dpStore.GetExistingProfiles(k2DeviceId)
+                     .Union(Enumerable.Range(1, 5))
+                     .OrderBy(x => x))
+            DpDeleteProfileSlot(k2DeviceId, wipeSlot);
 
         int rotation = _dpStore.GetRotation(k2DeviceId);
         // APEnable=false required before SetIconPic (UploadImageToProfile)
@@ -1958,6 +1999,99 @@ public partial class MainWindow
         _dpMappedKeys.Clear();
         foreach (var k in _dpKeys)
             if (k.HasAction) _dpMappedKeys.Add(k);
+    }
+
+    // ================================================================
+    // Drag & drop — swap two keys' action + icon (same-page only, mirrors the
+    // standalone K2.DisplayPad's CellButton_*/SwapCells and MacroPad's KeyButton_*)
+    // ================================================================
+
+    private void DpKeyButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _dpDragStartPoint = e.GetPosition(null);
+        _dpDragCandidate = (sender as Button)?.Tag as DisplayPadKey;
+    }
+
+    private void DpKeyButton_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _dpDragCandidate is null) return;
+        var key = _dpDragCandidate;
+        if (!IsDpKeyBindingSectionActive || (!key.HasAction && !key.HasImage))
+        {
+            _dpDragCandidate = null;
+            return;
+        }
+        if (!DragDropHelper.ExceedsDragThreshold(_dpDragStartPoint, e.GetPosition(null))) return;
+
+        _dpDragCandidate = null;
+        DragDrop.DoDragDrop((Button)sender, new DataObject(DpKeyDragFormat, key.Index), DragDropEffects.Move);
+    }
+
+    private void DpKeyButton_DragEnter(object sender, DragEventArgs e)
+    {
+        bool ok = e.Data.GetDataPresent(DpKeyDragFormat);
+        e.Effects = ok ? DragDropEffects.Move : DragDropEffects.None;
+        if (ok && sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, true);
+    }
+
+    private void DpKeyButton_DragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, false);
+    }
+
+    private void DpKeyButton_Drop(object sender, DragEventArgs e)
+    {
+        if (sender is Button btn) DragDropHelper.SetDropTargetHighlight(btn, false);
+        if (!IsDpKeyBindingSectionActive) return;
+        if (DpSelectedDeviceId() is not int id) return;
+        if (sender is not Button { Tag: DisplayPadKey targetKey }) return;
+        if (!e.Data.GetDataPresent(DpKeyDragFormat)) return;
+
+        int sourceIndex = (int)e.Data.GetData(DpKeyDragFormat);
+        if (sourceIndex < 0 || sourceIndex >= _dpKeys.Length) return;
+        var sourceKey = _dpKeys[sourceIndex];
+        if (ReferenceEquals(sourceKey, targetKey)) return;
+
+        DpSwapKeys(id, DpCurrentProfile(), sourceKey, targetKey);
+    }
+
+    /// <summary>Swaps action + icon between two keys of the current page, re-uploading
+    /// icons to the physical device at their new positions (each key's picture lives in
+    /// firmware, keyed by button index — a local-only swap would leave the device showing
+    /// the pre-swap pictures). Mirrors the standalone K2.DisplayPad's SwapCells.</summary>
+    private void DpSwapKeys(int id, int profile, DisplayPadKey a, DisplayPadKey b)
+    {
+        (a.ActionType, b.ActionType)   = (b.ActionType, a.ActionType);
+        (a.ActionValue, b.ActionValue) = (b.ActionValue, a.ActionValue);
+
+        string? aImage = a.ImagePath;
+        string? bImage = b.ImagePath;
+
+        if (!string.IsNullOrEmpty(bImage) && File.Exists(bImage))
+        {
+            DpUploadAndPersist(id, profile, a, bImage);
+        }
+        else
+        {
+            DpGifAnimator.Stop(id, a.Index);
+            a.ImagePath = null;
+            _dpStore.SaveButton(id, profile, _currentDpPageId, a.Index, null, a.ActionType, a.ActionValue);
+            DpClearKeyOnDevice(id, a.Index);
+        }
+
+        if (!string.IsNullOrEmpty(aImage) && File.Exists(aImage))
+        {
+            DpUploadAndPersist(id, profile, b, aImage);
+        }
+        else
+        {
+            DpGifAnimator.Stop(id, b.Index);
+            b.ImagePath = null;
+            _dpStore.SaveButton(id, profile, _currentDpPageId, b.Index, null, b.ActionType, b.ActionValue);
+            DpClearKeyOnDevice(id, b.Index);
+        }
+
+        DpLog($"[ACT] swapped key #{a.Index} <-> #{b.Index}");
     }
 
     /// <summary>Configure/Remove only make sense with a row selected — mirrors
@@ -2167,7 +2301,8 @@ public partial class MainWindow
                 DpHidNative.IconSize, DpHidNative.IconSize,
                 Loc.Get("crop_title", DpHidNative.IconSize, DpHidNative.IconSize),
                 bakeRoundedCorners: true);
-            if (cropped is not null) picked = cropped;
+            if (cropped is null) return;
+            picked = cropped;
         }
         DpUploadAndPersist(id, DpCurrentProfile(), key, picked);
     }

@@ -62,6 +62,15 @@
     <EmbeddedResource Include="Assets\dp_folder_template.png" />
   </ItemGroup>
 
+  <!-- Emoji catalog: name + category per emoji, generated from Unicode's own
+       emoji-test.txt (Emoji 15.1) and pre-filtered to single-codepoint emoji.
+       Embedded so EmojiCatalog/EmojiPickerDialog work with no file on disk;
+       the ART is not here — it comes from the system's Segoe UI Emoji COLR
+       tables at runtime (see EmojiGlyphRenderer). -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\emoji_catalog.tsv" />
+  </ItemGroup>
+
   <!-- Roboto font (SIL OFL 1.1, see Fonts/LICENSE.Roboto.txt): embedded as
        Resource so K2Theme.xaml can reference it via pack URI regardless of
        whether Roboto is installed on the end-user's machine. License text

@@ -1,17 +1,19 @@
 // MainWindow.MacroKeycapAppearance.cs — partial class: MacroPad half of the "keycap
-// appearance" feature (PnlMpSecSettings, the MacroPad tab's own Settings sidebar section —
-// see MainWindow.SectionNav.cs). Exact mirror of the Everest half in
-// MainWindow.KeycapAppearance.cs: same shared types (KeycapColorMode/KeycapStyle/KeyVisual/
-// LedOffColor/KeycapStyleChoice(s)) and same shared utility (TryParseHexColor/ParseColorMode/
-// ColorModeToString/SetLegendForeground), just a separate persisted setting and cache (this
-// is a per-device, not shared, choice) and its own controls/handlers with an "Mp" prefix.
+// appearance" feature (PnlMpSecAppearance, the MacroPad tab's own Appearance sidebar section
+// — see MainWindow.SectionNav.cs; Positioning/rotation stayed behind in Settings). Exact
+// mirror of the Everest half in MainWindow.KeycapAppearance.cs: same shared types
+// (KeycapColorMode/KeycapStyle/KeyVisual/LedOffColor/KeycapStyleChoice(s)) and same shared
+// utility (TryParseHexColor/ParseColorMode/ColorModeToString/SetLegendForeground), just a
+// separate persisted setting and cache (this is a per-device, not shared, choice) and its own
+// controls/handlers with an "Mp" prefix.
 //
 // Persisted in MacroPadStore (keys "settings.keycap_*" — same key names as the Everest half,
-// but a different store/device, so no collision), loaded/saved from
-// LoadMpKeycapAppearanceFromStore, guarded by the new _mpSettingsSuppress flag (MacroPad had
-// no unified "Settings" section/suppress-flag before this feature — Rotation and LED lighting
-// each have their own, see MainWindow.Keys.cs/_suppressRotationUpdate and
-// MainWindow.MacroLed.cs/_macroLedSuppress).
+// but a different store/device, so no collision), always the fixed global namespace — NOT
+// per-profile (user request 2026-08-22: Appearance settings are disconnected from profiles
+// entirely). Loaded/saved from LoadMpKeycapAppearanceFromStore, guarded by the
+// _mpSettingsSuppress flag (MacroPad had no unified "Settings" section/suppress-flag before
+// this feature — Rotation and LED lighting each have their own, see
+// MainWindow.Keys.cs/_suppressRotationUpdate and MainWindow.MacroLed.cs/_macroLedSuppress).
 //
 // The live per-tick LED color is applied by MainWindow.LedPreview.cs (OnMacroPadColorsUpdated)
 // via ApplyMacroPadLedColor/ResetMacroPadKeyToOff below; ApplyMacroKeycapAppearanceToAllKeys
@@ -137,7 +139,7 @@ public partial class MainWindow
 
     private void MpDeviceBox_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (!_mpCustomPaintMode && !(_mpKeycapEditMode && IsMpSettingsSectionActive)) return;
+        if (!_mpCustomPaintMode && !(_mpKeycapEditMode && IsMpAppearanceSectionActive)) return;
         _mpRubberStart = e.GetPosition(CvsMpRubberBand);
         _mpRubberTracking = true;
         _mpRubberActive = false;
@@ -176,7 +178,7 @@ public partial class MainWindow
         e.Handled = true;
         if (_mpCustomPaintMode)
             PaintMpKeysInRect(rect);
-        else if (_mpKeycapEditMode && IsMpSettingsSectionActive)
+        else if (_mpKeycapEditMode && IsMpAppearanceSectionActive)
             MpOpenKeycapDialogForRect(rect);
     }
 
@@ -206,15 +208,6 @@ public partial class MainWindow
         OpenMpKeycapCustomizeDialogBatch(matches);
     }
 
-    /// <summary>
-    /// Key namespace for the Settings section — reuses <c>CkMacroSync</c>/<c>macroled.sync</c>,
-    /// the same device-wide "sync across profiles" flag as the LED panel (see
-    /// <see cref="MacroLedPrefix"/>'s doc comment and Everest Max's EvSettingsPrefix, which
-    /// does the same thing for its own RGB/Settings/Dial). User request 2026-07-25.
-    /// </summary>
-    private string MpSettingsPrefix() =>
-        CkMacroSync.IsChecked == true ? "settings." : $"settings.p{CurrentProfile()}.";
-
     /// <summary>One-time control setup (ItemsSource) + persisted-value load, guarded by
     /// _mpSettingsSuppress. Called once from the constructor, and again on every profile
     /// switch (see ReloadCurrentProfile, MainWindow.Keys.cs).</summary>
@@ -229,16 +222,13 @@ public partial class MainWindow
     }
 
     /// <summary>Loads settings.keycap_* from the MacroPad store into the cache fields and the
-    /// Settings-section controls.</summary>
+    /// Appearance-section controls. Always the fixed global "settings.keycap_*" namespace —
+    /// Keycap Appearance is a cosmetic, device-wide preference, not per-profile (user request
+    /// 2026-08-22: split into its own Appearance section, disconnected from "sync across
+    /// profiles").</summary>
     private void LoadMpKeycapAppearanceFromStore()
     {
-        CkMpSettingsSync.IsChecked = CkMacroSync.IsChecked;
-
-        // Profile-scoped (or shared, if synced) namespace first, falling back to the legacy
-        // always-global "settings.keycap_*" keys — one-time seeding for existing installs/
-        // profiles that never had their own per-profile value saved yet.
-        string prefix = MpSettingsPrefix();
-        string? Get(string key) => _store.GetSetting(prefix + key) ?? _store.GetSetting("settings." + key);
+        string? Get(string key) => _store.GetSetting("settings." + key);
 
         _mpKeycapColorMode = ParseColorMode(Get("keycap_color_mode"), KeycapColorMode.Black);
         _mpKeycapCustomHex = Get("keycap_custom_hex") is { Length: > 0 } hex ? hex : "#404040";
@@ -257,8 +247,8 @@ public partial class MainWindow
                 3 => KeycapStyle.ReversePudding,
                 _ => KeycapStyle.Normal,
             };
-            _store.SetSetting(prefix + "keycap_style", ((int)_mpKeycapStyleValue).ToString());
-            _store.SetSetting(prefix + "keycap_translucent_legend", _mpKeycapTranslucentLegend ? "1" : "0");
+            _store.SetSetting("settings.keycap_style", ((int)_mpKeycapStyleValue).ToString());
+            _store.SetSetting("settings.keycap_translucent_legend", _mpKeycapTranslucentLegend ? "1" : "0");
         }
         else
         {
@@ -297,30 +287,6 @@ public partial class MainWindow
         ApplyMacroKeycapAppearanceToAllKeys();
     }
 
-    /// <summary>Re-saves the currently cached Keycap Appearance values under
-    /// <see cref="MpSettingsPrefix"/>'s current namespace — used when "sync across
-    /// profiles" is toggled (see CkMpSettingsSync_Click), same reasoning as Everest
-    /// Max's SaveKeycapAppearanceToStore. User request 2026-07-25.</summary>
-    private void SaveMpKeycapAppearanceToStore()
-    {
-        string prefix = MpSettingsPrefix();
-        _store.SetSetting(prefix + "keycap_color_mode", ColorModeToString(_mpKeycapColorMode));
-        _store.SetSetting(prefix + "keycap_custom_hex", _mpKeycapCustomHex);
-        _store.SetSetting(prefix + "keycap_text_color_mode", ColorModeToString(_mpKeycapTextColorMode));
-        _store.SetSetting(prefix + "keycap_text_custom_hex", _mpKeycapTextCustomHex);
-        _store.SetSetting(prefix + "keycap_style", ((int)_mpKeycapStyleValue).ToString());
-        _store.SetSetting(prefix + "keycap_translucent_legend", _mpKeycapTranslucentLegend ? "1" : "0");
-    }
-
-    /// <summary>Mirrors CkMacroSync (the LED panel's own checkbox) — same underlying
-    /// device flag, see MpSettingsPrefix's doc comment.</summary>
-    private void CkMpSettingsSync_Click(object sender, RoutedEventArgs e)
-    {
-        if (_mpSettingsSuppress) return;
-        CkMacroSync.IsChecked = CkMpSettingsSync.IsChecked;
-        CkMacroSync_Click(sender, e);
-        SaveMpKeycapAppearanceToStore();
-    }
 
     private void RbMpKeycapColor_Checked(object sender, RoutedEventArgs e)
     {
@@ -328,7 +294,7 @@ public partial class MainWindow
         _mpKeycapColorMode = sender == RbMpKeycapWhite  ? KeycapColorMode.White
                            : sender == RbMpKeycapCustom ? KeycapColorMode.Custom
                            :                              KeycapColorMode.Black;
-        _store.SetSetting(MpSettingsPrefix() + "keycap_color_mode", ColorModeToString(_mpKeycapColorMode));
+        _store.SetSetting("settings.keycap_color_mode", ColorModeToString(_mpKeycapColorMode));
         BtnMpKeycapCustomColor.IsEnabled = _mpKeycapColorMode == KeycapColorMode.Custom;
         ApplyMacroKeycapAppearanceToAllKeys();
     }
@@ -339,7 +305,7 @@ public partial class MainWindow
         _mpKeycapTextColorMode = sender == RbMpKeycapTextBlack  ? KeycapColorMode.Black
                                 : sender == RbMpKeycapTextCustom ? KeycapColorMode.Custom
                                 :                                  KeycapColorMode.White;
-        _store.SetSetting(MpSettingsPrefix() + "keycap_text_color_mode", ColorModeToString(_mpKeycapTextColorMode));
+        _store.SetSetting("settings.keycap_text_color_mode", ColorModeToString(_mpKeycapTextColorMode));
         BtnMpKeycapTextColor.IsEnabled = _mpKeycapTextColorMode == KeycapColorMode.Custom;
         ApplyMacroKeycapAppearanceToAllKeys();
     }
@@ -358,7 +324,7 @@ public partial class MainWindow
         if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
         _mpKeycapCustomHex = $"#{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
-        _store.SetSetting(MpSettingsPrefix() + "keycap_custom_hex", _mpKeycapCustomHex);
+        _store.SetSetting("settings.keycap_custom_hex", _mpKeycapCustomHex);
         BtnMpKeycapCustomColor.Background = new SolidColorBrush(Color.FromRgb(dlg.Color.R, dlg.Color.G, dlg.Color.B));
 
         if (RbMpKeycapCustom.IsChecked != true)
@@ -381,7 +347,7 @@ public partial class MainWindow
         if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
         _mpKeycapTextCustomHex = $"#{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
-        _store.SetSetting(MpSettingsPrefix() + "keycap_text_custom_hex", _mpKeycapTextCustomHex);
+        _store.SetSetting("settings.keycap_text_custom_hex", _mpKeycapTextCustomHex);
         BtnMpKeycapTextColor.Background = new SolidColorBrush(Color.FromRgb(dlg.Color.R, dlg.Color.G, dlg.Color.B));
 
         if (RbMpKeycapTextCustom.IsChecked != true)
@@ -395,7 +361,7 @@ public partial class MainWindow
         if (_mpSettingsSuppress) return;
         if (CbMpKeycapStyle.SelectedItem is not KeycapStyleChoice pick) return;
         _mpKeycapStyleValue = pick.Style;
-        _store.SetSetting(MpSettingsPrefix() + "keycap_style", ((int)pick.Style).ToString());
+        _store.SetSetting("settings.keycap_style", ((int)pick.Style).ToString());
         ApplyMacroKeycapAppearanceToAllKeys();
     }
 
@@ -403,7 +369,7 @@ public partial class MainWindow
     {
         if (_mpSettingsSuppress) return;
         _mpKeycapTranslucentLegend = CkMpKeycapTranslucentLegend.IsChecked == true;
-        _store.SetSetting(MpSettingsPrefix() + "keycap_translucent_legend", _mpKeycapTranslucentLegend ? "1" : "0");
+        _store.SetSetting("settings.keycap_translucent_legend", _mpKeycapTranslucentLegend ? "1" : "0");
         ApplyMacroKeycapAppearanceToAllKeys();
     }
 

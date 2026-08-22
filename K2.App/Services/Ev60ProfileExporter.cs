@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Xml.Linq;
+using K2.App.Models;
 using K2.Core;
 
 namespace K2.App.Services;
@@ -138,6 +139,9 @@ public static class Ev60ProfileExporter
                     new XElement("ProfileId", 0),
                     new XElement("EffIndex", effName),
                     new XElement("EffectName", effName == "OFF" ? "Off" : effEnum.ToString()),
+                    // Color-type pill: 0 single / 1 dual / 2 rainbow — inverse of the
+                    // import side (BaseCampDbImporter.ApplyLightingToStore's doc comment).
+                    new XElement("Type", lighting.Rainbow ? 2 : lighting.ColorDouble ? 1 : 0),
                     new XElement("Speed", lighting.SpeedPct),
                     new XElement("Brightness", (int)lighting.Brightness),
                     new XElement("Direction", lighting.DirIndex),
@@ -150,6 +154,12 @@ public static class Ev60ProfileExporter
         // ---- Settings (Game Mode/Core LED) ----
         int mode = int.TryParse(store.GetSetting($"settings.p{slot}.game_mode"), out var m) ? m : 0;
         bool led = store.GetSetting($"settings.p{slot}.indicator_led") == "1";
+        // Null = the user never picked one, so the value below is only K2's locale
+        // guess: exported as IsLayoutConfigured=false so the importing side keeps its
+        // own guess instead (same gate BaseCampDbImporter applies to BC's DB column).
+        var layoutStored = EverestKeyboardLayout.ParseStorageString(
+            store.GetSetting(EverestKeyboardLayout.LayoutSettingKey));
+        var layout = layoutStored ?? EverestKeyboardLayout.DetectLayout();
         root.Add(new XElement("Everest60Settings",
             new XElement("Everest60Setting",
                 new XElement("ProfileId", 0),
@@ -159,7 +169,16 @@ public static class Ev60ProfileExporter
                 new XElement("DisableWin", (mode & 0x4) != 0 ? "true" : "false"),
                 new XElement("DisableAltTab", (mode & 0x8) != 0 ? "true" : "false"),
                 new XElement("EnableCoreLED", led ? "true" : "false"),
+                // See EvProfileExporter for why these two are written.
+                new XElement("KeyboardLayout", EverestKeyboardLayout.ToStorageString(layout)),
+                new XElement("IsLayoutConfigured", layoutStored is not null ? "true" : "false"),
                 new XElement("modified_at", DateTime.Now.ToString("o")))));
+
+        // K2-only: the whole per-profile Settings namespace, verbatim — see
+        // K2ProfileSettingsXml for why a generic dump beats hand-written fields.
+        if (!bcCompatible)
+            root.Add(K2ProfileSettingsXml.Build(
+                store.GetSettingsWithPrefix, slot, K2ProfileSettingsXml.SettingsOnlyFamilies));
 
         var doc = new XDocument(new XDeclaration("1.0", "utf-8", null), root);
         doc.Save(filePath);

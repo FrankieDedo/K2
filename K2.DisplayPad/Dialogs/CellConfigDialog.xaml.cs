@@ -151,21 +151,24 @@ public partial class CellConfigDialog : Window
     }
 
     /// <summary>
-    /// When the action just assigned/changed is "exec" or "folder", auto-generate the
-    /// cell's picture (the executable's own icon, or a folder glyph + name) instead of
-    /// requiring the user to manually pick an image. Generated upright, like any other
-    /// image; the device's mounting rotation is applied at upload time same as everything
-    /// else (see <c>MainWindow.xaml.cs</c>'s upload paths).
+    /// When the action just assigned/changed is "exec", "folder" or "emoji", auto-generate
+    /// the cell's picture (the executable's own icon, a folder glyph + name, or the emoji
+    /// itself) instead of requiring the user to manually pick an image. Generated upright,
+    /// like any other image; the device's mounting rotation is applied at upload time same
+    /// as everything else (see <c>MainWindow.xaml.cs</c>'s upload paths).
     /// </summary>
     private void TryAutoGenerateCellImage()
     {
         if (string.IsNullOrWhiteSpace(ActionValue)) return;
-        if (ActionType != "exec" && ActionType != "folder") return;
+        if (ActionType is not ("exec" or "folder" or "emoji")) return;
 
         string dest = AutoIconCachePath(ActionType!, ActionValue!);
-        bool ok = ActionType == "exec"
-            ? IconImageGenerator.TryGenerateExecIcon(ActionValue!, AutoIconSize, dest)
-            : IconImageGenerator.TryGenerateDiskFolderIcon(ActionValue!, AutoIconSize, dest);
+        bool ok = ActionType switch
+        {
+            "exec"  => IconImageGenerator.TryGenerateExecIcon(ActionValue!, AutoIconSize, dest),
+            "emoji" => EmojiGlyphRenderer.TryGenerateEmojiIcon(ActionValue!, AutoIconSize, dest),
+            _       => IconImageGenerator.TryGenerateDiskFolderIcon(ActionValue!, AutoIconSize, dest),
+        };
         if (!ok) return;
 
         _pendingPath    = dest;
@@ -216,6 +219,7 @@ public partial class CellConfigDialog : Window
             "media"    => $"Media: {val}",
             "mouse"    => $"Mouse: {val}",
             "text"     => $"Text: {val}",
+            "emoji"    => ActionTypeHelper.EmojiSummary(val),
             "command"  => $"Command: {val}",
             "macro"    => $"Macro: {val}",
             "pyscript" => "Python script",

@@ -93,6 +93,7 @@
   <!-- Immagini dispositivi (sfondo tab + overlay tasti) -->
   <ItemGroup>
     <Resource Include="Assets\K2_logo.png" />
+    <Resource Include="Assets\K2_icon.png" />
     <Resource Include="Assets\setting_keyboard.png" />
     <Resource Include="Assets\MKD_setting.png" />
     <Resource Include="Assets\DKD_Setting.png" />
