@@ -208,7 +208,27 @@
   <string name="youtube_chat_message_label">ライブチャットメッセージ:</string>
   <string name="act_command">シェルコマンド</string>
   <string name="act_text">テキストを貼り付ける</string>
+  <string name="act_emoji">絵文字</string>
   <string name="act_macro">マクロを再生</string>
+
+  <!-- 絵文字アクション + 絵文字ブラウザー（EmojiPickerDialog） -->
+  <string name="emoji_picker_title">絵文字を選択</string>
+  <string name="emoji_choose_button">絵文字を選択…</string>
+  <string name="emoji_none_selected">絵文字が選択されていません</string>
+  <string name="emoji_search_label">検索:</string>
+  <string name="emoji_category_label">カテゴリー:</string>
+  <string name="emoji_category_all">すべて</string>
+  <string name="emoji_no_results">絵文字が見つかりません</string>
+  <string name="emoji_hint">キーを押すと、フォーカスされているアプリケーションに絵文字が入力されます。ディスプレイキー（DisplayPad、Everest Max のテンキー）では、キーの画像としても使用されます。</string>
+  <string name="emoji_grp_smileys">スマイリーと感情</string>
+  <string name="emoji_grp_people">人々と体</string>
+  <string name="emoji_grp_animals">動物と自然</string>
+  <string name="emoji_grp_food">食べ物と飲み物</string>
+  <string name="emoji_grp_travel">旅行と場所</string>
+  <string name="emoji_grp_activities">アクティビティ</string>
+  <string name="emoji_grp_objects">物</string>
+  <string name="emoji_grp_symbols">記号</string>
+  <string name="emoji_grp_flags">旗</string>
   <string name="act_macro_unresolved">マクロを再生（未割り当て）</string>
   <string name="act_googlehome">Google Home</string>
   <string name="act_pyscript">Python スクリプト</string>
@@ -350,6 +370,19 @@
   <string name="settings_k2_autostart_hint">K2 は現在、管理者権限を必要とします（BaseCampService の制御のため）。Windows はログオン時に Run レジストリキーから起動するアプリを自動昇格しないため、この設定だけでは K2 がサイレントに起動できないことがあります — その場合はタスクスケジューラを使用してください（ログオン時に「最上位の特権で実行」を設定したタスク）。</string>
   <string name="settings_start_min_tray">トレイに最小化した状態で起動</string>
   <string name="settings_start_min_tray_hint">K2 はドライバーを有効にした状態で起動しますが、ウィンドウはトレイに隠れています — トレイアイコンからいつでも開けます。</string>
+  <!-- DisplayPad デバイスマッピング -->
+  <string name="settings_dp_devicemap_group">DisplayPad デバイスマッピング</string>
+  <string name="settings_dp_devicemap_btn">マッピングを設定…</string>
+  <string name="settings_dp_devicemap_hint">DisplayPad を別の USB ポートに移動し、保存済みのプロファイルが誤ったパネルに表示されるようになった場合（例："DisplayPad 2" と "DisplayPad 3" が入れ替わっている）、これを使って各接続パッドが扱われるパネルを再割り当てできます。</string>
+  <string name="dp_devicemap_title">DisplayPad デバイスマッピング</string>
+  <string name="dp_devicemap_hint">接続されている各パッドがファームウェアバージョンとともに以下に一覧表示されます。「識別」をクリックしてパッドのバックライトを点滅させ、どの行かを確認してから、使用するボード番号を設定してください。2 つの行が同じボード番号を共有することはできません。</string>
+  <string name="dp_devicemap_col_current">現在の表示</string>
+  <string name="dp_devicemap_col_firmware">ファームウェア</string>
+  <string name="dp_devicemap_col_board">ボード番号</string>
+  <string name="dp_devicemap_identify_btn">識別</string>
+  <string name="dp_devicemap_none_connected">現在接続されている DisplayPad はありません — 再割り当てしたいパッドを接続してから、このウィンドウを開き直してください。</string>
+  <string name="dp_devicemap_duplicate_error">2 つのパッドが同じボード番号を使用することはできません。それぞれに異なる番号を割り当ててください。</string>
+  <string name="dp_devicemap_invalid_number">ボード番号は正の整数である必要があります。</string>
   <string name="settings_font_family">フォント</string>
   <string name="settings_font_family_hint">アプリ全体の UI フォントを即座に変更します。再起動は不要です。</string>
   <string name="tray_show">K2 を表示</string>
@@ -369,7 +402,7 @@
   <string name="hw_busy_uploading_image">デバイスに画像をアップロードしています。しばらくお待ちください…</string>
   <string name="hw_busy_importing_profile">プロファイルをインポートしています。しばらくお待ちください…</string>
   <string name="hw_busy_importing_profiles">プロファイルをインポートしています。しばらくお待ちください…</string>
-  <string name="hw_busy_restoring_defaults">デフォルトに戻しています。しばらくお待ちください…</string>
+  <string name="hw_busy_restoring_defaults">デフォルト設定を復元しています。しばらくお待ちください…</string>
   <string name="ev_crash_recovering">ドライバーがクラッシュしました — 3 秒後に自動回復を試みます…</string>
   <string name="ev_crash_recovered">ドライバーが回復しました — LED プレビューを再起動しました。</string>
   <string name="ev_crash_recovery_failed">ドライバーの回復に失敗しました — K2.App を再起動してください。</string>
@@ -391,7 +424,7 @@
   <string name="rgb_single_tip">エフェクトに単色を使用します。</string>
   <string name="rgb_double">2色</string>
   <string name="rgb_double_tip">エフェクトに2色を使用します（すべてのエフェクトに対応しているわけではありません）。</string>
-  <string name="rgb_sync_profiles">プロファイルを同期</string>
+  <string name="rgb_sync_profiles">プロファイル間で同期</string>
   <string name="rgb_primary">プライマリ:</string>
   <string name="rgb_secondary">セカンダリ:</string>
   <string name="rgb_tertiary">ターシャリ:</string>
@@ -477,7 +510,7 @@
   <string name="makalu_remap_btn_dpi">DPI ボタン</string>
   <string name="makalu_remap_btn_5">ボタン 5</string>
   <string name="makalu_remap_btn_6">ボタン 6</string>
-  <string name="makalu_settings_title">デバイス設定</string>
+  <string name="makalu_settings_title">設定</string>
   <string name="makalu_setting_poll">ポーリングレート:</string>
   <string name="makalu_setting_debounce">ボタンの反応:</string>
   <string name="makalu_setting_angle">アングルスナッピング:</string>
@@ -545,6 +578,7 @@
   <string name="dock_remove_action">アクションを削除</string>
   <!-- 設定（Everest サイドバーセクション: キーボードレイアウト） -->
   <string name="ev_settings">設定</string>
+  <string name="appearance">外観</string>
   <string name="ev_layout">レイアウト</string>
   <string name="settings_sync_profiles">プロファイル間で同期</string>
   <string name="settings_game_mode">ゲームモード</string>
@@ -580,9 +614,12 @@
   <string name="keycap_customize_use_mountain_logo">Mountain ロゴを使用（固定）</string>
   <string name="keycap_customize_clear_all">上書きをクリア</string>
   <string name="keycap_customize_close">閉じる</string>
-  <string name="settings_factory_reset">工場出荷時の設定に戻す</string>
-  <string name="settings_factory_reset_confirm">キーボードのゲームモード、インジケーター LED、ライティングエフェクトを工場出荷時の設定に戻します。続行しますか？</string>
-  <!-- キーボードマクロ -->
+  <string name="settings_factory_reset">すべての設定を工場出荷時の状態に戻す</string>
+  <string name="settings_factory_reset_hint">キーボード自体のメモリー（ファームウェアプロファイル、キー割り当て、ディスプレイキーの画像、照明）を消去し、K2 に保存されているこのキーボードの設定もクリアします。サイドバーの「デフォルトに戻す」とは異なり、こちらは K2 のプロファイルのみをリセットし、デバイスには影響しません。</string>
+  <string name="settings_factory_reset_confirm">これにより、キーボード自体のメモリーが工場出荷時の状態に戻ります。デバイスに保存されているすべてのファームウェアプロファイル、キー割り当て、ディスプレイキーの画像、照明エフェクトが消去され、K2 に保存されているこのキーボードの設定も合わせて削除されます。その後 K2 は、リストの最初のエフェクトでキーボードの照明を再起動するだけで、それ以外は何もデバイスに送信されません。この操作は元に戻せません。続行しますか？</string>
+  <string name="settings_factory_reset_busy">キーボードを工場出荷時の設定にリセットしています。しばらくお待ちください…</string>
+  <string name="settings_factory_reset_done">キーボードは工場出荷時の設定にリセットされ、K2 に保存されているこのキーボードの設定もクリアされました。照明はリストの最初のエフェクトで再起動されました。それ以外はデバイスに送信されていません。</string>
+  <string name="settings_factory_reset_failed">キーボードが工場出荷時リセットを確認しませんでした。デバイスにも、K2 に保存されている設定にも変更は加えられていません。</string>  <!-- キーボードマクロ -->
   <string name="keyboard_macro">キーボードマクロ</string>
   <string name="macro_library">マクロライブラリ</string>
   <string name="macro_new">新規</string>
@@ -773,6 +810,7 @@
   <string name="bc_pick_device_none">インポート元のデバイスを選択してください。</string>
   <string name="bc_pick_device_label">デバイス #{0} — {1} 件のプロファイル: {2}</string>
   <string name="bc_import_will_wipe">インポートの前に、"{0}" 上の既存の K2 プロファイルはすべて削除されます。</string>
+  <string name="ev_bc_import_will_wipe_firmware">さらに、キーボード自体も工場出荷時の状態にリセットされ、5 つすべてのファームウェアスロットに保存されている照明、キー割り当て、ディスプレイキーの画像が消去されます。</string>
   <string name="bc_import_read_failed">Base Camp のデータベースを読み込めませんでした（{0}）。何もインポートされておらず、既存の K2 プロファイルはそのまま残っています。</string>
   <!-- Everest インポート -->
   <string name="ev_no_profiles_in_bc">Base Camp データベースに Everest プロファイルが見つかりません。</string>

@@ -129,8 +129,17 @@ internal static class EverestSdkNative
     /// convention, parameters (key matrix, pressed/released, id).
     /// Called on an SDK internal thread.
     /// </summary>
+    /// <remarks>
+    /// TWO parameters, not three (fixed 2026-08-22). Thethree-parameter form was copied
+    /// from the MacroPad SDK, whose callback really does carry a device id; SDKDLL.dll's
+    /// does not — the decompiled Base Camp service declares
+    /// <c>void KEY_CALLBACK(ushort wMatrix, bool bPressed)</c>
+    /// (<c>BaseCamp.Service.Helpers/SDKDLL_Helper.cs</c>). Under __stdcall the callee
+    /// pops its own arguments, so the extra parameter made the managed stub unbalance
+    /// the stack on every invocation.
+    /// </remarks>
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    public delegate void KEY_CALLBACK(ushort wMatrix, bool bPressed, uint ID);
+    public delegate void KEY_CALLBACK(ushort wMatrix, bool bPressed);
 
     // ---- Exported functions (__cdecl) ----------------------------------------
 
@@ -139,12 +148,30 @@ internal static class EverestSdkNative
     public static extern int GetDLLVersion();
 
     /// <summary>
-    /// Opens the keyboard USB driver. Unlike MacroPad/DisplayPad,
-    /// does NOT require an HWND.
+    /// Opens the keyboard USB driver. Takes the window handle the DLL posts its
+    /// notifications to (<see cref="WM_KEY_STATUS"/> and friends).
+    /// <para>
+    /// Corrected 2026-08-22: this was declared without parameters, on the assumption
+    /// that the Everest — unlike MacroPad/DisplayPad — needed no HWND. The decompiled
+    /// Base Camp service says otherwise: <c>OpenUSBDriver(IntPtr handle)</c>
+    /// (<c>BaseCamp.Service.Helpers/SDKDLL_Helper.cs</c>). With no handle supplied, the
+    /// DLL read whatever happened to be on the stack and posted its key/dial messages
+    /// into the void — the most likely reason nothing from SDKDLL.dll's event channel
+    /// has ever reached K2 on real hardware. __cdecl, so passing the argument was always
+    /// safe either way: the caller cleans the stack.
+    /// </para>
     /// </summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
-    public static extern bool OpenUSBDriver();
+    public static extern bool OpenUSBDriver(IntPtr hWnd);
+
+    /// <summary>Window message SDKDLL.dll posts to the HWND given to
+    /// <see cref="OpenUSBDriver"/> when a key or Display Dial action fires:
+    /// <c>lParam</c> = key matrix, <c>wParam</c> = action code. A matrix of 0 marks a
+    /// Display Dial / Media Dock event — see <c>MainWindow.MediaDock.cs</c> for the
+    /// action codes. Same numeric value as the MacroPad SDK's message of the same name;
+    /// the two DLLs simply share the convention.</summary>
+    public const int WM_KEY_STATUS = 25600;
 
     /// <summary>Closes the USB driver.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
@@ -173,6 +200,21 @@ internal static class EverestSdkNative
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool GetProfileEffectTable(ref EffectMenu effectMenu);
+
+    /// <summary>
+    /// Reads back one stored effect: <paramref name="fwProfile"/> is 1-based and
+    /// <paramref name="menuIndex"/> is the profile's <c>EffectTable.curIndex</c> (from
+    /// <see cref="GetProfileEffectTable"/>). The counterpart of ChangeEffect — the only
+    /// way to learn which effect the keyboard is actually running after the user changed
+    /// it on the Display Dial instead of in the app.
+    /// <para>Signature from the decompiled Base Camp service (2026-08-22,
+    /// <c>BaseCamp.Service.Helpers/Everest.cs</c>:
+    /// <c>GetEffectContent(int iFWProfile, int iMenuIndex, ref EffData effData)</c>),
+    /// which is also where <see cref="EffData"/>'s layout came from.</para>
+    /// </summary>
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool GetEffectContent(int fwProfile, int menuIndex, ref EffData effData);
 
     /// <summary>
     /// Reads the keyboard layout from the firmware (HID <c>11 12</c>).

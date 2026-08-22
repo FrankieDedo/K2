@@ -134,6 +134,9 @@ public partial class MainWindow : Window
         _hWnd = new WindowInteropHelper(this).Handle;
         HwndSource.FromHwnd(_hWnd)?.AddHook(WndProc);
         App.WriteLog($"[MainWindow] HWND=0x{_hWnd.ToInt64():X}, WndProc hooked");
+        // SDKDLL.dll posts its key/dial notifications to the handle given to
+        // OpenUSBDriver — has to be set before the drivers auto-open just below.
+        Services.EverestService.HostWindow = _hWnd;
         Services.RawKeyboardActivityWatcher.Register(_hWnd);
         Services.RawMouseActivityWatcher.Register(_hWnd);
 
@@ -573,11 +576,20 @@ public partial class MainWindow : Window
         if (msg == MacroPadSdkNative.WM_DEVICE_PLUG || msg == MacroPadSdkNative.WM_FW_PROGRESS)
             _macroPad.HandleWindowMessage(msg, wParam, lParam);
 
+        // Everest Max Display Dial actions (profile/effect/brightness changed ON the
+        // keyboard) — see HandleEverestDockMessage in MainWindow.MediaDock.cs. Only the
+        // Everest is a consumer of this message today; the MacroPad SDK shares the
+        // message number but K2 has never read it for that device.
+        if (msg == Services.EverestSdkNative.WM_KEY_STATUS)
+            HandleEverestDockMessage(wParam, lParam);
+
         // Backlight auto-off wake, decoupled from SDKDLL.dll's own (unreliable
         // after idle, see RawKeyboardActivityWatcher's doc comment) KeyEvent —
         // real physical keyboard activity via Windows Raw Input.
-        if (Services.RawKeyboardActivityWatcher.IsKeyboardInput(msg, lParam))
+        if (Services.RawKeyboardActivityWatcher.IsKeyboardInput(msg, lParam, out bool keyDown, out ushort vKey))
         {
+            // Also the source for the Media Dock's APM page (MainWindow.MediaDock.cs).
+            RegisterApmKey(keyDown, vKey);
             _evAutoOffTimer?.RegisterActivity();
             // Everest 60 (2026-07-21, user report): same symptom as Everest Max's
             // original bug (see above) — after the auto-off timer's own native

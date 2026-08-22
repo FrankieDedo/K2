@@ -1,4 +1,4 @@
-// MainWindow.DisplayDial.cs — partial class: "Display Dial" panel
+﻿// MainWindow.DisplayDial.cs — partial class: "Display Dial" panel
 // Controls the visible pages on the Everest Max rotary display
 // and clock, screensaver, auto-off, menu color settings.
 //
@@ -31,10 +31,20 @@
 //                      actual wire framing has a few more header bytes than
 //                      assumed; doesn't matter now that the field identity is
 //                      confirmed from source, not inferred from offsets).
-//   byMMDockMenuIndex = ALWAYS hardcoded to 0 by Base Camp's own apply logic
-//                      (`stfld byMMDockMenuIndex` right after `initobj`, no
-//                      DisplayDial field feeds it) — not writable through this
-//                      path, full stop. Confirmed dead end; not used at all.
+//   byMMDockMenuIndex = write-only-as-zero, READ-ONLY as state. Base Camp's apply
+//                      logic always hardcodes it to 0 (`stfld byMMDockMenuIndex`
+//                      right after `initobj`, no DisplayDial field feeds it), so
+//                      there is nothing to send here — but that is only half the
+//                      story, and an earlier version of this comment ("confirmed
+//                      dead end; not used at all") wrote the field off entirely.
+//                      READ BACK, it reports the page the dock is currently
+//                      showing: 33..37 profile 1..5, 49..57 effect, 65 volume,
+//                      81 brightness, 97..101 PC info CPU/GPU/HDD/Internet/RAM,
+//                      113 APM. That is how Base Camp feeds the dock's live pages
+//                      and how it notices profile/effect changes made on the
+//                      keyboard (BaseCampService.PcInfo_timer, Common._dicEffects
+//                      — decompiled 2026-08-22). K2 reads it in
+//                      MainWindow.MediaDock.cs; do not delete it as unused.
 //   wMMDockScreenSaver / wMMDockTurnOff = timeout in seconds, ALWAYS sent as
 //                      the real configured value (Base Camp does NOT zero
 //                      these to represent "disabled" — that's carried
@@ -87,15 +97,27 @@ public partial class MainWindow
     private bool _dialInitialized;
 
     /// <summary>
-    /// Ticks the Media Dock clock every second (<c>EverestService.UpdateClock</c>) —
-    /// see that method's remarks (real Base Camp sends the format on every
-    /// periodic clock call, not via SetExtendInfo). Runs for the app's lifetime;
-    /// the Tick handler no-ops if the driver isn't open, same tolerance as other
-    /// pollers in this codebase. Unlike the RbDialClockType radio buttons
-    /// themselves, this always carries <see cref="_dialAppliedFormat24h"/> — the
-    /// clock must keep ticking continuously (it's not a one-shot setting write),
-    /// but which format it uses only changes on "Apply to device", same as
-    /// every other Display Dial field.
+    /// Re-syncs the Media Dock clock (<c>EverestService.UpdateClock</c>) — see that
+    /// method's remarks (real Base Camp carries the 12h/24h format on the clock call
+    /// itself, not via SetExtendInfo). Runs for the app's lifetime; the Tick handler
+    /// no-ops if the driver isn't open, same tolerance as other pollers in this
+    /// codebase. Always carries <see cref="_dialAppliedFormat24h"/>, which only
+    /// changes on "Apply to device" like every other Display Dial field.
+    /// <para>
+    /// <b>Interval = 30 minutes, NOT 1 second (2026-08-22 bug fix).</b> The dock has
+    /// an on-board RTC: <c>SetClockInfo</c> sets the time, the firmware ticks it on
+    /// its own. Ticking this every second was a K2 invention, and it kept the dock's
+    /// idle counter permanently reset — user report: "the screensaver never starts".
+    /// Confirmed against the real thing by decompiling <c>BaseCamp.Service.exe</c>
+    /// (<c>BaseCampService.Clock_timer</c>): <c>Interval = 1800000.0</c> ms, handler
+    /// <c>Clock_timer_Elapsed</c> → <c>Common.SetClockInfoInHW()</c>. Base Camp's own
+    /// 1-second timer (<c>PcInfo_timer</c>) only ever <i>reads</i> FW_EXTEND_INFO and
+    /// writes exclusively to the page the dock is currently showing — it never writes
+    /// the clock periodically. Extra clock pushes still happen exactly where Base Camp
+    /// does them: at session logon/unlock and when the Display Dial data is applied
+    /// (see <see cref="ApplyDialToDevice"/> and the one-shot sync in
+    /// <see cref="InitDisplayDialPanel"/>).
+    /// </para>
     /// </summary>
     private DispatcherTimer? _dialClockTimer;
 
@@ -190,13 +212,20 @@ public partial class MainWindow
 
         if (_dialClockTimer is null)
         {
-            _dialClockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            // 30 min, same as Base Camp's own Clock_timer — see _dialClockTimer's docs
+            // for why a 1s tick broke the dock screensaver.
+            _dialClockTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };
             _dialClockTimer.Tick += (_, _) =>
             {
                 if (_everest is { IsOpen: true })
                     _everest.UpdateClock(format24h: _dialAppliedFormat24h);
             };
             _dialClockTimer.Start();
+            // First sync now: with a 30-minute period the first Tick is far too late
+            // to put the right time on the dock at startup (Base Camp does the same
+            // one-shot push when the service starts / the Display Dial page opens).
+            if (_everest is { IsOpen: true })
+                _everest.UpdateClock(format24h: _dialAppliedFormat24h);
         }
         _dialInitialized = true;
     }

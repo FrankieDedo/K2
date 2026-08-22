@@ -27,6 +27,7 @@ internal static class RawKeyboardActivityWatcher
     private const uint RIDEV_INPUTSINK = 0x00000100;
     private const uint RID_INPUT = 0x10000003;
     private const uint RIM_TYPEKEYBOARD = 1;
+    private const ushort RI_KEY_BREAK = 0x0001;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RAWINPUTDEVICE
@@ -75,8 +76,19 @@ internal static class RawKeyboardActivityWatcher
 
     /// <summary>Call from the window's WndProc for every message. Returns true if this
     /// message is a raw keyboard input event (i.e. real physical key activity).</summary>
-    public static bool IsKeyboardInput(int msg, IntPtr lParam)
+    public static bool IsKeyboardInput(int msg, IntPtr lParam) =>
+        IsKeyboardInput(msg, lParam, out _, out _);
+
+    /// <summary>
+    /// Same as <see cref="IsKeyboardInput(int, IntPtr)"/>, but also reports whether the
+    /// event was a press (<paramref name="keyDown"/>) or a release, and which virtual key
+    /// it was. Needed by the Media Dock's APM counter, which must count presses only —
+    /// counting every raw keyboard message would double every keystroke.
+    /// </summary>
+    public static bool IsKeyboardInput(int msg, IntPtr lParam, out bool keyDown, out ushort vKey)
     {
+        keyDown = false;
+        vKey = 0;
         if (msg != WM_INPUT) return false;
 
         uint headerSize = (uint)Marshal.SizeOf<RAWINPUTHEADER>();
@@ -90,7 +102,20 @@ internal static class RawKeyboardActivityWatcher
             if (GetRawInputData(lParam, RID_INPUT, buffer, ref size, headerSize) != size)
                 return false;
             var header = Marshal.PtrToStructure<RAWINPUTHEADER>(buffer);
-            return header.dwType == RIM_TYPEKEYBOARD;
+            if (header.dwType != RIM_TYPEKEYBOARD) return false;
+
+            // RAWINPUT = { RAWINPUTHEADER header; union { RAWMOUSE, RAWKEYBOARD, RAWHID } }.
+            // No member of that union is wider than 4 bytes, so the payload starts right
+            // after the header on both x86 and x64. RAWKEYBOARD's first fields are
+            // USHORT MakeCode, USHORT Flags, USHORT Reserved, USHORT VKey — and Flags bit 0
+            // (RI_KEY_BREAK) marks a release.
+            if (size >= headerSize + 8)
+            {
+                ushort flags = (ushort)Marshal.ReadInt16(buffer, (int)headerSize + 2);
+                vKey = (ushort)Marshal.ReadInt16(buffer, (int)headerSize + 6);
+                keyDown = (flags & RI_KEY_BREAK) == 0;
+            }
+            return true;
         }
         finally
         {

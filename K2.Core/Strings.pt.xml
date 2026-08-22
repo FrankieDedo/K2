@@ -207,7 +207,27 @@
   <string name="youtube_chat_message_label">Mensagem de chat ao vivo:</string>
   <string name="act_command">Comando shell</string>
   <string name="act_text">Colar texto</string>
+  <string name="act_emoji">Emoji</string>
   <string name="act_macro">Reproduzir macro</string>
+
+  <!-- Ação de emoji + navegador de emoji (EmojiPickerDialog) -->
+  <string name="emoji_picker_title">Escolher um emoji</string>
+  <string name="emoji_choose_button">Escolher emoji…</string>
+  <string name="emoji_none_selected">Nenhum emoji selecionado</string>
+  <string name="emoji_search_label">Pesquisar:</string>
+  <string name="emoji_category_label">Categoria:</string>
+  <string name="emoji_category_all">Todas</string>
+  <string name="emoji_no_results">Nenhum emoji encontrado</string>
+  <string name="emoji_hint">O emoji é digitado na aplicação em foco quando a tecla é premida. Numa tecla de ecrã (DisplayPad, teclado numérico do Everest Max), também é usado como imagem da tecla.</string>
+  <string name="emoji_grp_smileys">Smileys e emoções</string>
+  <string name="emoji_grp_people">Pessoas e corpo</string>
+  <string name="emoji_grp_animals">Animais e natureza</string>
+  <string name="emoji_grp_food">Comida e bebida</string>
+  <string name="emoji_grp_travel">Viagens e lugares</string>
+  <string name="emoji_grp_activities">Atividades</string>
+  <string name="emoji_grp_objects">Objetos</string>
+  <string name="emoji_grp_symbols">Símbolos</string>
+  <string name="emoji_grp_flags">Bandeiras</string>
   <string name="act_macro_unresolved">Reproduzir macro (não atribuído)</string>
   <string name="act_googlehome">Google Home</string>
   <string name="act_pyscript">Script Python</string>
@@ -349,6 +369,19 @@
   <string name="settings_k2_autostart_hint">O K2 agora requer privilégios de administrador (para controlar o BaseCampService). O Windows não eleva automaticamente as apps iniciadas a partir da chave de registo Run no início de sessão, por isso esta entrada por si só pode não conseguir iniciar o K2 em silêncio — se isso acontecer, use o Agendador de Tarefas (uma tarefa definida para "Executar com privilégios mais elevados" no início de sessão).</string>
   <string name="settings_start_min_tray">Iniciar diretamente minimizado na tray</string>
   <string name="settings_start_min_tray_hint">O K2 inicia com os seus drivers ativos mas com a janela escondida na tray — abra-a a qualquer momento a partir do ícone da tray.</string>
+  <!-- Mapeamento de dispositivos DisplayPad -->
+  <string name="settings_dp_devicemap_group">Mapeamento de dispositivos DisplayPad</string>
+  <string name="settings_dp_devicemap_btn">Configurar mapeamento…</string>
+  <string name="settings_dp_devicemap_hint">Se moveu um DisplayPad para outra porta USB e os perfis guardados agora aparecem no painel errado (por ex. "DisplayPad 2" e "DisplayPad 3" trocados), use isto para reatribuir o painel que cada pad ligado representa.</string>
+  <string name="dp_devicemap_title">Mapeamento de dispositivos DisplayPad</string>
+  <string name="dp_devicemap_hint">Cada pad ligado é listado abaixo com a sua versão de firmware. Clique em "Identificar" para fazer piscar a retroiluminação de um pad e reconhecer a linha correspondente, depois defina o número de placa que deve usar. Duas linhas não podem partilhar o mesmo número de placa.</string>
+  <string name="dp_devicemap_col_current">Atualmente mostrado como</string>
+  <string name="dp_devicemap_col_firmware">Firmware</string>
+  <string name="dp_devicemap_col_board">N.º da placa</string>
+  <string name="dp_devicemap_identify_btn">Identificar</string>
+  <string name="dp_devicemap_none_connected">Nenhum DisplayPad está atualmente ligado — ligue os pads que pretende reatribuir e reabra esta janela.</string>
+  <string name="dp_devicemap_duplicate_error">Dois pads não podem usar o mesmo número de placa. Atribua um número diferente a cada um.</string>
+  <string name="dp_devicemap_invalid_number">Os números de placa devem ser números inteiros positivos.</string>
   <string name="settings_font_family">Tipo de letra</string>
   <string name="settings_font_family_hint">Altera imediatamente o tipo de letra da interface em toda a app, sem necessidade de reiniciar.</string>
   <string name="tray_show">Mostrar K2</string>
@@ -476,7 +509,7 @@
   <string name="makalu_remap_btn_dpi">Botão DPI</string>
   <string name="makalu_remap_btn_5">Botão 5</string>
   <string name="makalu_remap_btn_6">Botão 6</string>
-  <string name="makalu_settings_title">Definições do dispositivo</string>
+  <string name="makalu_settings_title">Definições</string>
   <string name="makalu_setting_poll">Taxa de polling:</string>
   <string name="makalu_setting_debounce">Resposta dos botões:</string>
   <string name="makalu_setting_angle">Angle snapping:</string>
@@ -544,6 +577,7 @@
   <string name="dock_remove_action">Remover ação</string>
   <!-- Definições (secção da barra lateral Everest: esquema do teclado) -->
   <string name="ev_settings">Definições</string>
+  <string name="appearance">Aparência</string>
   <string name="ev_layout">Layout</string>
   <string name="settings_sync_profiles">Sincronizar entre perfis</string>
   <string name="settings_game_mode">Modo de jogo</string>
@@ -579,8 +613,12 @@
   <string name="keycap_customize_use_mountain_logo">Usar logótipo Mountain (fixo)</string>
   <string name="keycap_customize_clear_all">Remover personalizações</string>
   <string name="keycap_customize_close">Fechar</string>
-  <string name="settings_factory_reset">Repor predefinições de fábrica</string>
-  <string name="settings_factory_reset_confirm">Isto repõe o Modo de jogo, os LEDs indicadores e os efeitos de iluminação do teclado para as predefinições de fábrica. Continuar?</string>
+  <string name="settings_factory_reset">Repor todas as definições de fábrica</string>
+  <string name="settings_factory_reset_hint">Apaga a memória própria do teclado — perfis de firmware, atribuições de teclas, imagens das teclas de ecrã e iluminação — e limpa a configuração guardada no K2 para o mesmo. Não é o mesmo que "Repor predefinições" na barra lateral, que apenas repõe os perfis do K2 e não toca no dispositivo.</string>
+  <string name="settings_factory_reset_confirm">Isto repõe a memória própria do teclado ao estado de fábrica: todos os perfis de firmware, atribuições de teclas, imagens de teclas de ecrã e efeitos de iluminação guardados no dispositivo são apagados, e a configuração guardada no K2 para este teclado é eliminada em conformidade. Depois disso, o K2 apenas reinicia a iluminação do teclado com o primeiro efeito da lista — nada mais é enviado para o dispositivo. Esta ação não pode ser desfeita. Continuar?</string>
+  <string name="settings_factory_reset_busy">A repor o teclado para as predefinições de fábrica, aguarde…</string>
+  <string name="settings_factory_reset_done">O teclado foi reposto para as predefinições de fábrica e a configuração guardada no K2 para o mesmo foi limpa. A sua iluminação foi reiniciada com o primeiro efeito da lista; nada mais foi enviado para o dispositivo.</string>
+  <string name="settings_factory_reset_failed">O teclado não confirmou a reposição de fábrica. Não foi feita nenhuma alteração no dispositivo nem na configuração guardada no K2.</string>
   <!-- Macro de teclado -->
   <string name="keyboard_macro">Macro de teclado</string>
   <string name="macro_library">Biblioteca de macros</string>
@@ -772,6 +810,7 @@
   <string name="bc_pick_device_none">Escolha um dispositivo a partir do qual importar.</string>
   <string name="bc_pick_device_label">Dispositivo #{0} — {1} perfil(is): {2}</string>
   <string name="bc_import_will_wipe">Isto irá ELIMINAR todos os perfis K2 existentes em "{0}" antes de importar.</string>
+  <string name="ev_bc_import_will_wipe_firmware">Isto também irá REPOR DE FÁBRICA o próprio teclado, apagando a iluminação, as atribuições de teclas e as imagens das teclas de ecrã guardadas nos 5 slots de firmware.</string>
   <string name="bc_import_read_failed">Não foi possível ler a base de dados do Base Camp ({0}). Nada foi importado e os seus perfis K2 existentes não foram alterados.</string>
   <!-- Importação Everest -->
   <string name="ev_no_profiles_in_bc">Não foram encontrados perfis Everest na base de dados do Base Camp.</string>

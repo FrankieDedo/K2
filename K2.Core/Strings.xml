@@ -356,6 +356,7 @@
   <string name="settings_update_zip_btn">Download ZIP…</string>
   <string name="settings_update_view_release_btn">View release notes</string>
   <string name="settings_update_downloading">Downloading…</string>
+  <string name="settings_update_downloading_pct">Downloading… {0}%</string>
   <string name="settings_update_install_confirm">Download version {0} and run the installer? K2 will close as soon as the installer starts, so it can update.</string>
   <string name="settings_update_zip_done">Saved to {0}</string>
   <!-- Restore defaults -->
@@ -530,7 +531,7 @@
   <string name="makalu_remap_btn_5">Button 5</string>
   <string name="makalu_remap_btn_6">Button 6</string>
 
-  <string name="makalu_settings_title">Device settings</string>
+  <string name="makalu_settings_title">Settings</string>
   <string name="makalu_setting_poll">Polling rate:</string>
   <string name="makalu_setting_debounce">Button response:</string>
   <string name="makalu_setting_angle">Angle snapping:</string>

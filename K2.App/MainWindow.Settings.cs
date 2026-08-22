@@ -91,8 +91,15 @@ public partial class MainWindow
         try
         {
             BtnAppUpdateInstall.IsEnabled = false;
+            PbAppUpdateDownload.Value = 0;
+            PbAppUpdateDownload.Visibility = Visibility.Visible;
+            var progress = new Progress<double>(p =>
+            {
+                PbAppUpdateDownload.Value = p * 100;
+                TxtAppUpdateStatus.Text = Loc.Get("settings_update_downloading_pct", (int)Math.Round(p * 100));
+            });
             TxtAppUpdateStatus.Text = Loc.Get("settings_update_downloading");
-            string path = await UpdateInstaller.DownloadInstallerAsync(asset, null);
+            string path = await UpdateInstaller.DownloadInstallerAsync(asset, progress);
 
             UpdateInstaller.LaunchInstaller(path);
             _reallyClosing = true;
@@ -102,6 +109,7 @@ public partial class MainWindow
         {
             MessageBox.Show(this, ex.Message, Loc.Get("settings_update_group"), MessageBoxButton.OK, MessageBoxImage.Error);
             BtnAppUpdateInstall.IsEnabled = true;
+            PbAppUpdateDownload.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -125,8 +133,15 @@ public partial class MainWindow
         try
         {
             BtnAppUpdateZip.IsEnabled = false;
+            PbAppUpdateDownload.Value = 0;
+            PbAppUpdateDownload.Visibility = Visibility.Visible;
+            var progress = new Progress<double>(p =>
+            {
+                PbAppUpdateDownload.Value = p * 100;
+                TxtAppUpdateStatus.Text = Loc.Get("settings_update_downloading_pct", (int)Math.Round(p * 100));
+            });
             TxtAppUpdateStatus.Text = Loc.Get("settings_update_downloading");
-            await UpdateInstaller.DownloadAsync(asset, dlg.FileName, null);
+            await UpdateInstaller.DownloadAsync(asset, dlg.FileName, progress);
             TxtAppUpdateStatus.Text = Loc.Get("settings_update_zip_done", dlg.FileName);
             Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{dlg.FileName}\"") { UseShellExecute = true });
         }
@@ -137,6 +152,7 @@ public partial class MainWindow
         finally
         {
             BtnAppUpdateZip.IsEnabled = true;
+            PbAppUpdateDownload.Visibility = Visibility.Collapsed;
         }
     }
 

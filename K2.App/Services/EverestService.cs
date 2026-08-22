@@ -80,6 +80,13 @@ public sealed class EverestService : IDisposable
     /// <summary>True if the USB driver was opened successfully and the DLL has not crashed.</summary>
     public bool IsOpen => _opened && !App.SdkCrashRecoveryNeeded;
 
+    /// <summary>Window SDKDLL.dll posts its key/dial notifications to — assign the main
+    /// window's HWND once it exists (OnSourceInitialized), before the driver is opened.
+    /// See <see cref="EverestSdkNative.OpenUSBDriver"/> for why the DLL needs one.
+    /// Zero is tolerated (the DLL simply has nowhere to post) so the service stays usable
+    /// from contexts without a window.</summary>
+    public static IntPtr HostWindow { get; set; } = IntPtr.Zero;
+
     /// <summary>
     /// Opens the keyboard's USB driver and registers the key callback.
     /// </summary>
@@ -103,7 +110,7 @@ public sealed class EverestService : IDisposable
 
         try
         {
-            _opened = EverestSdkNative.OpenUSBDriver();
+            _opened = EverestSdkNative.OpenUSBDriver(HostWindow);
         }
         catch (Exception ex)
         {
@@ -169,6 +176,30 @@ public sealed class EverestService : IDisposable
             _opened = true;
             App.WriteLog("[Everest.Open] (native) OK");
 
+            // Open SDKDLL.dll's own driver handle as well. The native engine replaces
+            // SDKDLL for driver open/close, init and the 4 numpad display keys, but
+            // everything else on the Max still goes through SDKDLL (RGB, numpad icons,
+            // Media Dock, Display Dial) — see the class header. Those calls need the
+            // DLL's handle open.
+            //
+            // MEASURED 2026-08-22 on the real keyboard, because this used to be
+            // documented the other way round ("SDKDLL calls work without OpenUSBDriver"):
+            // from a process that never calls OpenUSBDriver, GetExtendInfo/GetFWInfo
+            // return false forever (20+ consecutive one-second attempts); issue
+            // OpenUSBDriver once and the very next call succeeds and keeps succeeding.
+            // With it missing, every SDKDLL-only feature on the Max silently no-ops —
+            // most visibly ApplyDialToDevice, which bails out on its opening
+            // TryGetExtendInfo and so never writes the Display Dial's own settings
+            // (screensaver included) to the firmware.
+            //
+            // Two transports to one firmware is the intended design here (see
+            // _PROJECT_MAP.md), and every SDKDLL call is already serialized under
+            // _sdkLock, so this adds a handle, not a race.
+            bool sdkOpen = false;
+            try { sdkOpen = EverestSdkNative.OpenUSBDriver(HostWindow); }
+            catch (Exception ex) { App.WriteLog("[Everest.Open] (native) OpenUSBDriver threw: " + ex); }
+            App.WriteLog($"[Everest.Open] (native) SDKDLL OpenUSBDriver(0x{HostWindow.ToInt64():X}) -> {sdkOpen}");
+
             // Run Base Camp's own post-open init through SDKDLL even on the native path.
             // Rationale (2026-07-19): the display-key reset sequence, replicated byte-for-
             // byte from a real BC capture (evprofiles.pcapng) with identical pacing and
@@ -177,11 +208,7 @@ public sealed class EverestService : IDisposable
             // BC. Both BC captures start with Base Camp already running, so its session
             // init has never been seen on the wire; the one known candidate for the
             // missing device-side state is exactly this init (its doc comment already
-            // records that ChangeEffect is silently ignored without it). SDKDLL calls
-            // work without OpenUSBDriver (StartPicUpdate/GetExtendInfo already prove it
-            // in this very mode), and the DLL gets loaded ~3s later anyway by the first
-            // GetExtendInfo poll — so this adds no new crash surface, it only front-loads
-            // the same calls BC makes.
+            // records that ChangeEffect is silently ignored without it).
             InitDllState();
             return true;
         }
@@ -292,7 +319,11 @@ public sealed class EverestService : IDisposable
             try { _nativePad.Dispose(); }
             catch (Exception ex) { App.WriteLog("[Everest.Close] (native) threw: " + ex); }
             _nativePad = null;
+            // OpenNative also opens SDKDLL's handle (see its comment) — give it back.
+            try { EverestSdkNative.CloseUSBDriver(); }
+            catch (Exception ex) { App.WriteLog("[Everest.Close] (native) CloseUSBDriver threw: " + ex); }
             _opened = false;
+            _apEnabled = false;
             App.WriteLog("[Everest.Close] (native) driver closed");
             return;
         }
@@ -308,7 +339,9 @@ public sealed class EverestService : IDisposable
     /// <summary>Version of the SDK's native DLL.</summary>
     public int SdkVersion()
     {
-        if (_nativePad is not null) return -1; // native engine: SDKDLL.dll not loaded
+        // Used to short-circuit to -1 in native-engine mode on the assumption that
+        // SDKDLL.dll wasn't loaded there. It is: the native path opens it too (see
+        // OpenNative), so report the real version.
         lock (_sdkLock)
         try { return EverestSdkNative.GetDLLVersion(); }
         catch (Exception ex)
@@ -375,6 +408,34 @@ public sealed class EverestService : IDisposable
     public int CurrentProfile()
     {
         return TryGetFirmwareInfo(out var fw) ? fw.currentlyProfileIndex : 0;
+    }
+
+    /// <summary>
+    /// Reads back the effect the firmware is currently running for
+    /// <paramref name="fwProfile"/> (1-based): the profile's <c>curIndex</c> from the
+    /// effect table, then that slot's stored <c>EffData</c>. Two chained reads, exactly
+    /// as Base Camp's <c>Common.ChangeEverestBrightness</c>/<c>ChangeEffectOnUI</c> do it.
+    /// Used to follow effect/brightness changes the user makes on the Display Dial rather
+    /// than in the app — see <c>MainWindow.MediaDock.cs</c>.
+    /// <c>internal</c>: exposes a P/Invoke layer type (also internal).
+    /// </summary>
+    internal bool TryGetCurrentEffect(int fwProfile, out EverestSdkNative.EffData eff)
+    {
+        eff = default;
+        if (fwProfile is < 1 or > 5) return false;
+        lock (_sdkLock)
+        try
+        {
+            var menu = new EverestSdkNative.EffectMenu();
+            if (!EverestSdkNative.GetProfileEffectTable(ref menu) || menu.table is null) return false;
+            byte curIndex = menu.table[fwProfile - 1].curIndex;
+            return EverestSdkNative.GetEffectContent(fwProfile, curIndex, ref eff);
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.TryGetCurrentEffect] threw: " + ex);
+            return false;
+        }
     }
 
     /// <summary>
@@ -1295,8 +1356,15 @@ public sealed class EverestService : IDisposable
     /// Writes a display key's action binding into the firmware, flipping the key to
     /// "custom" mode so its built-in default action stops firing on press — see
     /// <see cref="EverestHidNative.Pad.WriteDisplayKeyBinding"/>. Only meaningful in
-    /// native-engine mode; K2 action types the firmware can't express are written as a
-    /// synthetic type-01 marker (suppression is the goal, K2 executes the action itself).
+    /// native-engine mode; K2 action types the firmware can't express get an EMPTY
+    /// type-01 payload (suppression is the goal, K2 executes the action itself).
+    /// A non-empty payload here is NOT inert: type=0x01 makes the firmware actually
+    /// try to launch it (like a real Base Camp exec binding), independent of K2 — the
+    /// previous "K2:" + actionType placeholder (e.g. "K2:oscmd") made every display
+    /// key bound to a non-exec/url action (Calculator, shell commands, ...) pop
+    /// Windows' "get an app to open this 'k2' link" dialog on every press, since
+    /// "K2:oscmd" parses as a URI with an unregistered "K2" scheme (user report
+    /// 2026-08-22). An empty payload gives the firmware nothing to resolve.
     /// </summary>
     public bool WriteNumpadBinding(int keyIndex, string actionType, string? actionValue)
     {
@@ -1314,7 +1382,7 @@ public sealed class EverestService : IDisposable
         }
         else
         {
-            type = 0x01; payload = "K2:" + actionType;   // synthetic — see doc comment
+            type = 0x01; payload = "";   // suppression only — must NOT look like a launchable path/URI
         }
         // Serialized against SDKDLL traffic like every other native-transport call —
         // see SwitchProfile's comment.
@@ -1482,7 +1550,12 @@ public sealed class EverestService : IDisposable
 
     /// <summary>
     /// Updates the clock on the Media Dock's display with the current time and
-    /// format. Call periodically (every second, as Base Camp does).
+    /// format. The dock has its own RTC and ticks on its own, so this is a
+    /// *resync*, not a per-second refresh: call it every 30 minutes (the interval
+    /// of Base Camp's own <c>Clock_timer</c>) plus on the events that need it
+    /// (apply, profile switch, startup). Calling it every second keeps the dock's
+    /// idle counter permanently reset, so the screensaver never fires — see
+    /// <c>MainWindow.DisplayDial.cs</c>'s <c>_dialClockTimer</c> (2026-08-22).
     /// </summary>
     /// <remarks>
     /// <b>2026-07-15, real Base Camp USB capture (_reference/usb_dumps/evclock.pcapng):</b>
@@ -1765,14 +1838,16 @@ public sealed class EverestService : IDisposable
 
     // ---- native callback (SDK thread) ---------------------------------
 
-    private void OnKeyCallback(ushort wMatrix, bool bPressed, uint id)
+    private void OnKeyCallback(ushort wMatrix, bool bPressed)
     {
         try
         {
             // We emit the event without a lock: consumers might
             // call back into other EverestService methods (deadlock).
             // Key logging removed — too noisy in normal use.
-            KeyEvent?.Invoke(this, new EverestKeyEventArgs(id, wMatrix, bPressed));
+            // DeviceId is always 0: the Everest is single-device and its callback
+            // carries no id (see EverestSdkNative.KEY_CALLBACK's remarks).
+            KeyEvent?.Invoke(this, new EverestKeyEventArgs(0, wMatrix, bPressed));
         }
         catch (Exception ex)
         {

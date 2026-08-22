@@ -208,7 +208,27 @@
   <string name="youtube_chat_message_label">实时聊天消息:</string>
   <string name="act_command">Shell 命令</string>
   <string name="act_text">粘贴文本</string>
+  <string name="act_emoji">表情符号</string>
   <string name="act_macro">播放宏</string>
+
+  <!-- 表情符号操作 + 表情符号浏览器 (EmojiPickerDialog) -->
+  <string name="emoji_picker_title">选择表情符号</string>
+  <string name="emoji_choose_button">选择表情符号…</string>
+  <string name="emoji_none_selected">未选择表情符号</string>
+  <string name="emoji_search_label">搜索:</string>
+  <string name="emoji_category_label">类别:</string>
+  <string name="emoji_category_all">全部</string>
+  <string name="emoji_no_results">未找到表情符号</string>
+  <string name="emoji_hint">按下按键时，表情符号会输入到当前聚焦的应用程序中。在显示按键（DisplayPad、Everest Max 数字键盘）上，它还会用作按键图像。</string>
+  <string name="emoji_grp_smileys">表情与情绪</string>
+  <string name="emoji_grp_people">人物与身体</string>
+  <string name="emoji_grp_animals">动物与自然</string>
+  <string name="emoji_grp_food">食物与饮料</string>
+  <string name="emoji_grp_travel">旅行与地点</string>
+  <string name="emoji_grp_activities">活动</string>
+  <string name="emoji_grp_objects">物品</string>
+  <string name="emoji_grp_symbols">符号</string>
+  <string name="emoji_grp_flags">旗帜</string>
   <string name="act_macro_unresolved">播放宏（未分配）</string>
   <string name="act_googlehome">Google Home</string>
   <string name="act_pyscript">Python 脚本</string>
@@ -351,6 +371,19 @@
   <string name="settings_k2_autostart_hint">K2 现在需要管理员权限（以控制 BaseCampService）。Windows 不会自动提升通过登录时 Run 注册表项启动的应用权限，因此仅靠此设置可能无法静默启动 K2 — 如果发生这种情况，请改用任务计划程序（将任务设置为登录时“以最高权限运行”）。</string>
   <string name="settings_start_min_tray">启动时直接最小化到托盘</string>
   <string name="settings_start_min_tray_hint">K2 启动时驱动程序保持激活，但窗口隐藏在托盘中 — 可随时从托盘图标打开。</string>
+  <!-- DisplayPad 设备映射 -->
+  <string name="settings_dp_devicemap_group">DisplayPad 设备映射</string>
+  <string name="settings_dp_devicemap_btn">配置映射…</string>
+  <string name="settings_dp_devicemap_hint">如果你将 DisplayPad 移动到了另一个 USB 端口，导致其已保存的配置文件现在显示在错误的面板上（例如 "DisplayPad 2" 和 "DisplayPad 3" 互换），可使用此功能重新指定每个已连接面板对应的编号。</string>
+  <string name="dp_devicemap_title">DisplayPad 设备映射</string>
+  <string name="dp_devicemap_hint">下方列出了每个已连接的面板及其固件版本。点击"识别"可使某个面板的背光闪烁，以便分辨对应的行，然后设置它应使用的板编号。两行不能使用相同的板编号。</string>
+  <string name="dp_devicemap_col_current">当前显示为</string>
+  <string name="dp_devicemap_col_firmware">固件</string>
+  <string name="dp_devicemap_col_board">板编号</string>
+  <string name="dp_devicemap_identify_btn">识别</string>
+  <string name="dp_devicemap_none_connected">当前没有连接任何 DisplayPad — 请连接要重新映射的面板，然后重新打开此窗口。</string>
+  <string name="dp_devicemap_duplicate_error">两个面板不能使用相同的板编号。请为每个面板指定不同的编号。</string>
+  <string name="dp_devicemap_invalid_number">板编号必须是正整数。</string>
   <string name="settings_font_family">字体</string>
   <string name="settings_font_family_hint">立即更改整个应用的界面字体，无需重启。</string>
   <string name="tray_show">显示 K2</string>
@@ -481,7 +514,7 @@
   <string name="makalu_remap_btn_dpi">DPI 键</string>
   <string name="makalu_remap_btn_5">按钮 5</string>
   <string name="makalu_remap_btn_6">按钮 6</string>
-  <string name="makalu_settings_title">设备设置</string>
+  <string name="makalu_settings_title">设置</string>
   <string name="makalu_setting_poll">轮询率:</string>
   <string name="makalu_setting_debounce">按键响应:</string>
   <string name="makalu_setting_angle">角度校正:</string>
@@ -549,6 +582,7 @@
   <string name="dock_remove_action">删除动作</string>
   <!-- 设置（Everest 侧栏部分：键盘布局） -->
   <string name="ev_settings">设置</string>
+  <string name="appearance">外观</string>
   <string name="ev_layout">布局</string>
   <string name="settings_sync_profiles">跨配置文件同步</string>
   <string name="settings_game_mode">游戏模式</string>
@@ -584,8 +618,12 @@
   <string name="keycap_customize_use_mountain_logo">使用 Mountain 标志（固定）</string>
   <string name="keycap_customize_clear_all">清除所有自定义</string>
   <string name="keycap_customize_close">关闭</string>
-  <string name="settings_factory_reset">恢复出厂设置</string>
-  <string name="settings_factory_reset_confirm">此操作会将键盘的游戏模式、指示灯 LED 和灯光效果恢复为出厂默认设置。是否继续？</string>
+  <string name="settings_factory_reset">将所有设置恢复为出厂默认值</string>
+  <string name="settings_factory_reset_hint">清除键盘自身的内存 — 固件配置文件、按键绑定、显示按键图像和照明 — 并清除 K2 中为其保存的配置。这与侧边栏的"恢复默认值"不同，后者仅重置 K2 的配置文件，不会影响设备。</string>
+  <string name="settings_factory_reset_confirm">此操作会将键盘自身的内存恢复到出厂状态：设备上存储的每个固件配置文件、按键绑定、显示按键图像和照明效果都将被清除，K2 中为该键盘保存的配置也会相应删除。之后，K2 只会用列表中的第一个效果重新启动键盘的照明 — 不会向设备推送任何其他内容。此操作无法撤销。是否继续？</string>
+  <string name="settings_factory_reset_busy">正在将键盘重置为出厂默认值，请稍候…</string>
+  <string name="settings_factory_reset_done">键盘已重置为出厂默认值，K2 中为其保存的配置也已清除。其照明已使用列表中的第一个效果重新启动；未向设备推送任何其他内容。</string>
+  <string name="settings_factory_reset_failed">键盘未确认出厂重置。设备和 K2 中保存的配置均未发生任何更改。</string>
   <!-- 键盘宏 -->
   <string name="keyboard_macro">键盘宏</string>
   <string name="macro_library">宏库</string>
@@ -779,6 +817,7 @@
   <string name="bc_pick_device_none">请选择要从中导入的设备。</string>
   <string name="bc_pick_device_label">设备 #{0} — {1} 个配置文件：{2}</string>
   <string name="bc_import_will_wipe">此操作将在导入前删除 "{0}" 上所有现有的 K2 配置文件。</string>
+  <string name="ev_bc_import_will_wipe_firmware">此操作还将对键盘本身进行出厂重置，清除全部 5 个固件槽位中存储的照明、按键绑定和显示按键图像。</string>
   <string name="bc_import_read_failed">无法读取 Base Camp 数据库（{0}）。未导入任何内容，你现有的 K2 配置文件未受影响。</string>
   <!-- Everest 导入 -->
   <string name="ev_no_profiles_in_bc">在 Base Camp 数据库中未找到 Everest 配置文件。</string>
