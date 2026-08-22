@@ -42,9 +42,13 @@ internal sealed class TrayIconNative : IDisposable
     private const int WM_APP      = 0x8000;
     private const int CallbackMsg = WM_APP + 0x21;
 
+    private const int WM_USER          = 0x0400;
     private const int WM_LBUTTONDBLCLK = 0x0203;
     private const int WM_CONTEXTMENU   = 0x007B;
-    private const int NIN_SELECT       = WM_APP + 0;
+    // NIN_SELECT is WM_USER-based (shellapi.h), not WM_APP-based — do not confuse
+    // with CallbackMsg above, which IS WM_APP-based (that's the outer message id;
+    // this is the notification code carried in its lParam).
+    private const int NIN_SELECT       = WM_USER + 0;
 
     private const int NIM_ADD        = 0x00;
     private const int NIM_MODIFY     = 0x01;

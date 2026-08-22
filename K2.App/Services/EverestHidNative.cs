@@ -338,9 +338,14 @@ internal static class EverestHidNative
         ///   first chunk:  17 [0xAA+key] [1+dataLen] [flag] [type] [ASCII data ≤59]
         ///   next chunks:  17 [0xAA+key] [dataLen]   [flag]        [ASCII data ≤60]
         /// flag: 00 = single chunk, 01 = first of many, 03 = final (02 = middle, inferred).
-        /// type: 01 = executable path, 02 = URL. For K2 action types the firmware has no
-        /// concept of, callers pass a synthetic type-01 payload — the point is flipping
-        /// the key to custom mode, execution stays in K2 either way.
+        /// type: 01 = executable path, 02 = URL. type=01 is genuinely LAUNCHED by the
+        /// firmware, not just stored — see EverestService.WriteNumpadBinding's doc
+        /// comment (2026-08-22 regression: a non-empty placeholder payload here made
+        /// Windows pop its "no app for this link" dialog on every press). For K2
+        /// action types the firmware has no concept of, callers pass type=01 with an
+        /// EMPTY payload — the point is flipping the key to custom mode, execution
+        /// stays in K2 either way, and an empty payload gives the firmware nothing to
+        /// try to open.
         /// </summary>
         /// <summary>Per-key firmware output mode: what the physical key emits, before
         /// any host-side action runs. See <see cref="WriteKeyOutputMode"/>.</summary>

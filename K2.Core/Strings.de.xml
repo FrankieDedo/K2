@@ -208,7 +208,27 @@
   <string name="youtube_chat_message_label">Live-Chat-Nachricht:</string>
   <string name="act_command">Shell-Befehl</string>
   <string name="act_text">Text einfügen</string>
+  <string name="act_emoji">Emoji</string>
   <string name="act_macro">Makro abspielen</string>
+
+  <!-- Emoji-Aktion + Emoji-Browser (EmojiPickerDialog) -->
+  <string name="emoji_picker_title">Emoji auswählen</string>
+  <string name="emoji_choose_button">Emoji auswählen…</string>
+  <string name="emoji_none_selected">Kein Emoji ausgewählt</string>
+  <string name="emoji_search_label">Suche:</string>
+  <string name="emoji_category_label">Kategorie:</string>
+  <string name="emoji_category_all">Alle</string>
+  <string name="emoji_no_results">Kein Emoji gefunden</string>
+  <string name="emoji_hint">Das Emoji wird beim Drücken der Taste in die aktive Anwendung eingegeben. Bei einer Display-Taste (DisplayPad, Everest-Max-Nummernblock) wird es zusätzlich als Tastenbild verwendet.</string>
+  <string name="emoji_grp_smileys">Smileys &amp; Emotionen</string>
+  <string name="emoji_grp_people">Personen &amp; Körper</string>
+  <string name="emoji_grp_animals">Tiere &amp; Natur</string>
+  <string name="emoji_grp_food">Essen &amp; Trinken</string>
+  <string name="emoji_grp_travel">Reisen &amp; Orte</string>
+  <string name="emoji_grp_activities">Aktivitäten</string>
+  <string name="emoji_grp_objects">Objekte</string>
+  <string name="emoji_grp_symbols">Symbole</string>
+  <string name="emoji_grp_flags">Flaggen</string>
   <string name="act_macro_unresolved">Makro abspielen (nicht zugewiesen)</string>
   <string name="act_googlehome">Google Home</string>
   <string name="act_pyscript">Python-Skript</string>
@@ -351,6 +371,19 @@
   <string name="settings_k2_autostart_hint">K2 benötigt jetzt Administratorrechte (um BaseCampService zu steuern). Windows erhöht Apps, die beim Anmelden über den Run-Registrierungsschlüssel gestartet werden, nicht automatisch, daher kann dieser Eintrag allein dazu führen, dass K2 nicht stillschweigend startet — verwende in diesem Fall stattdessen die Aufgabenplanung (eine Aufgabe, die bei der Anmeldung mit "Mit höchsten Privilegien ausführen" eingestellt ist).</string>
   <string name="settings_start_min_tray">Direkt minimiert in die Taskleiste starten</string>
   <string name="settings_start_min_tray_hint">K2 startet mit aktiven Treibern, aber das Fenster bleibt in der Taskleiste verborgen — jederzeit über das Taskleistensymbol zu öffnen.</string>
+  <!-- DisplayPad-Gerätezuordnung -->
+  <string name="settings_dp_devicemap_group">DisplayPad-Gerätezuordnung</string>
+  <string name="settings_dp_devicemap_btn">Zuordnung konfigurieren…</string>
+  <string name="settings_dp_devicemap_hint">Wenn du ein DisplayPad an einen anderen USB-Port angeschlossen hast und dessen gespeicherte Profile jetzt auf dem falschen Panel erscheinen (z. B. "DisplayPad 2" und "DisplayPad 3" vertauscht), kannst du hiermit neu zuweisen, welches Panel jedes angeschlossene Pad darstellt.</string>
+  <string name="dp_devicemap_title">DisplayPad-Gerätezuordnung</string>
+  <string name="dp_devicemap_hint">Jedes angeschlossene Pad wird unten mit seiner Firmware-Version aufgeführt. Klicke auf "Identifizieren", um die Hintergrundbeleuchtung eines Pads blinken zu lassen und die passende Zeile zu erkennen, und lege dann die zu verwendende Board-Nummer fest. Zwei Zeilen dürfen nicht dieselbe Board-Nummer verwenden.</string>
+  <string name="dp_devicemap_col_current">Derzeit angezeigt als</string>
+  <string name="dp_devicemap_col_firmware">Firmware</string>
+  <string name="dp_devicemap_col_board">Board-Nr.</string>
+  <string name="dp_devicemap_identify_btn">Identifizieren</string>
+  <string name="dp_devicemap_none_connected">Aktuell ist kein DisplayPad angeschlossen — schließe die neu zuzuordnenden Pads an und öffne dieses Fenster erneut.</string>
+  <string name="dp_devicemap_duplicate_error">Zwei Pads können nicht dieselbe Board-Nummer verwenden. Vergib für jedes eine andere Nummer.</string>
+  <string name="dp_devicemap_invalid_number">Board-Nummern müssen positive ganze Zahlen sein.</string>
   <string name="settings_font_family">Schriftart</string>
   <string name="settings_font_family_hint">Ändert die App-weite UI-Schriftart sofort, kein Neustart erforderlich.</string>
   <string name="tray_show">K2 anzeigen</string>
@@ -394,7 +427,7 @@
   <string name="rgb_single_tip">Verwendet eine einzelne Farbe für den Effekt.</string>
   <string name="rgb_double">Doppelfarbe</string>
   <string name="rgb_double_tip">Verwendet zwei Farben für den Effekt (nicht von jedem Effekt unterstützt).</string>
-  <string name="rgb_sync_profiles">Profile synchronisieren</string>
+  <string name="rgb_sync_profiles">Profilübergreifend synchronisieren</string>
   <string name="rgb_primary">Primär:</string>
   <string name="rgb_secondary">Sekundär:</string>
   <string name="rgb_tertiary">Tertiär:</string>
@@ -487,7 +520,7 @@
   <string name="makalu_remap_btn_5">Taste 5</string>
   <string name="makalu_remap_btn_6">Taste 6</string>
 
-  <string name="makalu_settings_title">Geräteeinstellungen</string>
+  <string name="makalu_settings_title">Einstellungen</string>
   <string name="makalu_setting_poll">Abfragerate:</string>
   <string name="makalu_setting_debounce">Tastenreaktion:</string>
   <string name="makalu_setting_angle">Winkelkorrektur:</string>
@@ -559,6 +592,7 @@
 
   <!-- Einstellungen (Everest-Seitenleiste: Tastatur-Layout) -->
   <string name="ev_settings">Einstellungen</string>
+  <string name="appearance">Erscheinungsbild</string>
   <string name="ev_layout">Layout</string>
   <string name="settings_sync_profiles">Profilübergreifend synchronisieren</string>
   <string name="settings_game_mode">Spielmodus</string>
@@ -594,9 +628,12 @@
   <string name="keycap_customize_use_mountain_logo">Mountain-Logo verwenden (fest)</string>
   <string name="keycap_customize_clear_all">Anpassungen zurücksetzen</string>
   <string name="keycap_customize_close">Schließen</string>
-  <string name="settings_factory_reset">Auf Werkseinstellungen zurücksetzen</string>
-  <string name="settings_factory_reset_confirm">Dies setzt Spielmodus, Anzeige-LEDs und Beleuchtungseffekte der Tastatur auf die Werkseinstellungen zurück. Fortfahren?</string>
-
+  <string name="settings_factory_reset">Alle Einstellungen auf Werkseinstellungen zurücksetzen</string>
+  <string name="settings_factory_reset_hint">Löscht den eigenen Speicher der Tastatur — Firmware-Profile, Tastenbelegungen, Display-Tasten-Bilder und Beleuchtung — und setzt die in K2 gespeicherte Konfiguration dafür zurück. Nicht zu verwechseln mit "Standardwerte wiederherstellen" in der Seitenleiste, das nur die K2-Profile zurücksetzt und das Gerät unangetastet lässt.</string>
+  <string name="settings_factory_reset_confirm">Dadurch wird der eigene Speicher der Tastatur auf den Werkszustand zurückgesetzt: jedes Firmware-Profil, jede Tastenbelegung, jedes Display-Tasten-Bild und jeder auf dem Gerät gespeicherte Beleuchtungseffekt wird gelöscht, und die in K2 gespeicherte Konfiguration für diese Tastatur wird passend dazu entfernt. Anschließend startet K2 die Beleuchtung der Tastatur nur mit dem ersten Effekt der Liste neu — es wird nichts weiter an das Gerät übertragen. Dies kann nicht rückgängig gemacht werden. Fortfahren?</string>
+  <string name="settings_factory_reset_busy">Tastatur wird auf Werkseinstellungen zurückgesetzt, bitte warten…</string>
+  <string name="settings_factory_reset_done">Die Tastatur wurde auf Werkseinstellungen zurückgesetzt und die in K2 gespeicherte Konfiguration dafür wurde gelöscht. Ihre Beleuchtung wurde mit dem ersten Effekt der Liste neu gestartet; es wurde nichts weiter an das Gerät übertragen.</string>
+  <string name="settings_factory_reset_failed">Die Tastatur hat den Werksreset nicht bestätigt. Es wurde weder am Gerät noch an der in K2 gespeicherten Konfiguration etwas geändert.</string>
   <!-- Tastatur-Makro -->
   <string name="keyboard_macro">Tastatur-Makro</string>
   <string name="macro_library">Makro-Bibliothek</string>
@@ -792,6 +829,7 @@
   <string name="bc_pick_device_none">Wähle ein Gerät, von dem importiert werden soll.</string>
   <string name="bc_pick_device_label">Gerät #{0} — {1} Profil(e): {2}</string>
   <string name="bc_import_will_wipe">Dadurch werden vor dem Import alle vorhandenen K2-Profile auf "{0}" GELÖSCHT.</string>
+  <string name="ev_bc_import_will_wipe_firmware">Außerdem wird die Tastatur selbst auf WERKSEINSTELLUNGEN ZURÜCKGESETZT, wobei Beleuchtung, Tastenbelegungen und Display-Tasten-Bilder in allen 5 Firmware-Slots gelöscht werden.</string>
   <string name="bc_import_read_failed">Die Base-Camp-Datenbank konnte nicht gelesen werden ({0}). Es wurde nichts importiert, deine vorhandenen K2-Profile blieben unverändert.</string>
   <!-- Everest-Import -->
   <string name="ev_no_profiles_in_bc">Keine Everest-Profile in der Base-Camp-Datenbank gefunden.</string>

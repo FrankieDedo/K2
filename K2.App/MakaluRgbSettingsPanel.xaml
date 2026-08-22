@@ -105,7 +105,7 @@
              as cramped/overlapping. -->
         <Grid x:Name="SecSettings" Visibility="Collapsed">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="24"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
@@ -182,10 +182,10 @@
                     <Slider x:Name="SldMkDpi" Minimum="50" Maximum="19000"
                             TickFrequency="50" ValueChanged="SldMkDpi_ValueChanged" VerticalAlignment="Center"/>
                 </DockPanel>
-                <TextBlock x:Name="LblMkDpiStatus" Margin="0,0,0,14" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
+                <TextBlock x:Name="LblMkDpiStatus" Margin="0,0,0,4" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
 
-                <WrapPanel Orientation="Horizontal" Margin="0,0,0,16">
-                    <TextBlock Text="{loc:Get makalu_setting_angle}" VerticalAlignment="Center" Width="130"/>
+                <WrapPanel Orientation="Horizontal">
+                    <TextBlock Text="{loc:Get makalu_setting_angle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
                     <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="120">
                         <UniformGrid Rows="1">
                             <RadioButton x:Name="RbMkAngleOff" Content="{loc:Get makalu_setting_off}" GroupName="MkAngle"
@@ -196,10 +196,8 @@
                                          themes:K2Segment.CornerRadius="0,6,6,0"/>
                         </UniformGrid>
                     </Border>
-                    <TextBlock x:Name="LblMkAngleStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}" Margin="8,0,0,0"/>
-                </WrapPanel>
-                <WrapPanel Orientation="Horizontal">
-                    <TextBlock Text="{loc:Get makalu_setting_liftoff}" VerticalAlignment="Center" Width="130"/>
+                    <TextBlock x:Name="LblMkAngleStatus" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}" Margin="8,0,24,0"/>
+                    <TextBlock Text="{loc:Get makalu_setting_liftoff}" VerticalAlignment="Center" Margin="0,0,10,0"/>
                     <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="225">
                         <UniformGrid Rows="1">
                             <RadioButton x:Name="RbMkLiftLow" Content="{loc:Get makalu_setting_liftoff_low}" GroupName="MkLift"

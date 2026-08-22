@@ -209,7 +209,27 @@
   <string name="youtube_chat_message_label">Message de chat en direct :</string>
   <string name="act_command">Commande shell</string>
   <string name="act_text">Coller du texte</string>
+  <string name="act_emoji">Emoji</string>
   <string name="act_macro">Lire une macro</string>
+
+  <!-- Action emoji + sélecteur d'emoji (EmojiPickerDialog) -->
+  <string name="emoji_picker_title">Choisir un emoji</string>
+  <string name="emoji_choose_button">Choisir un emoji…</string>
+  <string name="emoji_none_selected">Aucun emoji sélectionné</string>
+  <string name="emoji_search_label">Rechercher :</string>
+  <string name="emoji_category_label">Catégorie :</string>
+  <string name="emoji_category_all">Toutes</string>
+  <string name="emoji_no_results">Aucun emoji trouvé</string>
+  <string name="emoji_hint">L'emoji est saisi dans l'application au premier plan lorsque la touche est pressée. Sur une touche d'affichage (DisplayPad, pavé numérique Everest Max), il est également utilisé comme image de la touche.</string>
+  <string name="emoji_grp_smileys">Émoticônes et émotions</string>
+  <string name="emoji_grp_people">Personnes et corps</string>
+  <string name="emoji_grp_animals">Animaux et nature</string>
+  <string name="emoji_grp_food">Nourriture et boissons</string>
+  <string name="emoji_grp_travel">Voyages et lieux</string>
+  <string name="emoji_grp_activities">Activités</string>
+  <string name="emoji_grp_objects">Objets</string>
+  <string name="emoji_grp_symbols">Symboles</string>
+  <string name="emoji_grp_flags">Drapeaux</string>
   <string name="act_macro_unresolved">Lire une macro (non assignée)</string>
   <string name="act_googlehome">Google Home</string>
   <string name="act_pyscript">Script Python</string>
@@ -352,6 +372,19 @@
   <string name="settings_k2_autostart_hint">K2 nécessite désormais les droits administrateur (pour contrôler BaseCampService). Windows n'élève pas automatiquement les applications lancées depuis la clé de registre Run à l'ouverture de session, donc cette entrée seule peut échouer à démarrer K2 silencieusement — si cela se produit, utilisez plutôt le Planificateur de tâches (une tâche définie sur "Exécuter avec les privilèges les plus élevés" à l'ouverture de session).</string>
   <string name="settings_start_min_tray">Démarrer directement réduit dans la zone de notification</string>
   <string name="settings_start_min_tray_hint">K2 démarre avec ses pilotes actifs mais la fenêtre cachée dans la zone de notification — rouvrez-la à tout moment depuis l'icône.</string>
+  <!-- Mappage des appareils DisplayPad -->
+  <string name="settings_dp_devicemap_group">Mappage des appareils DisplayPad</string>
+  <string name="settings_dp_devicemap_btn">Configurer le mappage…</string>
+  <string name="settings_dp_devicemap_hint">Si vous avez déplacé un DisplayPad sur un autre port USB et que ses profils enregistrés apparaissent maintenant sur le mauvais panneau (par ex. "DisplayPad 2" et "DisplayPad 3" inversés), utilisez ceci pour réattribuer le panneau représenté par chaque pad connecté.</string>
+  <string name="dp_devicemap_title">Mappage des appareils DisplayPad</string>
+  <string name="dp_devicemap_hint">Chaque pad connecté est listé ci-dessous avec sa version de firmware. Cliquez sur "Identifier" pour faire clignoter le rétroéclairage d'un pad afin de reconnaître sa ligne, puis définissez le numéro de carte à utiliser. Deux lignes ne peuvent pas partager le même numéro de carte.</string>
+  <string name="dp_devicemap_col_current">Actuellement affiché comme</string>
+  <string name="dp_devicemap_col_firmware">Firmware</string>
+  <string name="dp_devicemap_col_board">N° de carte</string>
+  <string name="dp_devicemap_identify_btn">Identifier</string>
+  <string name="dp_devicemap_none_connected">Aucun DisplayPad n'est actuellement connecté — branchez les pads à réattribuer puis rouvrez cette fenêtre.</string>
+  <string name="dp_devicemap_duplicate_error">Deux pads ne peuvent pas utiliser le même numéro de carte. Attribuez un numéro différent à chacun.</string>
+  <string name="dp_devicemap_invalid_number">Les numéros de carte doivent être des entiers positifs.</string>
   <string name="settings_font_family">Police</string>
   <string name="settings_font_family_hint">Change immédiatement la police de l'interface dans toute l'application, sans redémarrage.</string>
   <string name="tray_show">Afficher K2</string>
@@ -394,7 +427,7 @@
   <string name="rgb_single_tip">Utilise une seule couleur unie pour l'effet.</string>
   <string name="rgb_double">Double couleur</string>
   <string name="rgb_double_tip">Utilise deux couleurs pour l'effet (non pris en charge par tous les effets).</string>
-  <string name="rgb_sync_profiles">Synchroniser les profils</string>
+  <string name="rgb_sync_profiles">Synchroniser entre les profils</string>
   <string name="rgb_primary">Principal :</string>
   <string name="rgb_secondary">Secondaire :</string>
   <string name="rgb_tertiary">Tertiaire :</string>
@@ -482,7 +515,7 @@
   <string name="makalu_remap_btn_dpi">Bouton DPI</string>
   <string name="makalu_remap_btn_5">Bouton 5</string>
   <string name="makalu_remap_btn_6">Bouton 6</string>
-  <string name="makalu_settings_title">Paramètres de l'appareil</string>
+  <string name="makalu_settings_title">Paramètres</string>
   <string name="makalu_setting_poll">Fréquence de scrutation :</string>
   <string name="makalu_setting_debounce">Réponse des boutons :</string>
   <string name="makalu_setting_angle">Angle snapping :</string>
@@ -550,6 +583,7 @@
   <string name="dock_remove_action">Supprimer l'action</string>
   <!-- Paramètres (section barre latérale Everest : disposition du clavier) -->
   <string name="ev_settings">Paramètres</string>
+  <string name="appearance">Apparence</string>
   <string name="ev_layout">Disposition</string>
   <string name="settings_sync_profiles">Synchroniser entre les profils</string>
   <string name="settings_game_mode">Mode jeu</string>
@@ -585,9 +619,12 @@
   <string name="keycap_customize_use_mountain_logo">Utiliser le logo Mountain (fixe)</string>
   <string name="keycap_customize_clear_all">Supprimer les personnalisations</string>
   <string name="keycap_customize_close">Fermer</string>
-  <string name="settings_factory_reset">Rétablir les paramètres d'usine</string>
-  <string name="settings_factory_reset_confirm">Cette opération réinitialise le Mode jeu, les LED indicatrices et les effets d'éclairage du clavier aux paramètres d'usine. Continuer ?</string>
-  <!-- Macro clavier -->
+  <string name="settings_factory_reset">Réinitialiser tous les paramètres aux valeurs d'usine</string>
+  <string name="settings_factory_reset_hint">Efface la mémoire propre du clavier — profils firmware, associations de touches, images des touches d'affichage et éclairage — et réinitialise la configuration enregistrée dans K2 pour celui-ci. Ce n'est pas la même chose que "Restaurer les valeurs par défaut" de la barre latérale, qui ne réinitialise que les profils K2 sans toucher à l'appareil.</string>
+  <string name="settings_factory_reset_confirm">Ceci réinitialise la mémoire propre du clavier à l'état d'usine : chaque profil firmware, association de touches, image de touche d'affichage et effet d'éclairage enregistré sur l'appareil est effacé, et la configuration enregistrée dans K2 pour ce clavier est supprimée en conséquence. Ensuite, K2 relance uniquement l'éclairage du clavier avec le premier effet de la liste — rien d'autre n'est renvoyé à l'appareil. Cette action est irréversible. Continuer ?</string>
+  <string name="settings_factory_reset_busy">Réinitialisation du clavier aux valeurs d'usine, veuillez patienter…</string>
+  <string name="settings_factory_reset_done">Le clavier a été réinitialisé aux valeurs d'usine et la configuration enregistrée dans K2 pour celui-ci a été effacée. Son éclairage a été relancé avec le premier effet de la liste ; rien d'autre n'a été renvoyé à l'appareil.</string>
+  <string name="settings_factory_reset_failed">Le clavier n'a pas confirmé la réinitialisation d'usine. Rien n'a été modifié sur l'appareil ni dans la configuration enregistrée dans K2.</string>  <!-- Macro clavier -->
   <string name="keyboard_macro">Macro clavier</string>
   <string name="macro_library">Bibliothèque de macros</string>
   <string name="macro_new">Nouveau</string>
@@ -780,6 +817,7 @@
   <string name="bc_pick_device_none">Choisissez un appareil depuis lequel importer.</string>
   <string name="bc_pick_device_label">Appareil n°{0} — {1} profil(s) : {2}</string>
   <string name="bc_import_will_wipe">Cette opération SUPPRIMERA tous les profils K2 existants sur "{0}" avant l'importation.</string>
+  <string name="ev_bc_import_will_wipe_firmware">Le clavier lui-même sera également RÉINITIALISÉ AUX VALEURS D'USINE, effaçant l'éclairage, les associations de touches et les images des touches d'affichage stockées dans les 5 emplacements de firmware.</string>
   <string name="bc_import_read_failed">Impossible de lire la base de données Base Camp ({0}). Rien n'a été importé et vos profils K2 existants n'ont pas été modifiés.</string>
   <!-- Importation Everest -->
   <string name="ev_no_profiles_in_bc">Aucun profil Everest trouvé dans la base de données Base Camp.</string>

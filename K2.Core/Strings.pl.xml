@@ -208,7 +208,27 @@
   <string name="youtube_chat_message_label">Wiadomość na czacie na żywo:</string>
   <string name="act_command">Polecenie powłoki</string>
   <string name="act_text">Wklej tekst</string>
+  <string name="act_emoji">Emoji</string>
   <string name="act_macro">Odtwórz makro</string>
+
+  <!-- Akcja emoji + przeglądarka emoji (EmojiPickerDialog) -->
+  <string name="emoji_picker_title">Wybierz emoji</string>
+  <string name="emoji_choose_button">Wybierz emoji…</string>
+  <string name="emoji_none_selected">Nie wybrano emoji</string>
+  <string name="emoji_search_label">Szukaj:</string>
+  <string name="emoji_category_label">Kategoria:</string>
+  <string name="emoji_category_all">Wszystkie</string>
+  <string name="emoji_no_results">Nie znaleziono emoji</string>
+  <string name="emoji_hint">Emoji jest wpisywane do aktywnej aplikacji po naciśnięciu klawisza. Na klawiszu wyświetlacza (DisplayPad, klawiatura numeryczna Everest Max) jest ono również używane jako obraz klawisza.</string>
+  <string name="emoji_grp_smileys">Uśmiechy i emocje</string>
+  <string name="emoji_grp_people">Ludzie i ciało</string>
+  <string name="emoji_grp_animals">Zwierzęta i przyroda</string>
+  <string name="emoji_grp_food">Jedzenie i napoje</string>
+  <string name="emoji_grp_travel">Podróże i miejsca</string>
+  <string name="emoji_grp_activities">Czynności</string>
+  <string name="emoji_grp_objects">Obiekty</string>
+  <string name="emoji_grp_symbols">Symbole</string>
+  <string name="emoji_grp_flags">Flagi</string>
   <string name="act_macro_unresolved">Odtwórz makro (nieprzypisane)</string>
   <string name="act_googlehome">Google Home</string>
   <string name="act_pyscript">Skrypt Python</string>
@@ -351,6 +371,19 @@
   <string name="settings_k2_autostart_hint">K2 wymaga teraz uprawnień administratora (do sterowania BaseCampService). Windows nie podnosi automatycznie uprawnień aplikacji uruchamianych z klucza rejestru Run przy logowaniu, więc sam ten wpis może nie uruchomić K2 po cichu — jeśli tak się stanie, użyj Harmonogramu zadań (zadanie ustawione na "Uruchom z najwyższymi uprawnieniami" przy logowaniu).</string>
   <string name="settings_start_min_tray">Uruchamiaj od razu zminimalizowane do zasobnika</string>
   <string name="settings_start_min_tray_hint">K2 uruchamia się z aktywnymi sterownikami, ale z oknem ukrytym w zasobniku systemowym — otwórz je w dowolnym momencie z ikony w zasobniku.</string>
+  <!-- Mapowanie urządzeń DisplayPad -->
+  <string name="settings_dp_devicemap_group">Mapowanie urządzeń DisplayPad</string>
+  <string name="settings_dp_devicemap_btn">Skonfiguruj mapowanie…</string>
+  <string name="settings_dp_devicemap_hint">Jeśli podłączyłeś DisplayPad do innego portu USB i jego zapisane profile pojawiają się teraz na niewłaściwym panelu (np. "DisplayPad 2" i "DisplayPad 3" zamienione miejscami), użyj tej opcji, aby ponownie przypisać, jaki panel reprezentuje każdy podłączony pad.</string>
+  <string name="dp_devicemap_title">Mapowanie urządzeń DisplayPad</string>
+  <string name="dp_devicemap_hint">Każdy podłączony pad jest wymieniony poniżej wraz z wersją firmware. Kliknij "Zidentyfikuj", aby podświetlenie pada zamigało i można było rozpoznać odpowiedni wiersz, a następnie ustaw numer płytki, którego ma używać. Dwa wiersze nie mogą mieć tego samego numeru płytki.</string>
+  <string name="dp_devicemap_col_current">Obecnie wyświetlany jako</string>
+  <string name="dp_devicemap_col_firmware">Firmware</string>
+  <string name="dp_devicemap_col_board">Nr płytki</string>
+  <string name="dp_devicemap_identify_btn">Zidentyfikuj</string>
+  <string name="dp_devicemap_none_connected">Obecnie nie jest podłączony żaden DisplayPad — podłącz pady, które chcesz przemapować, i otwórz ponownie to okno.</string>
+  <string name="dp_devicemap_duplicate_error">Dwa pady nie mogą używać tego samego numeru płytki. Nadaj każdemu inny numer.</string>
+  <string name="dp_devicemap_invalid_number">Numery płytek muszą być dodatnimi liczbami całkowitymi.</string>
   <string name="settings_font_family">Czcionka</string>
   <string name="settings_font_family_hint">Natychmiast zmienia czcionkę interfejsu w całej aplikacji, bez potrzeby ponownego uruchamiania.</string>
   <string name="tray_show">Pokaż K2</string>
@@ -487,7 +520,7 @@
   <string name="makalu_remap_btn_5">Przycisk 5</string>
   <string name="makalu_remap_btn_6">Przycisk 6</string>
 
-  <string name="makalu_settings_title">Ustawienia urządzenia</string>
+  <string name="makalu_settings_title">Ustawienia</string>
   <string name="makalu_setting_poll">Częstotliwość odpytywania:</string>
   <string name="makalu_setting_debounce">Odpowiedź przycisków:</string>
   <string name="makalu_setting_angle">Angle snapping:</string>
@@ -559,6 +592,7 @@
 
   <!-- Ustawienia (sekcja paska bocznego Everest: układ klawiatury) -->
   <string name="ev_settings">Ustawienia</string>
+  <string name="appearance">Wygląd</string>
   <string name="ev_layout">Układ</string>
   <string name="settings_sync_profiles">Synchronizuj między profilami</string>
   <string name="settings_game_mode">Tryb gry</string>
@@ -594,8 +628,12 @@
   <string name="keycap_customize_use_mountain_logo">Użyj logo Mountain (stałe)</string>
   <string name="keycap_customize_clear_all">Usuń wszystkie personalizacje</string>
   <string name="keycap_customize_close">Zamknij</string>
-  <string name="settings_factory_reset">Przywróć ustawienia fabryczne</string>
-  <string name="settings_factory_reset_confirm">To przywraca Tryb gry, diody wskaźnikowe i efekty podświetlenia klawiatury do ustawień fabrycznych. Kontynuować?</string>
+  <string name="settings_factory_reset">Przywróć wszystkie ustawienia do wartości fabrycznych</string>
+  <string name="settings_factory_reset_hint">Czyści własną pamięć klawiatury — profile firmware, przypisania klawiszy, obrazy klawiszy wyświetlacza i podświetlenie — oraz czyści zapisaną w K2 konfigurację tego urządzenia. To nie to samo co "Przywróć ustawienia domyślne" w panelu bocznym, które resetuje tylko profile K2 i nie dotyka urządzenia.</string>
+  <string name="settings_factory_reset_confirm">To przywraca własną pamięć klawiatury do stanu fabrycznego: każdy profil firmware, przypisanie klawiszy, obraz klawisza wyświetlacza i efekt podświetlenia zapisany na urządzeniu zostaje usunięty, a zapisana w K2 konfiguracja tej klawiatury zostaje odpowiednio skasowana. Następnie K2 uruchamia ponownie podświetlenie klawiatury tylko z pierwszym efektem z listy — nic więcej nie jest wysyłane do urządzenia. Tej operacji nie można cofnąć. Kontynuować?</string>
+  <string name="settings_factory_reset_busy">Przywracanie klawiatury do ustawień fabrycznych, proszę czekać…</string>
+  <string name="settings_factory_reset_done">Klawiatura została przywrócona do ustawień fabrycznych, a zapisana w K2 konfiguracja tego urządzenia została wyczyszczona. Jej podświetlenie zostało uruchomione ponownie z pierwszym efektem z listy; nic więcej nie zostało wysłane do urządzenia.</string>
+  <string name="settings_factory_reset_failed">Klawiatura nie potwierdziła przywrócenia ustawień fabrycznych. Nie wprowadzono żadnych zmian na urządzeniu ani w konfiguracji zapisanej w K2.</string>
 
   <!-- Makro klawiatury -->
   <string name="keyboard_macro">Makro klawiatury</string>
@@ -792,6 +830,7 @@
   <string name="bc_pick_device_none">Wybierz urządzenie, z którego chcesz importować.</string>
   <string name="bc_pick_device_label">Urządzenie #{0} — {1} profil(e/i): {2}</string>
   <string name="bc_import_will_wipe">To USUNIE wszystkie istniejące profile K2 na "{0}" przed importem.</string>
+  <string name="ev_bc_import_will_wipe_firmware">Spowoduje to również PRZYWRÓCENIE USTAWIEŃ FABRYCZNYCH samej klawiatury, czyszcząc podświetlenie, przypisania klawiszy i obrazy klawiszy wyświetlacza zapisane we wszystkich 5 slotach firmware.</string>
   <string name="bc_import_read_failed">Nie udało się odczytać bazy danych Base Camp ({0}). Nic nie zostało zaimportowane, a istniejące profile K2 pozostały nietknięte.</string>
   <!-- Import Everest -->
   <string name="ev_no_profiles_in_bc">Nie znaleziono profili Everest w bazie danych Base Camp.</string>

@@ -5,7 +5,7 @@
         xmlns:local="clr-namespace:K2.App"
         xmlns:themes="clr-namespace:K2.Core.Themes;assembly=K2.Core"
         Title="{loc:Get app_title}"
-        Icon="Assets/K2_icon.png"
+        Icon="Assets/K2_icon.ico"
         Tag="hide-titlebar-brand"
         Height="1024" Width="1600"
         MinHeight="768" MinWidth="1280"
@@ -1587,8 +1587,8 @@
                                                             <Grid Margin="0,6,0,12">
                                                                 <Grid.ColumnDefinitions>
                                                                     <!-- Fixed-width label column so both rows' entries share the same left edge -->
-                                                                    <ColumnDefinition Width="130"/>
-                                                                    <ColumnDefinition Width="60"/>
+                                                                    <ColumnDefinition Width="150"/>
+                                                                    <ColumnDefinition Width="50"/>
                                                                     <ColumnDefinition Width="20"/>
                                                                     <ColumnDefinition Width="Auto"/>
                                                                     <ColumnDefinition Width="*"/>
@@ -1603,7 +1603,7 @@
                                                                   Content="{loc:Get dial_screensaver}" VerticalAlignment="Center"
                                                                   ToolTip="{loc:Get dial_screensaver_enable_tip}"
                                                                   Click="CkDialScreenSaverEnable_Click" HorizontalAlignment="Left"/>
-                                                                <TextBox  Grid.Row="0" Grid.Column="1" x:Name="TxtDialScreenSaver" Width="48" Height="25" Padding="3,0,3,0" VerticalContentAlignment="Center"
+                                                                <TextBox  Grid.Row="0" Grid.Column="1" x:Name="TxtDialScreenSaver" Width="38" Height="25" Padding="3,0,3,0" VerticalContentAlignment="Center"
                                                                   TextChanged="TxtDialScreenSaver_TextChanged" TextAlignment="Center" Text="5"/>
                                                                 <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Get unit_seconds}" VerticalAlignment="Center" HorizontalAlignment="Left"/>
 
@@ -1611,7 +1611,7 @@
                                                                   Content="{loc:Get dial_autooff}" VerticalAlignment="Center"
                                                                   ToolTip="{loc:Get dial_turnoff_enable_tip}"
                                                                   Click="CkDialTurnOffEnable_Click" HorizontalAlignment="Left"/>
-                                                                <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtDialTurnOff" Width="48" Height="25" Padding="3,0,3,0" VerticalContentAlignment="Center"
+                                                                <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtDialTurnOff" Width="38" Height="25" Padding="3,0,3,0" VerticalContentAlignment="Center"
                                                                   VerticalAlignment="Center"
                                                                   TextChanged="TxtDialTurnOff_TextChanged"  HorizontalAlignment="Center" TextAlignment="Center"/>
                                                                 <TextBlock Grid.Row="1" Grid.Column="2" Text="{loc:Get unit_seconds}"
@@ -3587,6 +3587,8 @@
                                     Style="{StaticResource K2IconButton}" Tag="&#xE895;"/>
                                     <TextBlock x:Name="TxtAppUpdateStatus" Foreground="#9A9AA2"
                                        TextWrapping="Wrap" Margin="0,8,0,0" FontSize="12"/>
+                                    <ProgressBar x:Name="PbAppUpdateDownload" Height="6" Margin="0,6,0,0"
+                                         Minimum="0" Maximum="100" Visibility="Collapsed"/>
 
                                     <StackPanel x:Name="PnlAppUpdateAvailable" Visibility="Collapsed" Margin="0,12,0,0">
                                         <TextBlock x:Name="TxtAppUpdateNotes" Foreground="#C8C8CE"

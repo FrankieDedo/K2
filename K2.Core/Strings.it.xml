@@ -356,6 +356,7 @@
   <string name="settings_update_zip_btn">Scarica ZIP…</string>
   <string name="settings_update_view_release_btn">Vedi note di rilascio</string>
   <string name="settings_update_downloading">Download in corso…</string>
+  <string name="settings_update_downloading_pct">Download in corso… {0}%</string>
   <string name="settings_update_install_confirm">Scaricare la versione {0} e avviare l'installer? K2 si chiuderà non appena l'installer parte, per permettere l'aggiornamento.</string>
   <string name="settings_update_zip_done">Salvato in {0}</string>
   <string name="settings_danger_zone">Zona pericolosa</string>
@@ -529,7 +530,7 @@
   <string name="makalu_remap_btn_5">Tasto 5</string>
   <string name="makalu_remap_btn_6">Tasto 6</string>
 
-  <string name="makalu_settings_title">Impostazioni dispositivo</string>
+  <string name="makalu_settings_title">Impostazioni</string>
   <string name="makalu_setting_poll">Frequenza polling:</string>
   <string name="makalu_setting_debounce">Risposta tasti:</string>
   <string name="makalu_setting_angle">Angle snapping:</string>
