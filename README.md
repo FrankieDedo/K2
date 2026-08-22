@@ -54,7 +54,10 @@ Start as admin and keep in mind that it should close all Base Camp process autom
   <li><strong>Mouse action</strong> — click, scroll, and other mouse-emulated inputs</li>
   <li><strong>Switch profile</strong> — change profile on this device or target a different connected device</li>
   <li><strong>Play macro</strong> — trigger any recorded macro (keyboard+mouse) from the shared library</li>
-  <li><strong>Python script</strong> — run an inline snippet or a .py file, with an HTTP bridge back into K2 (log, read state, switch profile, run another action, simulate a key press)</li>
+  <li><strong>Python script</strong> — run a pasted script or a .py file</li>
+  <li><strong>Emojis</strong> — map any emoji to a key, display keys show the mapped emoji</li>
+  <li><strong>Google Home integration</strong> — Switch on and off lights and switches</li>
+  <li><strong>Third party application commands</strong> — Same as Base Camp, support Adobe Suite, DaVinci Resolve, Zoom, OBS, Twitch, Youtube, Spotify</li>
 </ul>
 <p><em>Available on every device — MacroPad, Everest Max/60, DisplayPad — through the same "Configure action" dialog.</em></p>
 </details>
@@ -121,9 +124,6 @@ Start as admin and keep in mind that it should close all Base Camp process autom
 <strong>I still got something to port from Base Camp</strong>
 
 <ul>
-  <li>Executable linked to a profile</li>
-  <li>LED preview for Makalu 67 (not an actual preview from the device, same as Base Camp)</li>
-  <li>Custom single-LED settings for all devices</li>
   <li>More in-detail macro steps editing</li>
   <li>Tested Makalu Max support (i don't have one, if you want to sell yours, tell me lol)</li>
   <li>Please, tell me if you find that something else wasn't ported from Base Camp!</li>
