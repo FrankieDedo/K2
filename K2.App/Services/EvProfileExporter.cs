@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
+using K2.App.Models;
 using K2.Core;
 
 namespace K2.App.Services;
@@ -164,14 +165,25 @@ public static class EvProfileExporter
         // path already knew how to read back. Profile-scoped keys with a fallback to the
         // shared ones, mirroring EvRgbPrefix/EvSettingsPrefix's own "synced = global"
         // rule (the panel writes to the shared namespace when sync is on).
-        string? Get(string key) => Scoped(store.GetSetting, key, slot);
+        // "Sync across profiles" (one flag for RGB + Settings + Display Dial, persisted as
+        // rgb.sync) makes every panel read and write the SHARED namespace. When it is on,
+        // per-profile rows left over from before it was turned on are stale, so the lookup
+        // order flips — otherwise an export carries values the user cannot see anywhere.
+        bool synced = store.GetSetting("rgb.sync") == "1";
+        string? Get(string key) => Scoped(store.GetSetting, key, slot, synced);
 
         root.Add(KeyboardLightingXml.BuildLightings(
             Get, $"rgb.p{slot}.", $"custom.p{slot}.keyLedColors", $"custom.p{slot}.keyEffects",
-            BaseCampDbImporter.EverestKeycapLedCount));
+            BaseCampDbImporter.EverestKeycapLedCount, includeK2Only: !bcCompatible));
 
         int mode = int.TryParse(Get($"settings.p{slot}.game_mode"), out var gm) ? gm : 0;
         int turnOffSec = int.TryParse(Get($"dial.p{slot}.turnOff"), out var to) ? to : 0;
+        // Null = the user never picked one, so the value below is only K2's locale
+        // guess: exported as IsLayoutConfigured=false so the importing side keeps its
+        // own guess instead (same gate BaseCampDbImporter applies to BC's DB column).
+        var layoutStored = EverestKeyboardLayout.ParseStorageString(
+            store.GetSetting(EverestKeyboardLayout.LayoutSettingKey));
+        var layout = layoutStored ?? EverestKeyboardLayout.DetectLayout();
         root.Add(new XElement("EverestKeyboardSettings",
             new XElement("KeyboardSetting",
                 new XElement("ProfileId", 0),
@@ -181,12 +193,41 @@ public static class EvProfileExporter
                 new XElement("DisableWin", Bool((mode & 0x4) != 0)),
                 new XElement("DisableAltTab", Bool((mode & 0x8) != 0)),
                 new XElement("EnableCoreLED", Bool(Get($"settings.p{slot}.indicator_led") == "1")),
+                // Keycap legends. Real BC exports write these two (verified against
+                // Profili_BaseCamp/*.xml: <KeyboardLayout>US</KeyboardLayout> +
+                // <IsLayoutConfigured>true</IsLayoutConfigured>) and K2 used to drop
+                // them, so a profile round-tripped through K2 came back to BC with no
+                // layout at all. Device-level in K2, per-profile in BC — see
+                // MainWindow.Everest.cs's LoadPersistedKeyboardLayout.
+                new XElement("KeyboardLayout", EverestKeyboardLayout.ToStorageString(layout)),
+                new XElement("IsLayoutConfigured", Bool(layoutStored is not null)),
                 new XElement("IsTurnOffAfter", Bool(Get($"dial.p{slot}.turnOffEnable") == "1")),
                 // Base Camp stores this as a "H:MM:SS" TimeSpan string, not a seconds
                 // count — see BaseCampDbImporter.TurnOffSecondsFromTimeSpanText.
                 new XElement("TurnOffAfter", TimeSpan.FromSeconds(turnOffSec).ToString(@"h\:mm\:ss")),
                 new XElement("ClockType", int.TryParse(Get($"dial.p{slot}.clockType"), out var ct) ? ct : 0),
                 new XElement("modified_at", DateTime.Now.ToString("o")))));
+
+        // K2-only: the WHOLE per-profile Settings + Display Dial namespace, verbatim.
+        // The <EverestKeyboardSettings> block above only carries the four values Base Camp
+        // has a column for; everything else the two panels persist (dial pages,
+        // screensaver, menu colour, keycap appearance, ...) used to be dropped on export
+        // and therefore never restored on import — user report 2026-08-22.
+        if (!bcCompatible)
+        {
+            root.Add(K2ProfileSettingsXml.Build(
+                store.GetSettingsWithPrefix, slot, K2ProfileSettingsXml.EverestFamilies,
+                preferShared: synced));
+
+            // K2-only, device-global (not per-slot): the physical unit's keyboard body
+            // colour, so restoring a K2 export onto a fresh install brings the keycap
+            // legend colours back in sync with the real plastic. Excluded from
+            // K2ProfileSettingsXml itself because that block is per-profile and this
+            // fact isn't (see K2ProfileSettingsXml's s_deviceGlobalKeys doc comment).
+            // User request 2026-08-22.
+            root.Add(new XElement("KeyboardColor",
+                store.GetSetting("settings.keyboard_color") == "black" ? "black" : "silver"));
+        }
 
         var doc = new XDocument(new XDeclaration("1.0", "utf-8", null), root);
         doc.Save(filePath);
@@ -199,13 +240,12 @@ public static class EvProfileExporter
     /// <summary>Reads a profile-scoped settings key, falling back to its shared
     /// (device-wide) twin — <c>rgb.p3.speed</c> → <c>rgb.speed</c> — for a profile whose
     /// values live in the shared namespace because "sync across profiles" is on.</summary>
-    private static string? Scoped(Func<string, string?> getSetting, string key, int slot)
+    private static string? Scoped(Func<string, string?> getSetting, string key, int slot, bool preferShared = false)
     {
-        var direct = getSetting(key);
-        if (direct is not null) return direct;
         string marker = $".p{slot}.";
         int at = key.IndexOf(marker, StringComparison.Ordinal);
-        return at < 0 ? null : getSetting(key[..at] + "." + key[(at + marker.Length)..]);
+        string? shared = at < 0 ? null : getSetting(key[..at] + "." + key[(at + marker.Length)..]);
+        return preferShared ? (shared ?? getSetting(key)) : (getSetting(key) ?? shared);
     }
 
     private static XElement BuildBinding(

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   K2 中文（简体）本地化文件。
   与可执行文件放在同一目录下，命名为 Strings.zh.xml。
@@ -58,6 +58,7 @@
   <string name="reset">重置</string>
   <string name="new_profile">+ 新建配置文件</string>
   <string name="profile_n">配置文件 {0}</string>
+  <string name="default_profile_name">默认配置文件</string>
   <string name="select_device_first">请先选择设备。</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -370,6 +371,7 @@
   <string name="hw_busy_uploading_image">正在将图片上传到设备，请稍候…</string>
   <string name="hw_busy_importing_profile">正在导入配置文件，请稍候…</string>
   <string name="hw_busy_importing_profiles">正在导入配置文件，请稍候…</string>
+  <string name="hw_busy_restoring_defaults">正在恢复默认设置，请稍候…</string>
   <string name="ev_crash_recovering">驱动程序已崩溃 — 正在尝试 3 秒后自动恢复…</string>
   <string name="ev_crash_recovered">驱动程序已恢复 — LED 预览已重新启动。</string>
   <string name="ev_crash_recovery_failed">驱动程序恢复失败 — 请重启 K2.App。</string>

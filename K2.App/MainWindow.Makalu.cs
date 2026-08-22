@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -130,7 +130,17 @@ public partial class MainWindow
         try
         {
             var existing = _mkStore.GetExistingProfiles();
-            if (existing.Count == 0) existing.Add(1);
+            if (existing.Count == 0)
+            {
+            // No profile at all — fresh install, hardware factory reset or the Settings
+            // tab's "Restore all defaults": recreate one instead of only showing a
+            // phantom slot 1 under the generic "Profile 1" label. Named "Default
+            // profile" (localized, `default_profile_name`), the same name Base Camp
+            // gives its own starting profile. User request 2026-08-21.
+                _mkStore.SetProfileName(1, Loc.Get("default_profile_name"));
+                _mkStore.MarkProfileExists(1);
+                existing.Add(1);
+            }
             var items = new List<MkProfileItem>();
             foreach (var slot in existing)
                 items.Add(new MkProfileItem(slot, _mkStore.GetProfileName(slot) ?? Loc.Get("profile_n", slot)));
@@ -636,6 +646,13 @@ public partial class MainWindow
                 }
                 _mkStore.SaveDpi(slot, new MakaluDpiRecord(levels, active));
             }
+
+            // K2-format extra: the whole per-profile Settings namespace (see
+            // K2ProfileSettingsXml). Absent from Base Camp files and from K2 exports made
+            // before 2026-08-22, in which case this is a no-op.
+            int k2Settings = K2ProfileSettingsXml.Apply(
+                root, _mkStore.SetSetting, slot, K2ProfileSettingsXml.SettingsOnlyFamilies);
+            if (k2Settings > 0) LogMakalu($"[IMP-XML] {k2Settings} K2 profile setting(s) restored");
 
             _mkStore.SetProfileName(slot, profileName);
             _mkStore.SetCurrentProfile(slot);

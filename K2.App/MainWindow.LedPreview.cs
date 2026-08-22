@@ -152,6 +152,27 @@ public partial class MainWindow
     }
 
     /// <summary>
+    /// Re-issues the color-stream-enable sequence (same SetSyncEffect off/on + EnableColorStream
+    /// as <see cref="StartLedPreview"/>/<see cref="TryEverestCrashRecovery"/>) after any firmware
+    /// picture write — <c>StartPicUpdate</c> (numpad display key icons, Media Dock screensaver)
+    /// holds the device busy for seconds and appears to leave color streaming off afterward: the
+    /// on-screen LED preview would keep showing the last colors it read before the upload started
+    /// and never update again (user report 2026-08-17: "il led preview si blocca dopo che ho
+    /// caricato un'icona" — confirmed against the runtime log, which shows a successful
+    /// UploadNumpadImage with no EnableColorStream call anywhere after it for the rest of the
+    /// session). No-op if the preview isn't actually active, to avoid a pointless SDK round-trip
+    /// on every upload while the user is looking at a different section.
+    /// </summary>
+    private void EvReArmColorStreamAfterFlashWrite()
+    {
+        if (_ledPoller is null || !_ledPoller.EverestEnabled || !_everest.IsOpen) return;
+        try { _everest.SetSyncEffect(false, 50); } catch { }
+        try { _everest.SetSyncEffect(true,  50); } catch { }
+        try { _everest.EnableColorStream(10);    } catch { }
+        App.WriteLog("[LED] color stream re-armed after flash write");
+    }
+
+    /// <summary>
     /// Enables/disables just the Everest half of the LED color preview. Called from
     /// <see cref="ShowEvSection"/> whenever the active Everest section changes: the
     /// preview is only meaningful while looking at "RGB &amp; Lighting", so polling
@@ -259,6 +280,17 @@ public partial class MainWindow
         {
             int matrixId = kv.Key;
             if (matrixId < 0 || matrixId >= colors.Length) continue;
+
+            // Skip a key that's currently mid-physical-press: EvHighlightKeyboardButton's
+            // red Tint/white-legend overlay (MainWindow.Everest.cs) is active right now and
+            // a poll landing here would stomp it — same guard MacroPad's poll already has
+            // (OnMacroPadColorsUpdated below) and the same class of bug Ev60 hit (see
+            // HandleEv60KeyByLed's catch-up comment). _evKeyVisuals is keyed by ledIndex
+            // (colors[] index), not matrix — go through the Button's Tag (the matrix/VK
+            // value) to reach _evByMatrix, the same space EverestKey.IsHighlighted lives in.
+            if (kv.Value.Button.Tag is int matrix
+                && _evByMatrix.TryGetValue(matrix, out var evKey) && evKey.IsHighlighted)
+                continue;
 
             var c = colors[matrixId];
             ApplyEverestLedColor(kv.Value, c.r, c.g, c.b);

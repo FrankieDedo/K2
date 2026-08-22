@@ -238,9 +238,7 @@ public partial class MainWindow
             MessageBoxButton.OKCancel,
             MessageBoxImage.Warning);
         if (res != MessageBoxResult.OK) return;
-        _store.ClearProfile(id, slot);
-        _store.SetSetting($"profile.{id}.{slot}.name", "");
-        _store.SetSetting($"profile.{id}.{slot}.launchExe", "");
+        _store.DeleteProfile(id, slot);
         Log($"[UI ] MacroPad profile {slot} deleted.");
         MpRefreshProfiles(id);
         // LstMpProfile_SelectionChanged will reload the key grid automatically
@@ -273,9 +271,7 @@ public partial class MainWindow
                 MessageBoxButton.OKCancel,
                 MessageBoxImage.Warning);
             if (res != MessageBoxResult.OK) return;
-            _store.ClearProfile(id, pi.Slot);
-            _store.SetSetting($"profile.{id}.{pi.Slot}.name", "");
-            _store.SetSetting($"profile.{id}.{pi.Slot}.launchExe", "");
+            _store.DeleteProfile(id, pi.Slot);
             Log($"[UI ] MacroPad profile {pi.Slot} deleted (gear).");
         }
         else
@@ -307,11 +303,7 @@ public partial class MainWindow
         int current = CurrentProfile();
         foreach (var slot in _store.GetExistingProfiles(id))
             if (slot != current)
-            {
-                _store.ClearProfile(id, slot);
-                _store.SetSetting($"profile.{id}.{slot}.name", "");
-                _store.SetSetting($"profile.{id}.{slot}.launchExe", "");
-            }
+                _store.DeleteProfile(id, slot);
 
         _store.ClearProfile(id, current);
         MpResetLedToDefaults();
@@ -452,7 +444,7 @@ public partial class MainWindow
 
         // Edit-individual-keycaps mode (Settings section): open the per-key color/image
         // customizer instead of the action-configuration dialog.
-        if (_mpKeycapEditMode && IsMpSettingsSectionActive)
+        if (_mpKeycapEditMode && IsMpAppearanceSectionActive)
         {
             OpenMpKeycapCustomizeDialog(key.Index, key.KeyLabel);
             return;
@@ -655,7 +647,17 @@ public partial class MainWindow
         try
         {
             var existing = _store.GetExistingProfiles(deviceId);
-            if (existing.Count == 0) existing.Add(1);
+            if (existing.Count == 0)
+            {
+            // No profile at all — fresh install, hardware factory reset or the Settings
+            // tab's "Restore all defaults": recreate one instead of only showing a
+            // phantom slot 1 under the generic "Profile 1" label. Named "Default
+            // profile" (localized, `default_profile_name`), the same name Base Camp
+            // gives its own starting profile. User request 2026-08-21.
+                if (_store.GetProfileName(deviceId, 1) is null)
+                    _store.SetProfileName(deviceId, 1, Loc.Get("default_profile_name"));
+                existing.Add(1);
+            }
             var items = new List<MpProfileItem>();
             foreach (var slot in existing)
             {
@@ -948,7 +950,9 @@ public partial class MainWindow
                 int c1 = BaseCampDbImporter.ParseBcColor(lt.Element("Color1")?.Value, 0x900000);
                 int c2 = BaseCampDbImporter.ParseBcColor(lt.Element("Color2")?.Value, 0);
                 int c3 = BaseCampDbImporter.ParseBcColor(lt.Element("Color3")?.Value, 0);
-                lightingRows.Add(new BaseCampDbImporter.BcLightingRow(effByte, speed, brightness, direction, c1, c2, c3, active));
+                // <Type> = color-type pill (0 single / 1 dual / 2 rainbow), same as Everest Max.
+                int colorType = int.TryParse(lt.Element("Type")?.Value, out var ct) ? ct : 0;
+                lightingRows.Add(new BaseCampDbImporter.BcLightingRow(effByte, speed, brightness, direction, c1, c2, c3, active, colorType));
 
                 // Per-key paint state of the Custom effect (12 M-keys) — same payload
                 // shape as Everest Max's, and gated on IsActive for the same reason
@@ -979,6 +983,13 @@ public partial class MainWindow
                 _store.SetSetting($"macroled.p{slot}.effect",
                     ((int)MacroPadSdkNative.EffectIndex.Custom).ToString());
             }
+
+            // K2-format extra: the whole per-profile Settings namespace (see
+            // K2ProfileSettingsXml). Absent from Base Camp files and from K2 exports made
+            // before 2026-08-22, in which case this is a no-op.
+            int k2Settings = K2ProfileSettingsXml.Apply(
+                root, _store.SetSetting, slot, K2ProfileSettingsXml.SettingsOnlyFamilies);
+            if (k2Settings > 0) Log($"[IMP-XML] {k2Settings} K2 profile setting(s) restored");
 
             _store.SetCurrentProfile(id, slot);
             MpRefreshProfiles(id);
@@ -1108,12 +1119,12 @@ public partial class MainWindow
             return;
         }
 
-        // Wipe: replace, don't append.
-        foreach (var slot in _store.GetExistingProfiles(k2DeviceId))
-        {
-            _store.ClearProfile(k2DeviceId, slot);
-            _store.SetSetting($"profile.{k2DeviceId}.{slot}.name", "");
-        }
+        // Wipe: replace, don't append — ALL slots, not only the ones GetExistingProfiles
+        // reports (2026-08-22, same change as the Everest Max import): a slot with no Keys
+        // row is invisible to that query yet can still hold stale macroled./settings. rows
+        // that would become the starting point of whatever the import puts there.
+        for (int wipeSlot = 1; wipeSlot <= MacroPadService.ProfileCount; wipeSlot++)
+            _store.DeleteProfile(k2DeviceId, wipeSlot);
 
         int totalKeys = 0;
         var usedSlots = new HashSet<int>();

@@ -510,9 +510,9 @@ public partial class MainWindow
         };
         if (dlg.ShowDialog(this) != true) return;
 
-        string picked = dlg.FileName;
-        string? cropped = ImageCropDialog.Show(this, picked, W, H, Loc.Get("crop_title", W, H));
-        if (cropped is not null) picked = cropped;
+        string? cropped = ImageCropDialog.Show(this, dlg.FileName, W, H, Loc.Get("crop_title", W, H));
+        if (cropped is null) return;
+        string picked = cropped;
 
         if (_everest is null) return;
         // StartPicUpdate (the SDK's picture-upload export) is synchronous and takes ~2s —
@@ -520,6 +520,9 @@ public partial class MainWindow
         // doc comment (MainWindow.NumpadDisplayKeys.cs).
         bool ok = RunHwBusy(Loc.Get("hw_busy_uploading_image"), () => _everest.UploadMMDockScreensaver(picked));
         LogEverest($"[DIAL] UploadMMDockScreensaver -> {ok}");
+        // Same flash-write side effect as the numpad display key icons — see
+        // EvReArmColorStreamAfterFlashWrite's doc comment (MainWindow.LedPreview.cs).
+        EvReArmColorStreamAfterFlashWrite();
     }
 
     private void BtnDialApply_Click(object sender, RoutedEventArgs e) => ApplyDialToDevice();

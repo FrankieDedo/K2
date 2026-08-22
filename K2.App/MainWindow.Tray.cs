@@ -12,20 +12,26 @@
 //     OnSourceInitialized -> AutoOpenDrivers) then immediately hides it to the tray,
 //     instead of leaving it on screen.
 //
-// The NotifyIcon is created once (constructor) so "close to tray" always has it
+// The tray icon is created once (constructor) so "close to tray" always has it
 // ready; it is only made Visible while the window itself is hidden, and disposed
 // in OnWindowClosed alongside the other per-process resources.
+//
+// It is a Services.TrayIconNative, NOT System.Windows.Forms.NotifyIcon: the latter
+// registers the icon under an identity Windows recycles across processes, which let
+// K2's icon collide with another program's (shared slot, clicks delivered to both).
+// See TrayIconNative.cs for the full rationale.
 
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Forms;
+using K2.App.Services;
 using K2.Core;
 
 namespace K2.App;
 
 public partial class MainWindow
 {
-    private NotifyIcon? _trayIcon;
+    private TrayIconNative? _trayIcon;
 
     // Set by the tray's "Exit" item before calling Close(), so MainWindow_Closing
     // lets the close proceed instead of redirecting it to the tray.
@@ -36,11 +42,7 @@ public partial class MainWindow
         // Fully qualified: MainWindow (a Window) already has an instance member named
         // "Icon" (ImageSource), which would otherwise shadow the System.Drawing.Icon type.
         var icon = System.Drawing.Icon.ExtractAssociatedIcon(System.Reflection.Assembly.GetExecutingAssembly().Location);
-        _trayIcon = new NotifyIcon
-        {
-            Text = "K2",
-            Visible = false,
-        };
+        _trayIcon = new TrayIconNative { Text = "K2" };
         if (icon is not null) _trayIcon.Icon = icon;
         _trayIcon.DoubleClick += (_, _) => RestoreFromTray();
 

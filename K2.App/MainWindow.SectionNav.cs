@@ -85,6 +85,7 @@ public partial class MainWindow
             nameof(RbSecKeyMapping) => PnlSecKeyMapping,
             nameof(RbSecRgb)        => PnlSecRgb,
             nameof(RbSecDial)       => PnlSecDial,
+            nameof(RbSecAppearance) => PnlSecAppearance,
             nameof(RbSecSettings)   => PnlSecSettings,
             nameof(RbSecUsb)        => PnlSecUsb,
             _                       => null
@@ -125,9 +126,9 @@ public partial class MainWindow
     /// gates whether clicking a key on the keyboard overlay opens the action dialog.</summary>
     private bool IsEvKeyBindingSectionActive => _activeEvSection == PnlSecKeyMapping;
 
-    /// <summary>True while the Everest "Settings" section is active — gates whether clicking a
+    /// <summary>True while the Everest "Appearance" section is active — gates whether clicking a
     /// key opens KeycapCustomizeDialog (only when "Edit individual keycaps" is also checked).</summary>
-    private bool IsEvSettingsSectionActive => _activeEvSection == PnlSecSettings;
+    private bool IsEvAppearanceSectionActive => _activeEvSection == PnlSecAppearance;
 
     // ── MacroPad sidebar (Key Binding / LED Lighting / Settings) ──────
     private FrameworkElement? _activeMpSection;
@@ -142,6 +143,7 @@ public partial class MainWindow
         {
             nameof(RbMpSecKeyBinding)  => PnlMpSecKeyBinding,
             nameof(RbMpSecLed)         => PnlMpSecLed,
+            nameof(RbMpSecAppearance)  => PnlMpSecAppearance,
             nameof(RbMpSecSettings)    => PnlMpSecSettings,
             _                          => null
         };
@@ -176,9 +178,9 @@ public partial class MainWindow
     /// gates whether clicking a key on the grid opens the action dialog.</summary>
     private bool IsMpKeyBindingSectionActive => _activeMpSection == PnlMpSecKeyBinding;
 
-    /// <summary>True while the MacroPad "Settings" section is active — gates whether clicking a
+    /// <summary>True while the MacroPad "Appearance" section is active — gates whether clicking a
     /// key opens KeycapCustomizeDialog (only when "Edit individual keycaps" is also checked).</summary>
-    private bool IsMpSettingsSectionActive => _activeMpSection == PnlMpSecSettings;
+    private bool IsMpAppearanceSectionActive => _activeMpSection == PnlMpSecAppearance;
 
     // ── DisplayPad sidebar (Key Binding / Pages / Settings) ───────────
     private FrameworkElement? _activeDpSection;

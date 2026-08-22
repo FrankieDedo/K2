@@ -5,7 +5,8 @@
         xmlns:local="clr-namespace:K2.App"
         xmlns:themes="clr-namespace:K2.Core.Themes;assembly=K2.Core"
         Title="{loc:Get app_title}"
-        Icon="Assets/K2_logo.png"
+        Icon="Assets/K2_icon.png"
+        Tag="hide-titlebar-brand"
         Height="1024" Width="1600"
         MinHeight="768" MinWidth="1280"
         WindowStartupLocation="CenterScreen"
@@ -704,6 +705,22 @@
                 </MultiDataTrigger>
             </Style.Triggers>
         </Style>
+
+        <!-- "Sync across profiles" checkbox: one style so the checkbox lands in
+             exactly the same spot in every section of the bottom settings panel
+             (Lighting / Display Dial / Settings, per device). It used to be
+             positioned ad hoc in each section (Center vs Top, 10 vs 25 vs 40px
+             margins, one of them inside a fixed 150px column that clipped the
+             label), so it visibly jumped around when switching sections —
+             user report 2026-08-22. Always place it as the top-right child of
+             the section's root Grid (Grid.ColumnSpan spanning every column) and
+             give it no local alignment/margin overrides. -->
+        <Style x:Key="K2SyncCheckBox" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+            <Setter Property="Margin" Value="0,2,10,0"/>
+            <Setter Property="Height" Value="22"/>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="12">
@@ -742,8 +759,7 @@
                          the app's landing tab, always first regardless of what's plugged in. -->
                     <TabItem x:Name="TabHome" Tag="home" ToolTip="{loc:Get tab_home}">
                         <TabItem.Header>
-                            <TextBlock Text="&#xE80F;" FontFamily="Segoe MDL2 Assets" FontSize="20"
-                                       FontWeight="Normal" FontStyle="Normal"/>
+                            <Image Source="Assets/K2_logo.png" Width="40" Height="40" Stretch="Uniform"/>
                         </TabItem.Header>
                     </TabItem>
                     <!-- Fixed device order: Everest Max > Everest 60 > Makalu > DisplayPad > MacroPad
@@ -939,7 +955,7 @@
                                                                Width="{Binding ImageWidth}" Height="{Binding ImageHeight}"
                                                                Margin="0,0,-13,-13"
                                                                RenderOptions.BitmapScalingMode="HighQuality"/>
-                                                            <TextBlock Grid.Column="1"
+                                                            <TextBlock x:Name="TxtCardName" Grid.Column="1"
                                                                    Text="{Binding Name, Converter={StaticResource UpperCaseConverter}}"
                                                                    FontSize="29" FontWeight="Bold" FontStyle="Italic"
                                                                    Foreground="{StaticResource K2TextBrush}"
@@ -951,6 +967,10 @@
                                                         <Trigger Property="IsMouseOver" Value="True">
                                                             <Setter TargetName="Card" Property="BorderBrush"
                                                                 Value="{DynamicResource K2AccentBrush}"/>
+                                                            <Setter TargetName="Card" Property="Background"
+                                                                Value="{DynamicResource K2AccentBrush}"/>
+                                                            <Setter TargetName="TxtCardName" Property="Foreground"
+                                                                Value="White"/>
                                                         </Trigger>
                                                     </ControlTemplate.Triggers>
                                                 </ControlTemplate>
@@ -1019,6 +1039,10 @@
                                     <RadioButton x:Name="RbSecDial"
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="Display Dial" GroupName="EvSections"
+                                             Checked="EvSection_Changed"/>
+                                    <RadioButton x:Name="RbSecAppearance"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get appearance}" GroupName="EvSections"
                                              Checked="EvSection_Changed"/>
                                     <RadioButton x:Name="RbSecSettings"
                                              Style="{StaticResource SectionTabStyle}"
@@ -1274,8 +1298,13 @@
                                             </Grid>
 
                                             <!-- ── RGB & LIGHTING ── -->
-                                            <ScrollViewer x:Name="PnlSecRgb"
-                                                      MaxHeight="220" VerticalScrollBarVisibility="Auto" VerticalAlignment="Top" Visibility="Collapsed">
+                                            <!-- No MaxHeight: the old 220 cap forced a scrollbar as soon as the
+                                                 window grew past the panel's MinHeight, and made this section the
+                                                 only one whose right edge was shifted by a scrollbar (which in turn
+                                                 misaligned CkEvSync vs. the other sections' sync checkbox). The
+                                                 panel itself is already bounded (Grid row, see BdrEvSettingsPanel). -->
+                                            <ScrollViewer x:Name="PnlSecRgb" Grid.RowSpan="2"
+                                                      VerticalScrollBarVisibility="Auto" VerticalAlignment="Top" Visibility="Collapsed">
                                                 <StackPanel>
                                                     <!-- Preset effects row 1: effect/speed/on-off (left) + sync (right) —
                                                      same Grid layout as MacroPad's PnlMpSecLed. -->
@@ -1310,16 +1339,12 @@
                                                                 LostFocus="TxtEvAutoOffSeconds_LostFocus" VerticalAlignment="Center" Height="25" Padding="3,2,3,0" TextChanged="TxtEvAutoOffSeconds_TextChanged"/>
                                                             <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                                         </StackPanel>
-                                                        <!-- Right-aligned to match CkSettingsSync's position in the
-                                                         Settings section below (PnlSecSettings) — both sit in a
-                                                         same-width panel, so HorizontalAlignment="Right" with the
-                                                         same base 10px margin lines them up when switching
-                                                         sections. Nudged a further 15px left per user request
-                                                         (2026-07-21) via the extra margin. Replaces the old
-                                                         hardcoded Margin="888,0,10,0" left-offset hack. -->
+                                                        <!-- Position comes entirely from K2SyncCheckBox (see
+                                                         Window.Resources) so it matches CkDialSync/CkSettingsSync
+                                                         exactly — no local alignment/margin here. -->
                                                         <CheckBox x:Name="CkEvSync" Content="{loc:Get rgb_sync_profiles}"
-                                                              VerticalAlignment="Center" Click="CkEvSync_Click" Grid.ColumnSpan="2"
-                                                              HorizontalAlignment="Right" Margin="0,0,25,0"/>
+                                                              Style="{StaticResource K2SyncCheckBox}"
+                                                              Click="CkEvSync_Click" Grid.ColumnSpan="2"/>
                                                     </Grid>
                                                     <!-- Backlight auto-off — moved here from Settings (user request
                                                      2026-07-21): lives next to the backlight switch above, sized
@@ -1485,13 +1510,27 @@
                                                             <ColumnDefinition Width="*"/>
                                                             <ColumnDefinition Width="20"/>
                                                             <ColumnDefinition Width="Auto"/>
-                                                            <ColumnDefinition Width="150"/>
+                                                            <!-- Spacer column reserving room for the top-right sync
+                                                                 checkbox so it never overlaps the screensaver block. -->
+                                                            <ColumnDefinition Width="170"/>
                                                         </Grid.ColumnDefinitions>
 
+                                                        <!-- Spans every column and takes its position from
+                                                         K2SyncCheckBox, like CkEvSync/CkSettingsSync. It used to be
+                                                         pinned inside the fixed 150px column 3 with Width=110, which
+                                                         both clipped the label and put it ~40px off the other
+                                                         sections' checkbox. -->
+                                                        <CheckBox x:Name="CkDialSync" Grid.ColumnSpan="4"
+                                                              Content="{loc:Get rgb_sync_profiles}"
+                                                              Style="{StaticResource K2SyncCheckBox}"
+                                                              Click="CkDialSync_Click"/>
+
                                                         <!-- Left: show/hide menu pages — 2 columns x 4 rows, toggle-switch rows -->
-                                                        <CheckBox  Grid.Column="3" x:Name="CkDialSync" Content="{loc:Get rgb_sync_profiles}" Click="CkDialSync_Click" HorizontalAlignment="Left" VerticalAlignment="Top" Width="110" Margin="40,2,0,0"/>
                                                         <StackPanel Grid.Column="0">
-                                                            <TextBlock Text="{loc:Get dial_pages_visible}" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                                            <TextBlock Text="{loc:Get dial_pages_visible}" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                                            <!-- Padding="0,3" on every toggle row (style default is
+                                                                 0,6): 8 rows x 6px is exactly what pushed this section
+                                                                 past the panel height and made it scroll. -->
                                                             <Grid>
                                                                 <Grid.ColumnDefinitions>
                                                                     <ColumnDefinition Width="*"/>
@@ -1499,28 +1538,28 @@
                                                                     <ColumnDefinition Width="*"/>
                                                                 </Grid.ColumnDefinitions>
                                                                 <StackPanel Grid.Column="0">
-                                                                    <CheckBox x:Name="CkDialClock"    Style="{StaticResource K2ToggleRow}" Tag="&#xEC92;" Content="{loc:Get dial_clock}"      Click="CkDial_Click"/>
-                                                                    <CheckBox x:Name="CkDialProfile"  Style="{StaticResource K2ToggleRow}" Tag="&#xE77B;" Content="{loc:Get dial_profile}"    Click="CkDial_Click"/>
-                                                                    <CheckBox x:Name="CkDialLighting" Style="{StaticResource K2ToggleRow}" Tag="&#xEA80;" Content="{loc:Get dial_lighting}"   Click="CkDial_Click"/>
-                                                                    <CheckBox x:Name="CkDialVolume"   Style="{StaticResource K2ToggleRow}" Tag="&#xE994;" Content="{loc:Get dial_volume}"     Click="CkDial_Click"/>
+                                                                    <CheckBox x:Name="CkDialClock"    Style="{StaticResource K2ToggleRow}" Padding="0,3" Tag="&#xEC92;" Content="{loc:Get dial_clock}"      Click="CkDial_Click"/>
+                                                                    <CheckBox x:Name="CkDialProfile"  Style="{StaticResource K2ToggleRow}" Padding="0,3" Tag="&#xE77B;" Content="{loc:Get dial_profile}"    Click="CkDial_Click"/>
+                                                                    <CheckBox x:Name="CkDialLighting" Style="{StaticResource K2ToggleRow}" Padding="0,3" Tag="&#xEA80;" Content="{loc:Get dial_lighting}"   Click="CkDial_Click"/>
+                                                                    <CheckBox x:Name="CkDialVolume"   Style="{StaticResource K2ToggleRow}" Padding="0,3" Tag="&#xE994;" Content="{loc:Get dial_volume}"     Click="CkDial_Click"/>
                                                                 </StackPanel>
                                                                 <StackPanel Grid.Column="2">
-                                                                    <CheckBox x:Name="CkDialBright"   Style="{StaticResource K2ToggleRow}" Tag="&#xE706;" Content="{loc:Get dial_brightness}" Click="CkDial_Click"/>
-                                                                    <CheckBox x:Name="CkDialPCInfo"   Style="{StaticResource K2ToggleRow}" Tag="&#xE977;" Content="{loc:Get dial_pcinfo}"     Click="CkDial_Click"/>
-                                                                    <CheckBox x:Name="CkDialAPM"      Style="{StaticResource K2ToggleRow}" Tag="&#xE916;" Content="{loc:Get dial_apm}"        Click="CkDial_Click"/>
-                                                                    <CheckBox x:Name="CkDialCustom"   Style="{StaticResource K2ToggleRow}" Tag="&#xE765;" Content="{loc:Get dial_custom}"     Click="CkDial_Click"/>
+                                                                    <CheckBox x:Name="CkDialBright"   Style="{StaticResource K2ToggleRow}" Padding="0,3" Tag="&#xE706;" Content="{loc:Get dial_brightness}" Click="CkDial_Click"/>
+                                                                    <CheckBox x:Name="CkDialPCInfo"   Style="{StaticResource K2ToggleRow}" Padding="0,3" Tag="&#xE977;" Content="{loc:Get dial_pcinfo}"     Click="CkDial_Click"/>
+                                                                    <CheckBox x:Name="CkDialAPM"      Style="{StaticResource K2ToggleRow}" Padding="0,3" Tag="&#xE916;" Content="{loc:Get dial_apm}"        Click="CkDial_Click"/>
+                                                                    <CheckBox x:Name="CkDialCustom"   Style="{StaticResource K2ToggleRow}" Padding="0,3" Tag="&#xE765;" Content="{loc:Get dial_custom}"     Click="CkDial_Click"/>
                                                                 </StackPanel>
                                                             </Grid>
 
-                                                            <WrapPanel Orientation="Horizontal" Margin="0,12,0,-24" HorizontalAlignment="Right">
+                                                            <WrapPanel Orientation="Horizontal" Margin="0,16,0,-30" HorizontalAlignment="Right">
                                                                 <TextBlock Text="{loc:Get dial_menu_color}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                                                <Button x:Name="BtnDialMenuColor" Width="30" Height="30"
+                                                                <Button x:Name="BtnDialMenuColor" Width="28" Height="28"
                                                                 Background="#F3CC23" BorderThickness="2"
                                                                 BorderBrush="#3A3A40" Click="BtnDialMenuColor_Click"/>
                                                             </WrapPanel>
 
-                                                            <TextBlock Text="{loc:Get dial_clock_section}" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                                            <WrapPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                                            <TextBlock Text="{loc:Get dial_clock_section}" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                                            <WrapPanel Orientation="Horizontal" Margin="0,2,0,0">
                                                                 <TextBlock Text="{loc:Get dial_clock_style_label}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                                                 <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="140" Margin="0,0,16,0">
                                                                     <UniformGrid Rows="1">
@@ -1611,25 +1650,18 @@
                                              left a large empty strip above the content whenever this section is
                                              shorter than the tallest section (Key Binding/RGB) sharing the same
                                              Border — flagged by user (screenshot, 2026-07-21). -->
-                                            <ScrollViewer x:Name="PnlSecSettings"
-                                                      VerticalScrollBarVisibility="Auto" VerticalAlignment="Top" Height="283" Grid.RowSpan="2" Visibility="Collapsed">
+                                            <!-- ── APPEARANCE ── Keycap appearance + Keyboard color: purely
+                                                 cosmetic on-screen preview options, global (not per-profile —
+                                                 same as settings.keyboard_color always was), split out of
+                                                 Settings into their own section per user request 2026-08-22. -->
+                                            <ScrollViewer x:Name="PnlSecAppearance"
+                                                      VerticalScrollBarVisibility="Auto" VerticalAlignment="Top" Grid.RowSpan="2" Visibility="Collapsed">
                                                 <Grid>
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto"/>
-                                                        <!-- Sync across profiles: pinned top-right of the whole
-                                                         panel, spanning both columns (user request 2026-07-21) —
-                                                         not part of the Indicator LEDs row anymore. -->
-                                                        <RowDefinition Height="Auto"/>
-                                                    </Grid.RowDefinitions>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="440"/>
                                                         <ColumnDefinition Width="*"/>
                                                     </Grid.ColumnDefinitions>
-                                                    <CheckBox Grid.Row="1" Grid.Column="1"
-                                                      x:Name="CkSettingsSync" Height="25" Content="{loc:Get settings_sync_profiles}"
-                                                      Click="CkSettingsSync_Click" HorizontalAlignment="Right" Margin="0,0,10,258"
-                                                      Checked="CkSettingsSync_Checked"/>
-                                                    <StackPanel Grid.Row="1" Grid.Column="0">
+                                                    <StackPanel Grid.Column="0">
                                                         <TextBlock Text="{loc:Get settings_keycap_group}" FontWeight="SemiBold" Margin="0,0,0,6"/>
                                                         <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
                                                             <TextBlock Text="{loc:Get settings_keycap_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -1666,69 +1698,86 @@
                                                             <ComboBox x:Name="CbEvKeycapStyle" Width="240"
                                                               SelectionChanged="CbEvKeycapStyle_SelectionChanged" Margin="4,3,0,0"/>
                                                         </WrapPanel>
-                                                        <WrapPanel Orientation="Horizontal" Margin="0,5,0,4">
-                                                            <CheckBox x:Name="CkEvKeycapTranslucentLegend" Content="{loc:Get settings_keycap_translucent_legend}"
-                                                              Click="CkEvKeycapTranslucentLegend_Click"/>
-                                                        </WrapPanel>
-
-                                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                                            <CheckBox x:Name="CkEvKeycapEditMode" Content="{loc:Get settings_keycap_edit_individual}"
-                                                              Click="CkEvKeycapEditMode_Click" Margin="0,5,0,0"/>
-                                                        </WrapPanel>
-                                                        <TextBlock Text="{loc:Get settings_keycap_edit_individual_hint}" Foreground="#9A9AA2"
-                                                               TextWrapping="Wrap" Margin="0,3,0,10" FontSize="12"/>
-
-
                                                     </StackPanel>
-                                                    <StackPanel Grid.Row="1" Grid.Column="1">
+                                                    <!-- Keyboard color + the two keycap toggles. The toggles and their
+                                                         hint used to sit at the bottom of column 0, which made that
+                                                         column ~250px tall — past the settings panel's height, so this
+                                                         section always showed a scrollbar. Moved here to balance the
+                                                         two columns (user request 2026-08-22: everything must fit
+                                                         without vertical scrolling). -->
+                                                    <StackPanel Grid.Column="1">
+                                                        <TextBlock Text="{loc:Get settings_keyboard_color}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                                        <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="140"
+                                                                HorizontalAlignment="Left" Margin="0,0,0,10">
+                                                            <UniformGrid Rows="1">
+                                                                <RadioButton x:Name="RbEvKbColorSilver" Content="{loc:Get color_silver}" GroupName="EvKbColor" Style="{StaticResource K2SegmentedButton}" Checked="RbEvKbColor_Checked" themes:K2Segment.CornerRadius="6,0,0,6"/>
+                                                                <RadioButton x:Name="RbEvKbColorBlack" Content="{loc:Get color_black}" GroupName="EvKbColor" Style="{StaticResource K2SegmentedButton}" Checked="RbEvKbColor_Checked" themes:K2Segment.CornerRadius="0,6,6,0"/>
+                                                            </UniformGrid>
+                                                        </Border>
+                                                        <CheckBox x:Name="CkEvKeycapTranslucentLegend" Content="{loc:Get settings_keycap_translucent_legend}"
+                                                              Click="CkEvKeycapTranslucentLegend_Click" Margin="0,0,0,6"/>
+                                                        <CheckBox x:Name="CkEvKeycapEditMode" Content="{loc:Get settings_keycap_edit_individual}"
+                                                              Click="CkEvKeycapEditMode_Click"/>
+                                                        <TextBlock Text="{loc:Get settings_keycap_edit_individual_hint}" Foreground="#9A9AA2"
+                                                               TextWrapping="Wrap" Margin="0,3,10,0" FontSize="12" MaxWidth="520"
+                                                               HorizontalAlignment="Left"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </ScrollViewer>
 
-                                                        <!-- Moved above Game Mode + Reset defaults button removed
-                                                         (planned to come back later as a shared control for all
-                                                         devices, not just Everest Max) per user request
-                                                         2026-07-21. -->
+                                            <ScrollViewer x:Name="PnlSecSettings"
+                                                      VerticalScrollBarVisibility="Auto" VerticalAlignment="Top" Grid.RowSpan="2" Visibility="Collapsed">
+                                                <!-- Two columns (same 440/* split as Appearance above): stacked in a
+                                                     single column the four groups + the factory-reset button ran
+                                                     ~290px tall and this section always scrolled. -->
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="440"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <CheckBox Grid.ColumnSpan="2"
+                                                      x:Name="CkSettingsSync" Content="{loc:Get settings_sync_profiles}"
+                                                      Style="{StaticResource K2SyncCheckBox}"
+                                                      Click="CkSettingsSync_Click"
+                                                      Checked="CkSettingsSync_Checked"/>
+                                                    <StackPanel Grid.Column="0">
                                                         <TextBlock Text="{loc:Get keyboard_language_layout}" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,12">
                                                             <TextBlock Text="{loc:Get ev_layout}" VerticalAlignment="Center"
                                                            FontWeight="SemiBold" Margin="0,0,6,0"/>
                                                             <ComboBox x:Name="CbEvKeyboardLayout" Width="200" Height="25" VerticalAlignment="Center"/>
                                                         </WrapPanel>
 
+                                                        <TextBlock Text="{loc:Get settings_indicator_leds}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                            <CheckBox x:Name="CkCoreIndicatorLed" Height="25" Content="{loc:Get settings_enable_core_led}"
+                                                      Click="CkCoreIndicatorLed_Click"/>
+                                                        </WrapPanel>
+
+                                                        <!-- Hardware factory reset — bare button, no Danger-zone box
+                                                         (user request 2026-08-22: "lascia solo il bottone"), hint
+                                                         moved to ToolTip. Wipes both the keyboard's own flash memory
+                                                         AND K2's saved configuration for it — see
+                                                         BtnSettingsFactoryReset_Click's doc comment. Distinct from the
+                                                         sidebar's "Restore defaults", which only resets K2's profiles. -->
+                                                        <Button x:Name="BtnSettingsFactoryReset" Content="{loc:Get settings_factory_reset}"
+                                                            ToolTip="{loc:Get settings_factory_reset_hint}"
+                                                            Padding="8,4" HorizontalAlignment="Left" Margin="0,16,0,0"
+                                                            Click="BtnSettingsFactoryReset_Click"
+                                                            Style="{StaticResource K2IconButton}" Tag="&#xE777;"/>
+                                                    </StackPanel>
+
+                                                    <!-- Right column: Game Mode. Sits below the sync checkbox's line
+                                                         (Margin top) so the two never collide. -->
+                                                    <StackPanel Grid.Column="1" Margin="0,28,0,0">
                                                         <TextBlock Text="{loc:Get settings_game_mode}" FontWeight="SemiBold" Margin="0,0,0,6"
                                                            ToolTip="{loc:Get settings_game_mode_tip}"/>
-                                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,15">
-                                                            <CheckBox x:Name="CkGameModeShiftTab" Content="{loc:Get settings_disable_shift_tab}" Click="CkGameMode_Click" Height="25" Margin="0,0,10,0"/>
-                                                            <CheckBox x:Name="CkGameModeAltF4" Content="{loc:Get settings_disable_alt_f4}" Click="CkGameMode_Click" Height="25" Margin="0,0,10,0"/>
-                                                            <CheckBox x:Name="CkGameModeWinKey" Content="{loc:Get settings_disable_win_key}" Click="CkGameMode_Click" Height="25" Margin="0,0,10,0"/>
-                                                            <CheckBox x:Name="CkGameModeAltTab" Content="{loc:Get settings_disable_alt_tab}" Click="CkGameMode_Click" VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="0,0,0,0" Height="25"/>
+                                                        <WrapPanel Orientation="Horizontal">
+                                                            <CheckBox x:Name="CkGameModeShiftTab" Content="{loc:Get settings_disable_shift_tab}" Click="CkGameMode_Click" Height="25" Margin="0,0,10,4"/>
+                                                            <CheckBox x:Name="CkGameModeAltF4" Content="{loc:Get settings_disable_alt_f4}" Click="CkGameMode_Click" Height="25" Margin="0,0,10,4"/>
+                                                            <CheckBox x:Name="CkGameModeWinKey" Content="{loc:Get settings_disable_win_key}" Click="CkGameMode_Click" Height="25" Margin="0,0,10,4"/>
+                                                            <CheckBox x:Name="CkGameModeAltTab" Content="{loc:Get settings_disable_alt_tab}" Click="CkGameMode_Click" Height="25" Margin="0,0,0,4"/>
                                                         </WrapPanel>
-                                                        <Grid>
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="440"/>
-                                                                <ColumnDefinition Width="*"/>
-                                                            </Grid.ColumnDefinitions>
-                                                            <StackPanel Grid.Column="0">
-                                                                <TextBlock Text="{loc:Get settings_indicator_leds}" FontWeight="SemiBold" Margin="0,0,0,12"/>
-                                                                <WrapPanel Orientation="Horizontal">
-                                                                    <CheckBox x:Name="CkCoreIndicatorLed" Height="25" Content="{loc:Get settings_enable_core_led}"
-                                                              Click="CkCoreIndicatorLed_Click"/>
-                                                                </WrapPanel>
-                                                            </StackPanel>
-
-
-                                                            <StackPanel HorizontalAlignment="Left" VerticalAlignment="Center" Grid.ColumnSpan="2" Margin="232,0,0,0" Width="307">
-                                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                                    <TextBlock Text="{loc:Get settings_keyboard_color}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,6,0"/>
-                                                                </WrapPanel>
-                                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                                    <Border Style="{StaticResource K2SegmentedGroupBorder}" Width="140">
-                                                                        <UniformGrid Rows="1">
-                                                                            <RadioButton x:Name="RbEvKbColorSilver" Content="{loc:Get color_silver}" GroupName="EvKbColor" Style="{StaticResource K2SegmentedButton}" Checked="RbEvKbColor_Checked" themes:K2Segment.CornerRadius="6,0,0,6"/>
-                                                                            <RadioButton x:Name="RbEvKbColorBlack" Content="{loc:Get color_black}" GroupName="EvKbColor" Style="{StaticResource K2SegmentedButton}" Checked="RbEvKbColor_Checked" themes:K2Segment.CornerRadius="0,6,6,0"/>
-                                                                        </UniformGrid>
-                                                                    </Border>
-                                                                </WrapPanel>
-                                                            </StackPanel>
-                                                        </Grid>
                                                     </StackPanel>
                                                 </Grid>
                                             </ScrollViewer>
@@ -1896,6 +1945,10 @@
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get rgb_lighting}" GroupName="Ev60Sections"
                                              Checked="Ev60Section_Changed"/>
+                                    <RadioButton x:Name="RbEv60SecAppearance"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get appearance}" GroupName="Ev60Sections"
+                                             Checked="Ev60Section_Changed"/>
                                     <RadioButton x:Name="RbEv60SecSettings"
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get ev_settings}" GroupName="Ev60Sections"
@@ -2052,101 +2105,101 @@
                                              same physical 64-key board for every locale (no ISO variant on this
                                              hardware — confirmed no backtick/ISO-102 key) — only the printed
                                              legends change, LED index/physical position stays fixed. -->
+                                        <!-- ── APPEARANCE ── Keycap appearance: purely cosmetic, global
+                                             (not per-profile — split out of Settings per user request
+                                             2026-08-22, same reasoning as Everest Max's PnlSecAppearance). -->
+                                        <ScrollViewer x:Name="PnlEv60Appearance"
+                                                      VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                                            <StackPanel>
+                                                <TextBlock Text="{loc:Get settings_keycap_group}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                    <TextBlock Text="{loc:Get settings_keycap_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                    <RadioButton x:Name="RbEv60KeycapBlack" Content="{loc:Get settings_keycap_black}"
+                                                         GroupName="Ev60KeycapColor" VerticalAlignment="Center"
+                                                         Margin="0,0,10,0" Checked="RbEv60KeycapColor_Checked"/>
+                                                    <RadioButton x:Name="RbEv60KeycapWhite" Content="{loc:Get settings_keycap_white}"
+                                                         GroupName="Ev60KeycapColor" VerticalAlignment="Center"
+                                                         Margin="0,0,10,0" Checked="RbEv60KeycapColor_Checked"/>
+                                                    <RadioButton x:Name="RbEv60KeycapCustom" Content="{loc:Get settings_keycap_custom}"
+                                                         GroupName="Ev60KeycapColor" VerticalAlignment="Center"
+                                                         Margin="0,0,6,0" Checked="RbEv60KeycapColor_Checked"/>
+                                                    <Button x:Name="BtnEv60KeycapCustomColor" Width="30" Height="30"
+                                                    Background="#404040" BorderThickness="2" BorderBrush="#3A3A40"
+                                                    Click="BtnEv60KeycapCustomColor_Click" Margin="5,0,0,0"/>
+                                                </WrapPanel>
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                    <TextBlock Text="{loc:Get settings_keycap_text_color}" VerticalAlignment="Center" Margin="0,0,6,0" Padding="0,0,18,0"/>
+                                                    <RadioButton x:Name="RbEv60KeycapTextBlack" Content="{loc:Get settings_keycap_black}"
+                                                         GroupName="Ev60KeycapTextColor" VerticalAlignment="Center"
+                                                         Margin="0,0,10,0" Checked="RbEv60KeycapTextColor_Checked"/>
+                                                    <RadioButton x:Name="RbEv60KeycapTextWhite" Content="{loc:Get settings_keycap_white}"
+                                                         GroupName="Ev60KeycapTextColor" VerticalAlignment="Center"
+                                                         Margin="0,0,10,0" Checked="RbEv60KeycapTextColor_Checked"/>
+                                                    <RadioButton x:Name="RbEv60KeycapTextCustom" Content="{loc:Get settings_keycap_custom}"
+                                                         GroupName="Ev60KeycapTextColor" VerticalAlignment="Center"
+                                                         Margin="0,0,6,0" Checked="RbEv60KeycapTextColor_Checked"/>
+                                                    <Button x:Name="BtnEv60KeycapTextColor" Width="30" Height="30"
+                                                    Background="White" BorderThickness="2" BorderBrush="#3A3A40"
+                                                    Click="BtnEv60KeycapTextColor_Click" Margin="5,0,0,0"/>
+                                                </WrapPanel>
+                                                <!-- Keycap style: imported from Everest Max's Settings section
+                                             (settings_keycap_style/CbEvKeycapStyle). No live LED tick to
+                                             blend with on this raw-HID board, so the "live" signal each
+                                             style blends with is the Key Lighting section's painted
+                                             per-key color instead (see ApplyEv60KeycapAppearanceToAllKeys) —
+                                             applies to the numpad too (always the "off" baseline there,
+                                             since it's never painted). -->
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                    <TextBlock Text="{loc:Get settings_keycap_style}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                    <ComboBox x:Name="CbEv60KeycapStyle" Width="240"
+                                                      SelectionChanged="CbEv60KeycapStyle_SelectionChanged" Margin="4,0,0,0"/>
+                                                </WrapPanel>
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                    <CheckBox x:Name="CkEv60KeycapTranslucentLegend" Content="{loc:Get settings_keycap_translucent_legend}"
+                                                      Click="CkEv60KeycapTranslucentLegend_Click"/>
+                                                </WrapPanel>
+
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                    <CheckBox x:Name="CkEv60KeycapEditMode" Content="{loc:Get settings_keycap_edit_individual}"
+                                                      Click="CkEv60KeycapEditMode_Click" Margin="0,5,0,0"/>
+                                                </WrapPanel>
+                                                <TextBlock Text="{loc:Get settings_keycap_edit_individual_hint}" Foreground="#9A9AA2"
+                                                   TextWrapping="Wrap" Margin="0,3,0,10" FontSize="12"/>
+                                            </StackPanel>
+                                        </ScrollViewer>
+
                                         <ScrollViewer x:Name="PnlEv60Settings"
                                                       VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                                            <StackPanel>
+                                                <TextBlock Text="{loc:Get keyboard_language_layout}" FontWeight="SemiBold" Margin="0,0  ,0,10"/>
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                                    <TextBlock Text="{loc:Get ev_layout}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,6,0"/>
+                                                    <ComboBox x:Name="CbEv60KeyboardLayout" Width="200" Margin="0,0,16,0"/>
+                                                </WrapPanel>
 
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel Grid.Column="0">
-                                                    <TextBlock Text="{loc:Get settings_keycap_group}" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                                        <TextBlock Text="{loc:Get settings_keycap_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                        <RadioButton x:Name="RbEv60KeycapBlack" Content="{loc:Get settings_keycap_black}"
-                                                             GroupName="Ev60KeycapColor" VerticalAlignment="Center"
-                                                             Margin="0,0,10,0" Checked="RbEv60KeycapColor_Checked"/>
-                                                        <RadioButton x:Name="RbEv60KeycapWhite" Content="{loc:Get settings_keycap_white}"
-                                                             GroupName="Ev60KeycapColor" VerticalAlignment="Center"
-                                                             Margin="0,0,10,0" Checked="RbEv60KeycapColor_Checked"/>
-                                                        <RadioButton x:Name="RbEv60KeycapCustom" Content="{loc:Get settings_keycap_custom}"
-                                                             GroupName="Ev60KeycapColor" VerticalAlignment="Center"
-                                                             Margin="0,0,6,0" Checked="RbEv60KeycapColor_Checked"/>
-                                                        <Button x:Name="BtnEv60KeycapCustomColor" Width="30" Height="30"
-                                                        Background="#404040" BorderThickness="2" BorderBrush="#3A3A40"
-                                                        Click="BtnEv60KeycapCustomColor_Click" Margin="5,0,0,0"/>
-                                                    </WrapPanel>
-                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                        <TextBlock Text="{loc:Get settings_keycap_text_color}" VerticalAlignment="Center" Margin="0,0,6,0" Padding="0,0,18,0"/>
-                                                        <RadioButton x:Name="RbEv60KeycapTextBlack" Content="{loc:Get settings_keycap_black}"
-                                                             GroupName="Ev60KeycapTextColor" VerticalAlignment="Center"
-                                                             Margin="0,0,10,0" Checked="RbEv60KeycapTextColor_Checked"/>
-                                                        <RadioButton x:Name="RbEv60KeycapTextWhite" Content="{loc:Get settings_keycap_white}"
-                                                             GroupName="Ev60KeycapTextColor" VerticalAlignment="Center"
-                                                             Margin="0,0,10,0" Checked="RbEv60KeycapTextColor_Checked"/>
-                                                        <RadioButton x:Name="RbEv60KeycapTextCustom" Content="{loc:Get settings_keycap_custom}"
-                                                             GroupName="Ev60KeycapTextColor" VerticalAlignment="Center"
-                                                             Margin="0,0,6,0" Checked="RbEv60KeycapTextColor_Checked"/>
-                                                        <Button x:Name="BtnEv60KeycapTextColor" Width="30" Height="30"
-                                                        Background="White" BorderThickness="2" BorderBrush="#3A3A40"
-                                                        Click="BtnEv60KeycapTextColor_Click" Margin="5,0,0,0"/>
-                                                    </WrapPanel>
-                                                    <!-- Keycap style: imported from Everest Max's Settings section
-                                                 (settings_keycap_style/CbEvKeycapStyle). No live LED tick to
-                                                 blend with on this raw-HID board, so the "live" signal each
-                                                 style blends with is the Key Lighting section's painted
-                                                 per-key color instead (see ApplyEv60KeycapAppearanceToAllKeys) —
-                                                 applies to the numpad too (always the "off" baseline there,
-                                                 since it's never painted). -->
-                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                        <TextBlock Text="{loc:Get settings_keycap_style}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                        <ComboBox x:Name="CbEv60KeycapStyle" Width="240"
-                                                          SelectionChanged="CbEv60KeycapStyle_SelectionChanged" Margin="4,0,0,0"/>
-                                                    </WrapPanel>
-                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                        <CheckBox x:Name="CkEv60KeycapTranslucentLegend" Content="{loc:Get settings_keycap_translucent_legend}"
-                                                          Click="CkEv60KeycapTranslucentLegend_Click"/>
-                                                    </WrapPanel>
-
-                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                                        <CheckBox x:Name="CkEv60KeycapEditMode" Content="{loc:Get settings_keycap_edit_individual}"
-                                                          Click="CkEv60KeycapEditMode_Click" Margin="0,5,0,0"/>
-                                                    </WrapPanel>
-                                                    <TextBlock Text="{loc:Get settings_keycap_edit_individual_hint}" Foreground="#9A9AA2"
-                                                       TextWrapping="Wrap" Margin="0,3,0,10" FontSize="12"/>
-                                                </StackPanel>
-                                                <StackPanel Grid.Column="1">
-                                                    <TextBlock Text="{loc:Get keyboard_language_layout}" FontWeight="SemiBold" Margin="0,0  ,0,10"/>
-                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,15">
-                                                        <TextBlock Text="{loc:Get ev_layout}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,6,0"/>
-                                                        <ComboBox x:Name="CbEv60KeyboardLayout" Width="200" Margin="0,0,16,0"/>
-                                                    </WrapPanel>
-
-                                                    <!-- Game Mode + Core Indicator LED — ported from Everest Max's
-                                                     Settings section (user request 2026-07-26): same fields
-                                                     (KeyboardSettings table/EverestKeyboardSettings XML DisableShift/
-                                                     DisableAltF4/DisableWin/DisableAltTab/EnableCoreLED) exist for
-                                                     Everest 60 too (Everest60Settings table), but no raw-HID/SDK
-                                                     command to apply them has been reverse-engineered yet for this
-                                                     device (checked K2/_reference and BaseCampLinux — neither has
-                                                     one for EverestMini) — persisted + imported like every other
-                                                     Ev60 setting, not yet sent to the device. -->
-                                                    <TextBlock Text="{loc:Get settings_game_mode}" FontWeight="SemiBold" Margin="0,0,0,6"
-                                                       ToolTip="{loc:Get settings_game_mode_tip}"/>
-                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,15">
-                                                        <CheckBox x:Name="CkEv60GameModeShiftTab" Content="{loc:Get settings_disable_shift_tab}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,10,0"/>
-                                                        <CheckBox x:Name="CkEv60GameModeAltF4" Content="{loc:Get settings_disable_alt_f4}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,10,0"/>
-                                                        <CheckBox x:Name="CkEv60GameModeWinKey" Content="{loc:Get settings_disable_win_key}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,10,0"/>
-                                                        <CheckBox x:Name="CkEv60GameModeAltTab" Content="{loc:Get settings_disable_alt_tab}" Click="CkEv60GameMode_Click" Height="25"/>
-                                                    </WrapPanel>
-                                                    <TextBlock Text="{loc:Get settings_indicator_leds}" FontWeight="SemiBold" Margin="0,0,0,12"/>
-                                                    <WrapPanel Orientation="Horizontal">
-                                                        <CheckBox x:Name="CkEv60CoreIndicatorLed" Height="25" Content="{loc:Get settings_enable_core_led}"
-                                                          Click="CkEv60CoreIndicatorLed_Click"/>
-                                                    </WrapPanel>
-                                                </StackPanel>
-                                            </Grid>
+                                                <!-- Game Mode + Core Indicator LED — ported from Everest Max's
+                                                 Settings section (user request 2026-07-26): same fields
+                                                 (KeyboardSettings table/EverestKeyboardSettings XML DisableShift/
+                                                 DisableAltF4/DisableWin/DisableAltTab/EnableCoreLED) exist for
+                                                 Everest 60 too (Everest60Settings table), but no raw-HID/SDK
+                                                 command to apply them has been reverse-engineered yet for this
+                                                 device (checked K2/_reference and BaseCampLinux — neither has
+                                                 one for EverestMini) — persisted + imported like every other
+                                                 Ev60 setting, not yet sent to the device. -->
+                                                <TextBlock Text="{loc:Get settings_game_mode}" FontWeight="SemiBold" Margin="0,0,0,6"
+                                                   ToolTip="{loc:Get settings_game_mode_tip}"/>
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                                    <CheckBox x:Name="CkEv60GameModeShiftTab" Content="{loc:Get settings_disable_shift_tab}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,10,0"/>
+                                                    <CheckBox x:Name="CkEv60GameModeAltF4" Content="{loc:Get settings_disable_alt_f4}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,10,0"/>
+                                                    <CheckBox x:Name="CkEv60GameModeWinKey" Content="{loc:Get settings_disable_win_key}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,10,0"/>
+                                                    <CheckBox x:Name="CkEv60GameModeAltTab" Content="{loc:Get settings_disable_alt_tab}" Click="CkEv60GameMode_Click" Height="25"/>
+                                                </WrapPanel>
+                                                <TextBlock Text="{loc:Get settings_indicator_leds}" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                                                <WrapPanel Orientation="Horizontal">
+                                                    <CheckBox x:Name="CkEv60CoreIndicatorLed" Height="25" Content="{loc:Get settings_enable_core_led}"
+                                                      Click="CkEv60CoreIndicatorLed_Click"/>
+                                                </WrapPanel>
+                                            </StackPanel>
                                         </ScrollViewer>
                                     </Grid>
                                 </Border>
@@ -2508,6 +2561,10 @@
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get rgb_lighting}" GroupName="MpSections"
                                              Checked="MpSection_Changed"/>
+                                    <RadioButton x:Name="RbMpSecAppearance"
+                                             Style="{StaticResource SectionTabStyle}"
+                                             Content="{loc:Get appearance}" GroupName="MpSections"
+                                             Checked="MpSection_Changed"/>
                                     <RadioButton x:Name="RbMpSecSettings"
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get ev_settings}" GroupName="MpSections"
@@ -2781,75 +2838,73 @@
                                             </StackPanel>
                                         </ScrollViewer>
 
-                                        <!-- ── SETTINGS (keycap appearance, same as Everest) ── (own ScrollViewer) -->
+                                        <!-- ── APPEARANCE ── Keycap appearance: purely cosmetic, global
+                                             (not per-profile — split out of Settings per user request
+                                             2026-08-22, same reasoning as Everest Max's PnlSecAppearance). -->
+                                        <ScrollViewer x:Name="PnlMpSecAppearance" Visibility="Collapsed"
+                                                  VerticalScrollBarVisibility="Auto">
+                                            <StackPanel>
+                                                <TextBlock Text="{loc:Get settings_keycap_group}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                    <TextBlock Text="{loc:Get settings_keycap_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                    <RadioButton x:Name="RbMpKeycapBlack" Content="{loc:Get settings_keycap_black}"
+                                                         GroupName="MpKeycapColor" VerticalAlignment="Center"
+                                                         Margin="0,0,10,0" Checked="RbMpKeycapColor_Checked"/>
+                                                    <RadioButton x:Name="RbMpKeycapWhite" Content="{loc:Get settings_keycap_white}"
+                                                         GroupName="MpKeycapColor" VerticalAlignment="Center"
+                                                         Margin="0,0,10,0" Checked="RbMpKeycapColor_Checked"/>
+                                                    <RadioButton x:Name="RbMpKeycapCustom" Content="{loc:Get settings_keycap_custom}"
+                                                         GroupName="MpKeycapColor" VerticalAlignment="Center"
+                                                         Margin="0,0,6,0" Checked="RbMpKeycapColor_Checked"/>
+                                                    <Button x:Name="BtnMpKeycapCustomColor" Width="30" Height="30"
+                                                    Background="#404040" BorderThickness="2" BorderBrush="#3A3A40"
+                                                    Click="BtnMpKeycapCustomColor_Click"/>
+                                                </WrapPanel>
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                    <TextBlock Text="{loc:Get settings_keycap_text_color}" VerticalAlignment="Center" Margin="0,0,6,0" Padding="0,0,18,0"/>
+                                                    <RadioButton x:Name="RbMpKeycapTextBlack" Content="{loc:Get settings_keycap_black}"
+                                                         GroupName="MpKeycapTextColor" VerticalAlignment="Center"
+                                                         Margin="0,0,10,0" Checked="RbMpKeycapTextColor_Checked"/>
+                                                    <RadioButton x:Name="RbMpKeycapTextWhite" Content="{loc:Get settings_keycap_white}"
+                                                         GroupName="MpKeycapTextColor" VerticalAlignment="Center"
+                                                         Margin="0,0,10,0" Checked="RbMpKeycapTextColor_Checked"/>
+                                                    <RadioButton x:Name="RbMpKeycapTextCustom" Content="{loc:Get settings_keycap_custom}"
+                                                         GroupName="MpKeycapTextColor" VerticalAlignment="Center"
+                                                         Margin="0,0,6,0" Checked="RbMpKeycapTextColor_Checked"/>
+                                                    <Button x:Name="BtnMpKeycapTextColor" Width="30" Height="30"
+                                                    Background="White" BorderThickness="2" BorderBrush="#3A3A40"
+                                                    Click="BtnMpKeycapTextColor_Click"/>
+                                                </WrapPanel>
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                    <TextBlock Text="{loc:Get settings_keycap_style}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                    <ComboBox x:Name="CbMpKeycapStyle" Width="240"
+                                                      SelectionChanged="CbMpKeycapStyle_SelectionChanged" Margin="4,0,0,0"/>
+                                                </WrapPanel>
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                    <CheckBox x:Name="CkMpKeycapTranslucentLegend" Content="{loc:Get settings_keycap_translucent_legend}"
+                                                      Click="CkMpKeycapTranslucentLegend_Click"/>
+                                                </WrapPanel>
+
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                    <CheckBox x:Name="CkMpKeycapEditMode" Content="{loc:Get settings_keycap_edit_individual}"
+                                                      Click="CkMpKeycapEditMode_Click" Margin="0,5,0,0"/>
+                                                </WrapPanel>
+                                                <TextBlock Text="{loc:Get settings_keycap_edit_individual_hint}" Foreground="#9A9AA2"
+                                                       TextWrapping="Wrap" Margin="0,3,0,10" FontSize="12"/>
+                                            </StackPanel>
+                                        </ScrollViewer>
+
+                                        <!-- ── SETTINGS (Positioning/rotation only — Keycap appearance
+                                             moved to its own Appearance section above) ── -->
                                         <ScrollViewer x:Name="PnlMpSecSettings" Visibility="Collapsed"
                                                   VerticalScrollBarVisibility="Auto">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel Grid.Column="0">
-                                                    <TextBlock Text="{loc:Get settings_keycap_group}" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                                        <TextBlock Text="{loc:Get settings_keycap_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                        <RadioButton x:Name="RbMpKeycapBlack" Content="{loc:Get settings_keycap_black}"
-                                                             GroupName="MpKeycapColor" VerticalAlignment="Center"
-                                                             Margin="0,0,10,0" Checked="RbMpKeycapColor_Checked"/>
-                                                        <RadioButton x:Name="RbMpKeycapWhite" Content="{loc:Get settings_keycap_white}"
-                                                             GroupName="MpKeycapColor" VerticalAlignment="Center"
-                                                             Margin="0,0,10,0" Checked="RbMpKeycapColor_Checked"/>
-                                                        <RadioButton x:Name="RbMpKeycapCustom" Content="{loc:Get settings_keycap_custom}"
-                                                             GroupName="MpKeycapColor" VerticalAlignment="Center"
-                                                             Margin="0,0,6,0" Checked="RbMpKeycapColor_Checked"/>
-                                                        <Button x:Name="BtnMpKeycapCustomColor" Width="30" Height="30"
-                                                        Background="#404040" BorderThickness="2" BorderBrush="#3A3A40"
-                                                        Click="BtnMpKeycapCustomColor_Click"/>
-                                                    </WrapPanel>
-                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                        <TextBlock Text="{loc:Get settings_keycap_text_color}" VerticalAlignment="Center" Margin="0,0,6,0" Padding="0,0,18,0"/>
-                                                        <RadioButton x:Name="RbMpKeycapTextBlack" Content="{loc:Get settings_keycap_black}"
-                                                             GroupName="MpKeycapTextColor" VerticalAlignment="Center"
-                                                             Margin="0,0,10,0" Checked="RbMpKeycapTextColor_Checked"/>
-                                                        <RadioButton x:Name="RbMpKeycapTextWhite" Content="{loc:Get settings_keycap_white}"
-                                                             GroupName="MpKeycapTextColor" VerticalAlignment="Center"
-                                                             Margin="0,0,10,0" Checked="RbMpKeycapTextColor_Checked"/>
-                                                        <RadioButton x:Name="RbMpKeycapTextCustom" Content="{loc:Get settings_keycap_custom}"
-                                                             GroupName="MpKeycapTextColor" VerticalAlignment="Center"
-                                                             Margin="0,0,6,0" Checked="RbMpKeycapTextColor_Checked"/>
-                                                        <Button x:Name="BtnMpKeycapTextColor" Width="30" Height="30"
-                                                        Background="White" BorderThickness="2" BorderBrush="#3A3A40"
-                                                        Click="BtnMpKeycapTextColor_Click"/>
-                                                    </WrapPanel>
-                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                        <TextBlock Text="{loc:Get settings_keycap_style}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                        <ComboBox x:Name="CbMpKeycapStyle" Width="240"
-                                                          SelectionChanged="CbMpKeycapStyle_SelectionChanged" Margin="4,0,0,0"/>
-                                                    </WrapPanel>
-                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                        <CheckBox x:Name="CkMpKeycapTranslucentLegend" Content="{loc:Get settings_keycap_translucent_legend}"
-                                                          Click="CkMpKeycapTranslucentLegend_Click"/>
-                                                    </WrapPanel>
-
-                                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                                        <CheckBox x:Name="CkMpKeycapEditMode" Content="{loc:Get settings_keycap_edit_individual}"
-                                                          Click="CkMpKeycapEditMode_Click" Margin="0,5,0,0"/>
-                                                    </WrapPanel>
-                                                    <TextBlock Text="{loc:Get settings_keycap_edit_individual_hint}" Foreground="#9A9AA2"
-                                                           TextWrapping="Wrap" Margin="0,3,0,10" FontSize="12"/>
-                                                </StackPanel>
-                                                <StackPanel Grid.Column="1">
-                                                    <!-- Mirrors CkMacroSync (LED panel) — same underlying device flag,
-                                                     see MpSettingsPrefix's doc comment (MainWindow.MacroKeycapAppearance.cs). -->
-                                                    <CheckBox x:Name="CkMpSettingsSync" Content="{loc:Get led_sync_profiles}"
-                                                          Click="CkMpSettingsSync_Click" HorizontalAlignment="Right" Margin="0,0,0,10"/>
-                                                    <TextBlock Text="{loc:Get positioning}" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                                    <WrapPanel Orientation="Horizontal">
-                                                        <ComboBox x:Name="CbMacroRotation" Width="190"
-                                                          SelectionChanged="CbMacroRotation_SelectionChanged"/>
-                                                    </WrapPanel>
-                                                </StackPanel>
-                                            </Grid>
+                                            <StackPanel>
+                                                <TextBlock Text="{loc:Get positioning}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                                <WrapPanel Orientation="Horizontal">
+                                                    <ComboBox x:Name="CbMacroRotation" Width="190"
+                                                      SelectionChanged="CbMacroRotation_SelectionChanged"/>
+                                                </WrapPanel>
+                                            </StackPanel>
                                         </ScrollViewer>
                                     </Grid>
                                 </Border>
@@ -3605,6 +3660,17 @@
                                     Click="BtnAppExportLog_Click"
                                     Style="{StaticResource K2IconButton}" Tag="&#xE898;"/>
                                     <TextBlock Text="{loc:Get settings_export_log_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox x:Name="GbDpDeviceMap" Header="{loc:Get settings_dp_devicemap_group}" Margin="0,0,0,20">
+                                <StackPanel Margin="8">
+                                    <Button x:Name="BtnDpDeviceMap" Content="{loc:Get settings_dp_devicemap_btn}"
+                                    Padding="8,4" HorizontalAlignment="Left"
+                                    Click="BtnDpDeviceMap_Click"
+                                    Style="{StaticResource K2IconButton}" Tag="&#xE8AB;"/>
+                                    <TextBlock Text="{loc:Get settings_dp_devicemap_hint}" Foreground="#9A9AA2"
                                        TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
                                 </StackPanel>
                             </GroupBox>

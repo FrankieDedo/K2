@@ -129,11 +129,10 @@ public partial class KeycapCustomizeDialog : Window
         };
         if (dlg.ShowDialog(this) != true) return;
 
-        string picked = dlg.FileName;
-        string? cropped = ImageCropDialog.Show(this, picked, _cropTargetSize, _cropTargetSize, Loc.Get("crop_title", _cropTargetSize, _cropTargetSize));
-        if (cropped is not null) picked = cropped;
+        string? cropped = ImageCropDialog.Show(this, dlg.FileName, _cropTargetSize, _cropTargetSize, Loc.Get("crop_title", _cropTargetSize, _cropTargetSize));
+        if (cropped is null) return;
 
-        ImagePath = picked;
+        ImagePath = cropped;
         RefreshImagePreview();
         Changed?.Invoke();
     }

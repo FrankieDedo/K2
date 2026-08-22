@@ -194,6 +194,49 @@ public partial class Everest60KeyBindingPanel : UserControl
         PersistOrDiscardKey(key);
     }
 
+    /// <summary>Board LED index → key, creating an empty (no-action) entry if none
+    /// exists yet — shared by <see cref="SwapKeys"/> so a drop onto an unmapped key
+    /// still has somewhere to land the dragged action.</summary>
+    private Ev60Key GetOrCreateKey(int ledIndex, string label)
+    {
+        if (_byLed.TryGetValue(ledIndex, out var key)) return key;
+        int? numpadIndex = ledIndex >= Everest60Protocol.NumpadLedIndexBase
+            ? ledIndex - Everest60Protocol.NumpadLedIndexBase : null;
+        key = new Ev60Key(ledIndex, numpadIndex) { Label = label };
+        _keys.Add(key);
+        _byLed[ledIndex] = key;
+        return key;
+    }
+
+    /// <summary>Swaps the action between two board/numpad keys (drag & drop on the
+    /// keyboard overlay, MainWindow.Everest60.cs's Ev60Key*Button_Drop) — mirrors
+    /// MainWindow.Keys.cs's KeyButton_Drop (MacroPad). Unlike that dense array, keys
+    /// here are sparse (only mapped ones exist in <see cref="_byLed"/>), so an unmapped
+    /// target is created on demand via <see cref="GetOrCreateKey"/> and left to be
+    /// discarded again by <see cref="PersistOrDiscardKey"/> if it ends up empty.</summary>
+    internal void SwapKeys(int ledIndexA, string labelA, int ledIndexB, string labelB)
+    {
+        if (ledIndexA == ledIndexB) return;
+        _byLed.TryGetValue(ledIndexA, out var existingA);
+        _byLed.TryGetValue(ledIndexB, out var existingB);
+        if (existingA is null && existingB is null) return;
+
+        string? aType = existingA?.ActionType, aValue = existingA?.ActionValue;
+        string? bType = existingB?.ActionType, bValue = existingB?.ActionValue;
+
+        var keyA = GetOrCreateKey(ledIndexA, labelA);
+        var keyB = GetOrCreateKey(ledIndexB, labelB);
+
+        keyA.ActionType  = bType;
+        keyA.ActionValue = bValue;
+        keyB.ActionType  = aType;
+        keyB.ActionValue = aValue;
+
+        PersistOrDiscardKey(keyA);
+        PersistOrDiscardKey(keyB);
+        _log($"[KeyBind] swapped key led={ledIndexA} <-> led={ledIndexB}");
+    }
+
     private void UpdateListButtons()
     {
         bool hasSelection = LvEv60Keys.SelectedItem is not null;

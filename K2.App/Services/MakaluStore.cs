@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -28,6 +28,20 @@ public sealed class MakaluStore : IDisposable
         _conn = new SqliteConnection($"Data Source={dbPath};Cache=Shared");
         _conn.Open();
         EnsureSchema();
+        PurgeEmptyProfileSettings();
+    }
+
+    /// <summary>One-time tidy-up (2026-08-21): before profile deletion started really
+    /// deleting its rows (see the ClearProfile/DeleteProfile change of the same date), a
+    /// deleted profile left its <c>profile.*</c> keys behind as empty strings — an empty
+    /// value already means "not set" everywhere they are read, so the rows were pure
+    /// clutter that made a wiped store look like it still had profiles in it. Drops them
+    /// on open; no-ops from then on.</summary>
+    private void PurgeEmptyProfileSettings()
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM Settings WHERE Value = '' AND substr(Key, 1, 8) = 'profile.'";
+        cmd.ExecuteNonQuery();
     }
 
     public static string DefaultDbPath()
@@ -216,16 +230,55 @@ ON CONFLICT(Profile, ButtonIndex) DO UPDATE SET FunctionName=excluded.FunctionNa
     public void ClearProfile(int slot)
     {
         ClearRemap(slot);
-        SetSetting($"profile.{slot}.lighting", "");
-        SetSetting($"profile.{slot}.dpi", "");
-        SetSetting($"profile.{slot}.settings", "");
-        SetSetting($"profile.{slot}.name", "");
-        // Clear the "exists" marker too, so the slot disappears from the profile list
-        // (see GetExistingProfiles) until reused — mirrors EverestStore.ClearProfile,
-        // needed now that MainWindow.Makalu.cs's list only shows configured slots
-        // (2026-07-29) instead of always showing all 5.
-        SetSetting($"profile.{slot}.exists", "");
+        // Every per-profile row this store owns lives under profile.{slot}. — name,
+        // lighting, dpi, settings, launchExe and the "exists" marker that keeps the slot
+        // in the profile list (see GetExistingProfiles). CHANGED 2026-08-21: these used
+        // to be blanked with an empty string, which left the deleted profile's rows in
+        // the Settings table for good (same fix as EverestStore.ClearProfile).
+        DeleteSettingsWithPrefix($"profile.{slot}.");
     }
+
+    /// <summary>Deletes every Settings row whose Key starts with one of
+    /// <paramref name="prefixes"/> — the per-profile namespaces are all
+    /// <c>&lt;something&gt;.{slot}.</c>-shaped, so an exact prefix match (no LIKE/GLOB
+    /// wildcards to escape) is enough. Used by profile deletion, which must remove the
+    /// rows rather than blank them (see <see cref="ClearProfile"/>).</summary>
+    public void DeleteSettingsWithPrefix(params string[] prefixes)
+    {
+        foreach (var prefix in prefixes)
+        {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM Settings WHERE substr(Key, 1, length($p)) = $p";
+            cmd.Parameters.AddWithValue("$p", prefix);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
+    /// Every Settings row whose Key starts with <paramref name="prefix"/>, keyed by what
+    /// FOLLOWS the prefix (<c>settings.p3.game_mode</c> under prefix <c>settings.p3.</c>
+    /// comes back as <c>game_mode</c>). Exact prefix match, no LIKE/GLOB wildcards to
+    /// escape — same shape as <see cref="DeleteSettingsWithPrefix"/>.
+    /// <para>Added 2026-08-22 for the profile exporters: a K2-format export carries the
+    /// whole per-profile settings namespace verbatim (see <c>K2ProfileSettingsXml</c>),
+    /// so panels can gain settings without every exporter needing a new hand-written
+    /// field.</para>
+    /// </summary>
+    public IReadOnlyDictionary<string, string> GetSettingsWithPrefix(string prefix)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT Key, Value FROM Settings WHERE substr(Key, 1, length($p)) = $p";
+        cmd.Parameters.AddWithValue("$p", prefix);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            string key = r.GetString(0);
+            result[key[prefix.Length..]] = r.IsDBNull(1) ? "" : r.GetString(1);
+        }
+        return result;
+    }
+
 
     /// <summary>Deletes only this profile's button remap — unlike <see cref="ClearProfile"/>,
     /// keeps the profile's name (lighting/DPI/settings are reset separately, with explicit

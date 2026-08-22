@@ -1,4 +1,4 @@
-// MainWindow.NumpadDisplayKeys.cs — partial class: 4 Everest numpad display keys.
+﻿// MainWindow.NumpadDisplayKeys.cs — partial class: 4 Everest numpad display keys.
 // Unified interface (matches DisplayPad): a single click opens NdkKeyConfigDialog,
 // which combines image + action in one window. Right-click keeps quick "remove"
 // shortcuts only. Images are uploaded via EverestImageUploader (72×72 RGB565) and
@@ -409,8 +409,14 @@ public partial class MainWindow
         _ndkUploadBusy = true;
         try
         {
-            bool ok = RunHwBusy(Loc.Get("hw_busy_uploading_image"),
-                () => RetryNdkWrite(() => UploadNdkImage(keyIndex, imagePath, profile)));
+            bool ok = RunHwBusy(Loc.Get("hw_busy_uploading_image"), () =>
+            {
+                // Never start a picture transfer on top of a pending debounced SaveFlash —
+                // the firmware answers nothing while it writes flash (see
+                // EverestService.FlushSaveFlash).
+                _everest.FlushSaveFlash();
+                return RetryNdkWrite(() => UploadNdkImage(keyIndex, imagePath, profile));
+            });
             if (ok)
             {
                 _ndkImagePaths[keyIndex] = imagePath;
@@ -434,6 +440,10 @@ public partial class MainWindow
             // pick up the real state (also catches an actual unplug that happened meanwhile).
             _ndkUploadBusy = false;
             UpdateKeyboardLayout();
+            // The flash write appears to leave color streaming off (see doc comment on
+            // EvReArmColorStreamAfterFlashWrite) — without this the on-screen LED preview
+            // freezes at whatever it last showed before the upload started.
+            EvReArmColorStreamAfterFlashWrite();
         }
     }
 
@@ -601,8 +611,11 @@ public partial class MainWindow
         _ndkUploadBusy = true;
         try
         {
-            bool ok = RunHwBusy(Loc.Get("hw_busy_uploading_image"),
-                () => RetryNdkWrite(() => _everest.ClearNumpadImage(idx, (byte)profile)));
+            bool ok = RunHwBusy(Loc.Get("hw_busy_uploading_image"), () =>
+            {
+                _everest.FlushSaveFlash();   // see NdkApplyImage
+                return RetryNdkWrite(() => _everest.ClearNumpadImage(idx, (byte)profile));
+            });
             // Successful reset = flash back to factory artwork for this key: remember it
             // so EvResetEmptyNdkSlots (MainWindow.Everest.cs) doesn't redo it on the next
             // profile switch. Only cache the marker outside the post-upload busy window,
@@ -621,6 +634,7 @@ public partial class MainWindow
             NdkSetButtonsEnabled(true);
             _ndkUploadBusy = false;
             UpdateKeyboardLayout();
+            EvReArmColorStreamAfterFlashWrite();
         }
     }
 

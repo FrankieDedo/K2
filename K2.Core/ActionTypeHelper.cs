@@ -242,6 +242,7 @@ public static class ActionTypeHelper
             "mouse"    => val,
             "disable"  => Loc.Get("act_disable"),
             "text"     => val,
+            "emoji"    => EmojiSummary(actionValue),
             "command"  => val,
             "macro"    => MacroSummary(actionValue),
             "googlehome" => GoogleHomeSummary(actionValue),
@@ -252,6 +253,17 @@ public static class ActionTypeHelper
             "pyscript" => Loc.Get("act_pyscript"),
             _          => IsUnrecognized(actionType) ? Loc.Get("act_unrecognized") : actionType ?? "",
         };
+    }
+
+    /// <summary>Display text for an "emoji" action: the emoji itself plus its English name
+    /// when the catalog knows it (key lists render text with the app font, which has no color
+    /// emoji art — the name is what actually identifies it there). Public for the same reason
+    /// as <see cref="GoogleHomeSummary"/>: the per-device dialogs keep their own switch.</summary>
+    public static string EmojiSummary(string? actionValue)
+    {
+        if (string.IsNullOrEmpty(actionValue)) return Loc.Get("act_emoji");
+        var entry = EmojiCatalog.Find(actionValue);
+        return entry is null ? actionValue : $"{entry.Emoji}  {entry.Name}";
     }
 
     /// <summary>Display text for a "googlehome" action: the bound device's friendly name,

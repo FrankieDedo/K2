@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   Deutsche Lokalisierung für K2.
   In denselben Ordner wie die exe als Strings.de.xml kopieren.
@@ -58,6 +58,7 @@
   <string name="reset">Zurücksetzen</string>
   <string name="new_profile">+ Neues Profil</string>
   <string name="profile_n">Profil {0}</string>
+  <string name="default_profile_name">Standardprofil</string>
   <string name="select_device_first">Bitte zuerst ein Gerät auswählen.</string>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -370,6 +371,7 @@
   <string name="hw_busy_uploading_image">Bild wird auf das Gerät hochgeladen, bitte warten…</string>
   <string name="hw_busy_importing_profile">Profil wird importiert, bitte warten…</string>
   <string name="hw_busy_importing_profiles">Profile werden importiert, bitte warten…</string>
+  <string name="hw_busy_restoring_defaults">Standardwerte werden wiederhergestellt, bitte warten…</string>
   <string name="ev_crash_recovering">Treiber abgestürzt — automatische Wiederherstellung in 3 s wird versucht…</string>
   <string name="ev_crash_recovered">Treiber wiederhergestellt — LED-Vorschau neu gestartet.</string>
   <string name="ev_crash_recovery_failed">Treiberwiederherstellung fehlgeschlagen — bitte K2.App neu starten.</string>

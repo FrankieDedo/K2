@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -26,6 +26,20 @@ public sealed class MacroPadStore : IDisposable
         _conn = new SqliteConnection($"Data Source={dbPath};Cache=Shared");
         _conn.Open();
         EnsureSchema();
+        PurgeEmptyProfileSettings();
+    }
+
+    /// <summary>One-time tidy-up (2026-08-21): before profile deletion started really
+    /// deleting its rows (see the ClearProfile/DeleteProfile change of the same date), a
+    /// deleted profile left its <c>profile.*</c> keys behind as empty strings — an empty
+    /// value already means "not set" everywhere they are read, so the rows were pure
+    /// clutter that made a wiped store look like it still had profiles in it. Drops them
+    /// on open; no-ops from then on.</summary>
+    private void PurgeEmptyProfileSettings()
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM Settings WHERE Value = '' AND substr(Key, 1, 8) = 'profile.'";
+        cmd.ExecuteNonQuery();
     }
 
     public static string DefaultDbPath()
@@ -217,7 +231,9 @@ ON CONFLICT(DeviceId, Profile, KeyIndex) DO UPDATE SET
         return result;
     }
 
-    /// <summary>Deletes all actions of a profile.</summary>
+    /// <summary>Deletes all actions of a profile — content only, the profile keeps its
+    /// identity (name/existence). Used by "Restore defaults"; to delete the profile
+    /// itself use <see cref="DeleteProfile"/>.</summary>
     public void ClearProfile(int deviceId, int profile)
     {
         using var cmd = _conn.CreateCommand();
@@ -226,6 +242,66 @@ ON CONFLICT(DeviceId, Profile, KeyIndex) DO UPDATE SET
         cmd.Parameters.AddWithValue("$p", profile);
         cmd.ExecuteNonQuery();
     }
+
+    /// <summary>Deletes a profile completely: its keys, its keycap overrides and EVERY
+    /// Settings row it owns — <c>profile.{deviceId}.{slot}.*</c> (name/launchExe) and the
+    /// per-profile M-key lighting under <c>macroled.p{slot}.*</c>. ADDED 2026-08-21: the
+    /// delete paths in MainWindow.Keys.cs used to call <see cref="ClearProfile"/> and then
+    /// blank name/launchExe with an empty string, which left the deleted profile's rows
+    /// (and its whole lighting namespace) behind in the Settings table.</summary>
+    public void DeleteProfile(int deviceId, int profile)
+    {
+        ClearProfile(deviceId, profile);
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = "DELETE FROM KeycapOverrides WHERE Profile=$p";
+            cmd.Parameters.AddWithValue("$p", profile);
+            cmd.ExecuteNonQuery();
+        }
+        DeleteSettingsWithPrefix($"profile.{deviceId}.{profile}.", $"macroled.p{profile}.");
+    }
+
+    /// <summary>Deletes every Settings row whose Key starts with one of
+    /// <paramref name="prefixes"/> — the per-profile namespaces are all
+    /// <c>&lt;something&gt;.{slot}.</c>-shaped, so an exact prefix match (no LIKE/GLOB
+    /// wildcards to escape) is enough. Used by profile deletion, which must remove the
+    /// rows rather than blank them.</summary>
+    public void DeleteSettingsWithPrefix(params string[] prefixes)
+    {
+        foreach (var prefix in prefixes)
+        {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM Settings WHERE substr(Key, 1, length($p)) = $p";
+            cmd.Parameters.AddWithValue("$p", prefix);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
+    /// Every Settings row whose Key starts with <paramref name="prefix"/>, keyed by what
+    /// FOLLOWS the prefix (<c>settings.p3.game_mode</c> under prefix <c>settings.p3.</c>
+    /// comes back as <c>game_mode</c>). Exact prefix match, no LIKE/GLOB wildcards to
+    /// escape — same shape as <see cref="DeleteSettingsWithPrefix"/>.
+    /// <para>Added 2026-08-22 for the profile exporters: a K2-format export carries the
+    /// whole per-profile settings namespace verbatim (see <c>K2ProfileSettingsXml</c>),
+    /// so panels can gain settings without every exporter needing a new hand-written
+    /// field.</para>
+    /// </summary>
+    public IReadOnlyDictionary<string, string> GetSettingsWithPrefix(string prefix)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT Key, Value FROM Settings WHERE substr(Key, 1, length($p)) = $p";
+        cmd.Parameters.AddWithValue("$p", prefix);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            string key = r.GetString(0);
+            result[key[prefix.Length..]] = r.IsDBNull(1) ? "" : r.GetString(1);
+        }
+        return result;
+    }
+
 
     /// <summary>Wipes every device's keys/settings/keycap overrides — used by the app-wide
     /// "Restore all defaults" (Settings tab). Per-device "Restore defaults" instead reuses

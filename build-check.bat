@@ -31,20 +31,35 @@ for %%D in (K2.App K2.Core K2.DisplayPad K2.DisplayPad.Satellite) do (
 )
 echo   Cleanup done.
 
+REM MSBuild/VBCSCompiler keep a node-reuse build server alive between dotnet
+REM build invocations; it caches file lists from before the clean above and
+REM causes spurious errors on a LATER build in this same run (seen
+REM 2026-08-17: RG1000 duplicate baml key, CS2001 "MainWindow.g.cs not
+REM found", CS1061 on a freshly-generated partial class — all on K2.App,
+REM built 3rd/3rd, after the earlier K2.DisplayPad/K2.DisplayPad.Satellite
+REM builds had already primed a reused node with pre-clean state). A single
+REM "dotnet build-server shutdown" before the loop is NOT enough by itself —
+REM node reuse re-accumulates stale state across the 3 dotnet build calls
+REM below — so also disable node reuse for the whole script.
+echo.
+echo   Restarting MSBuild/VBCSCompiler build server (stale node-reuse cache) ...
+dotnet build-server shutdown >nul 2>&1
+set MSBUILDDISABLENODEREUSE=1
+
 echo.
 echo [2/3] dotnet build K2.DisplayPad + K2.DisplayPad.Satellite (Debug, x64) ...
 echo.>> "%LOG%"
 echo === K2.DisplayPad.csproj  Debug x64 ===>> "%LOG%"
-dotnet build ".\K2.DisplayPad\K2.DisplayPad.csproj" -c Debug -p:Platform=x64 >> "%LOG%" 2>&1
+dotnet build ".\K2.DisplayPad\K2.DisplayPad.csproj" -c Debug -p:Platform=x64 -nodeReuse:false >> "%LOG%" 2>&1
 
 echo.>> "%LOG%"
 echo === K2.DisplayPad.Satellite.csproj  Debug x64 ===>> "%LOG%"
-dotnet build ".\K2.DisplayPad.Satellite\K2.DisplayPad.Satellite.csproj" -c Debug -p:Platform=x64 >> "%LOG%" 2>&1
+dotnet build ".\K2.DisplayPad.Satellite\K2.DisplayPad.Satellite.csproj" -c Debug -p:Platform=x64 -nodeReuse:false >> "%LOG%" 2>&1
 
 echo [3/3] dotnet build K2.App (Debug, x86) ...
 echo.>> "%LOG%"
 echo === K2.App.csproj  Debug x86 ===>> "%LOG%"
-dotnet build ".\K2.App\K2.App.csproj" -c Debug -p:Platform=x86 >> "%LOG%" 2>&1
+dotnet build ".\K2.App\K2.App.csproj" -c Debug -p:Platform=x86 -nodeReuse:false >> "%LOG%" 2>&1
 
 echo.
 echo ------------------------------------------------------------

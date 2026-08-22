@@ -269,7 +269,7 @@ public static class ActionExecutor
     /// recognizes directly — see <see cref="MapSubAction"/>'s default arm.</summary>
     private static readonly HashSet<string> NativeSubActionTypes = new(StringComparer.Ordinal)
     {
-        "url", "exec", "folder", "browser", "profile", "keys", "text", "oscmd", "media", "mouse",
+        "url", "exec", "folder", "browser", "profile", "keys", "text", "emoji", "oscmd", "media", "mouse",
     };
 
     /// <summary>Same "Run browser" -> native browser action mapping as
@@ -325,17 +325,105 @@ public static class ActionExecutor
         log("[EXEC] back -> Alt+Left");
     }
 
+    // ── Unicode text injection ─────────────────
+
+    /// <summary>
+    /// Types <paramref name="text"/> into the focused window as raw Unicode, one
+    /// <c>KEYEVENTF_UNICODE</c> keystroke per UTF-16 code unit — the only way to send an
+    /// emoji: <c>SendKeys</c> (what the "keys"/"text" actions use) goes through the keyboard
+    /// layout and can't carry a surrogate pair, so a non-BMP character comes out as garbage
+    /// or nothing at all. Surrogate pairs need no special handling here beyond being sent as
+    /// two consecutive units, which is exactly what Windows expects.
+    /// </summary>
+    public static void SendUnicodeText(string text, Action<string> log)
+    {
+        if (string.IsNullOrEmpty(text)) { log("[EXEC] unicode text: empty"); return; }
+
+        var inputs = new List<User32.INPUT>(text.Length * 2);
+        foreach (char c in text)
+        {
+            inputs.Add(UnicodeKey(c, down: true));
+            inputs.Add(UnicodeKey(c, down: false));
+        }
+
+        uint sent = User32.SendInput((uint)inputs.Count, inputs.ToArray(),
+                                     Marshal.SizeOf<User32.INPUT>());
+        if (sent != inputs.Count)
+            log($"[EXEC] unicode text: SendInput sent {sent}/{inputs.Count} (err {Marshal.GetLastWin32Error()})");
+        else
+            log($"[EXEC] unicode text -> \"{text}\"");
+    }
+
+    private static User32.INPUT UnicodeKey(char c, bool down) => new()
+    {
+        type = User32.INPUT_KEYBOARD,
+        u = new User32.InputUnion
+        {
+            ki = new User32.KEYBDINPUT
+            {
+                wVk         = 0,          // must be 0 for KEYEVENTF_UNICODE
+                wScan       = c,
+                dwFlags     = User32.KEYEVENTF_UNICODE | (down ? 0 : User32.KEYEVENTF_KEYUP),
+                time        = 0,
+                dwExtraInfo = UIntPtr.Zero,
+            }
+        }
+    };
+
     // ── WinAPI ─────────────────────────────────
 
     private static class User32
     {
-        public const uint KEYEVENTF_KEYUP = 0x0002;
+        public const uint KEYEVENTF_KEYUP   = 0x0002;
+        public const uint KEYEVENTF_UNICODE = 0x0004;
+        public const uint INPUT_KEYBOARD    = 1;
+
         [DllImport("user32.dll", SetLastError = true)]
         public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
         [DllImport("user32.dll")]
         public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, UIntPtr dwExtraInfo);
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool LockWorkStation();
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct INPUT
+        {
+            public uint type;
+            public InputUnion u;
+        }
+
+        [StructLayout(LayoutKind.Explicit)]
+        public struct InputUnion
+        {
+            [FieldOffset(0)] public MOUSEINPUT    mi;
+            [FieldOffset(0)] public KEYBDINPUT    ki;
+            [FieldOffset(0)] public HARDWAREINPUT hi;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MOUSEINPUT
+        {
+            public int dx, dy;
+            public uint mouseData, dwFlags, time;
+            public UIntPtr dwExtraInfo;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct KEYBDINPUT
+        {
+            public ushort wVk, wScan;
+            public uint dwFlags, time;
+            public UIntPtr dwExtraInfo;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct HARDWAREINPUT
+        {
+            public uint uMsg;
+            public ushort wParamL, wParamH;
+        }
     }
 
     private static class PowrProf

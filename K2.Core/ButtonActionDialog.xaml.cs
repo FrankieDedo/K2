@@ -89,6 +89,10 @@ public partial class ButtonActionDialog : Window
         {
             TxtYoutubeMessage.Text = currentValue ?? "";
         }
+        else if (currentType == "emoji")
+        {
+            LoadEmojiSpec(currentValue ?? "");
+        }
         else
         {
             TxtPayload.Text  = currentValue ?? "";
@@ -151,6 +155,7 @@ public partial class ButtonActionDialog : Window
             "zoom"     => ("Zoom shortcut:",                ""),
             "command"  => ("Command line:",                "cmd /c echo hello"),
             "text"     => ("Text to paste:",               "hello world"),
+            "emoji"    => ("Emoji:",                        ""),
             "macro"    => ("Macro:",                        ""),
             "googlehome" => ("Google Home action:",         ""),
             "obs"        => ("OBS Studio command:",         ""),
@@ -184,7 +189,8 @@ public partial class ButtonActionDialog : Window
         bool multi   = tag == "multi";
         bool appShortcut = tag is "adobe" or "davinci" or "zoom";
         bool youtube = tag == "youtube";
-        bool std     = !py && !exec && !folder && !page && !browser && !profile && !combo && !keys && !hotkeyswitch && !multi && !appShortcut && !youtube;
+        bool emoji   = tag == "emoji";
+        bool std     = !py && !exec && !folder && !page && !browser && !profile && !combo && !keys && !hotkeyswitch && !multi && !appShortcut && !youtube && !emoji;
 
         PyPanel.Visibility       = py      ? Visibility.Visible : Visibility.Collapsed;
         ExecPanel.Visibility     = exec    ? Visibility.Visible : Visibility.Collapsed;
@@ -198,6 +204,7 @@ public partial class ButtonActionDialog : Window
         MultiPanel.Visibility    = multi   ? Visibility.Visible : Visibility.Collapsed;
         AppShortcutPanel.Visibility = appShortcut ? Visibility.Visible : Visibility.Collapsed;
         YoutubePanel.Visibility  = youtube ? Visibility.Visible : Visibility.Collapsed;
+        EmojiPanel.Visibility    = emoji   ? Visibility.Visible : Visibility.Collapsed;
         StandardPanel.Visibility = std     ? Visibility.Visible : Visibility.Collapsed;
 
         if (exec) RefreshExecPanel();
@@ -210,6 +217,7 @@ public partial class ButtonActionDialog : Window
         if (keys) EnsureKeysPanel();
         if (hotkeyswitch) EnsureHotkeySwitchPanel();
         if (appShortcut) EnsureAppShortcutPanel(tag);
+        if (emoji) RefreshEmojiPreview();
     }
 
     // ---- Python Script panel ----------------------------------------
@@ -312,6 +320,10 @@ public partial class ButtonActionDialog : Window
         else if (tag == "youtube")
         {
             ActionValue = TxtYoutubeMessage.Text?.Trim() ?? "";
+        }
+        else if (tag == "emoji")
+        {
+            ActionValue = SaveEmojiSpec();
         }
         else if (tag == "disable")
         {
