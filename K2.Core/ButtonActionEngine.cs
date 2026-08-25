@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -180,6 +180,10 @@ public sealed class ButtonActionEngine : IDisposable
                 ActionExecutor.DoMouse(value, Log);
                 break;
 
+            case "audiodevice":
+                ActionExecutor.SetAudioDevice(value, Log);
+                break;
+
             case "obs":
             {
                 if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] obs without payload"); break; }
@@ -215,6 +219,34 @@ public sealed class ButtonActionEngine : IDisposable
                     _ => LogUnhandledTwitchCommand(cmd, Log),
                 };
                 Log($"[EXEC] twitch -> {cmd}{(arg.Length > 0 ? $" ({arg})" : "")} = {ok}");
+                break;
+            }
+
+            case "discord":
+            {
+                if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] discord without payload"); break; }
+                int tilde = value.IndexOf('~');
+                string cmd = tilde < 0 ? value : value[..tilde];
+                string arg = tilde < 0 ? "" : value[(tilde + 1)..];
+                bool ok = cmd switch
+                {
+                    "mute_toggle"       => Services.DiscordBridge.ToggleMute(Log),
+                    "mute_on"           => Services.DiscordBridge.SetMute(true, Log),
+                    "mute_off"          => Services.DiscordBridge.SetMute(false, Log),
+                    "deafen_toggle"     => Services.DiscordBridge.ToggleDeaf(Log),
+                    "deafen_on"         => Services.DiscordBridge.SetDeaf(true, Log),
+                    "deafen_off"        => Services.DiscordBridge.SetDeaf(false, Log),
+                    "input_mode_toggle" => Services.DiscordBridge.ToggleInputMode(Log),
+                    "input_volume"      => Services.DiscordBridge.SetInputVolume(arg, Log),
+                    "output_volume"     => Services.DiscordBridge.SetOutputVolume(arg, Log),
+                    "join_voice"        => Services.DiscordBridge.JoinVoiceChannel(arg, Log),
+                    "leave_voice"       => Services.DiscordBridge.LeaveVoiceChannel(Log),
+                    "user_volume"       => Services.DiscordBridge.SetUserVolume(arg, Log),
+                    "user_mute_toggle"  => Services.DiscordBridge.ToggleUserMute(arg, Log),
+                    "send_message"      => Services.DiscordBridge.SendWebhookMessage(arg, Log),
+                    _ => LogUnhandledDiscordCommand(cmd, Log),
+                };
+                Log($"[EXEC] discord -> {cmd}{(arg.Length > 0 ? $" ({arg})" : "")} = {ok}");
                 break;
             }
 
@@ -308,6 +340,12 @@ public sealed class ButtonActionEngine : IDisposable
                 Log($"[EXEC] unknown action type: {type}");
                 break;
         }
+    }
+
+    private static bool LogUnhandledDiscordCommand(string cmd, Action<string> log)
+    {
+        log($"[EXEC] discord: command \"{cmd}\" not handled");
+        return false;
     }
 
     private static bool LogUnhandledTwitchCommand(string cmd, Action<string> log)

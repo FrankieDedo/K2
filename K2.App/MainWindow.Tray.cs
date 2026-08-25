@@ -4,9 +4,11 @@
 // in MainWindow.xaml):
 //   - "Close to tray"           (AppSettings.CloseToTray)          — closing the
 //     window (X button) hides it to the tray instead of exiting the app.
-//   - "Start with Windows"      (Services.K2AutostartService)      — HKCU Run key
-//     entry for K2.App.exe itself (distinct from Base Camp's own, see
-//     Services.BaseCampProcessGuard / MainWindow.Settings.cs CkBcAutostart).
+//   - "Start with Windows"      (Services.K2AutostartService)      — per-user
+//     Scheduled Task (ONLOGON, /RL HIGHEST) for K2.App.exe itself, distinct from
+//     Base Camp's own (see Services.BaseCampProcessGuard / MainWindow.Settings.cs
+//     CkBcAutostart). Not the HKCU Run key: K2.App's requireAdministrator manifest
+//     means Windows would silently skip a Run-key entry at logon (no auto-elevation).
 //   - "Start minimized to tray" (AppSettings.StartMinimizedToTray) — read once by
 //     App.OnStartup, which Shows() the window (so drivers still auto-open via
 //     OnSourceInitialized -> AutoOpenDrivers) then immediately hides it to the tray,

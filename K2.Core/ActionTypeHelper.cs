@@ -103,6 +103,15 @@ public static class ActionTypeHelper
         return actionValue;
     }
 
+    /// <summary>Display text for an "audiodevice" action: the saved device's friendly
+    /// name, or a generic label when no device is configured yet — never the raw JSON
+    /// payload.</summary>
+    public static string AudioDeviceSummary(string? actionValue)
+    {
+        var payload = AudioDevicePayload.Parse(actionValue);
+        return payload is not null && payload.Name.Length > 0 ? payload.Name : Loc.Get("act_audiodevice");
+    }
+
     /// <summary>K2's OBS Studio command vocabulary — the single source of truth shared by
     /// <see cref="ButtonActionDialog"/>'s picker (<c>ButtonActionDialog.Simple</c>'s
     /// <c>ObsOptions</c>) and <see cref="ObsSummary"/>, same pattern as <see cref="MediaKeys"/>.
@@ -203,7 +212,102 @@ public static class ActionTypeHelper
     /// <see cref="SpotifyCommands"/> entry, plus the stored argument when present.</summary>
     public static string SpotifySummary(string? actionValue) => TildeCommandSummary(actionValue, "act_spotify", SpotifyCommands);
 
-    /// <summary>Shared "CommandName~arg" summary logic for the OBS/Twitch/Spotify pickers — all
+    /// <summary>K2's Discord command vocabulary — internal tags (Base Camp has no Discord
+    /// action at all, so there's nothing to stay import-compatible with). Everything except
+    /// <c>send_message</c> (channel webhook) goes through the local RPC pipe, see
+    /// <see cref="Services.DiscordBridge"/>. Same "single source of truth" pattern as
+    /// <see cref="TwitchCommands"/>.</summary>
+    public static readonly (string Value, string LocKey)[] DiscordCommands =
+    {
+        ("mute_toggle",       "discord_cmd_mute_toggle"),
+        ("mute_on",           "discord_cmd_mute_on"),
+        ("mute_off",          "discord_cmd_mute_off"),
+        ("deafen_toggle",     "discord_cmd_deafen_toggle"),
+        ("deafen_on",         "discord_cmd_deafen_on"),
+        ("deafen_off",        "discord_cmd_deafen_off"),
+        ("input_mode_toggle", "discord_cmd_input_mode_toggle"),
+        ("input_volume",      "discord_cmd_input_volume"),
+        ("output_volume",     "discord_cmd_output_volume"),
+        ("join_voice",        "discord_cmd_join_voice"),
+        ("leave_voice",       "discord_cmd_leave_voice"),
+        ("user_volume",       "discord_cmd_user_volume"),
+        ("user_mute_toggle",  "discord_cmd_user_mute_toggle"),
+        ("send_message",      "discord_cmd_send_message"),
+    };
+
+    /// <summary>Display text for a "discord" action: the localized label of the matching
+    /// <see cref="DiscordCommands"/> entry, plus the stored argument when present.</summary>
+    public static string DiscordSummary(string? actionValue) => TildeCommandSummary(actionValue, "act_discord", DiscordCommands);
+
+    // ───────────────── Live DisplayPad tiles (K2-only, see LiveTileRenderer) ─────────────────
+    //
+    // Base Camp has no DisplayPad clock/monitor key to stay import-compatible with (its own
+    // CPU/RAM/GPU/disk/network readouts and clock are Everest Max Media Dock / Display Dial
+    // pages drawn by the keyboard firmware — see MainWindow.MediaDock.cs), so these three
+    // vocabularies are K2's own, in the same (Value, LocKey) shape as every table above.
+
+    /// <summary>Clock faces a <c>dp_clock</c> key can show. The single-unit ones
+    /// (<c>hours</c>/<c>minutes</c>/<c>seconds</c>) exist so three adjacent keys can spell out
+    /// one clock across the pad — the layout this whole action was requested for.</summary>
+    public static readonly (string Value, string LocKey)[] ClockModes =
+    {
+        ("analog",    "clock_mode_analog"),
+        ("digital24", "clock_mode_digital24"),
+        ("digital12", "clock_mode_digital12"),
+        ("vert24",    "clock_mode_vert24"),
+        ("vert12",    "clock_mode_vert12"),
+        ("hours",     "clock_mode_hours"),
+        ("hours12",   "clock_mode_hours12"),
+        ("minutes",   "clock_mode_minutes"),
+        ("seconds",   "clock_mode_seconds"),
+        ("date",      "clock_mode_date"),
+    };
+
+    /// <summary>Metrics a <c>dp_sysmon</c> key can show — the same set (and the same
+    /// measurement sources) the Everest Max dock's PC Info pages feed from, see
+    /// <c>K2.App.Services.SystemMonitor</c>.</summary>
+    public static readonly (string Value, string LocKey)[] SysMonMetrics =
+    {
+        ("cpu",      "sysmon_cpu"),
+        ("ram",      "sysmon_ram"),
+        ("gpu",      "sysmon_gpu"),
+        ("disk",     "sysmon_disk"),
+        ("net_down", "sysmon_net_down"),
+        ("net_up",   "sysmon_net_up"),
+    };
+
+    /// <summary>Readouts a <c>dp_speedtest</c> key can show. Unlike <see cref="SysMonMetrics"/>
+    /// these are not sampled continuously: the key shows the LAST result and pressing it runs a
+    /// new test (all three figures at once, so a ping/down/up trio of keys refreshes together —
+    /// see <c>K2.App.Services.SpeedTestService</c>).</summary>
+    public static readonly (string Value, string LocKey)[] SpeedTestMetrics =
+    {
+        ("down", "speedtest_down"),
+        ("up",   "speedtest_up"),
+        ("ping", "speedtest_ping"),
+    };
+
+    /// <summary>Display text for a "dp_clock"/"dp_sysmon"/"dp_speedtest" action: the localized
+    /// name of the picked mode/metric, so the key list says "Analog clock" rather than
+    /// "analog".</summary>
+    public static string LiveTileSummary(string? actionType, string? actionValue)
+    {
+        var table = actionType switch
+        {
+            "dp_clock"     => ClockModes,
+            "dp_sysmon"    => SysMonMetrics,
+            "dp_speedtest" => SpeedTestMetrics,
+            _              => Array.Empty<(string Value, string LocKey)>(),
+        };
+        string value = (actionValue ?? "").Trim();
+        foreach (var (v, locKey) in table)
+            if (string.Equals(v, value, StringComparison.OrdinalIgnoreCase)) return Loc.Get(locKey);
+        // An empty value means "never configured": show what the key WILL do, since the
+        // pickers (and the live service) both fall back to the first entry.
+        return value.Length == 0 && table.Length > 0 ? Loc.Get(table[0].LocKey) : value;
+    }
+
+    /// <summary>Shared "CommandName~arg" summary logic for the OBS/Twitch/Spotify/Discord pickers — all
     /// store their value the same way (see <see cref="ButtonActionDialog.SaveComboSpec"/>).</summary>
     private static string TildeCommandSummary(string? actionValue, string emptyLocKey, (string Value, string LocKey)[] table)
     {
@@ -240,6 +344,7 @@ public static class ActionTypeHelper
             "oscmd"    => val,
             "media"    => MediaSummary(actionValue),
             "mouse"    => val,
+            "audiodevice" => AudioDeviceSummary(actionValue),
             "disable"  => Loc.Get("act_disable"),
             "text"     => val,
             "emoji"    => EmojiSummary(actionValue),
@@ -249,8 +354,11 @@ public static class ActionTypeHelper
             "obs"      => ObsSummary(actionValue),
             "twitch"   => TwitchSummary(actionValue),
             "spotify"  => SpotifySummary(actionValue),
+            "discord"  => DiscordSummary(actionValue),
             "youtube"  => string.IsNullOrEmpty(val) ? Loc.Get("act_youtube") : val,
             "pyscript" => Loc.Get("act_pyscript"),
+            "dp_emojibrowser" => Loc.Get("act_emojibrowser"),
+            "dp_clock" or "dp_sysmon" or "dp_speedtest" => LiveTileSummary(actionType, actionValue),
             _          => IsUnrecognized(actionType) ? Loc.Get("act_unrecognized") : actionType ?? "",
         };
     }

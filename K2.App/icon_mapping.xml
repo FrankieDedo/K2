@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   K2 - action -> default icon mapping.
 
@@ -633,6 +633,10 @@
   spotify          | Spotify                        | spotify (mostly mapped)
   youtube          | YouTube                        | youtube (fixed - chat
                     |                              |   message only)
+  discord          | Discord                        | (n/a - no Base Camp art;
+                    |                              |   falls back to the Segoe
+                    |                              |   MDL2 tiles in
+                    |                              |   ActionIconFallback)
   pyscript         | Python Script                  | (n/a)
 
   Not a real action type, but present as a gallery category with no way to

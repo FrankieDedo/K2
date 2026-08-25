@@ -54,6 +54,7 @@ public sealed class DisplayPadStore : IDisposable
                 ImagePath    TEXT,
                 ActionType   TEXT,
                 ActionValue  TEXT,
+                IconSpec     TEXT,
                 PRIMARY KEY (DeviceId, Profile, PageId, ButtonIndex)
             )");
             Exec(@"INSERT INTO Buttons (DeviceId, Profile, PageId, ButtonIndex, ImagePath, ActionType, ActionValue)
@@ -69,8 +70,15 @@ public sealed class DisplayPadStore : IDisposable
             ImagePath    TEXT,
             ActionType   TEXT,
             ActionValue  TEXT,
+            IconSpec     TEXT,
             PRIMARY KEY (DeviceId, Profile, PageId, ButtonIndex)
         )");
+        // Per-key icon settings (KeyIconSpec JSON — "default icon" flag, caption text, font,
+        // colors, rotation). Added 2026-08-24 as a plain nullable column so existing rows keep
+        // working: a NULL spec means "legacy key, infer from whether it has a picture".
+        if (!ColumnExists("Buttons", "IconSpec"))
+            Exec("ALTER TABLE Buttons ADD COLUMN IconSpec TEXT");
+
         Exec(@"CREATE TABLE IF NOT EXISTS Settings (
             Key   TEXT PRIMARY KEY,
             Value TEXT
@@ -127,12 +135,34 @@ ON CONFLICT(DeviceId, Profile, PageId, ButtonIndex) DO UPDATE SET
         string? imagePath, string? actionType, string? actionValue)
         => SaveButton(deviceId, profile, 0, btn, imagePath, actionType, actionValue);
 
+    /// <summary>
+    /// Stores the key's icon settings (<see cref="K2.Core.KeyIconSpec"/> JSON, null to clear).
+    /// Deliberately separate from <see cref="SaveButton"/>: that one is called from a dozen
+    /// places that know nothing about icon styling (swap, import, media dock, screensaver…),
+    /// and its UPSERT leaves this column untouched so those paths preserve whatever the key
+    /// already had. Call it right AFTER a SaveButton for the same key, so the row exists.
+    /// </summary>
+    public void SaveIconSpec(int deviceId, int profile, int pageId, int btn, string? specJson)
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = @"
+INSERT INTO Buttons(DeviceId, Profile, PageId, ButtonIndex, IconSpec)
+VALUES ($d, $p, $pg, $b, $s)
+ON CONFLICT(DeviceId, Profile, PageId, ButtonIndex) DO UPDATE SET IconSpec=excluded.IconSpec";
+        cmd.Parameters.AddWithValue("$d",  deviceId);
+        cmd.Parameters.AddWithValue("$p",  profile);
+        cmd.Parameters.AddWithValue("$pg", pageId);
+        cmd.Parameters.AddWithValue("$b",  btn);
+        cmd.Parameters.AddWithValue("$s",  (object?)specJson ?? DBNull.Value);
+        cmd.ExecuteNonQuery();
+    }
+
     /// <summary>Loads buttons for a specific page within a profile.</summary>
     public IReadOnlyList<DpButtonRecord> LoadPage(int deviceId, int profile, int pageId)
     {
         var result = new List<DpButtonRecord>();
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = @"SELECT PageId, ButtonIndex, ImagePath, ActionType, ActionValue
+        cmd.CommandText = @"SELECT PageId, ButtonIndex, ImagePath, ActionType, ActionValue, IconSpec
                             FROM Buttons WHERE DeviceId=$d AND Profile=$p AND PageId=$pg
                             ORDER BY ButtonIndex";
         cmd.Parameters.AddWithValue("$d",  deviceId);
@@ -149,7 +179,7 @@ ON CONFLICT(DeviceId, Profile, PageId, ButtonIndex) DO UPDATE SET
     {
         var result = new List<DpButtonRecord>();
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = @"SELECT PageId, ButtonIndex, ImagePath, ActionType, ActionValue
+        cmd.CommandText = @"SELECT PageId, ButtonIndex, ImagePath, ActionType, ActionValue, IconSpec
                             FROM Buttons WHERE DeviceId=$d AND Profile=$p
                             ORDER BY PageId, ButtonIndex";
         cmd.Parameters.AddWithValue("$d", deviceId);
@@ -177,7 +207,8 @@ ON CONFLICT(DeviceId, Profile, PageId, ButtonIndex) DO UPDATE SET
             if (img is null) return;
             at = null; av = null;
         }
-        result.Add(new DpButtonRecord(deviceId, profile, r.GetInt32(0), r.GetInt32(1), img, at, av));
+        string? spec = r.FieldCount > 5 && !r.IsDBNull(5) ? r.GetString(5) : null;
+        result.Add(new DpButtonRecord(deviceId, profile, r.GetInt32(0), r.GetInt32(1), img, at, av, spec));
     }
 
     /// <summary>Legacy alias — loads root page (pageId=0) only.</summary>
@@ -502,4 +533,5 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
 
 public sealed record DpButtonRecord(
     int DeviceId, int Profile, int PageId, int ButtonIndex,
-    string? ImagePath, string? ActionType, string? ActionValue);
+    string? ImagePath, string? ActionType, string? ActionValue,
+    string? IconSpec = null);

@@ -69,6 +69,14 @@
   <string name="dlg_button_label">Button #?</string>
   <string name="dlg_action_type">Action type:</string>
   <string name="dlg_value">Value:</string>
+  <string name="picker_pick_category">Choose a category</string>
+  <string name="picker_pick_action">Choose an action</string>
+  <string name="picker_back">Back</string>
+  <string name="cat_system">System</string>
+  <string name="cat_navigation">Navigation</string>
+  <string name="cat_input">Input</string>
+  <string name="cat_content">Content</string>
+  <string name="cat_apps">Apps &amp; Services</string>
   <string name="act_none">None</string>
   <string name="act_disable">Disabled key</string>
   <string name="act_url">Open URL</string>
@@ -98,8 +106,11 @@
   <string name="act_zoom">Zoom</string>
   <string name="act_obs">OBS Studio</string>
   <string name="act_twitch">Twitch</string>
+  <string name="act_discord">Discord</string>
   <string name="act_spotify">Spotify</string>
   <string name="act_youtube">YouTube</string>
+  <string name="act_audiodevice">Audio device</string>
+  <string name="audiodevice_refresh_button">Refresh devices</string>
   <string name="appshortcut_app_label">Application:</string>
   <string name="appshortcut_action_label">Action:</string>
   <string name="appshortcut_custom">Custom…</string>
@@ -196,6 +207,40 @@
   <string name="spotify_cmd_volume_set">Set Volume</string>
   <string name="spotify_cmd_save_playlist">Save Track to Playlist</string>
   <string name="spotify_cmd_remove_playlist">Remove Track from Playlist</string>
+  <string name="discord_settings_title">Discord Settings</string>
+  <string name="discord_hint">Voice commands drive the Discord DESKTOP app through its local RPC pipe and need your own Discord application; "Send message" only needs a channel webhook URL.</string>
+  <string name="discord_setup_guide">1. Go to discord.com/developers/applications and click "New Application".
+2. OAuth2 &gt; Redirects: add http://localhost:17564/callback
+3. Copy the Client ID and click "Reset Secret" for the Client Secret.
+4. Click Connect: Discord itself will ask you to authorize (you must be the app owner).</string>
+  <string name="discord_client_id_label">Client ID:</string>
+  <string name="discord_client_secret_label">Client Secret:</string>
+  <string name="discord_webhook_label">Webhook URL (optional):</string>
+  <string name="discord_webhook_hint">Discord &gt; Server Settings &gt; Integrations &gt; Webhooks &gt; New Webhook &gt; Copy Webhook URL. Used only by "Send message", no app or login needed.</string>
+  <string name="discord_connect">Connect</string>
+  <string name="discord_connecting">Waiting for authorization in Discord…</string>
+  <string name="discord_disconnect">Disconnect</string>
+  <string name="discord_connected_as">Connected as</string>
+  <string name="discord_settings_button">Discord settings…</string>
+  <string name="discord_cmd_mute_toggle">Toggle Mute</string>
+  <string name="discord_cmd_mute_on">Mute</string>
+  <string name="discord_cmd_mute_off">Unmute</string>
+  <string name="discord_cmd_deafen_toggle">Toggle Deafen</string>
+  <string name="discord_cmd_deafen_on">Deafen</string>
+  <string name="discord_cmd_deafen_off">Undeafen</string>
+  <string name="discord_cmd_input_mode_toggle">Toggle Push-to-Talk / Voice Activity</string>
+  <string name="discord_cmd_input_volume">Set Microphone Volume</string>
+  <string name="discord_cmd_output_volume">Set Output Volume</string>
+  <string name="discord_cmd_join_voice">Join Voice Channel</string>
+  <string name="discord_cmd_leave_voice">Leave Voice Channel</string>
+  <string name="discord_cmd_user_volume">Set User Volume</string>
+  <string name="discord_cmd_user_mute_toggle">Toggle User Mute</string>
+  <string name="discord_cmd_send_message">Send Message (webhook)</string>
+  <string name="discord_arg_hint">Volume: 70 (absolute) or +10 / -10 (relative) — User volume: userId:70 — Message: the text to post</string>
+  <string name="discord_key_mic_on">Mic on</string>
+  <string name="discord_key_mic_off">Mic off</string>
+  <string name="discord_key_audio_on">Audio on</string>
+  <string name="discord_key_audio_off">Audio off</string>
   <string name="youtube_settings_title">YouTube Settings</string>
   <string name="youtube_hint">Create an OAuth Desktop-app client at console.cloud.google.com with the YouTube Data API v3 enabled, then paste its Client ID/Secret here.</string>
   <string name="youtube_setup_guide">1. Go to console.cloud.google.com, create/select a project, then enable "YouTube Data API v3" (APIs &amp; Services -&gt; Library).
@@ -210,6 +255,18 @@
   <string name="act_command">Shell command</string>
   <string name="act_text">Paste text</string>
   <string name="act_emoji">Emoji</string>
+  <string name="act_emojibrowser">Emoji browser</string>
+  <string name="emb_grp_smileys">Smileys</string>
+  <string name="emb_grp_people">People</string>
+  <string name="emb_grp_animals">Animals</string>
+  <string name="emb_grp_food">Food</string>
+  <string name="emb_grp_travel">Travel</string>
+  <string name="emb_grp_activities">Activities</string>
+  <string name="emb_grp_objects">Objects</string>
+  <string name="emb_grp_symbols">Symbols</string>
+  <string name="emb_grp_flags">Flags</string>
+  <string name="emb_caption">Emoji</string>
+  <string name="emb_close">Close</string>
   <string name="act_macro">Play macro</string>
 
   <!-- Emoji action + emoji browser (EmojiPickerDialog) -->
@@ -315,6 +372,7 @@
   <string name="settings_dp_native_hint">Drives the DisplayPad directly over USB instead of the Mountain SDK: confirmed transfers (no icon corruption), no satellite process. Profile persistence on the device is not available; images are re-uploaded from the K2 database. Takes effect after restarting K2.</string>
   <string name="settings_ev_native">Everest Max: native USB engine (experimental, partial)</string>
   <string name="settings_ev_native_hint">Drives the Everest Max's connection and the 4 numpad display buttons directly over USB instead of SDKDLL.dll — removes that DLL's chronic timer-thread crash for what it covers. RGB effects, numpad icons, Media Dock, and full-keyboard remap events still use SDKDLL.dll for now (not yet ported). Takes effect after restarting K2.</string>
+  <string name="settings_bc_interactions_group">Base Camp interactions</string>
   <string name="settings_auto_stop_bc">Automatically stop Base Camp on startup</string>
   <string name="settings_auto_stop_bc_hint">Every time K2 starts, it stops the Base Camp Windows service and closes every Base Camp process (GUI, service, workers, Makalu monitor) still running or relaunched by Windows autostart — so K2 fully replaces Base Camp instead of both running at once. Disable this if you still want to use Base Camp alongside K2.</string>
   <string name="settings_kill_bc_worker">Terminate Base Camp DisplayPad worker</string>
@@ -393,6 +451,10 @@
   <string name="settings_accent_color_hint">Changes the app-wide accent color immediately, no restart needed.</string>
   <string name="settings_accent_k2red">K2 Red</string>
   <string name="settings_accent_mountainblue">Mountain Blue</string>
+  <string name="settings_icon_color">Icon color</string>
+  <string name="settings_icon_color_hint">Color used for auto-generated icon glyphs/tints. Defaults to the accent color above, or pin it to a fixed color instead.</string>
+  <string name="settings_icon_color_default">Same as accent color</string>
+  <string name="settings_icon_color_white">White</string>
   <string name="settings_icon_style">Default icon style</string>
   <string name="settings_icon_style_black">Black</string>
   <string name="settings_icon_style_color">Color</string>
@@ -759,8 +821,11 @@
   <string name="dp_delete_page">Delete</string>
   <string name="dp_delete_page_title">Delete page</string>
   <string name="dp_delete_page_confirm">Delete page "{0}"? Any key that opens it will stop working.</string>
-  <string name="dp_add_text">Add text…</string>
+  <string name="dp_add_text">Edit icon…</string>
+  <string name="dp_icon_section">Icon</string>
   <string name="dp_gallery_icon">Default icon</string>
+  <string name="dp_gallery_icon_with_text">With text</string>
+  <string name="dp_gallery_icon_without_text">Without text</string>
   <string name="gallery_dialog_title">Icon gallery</string>
   <string name="gallery_category_label">Category:</string>
   <string name="gallery_tint_accent">Tint to accent color</string>
@@ -779,6 +844,9 @@
   <string name="gallery_cat_pcinfo_clock">PC Info / Clock</string>
   <string name="gallery_cat_pcinfo_icons">PC Info icons</string>
   <string name="txt_dialog_title">Insert text</string>
+  <string name="txt_icon_section">Icon</string>
+  <string name="txt_text_section">Text</string>
+  <string name="txt_reset_icon">Reset icon</string>
   <string name="txt_label">Text:</string>
   <string name="txt_font_label">Font:</string>
   <string name="txt_font_size_auto">Auto-fit size</string>
@@ -787,6 +855,9 @@
   <string name="txt_bg_color">Background:</string>
   <string name="txt_color">Text:</string>
   <string name="txt_position_label">Position:</string>
+  <string name="txt_icon_source_label">Icon source:</string>
+  <string name="txt_icon_source_basecamp">Base Camp</string>
+  <string name="txt_icon_source_k2">K2</string>
   <string name="txt_generate_failed">Could not generate the text image.</string>
   <string name="dp_open_bc_profile">Open BaseCamp profile</string>
   <string name="dp_filter_bc_xml">BaseCamp profile (*.xml)|*.xml|All files|*.*</string>
@@ -903,4 +974,28 @@
   <string name="unhandled_error_domain">Unhandled error (domain)</string>
   <string name="veh_no_return">Frame-walk: no return address outside SDKDLL.dll found</string>
   <string name="profile_switch_unsupported">profile: profile switching not yet supported on MacroPad</string>
+  <!-- DisplayPad live tiles: clock / PC monitor / speed test (dp_clock, dp_sysmon, dp_speedtest) -->
+  <string name="act_dp_clock">Clock</string>
+  <string name="act_dp_sysmon">PC monitor</string>
+  <string name="act_dp_speedtest">Speed test</string>
+  <string name="cat_live">Live tiles</string>
+  <string name="clock_mode_analog">Analog clock</string>
+  <string name="clock_mode_digital24">Digital clock (24h)</string>
+  <string name="clock_mode_digital12">Digital clock (12h)</string>
+  <string name="clock_mode_vert24">Vertical clock (24h)</string>
+  <string name="clock_mode_vert12">Vertical clock (12h)</string>
+  <string name="clock_mode_hours">Hours only (24h)</string>
+  <string name="clock_mode_hours12">Hours only (12h)</string>
+  <string name="clock_mode_minutes">Minutes only</string>
+  <string name="clock_mode_seconds">Seconds only</string>
+  <string name="clock_mode_date">Date</string>
+  <string name="sysmon_cpu">CPU usage</string>
+  <string name="sysmon_ram">RAM usage</string>
+  <string name="sysmon_gpu">GPU usage</string>
+  <string name="sysmon_disk">Disk usage</string>
+  <string name="sysmon_net_down">Download speed</string>
+  <string name="sysmon_net_up">Upload speed</string>
+  <string name="speedtest_down">Speed test - download</string>
+  <string name="speedtest_up">Speed test - upload</string>
+  <string name="speedtest_ping">Speed test - ping</string>
 </strings>

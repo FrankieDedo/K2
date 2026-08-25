@@ -12,6 +12,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using K2.App.Models;
 using K2.App.Services;
 using K2.Core;
@@ -99,7 +100,9 @@ public partial class MainWindow
     /// like any other image; rotated for the device's mounting the same way at upload
     /// time (<see cref="_dpRotation"/>), no special-casing needed.
     /// </summary>
-    private static readonly string DpAutoIconDir = Path.Combine(
+    /// <remarks>Internal, not private: <see cref="Services.DiscordVoiceKeyService"/> needs it
+    /// to tell an auto-generated icon from one the user picked themselves.</remarks>
+    internal static readonly string DpAutoIconDir = Path.Combine(
         K2Paths.For("K2.DisplayPad"), "auto_icons");
 
     /// <summary>Cache path for an auto-generated icon, under <see cref="DpAutoIconDir"/>.</summary>
@@ -207,6 +210,7 @@ public partial class MainWindow
 
         DpRebuildKeyGrid();
         DpApplyDefaultKeyMap();
+        DpInitLiveKeyPreviewTimer();
 
         LvDpKeys.ItemsSource = _dpMappedKeys;
         foreach (var k in _dpKeys)
@@ -1009,6 +1013,9 @@ public partial class MainWindow
     private void DpScreensaverTimeout(int id)
     {
         if (!_dpDeviceIds.Contains(id)) return;
+        // The emoji browser owns the panel while it is up; waking from the screensaver
+        // repaints the stored page, which would silently drop the browser under the user.
+        if (DpEmojiBrowserActive(id)) return;
         int profile = _dpStore.GetCurrentProfile(id);
         int pageId = DpCurrentPageIdFor(id);
         var image = _dpStore.GetFullscreenImage(id, profile, pageId);
@@ -1021,6 +1028,8 @@ public partial class MainWindow
         _dpFullscreenByDevice[id] = true;
         // Per-key GIF loops would keep repainting their own tiles over the screensaver.
         DpGifAnimator.StopAllForDevice(id);
+        // Same reason: a live clock/monitor tile would tick right over the screensaver image.
+        DpLiveTileService.Stop(id);
 
         int rotation = _dpStore.GetRotation(id);
         var (path, userRotation) = image.Value;
@@ -1493,12 +1502,15 @@ public partial class MainWindow
         if (DpSelectedDeviceId() is not int id) return;
         int profile = DpCurrentProfile();
         DpGifAnimator.StopAllForDevice(id);
+        // Idem for the clock/monitor tiles: the profile is being wiped, so nothing should keep
+        // painting on it (a later repaint re-registers whatever survives).
+        DpLiveTileService.Stop(id);
         DpFullscreenAnimator.Stop(id);
         _dpClient.ResetPictures(id);
         _dpStore.ClearProfile(id, profile);
         _dpStore.ClearFullscreenImage(id, profile, _currentDpPageId);
         ResetDpNavigation();
-        foreach (var k in _dpKeys) { k.ImagePath = null; k.ActionType = null; k.ActionValue = null; }
+        foreach (var k in _dpKeys) { k.ImagePath = null; k.ActionType = null; k.ActionValue = null; k.IconSpecJson = null; }
         DpLog($"ResetAllPictures({id})");
     }
 
@@ -1960,12 +1972,14 @@ public partial class MainWindow
     /// next to LvDpKeys (<see cref="BtnDpConfigure_Click"/>).</summary>
     private void DpOpenKeyConfigDialog(DisplayPadKey key, int id)
     {
-        var dlg = new DpKeyConfigDialog(key.Index, key.ImagePath, key.ActionType, key.ActionValue) { Owner = this };
+        var dlg = new DpKeyConfigDialog(key.Index, key.ImagePath, key.ActionType, key.ActionValue,
+            key.IconSpecJson) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
         // Update action
         key.ActionType  = dlg.ActionType;
         key.ActionValue = dlg.ActionValue;
+        key.IconSpecJson = dlg.IconSpecJson;
 
         // Update image (upload + persist) only if it changed
         if (dlg.ImageChanged)
@@ -1990,6 +2004,10 @@ public partial class MainWindow
             _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, key.ImagePath, key.ActionType, key.ActionValue);
             DpLog($"[ACT] key #{key.Index} <- {key.ActionType ?? "none"}");
         }
+
+        // Icon settings live in their own column (see DisplayPadStore.SaveIconSpec) and are
+        // written last, after whichever branch above created/updated the row.
+        _dpStore.SaveIconSpec(id, DpCurrentProfile(), _currentDpPageId, key.Index, key.IconSpecJson);
     }
 
     /// <summary>Rebuilds the Key Binding section's mapped-keys list (LvDpKeys) —
@@ -2554,6 +2572,7 @@ public partial class MainWindow
             if (_dpAutoOffTimers.Remove(goneId, out var goneTimer)) goneTimer.Dispose();
             if (_dpScreensaverTimers.Remove(goneId, out var goneSs)) goneSs.Dispose();
             _dpScreensaverShowing.Remove(goneId);
+            _dpEmojiBrowser.Remove(goneId);
             _dpSavedBrightness.Remove(goneId);
         }
         var items = new List<DpDeviceItem>();
@@ -2659,6 +2678,7 @@ public partial class MainWindow
     private void DpReloadCurrentProfile(bool persistent = true, bool blankFirst = false)
     {
         if (DpSelectedDeviceId() is not int id) return;
+        DpEmojiBrowserAbandon(id);   // see DpRequestRepaint
         int profile = DpCurrentProfile();
         int pageId = _currentDpPageId;
         int rotation = _dpRotation;
@@ -2666,12 +2686,17 @@ public partial class MainWindow
         foreach (var k in _dpKeys) { k.ImagePath = null; k.ActionType = null; k.ActionValue = null; }
         var rows = _dpStore.LoadPage(id, profile, pageId);
         DpLog($"[DB] loaded {rows.Count} records for device={id} profile={profile} page={pageId}");
+        DiscordVoiceKeyService.Sync(_dpClient, DpLogAsync, id, rotation, rows);   // see DpUploadPageForDevice
+        DpLiveTileService.Sync(_dpClient, DpLogAsync, id, rotation, rows);        // clock/monitor/speed-test keys
 
         // Stop every animated-GIF loop on this device NOW (synchronously) — a page/profile
         // switch repurposes key indices, and a stale animation task would keep overwriting
         // whatever key it was bound to (possibly mid-blank) with frames from the OLD page.
         // Mirrors BC cancelling pending per-key GIF tasks before it starts a new batch.
         DpGifAnimator.StopAllForDevice(id);
+        // No matching DpLiveTileService.Stop here: the Sync call above already REPLACED this
+        // device's live-key set with the new page's, which is the same thing a stop+register
+        // would achieve — and stopping after it would unregister the keys just synced.
 
         // A fullscreen image, if assigned to this page, REPLACES all 12 per-key icons on
         // the hardware — per-key actions (loaded into _dpKeys below) still work normally
@@ -2691,6 +2716,8 @@ public partial class MainWindow
         bool fullscreenActive = hasFullscreenImage && !screensaver.Enabled;
         DpConfigureScreensaver(id, hasFullscreenImage && screensaver.Enabled, screensaver.Seconds);
         _dpFullscreenByDevice[id] = fullscreenActive;
+        // A fullscreen image owns all 12 slots — nothing for the live tiles to paint on.
+        if (fullscreenActive) DpLiveTileService.Stop(id);
         if (!fullscreenActive) DpFullscreenAnimator.Stop(id);
 
         var toUpload = new List<(int btnIndex, string imagePath)>();
@@ -2702,11 +2729,17 @@ public partial class MainWindow
             var key = _dpKeys[r.ButtonIndex];
             key.ActionType = r.ActionType;
             key.ActionValue = r.ActionValue;
+            key.IconSpecJson = r.IconSpec;   // see DpOpenKeyConfigDialog / KeyIconSpec
             if (!string.IsNullOrEmpty(r.ImagePath) && File.Exists(r.ImagePath))
             {
                 key.ImagePath = r.ImagePath;
                 keysWithImage.Add(r.ButtonIndex);
                 if (fullscreenActive) continue;   // hardware won't show per-key icons anyway
+                // A key the Discord overlay owns is painted by DiscordVoiceKeyService.Repaint
+                // at the tail of this batch: uploading its stored picture too would only make
+                // the two alternate on the panel. The app's own grid above keeps showing it.
+                if (DiscordVoiceKeyService.Owns(id, r.ButtonIndex)) continue;
+                if (DpLiveTileService.Owns(id, r.ButtonIndex)) continue;          // idem, live tiles
                 if (DpGifAnimator.IsAnimatedGif(r.ImagePath))
                     toAnimate.Add((r.ButtonIndex, r.ImagePath));
                 else
@@ -2776,6 +2809,9 @@ public partial class MainWindow
                     if (ct.IsCancellationRequested) return;
                     DpGifAnimator.StartOrUpdate(_dpClient, DpLogAsync, id, btnIndex, imagePath, rotation);
                 }
+                // Last: the Discord live tiles paint OVER the profile's own icon for those keys.
+                if (!ct.IsCancellationRequested) DiscordVoiceKeyService.Repaint(id);
+                if (!ct.IsCancellationRequested) DpLiveTileService.Repaint(id);
             }, TaskScheduler.Default);
             _dpUploadChain[id] = next;
         }
@@ -2812,6 +2848,9 @@ public partial class MainWindow
     /// </summary>
     private void DpRequestRepaint(int id)
     {
+        // Any full repaint replaces whatever is on the panel, emoji browser included —
+        // drop it here rather than in each of the (many) callers.
+        DpEmojiBrowserAbandon(id);
         if (_dpRepaintBusy.GetValueOrDefault(id))
         {
             _dpRepaintPending.Add(id);
@@ -2903,9 +2942,15 @@ public partial class MainWindow
     /// </summary>
     private void DpUploadPageForDevice(int id, int profile, int pageId, bool persistent, bool blankFirst = false)
     {
+        DpEmojiBrowserAbandon(id);   // this page's icons take the panel back — see DpRequestRepaint
         DpEnsureDefaultBackButton(id, profile, pageId);
         int rotation = _dpStore.GetRotation(id);
         var rows = _dpStore.LoadPage(id, profile, pageId);
+        // Live Discord mute/deafen tiles for this page's keys (transient overlay, see
+        // DiscordVoiceKeyService) — re-synced on every repaint so it always matches the
+        // page actually on the panel.
+        DiscordVoiceKeyService.Sync(_dpClient, DpLogAsync, id, rotation, rows);
+        DpLiveTileService.Sync(_dpClient, DpLogAsync, id, rotation, rows);   // see DpReloadCurrentProfile
         var fullscreen = _dpStore.GetFullscreenImage(id, profile, pageId);
         // Screensaver mode: painted later by DpScreensaverTimeout, not now — see
         // DpReloadCurrentProfile (the foreground counterpart) for the full reasoning.
@@ -2914,6 +2959,8 @@ public partial class MainWindow
         bool fullscreenActive = hasFullscreenImage && !screensaver.Enabled;
         DpConfigureScreensaver(id, hasFullscreenImage && screensaver.Enabled, screensaver.Seconds);
         _dpFullscreenByDevice[id] = fullscreenActive;
+        // A fullscreen image owns all 12 slots — nothing for the live tiles to paint on.
+        if (fullscreenActive) DpLiveTileService.Stop(id);
         if (!fullscreenActive) DpFullscreenAnimator.Stop(id);
 
         var keysWithImage = new HashSet<int>(
@@ -2948,6 +2995,8 @@ public partial class MainWindow
             foreach (var r in rows)
             {
                 if (string.IsNullOrEmpty(r.ImagePath) || !File.Exists(r.ImagePath)) continue;
+                if (DiscordVoiceKeyService.Owns(id, r.ButtonIndex)) continue;   // see DpReloadCurrentProfile
+                if (DpLiveTileService.Owns(id, r.ButtonIndex)) continue;        // idem
                 if (DpGifAnimator.IsAnimatedGif(r.ImagePath))
                     DpGifAnimator.StartOrUpdate(_dpClient, DpLogAsync, id, r.ButtonIndex, r.ImagePath, rotation);
                 else
@@ -2956,6 +3005,8 @@ public partial class MainWindow
                     _dpClient.UploadImage(id, r.ImagePath, r.ButtonIndex, rotation);
                 }
             }
+            DiscordVoiceKeyService.Repaint(id);   // see DpReloadCurrentProfile
+            DpLiveTileService.Repaint(id);        // idem
         }, TaskScheduler.Default);
         _dpUploadChain[id] = next;
     }
@@ -2988,6 +3039,10 @@ public partial class MainWindow
             DpBgNavigateToPage(devId, folderPageId);
         else if (row.ActionType == "dp_back")
             DpBgNavigateBack(devId);
+        else if (row.ActionType == "dp_emojibrowser")
+            DpEmojiBrowserOpen(devId);
+        else if (DpLiveTileService.IsLiveType(row.ActionType))
+            DpLiveTileService.HandlePress(devId, idx, DpLogAsync);   // speed-test keys only; clock/monitor readouts ignore the press
         else
             DpEngineFor(devId).Execute(row.ActionType, row.ActionValue, idx);
     }
@@ -3086,6 +3141,19 @@ public partial class MainWindow
             // key that wakes the panel still does its job — just on top of the real icons.
             DpGetScreensaverTimer(evtDevId).RegisterActivity();
 
+            // While the emoji browser owns this pad's panel (see
+            // MainWindow.DisplayPad.EmojiBrowser.cs) it consumes every key itself: the
+            // underlying page's bindings must not fire behind the overlay. Uses the
+            // foreground tab's (possibly remapped) matrix table when this IS the visible
+            // tab, the default map otherwise — same split as the dispatch below.
+            if (DpEmojiBrowserActive(evtDevId))
+            {
+                var embMap = DpSelectedDeviceId() == evtDevId ? _dpMatrixToIndex : DpDefaultMatrixToIndex;
+                if (embMap.TryGetValue(matrix, out int embIdx) && embIdx < 12)
+                    DpEmojiBrowserKey(evtDevId, embIdx, pressed);
+                return;
+            }
+
             // The foreground tab (_activeDpDeviceId) uses the UI-bound state (_dpKeys,
             // _dpMatrixToIndex, _currentDpPageId, remap mode, press-bounce visual). Any OTHER
             // connected DisplayPad (multi-device setups) must still execute ITS OWN bindings —
@@ -3130,6 +3198,10 @@ public partial class MainWindow
                         DpNavigateToPage(pageId, _dpStore.GetFolderName(pageId));
                     else if (action == "dp_back")
                         DpNavigateBack();
+                    else if (DpLiveTileService.IsLiveType(action))
+                        DpLiveTileService.HandlePress(selId, hi, DpLogAsync);   // see DpHandleBackgroundKey
+                    else if (action == "dp_emojibrowser")
+                        DpEmojiBrowserOpen(selId);
                     else
                         _dpEngine?.Execute(action, value, hi);
                 }
@@ -3158,6 +3230,13 @@ public partial class MainWindow
     /// works once you've opened that pad's tab".</summary>
     private void DpUploadPressVisualForDevice(int id, int btnIndex, string? imgPath, int rotation, bool pressed)
     {
+        // A key owned by the Discord live overlay bounces ITS tile, not the stored picture:
+        // re-uploading the latter on every press/release is what made the live glyph snap back
+        // to the profile's icon on each click. Resolved per call, so the key-UP repaint already
+        // carries the state the key-DOWN action just produced.
+        imgPath = DiscordVoiceKeyService.CurrentIconPath(id, btnIndex)
+                  ?? DpLiveTileService.CurrentIconPath(id, btnIndex) ?? imgPath;
+
         if (string.IsNullOrEmpty(imgPath) || !File.Exists(imgPath)) return;
         if (DpGifAnimator.IsAnimatedGif(imgPath)) return;
         if (_dpFullscreenByDevice.TryGetValue(id, out bool fs) && fs) return;
@@ -3260,11 +3339,54 @@ public partial class MainWindow
     private void DpLogAsync(string text) => Dispatcher.BeginInvoke(() => DpLog(text));
 
     // ================================================================
+    // Live key preview (app window) — clock / PC monitor / speed test
+    // ================================================================
+    //
+    // DpLiveTileService's own timer drives ONLY the physical DisplayPad — the app's own key
+    // grid never gets an image at all for these keys otherwise (the stored DB row has no
+    // ImagePath, same as dp_folder/dp_emojibrowser: there's nothing to load, only a
+    // generated-on-the-fly picture). Renders independently, on the UI thread, into a file the
+    // hardware-side service never touches — so the two 1 Hz timers can never race on the same
+    // PNG (see DpLiveTileService.UiPreviewPath's remarks).
+
+    private DispatcherTimer? _dpKeyLiveTimer;
+
+    private void DpInitLiveKeyPreviewTimer()
+    {
+        if (_dpKeyLiveTimer is not null) return;
+        _dpKeyLiveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _dpKeyLiveTimer.Tick += (_, _) => DpRefreshLiveKeyPreviews();
+        _dpKeyLiveTimer.Start();
+    }
+
+    /// <summary>Re-renders and re-binds every dp_clock/dp_sysmon/dp_speedtest key on the
+    /// currently displayed foreground page — cheap no-op when there are none (a 12-key loop
+    /// with an early-continue). <see cref="DisplayPadKey.TouchPreview"/> is what actually
+    /// forces the WPF binding to re-read the file every tick: the path itself stays the same
+    /// key-to-key, so the plain ImagePath setter's "no-op on unchanged value" guard would
+    /// otherwise swallow every refresh after the first.</summary>
+    private void DpRefreshLiveKeyPreviews()
+    {
+        if (DpSelectedDeviceId() is not int id) return;
+        foreach (var key in _dpKeys)
+        {
+            if (!DpLiveTileService.IsLiveType(key.ActionType)) continue;
+            string path = DpLiveTileService.UiPreviewPath(id, key.Index);
+            var spec = KeyIconSpec.FromJson(key.IconSpecJson);
+            if (!DpLiveTileService.RenderNow(key.ActionType!, key.ActionValue, spec, path)) continue;
+            if (key.ImagePath != path) key.ImagePath = path;
+            key.TouchPreview();
+        }
+    }
+
+    // ================================================================
     // Cleanup
     // ================================================================
 
     private void CleanupDisplayPad()
     {
+        _dpKeyLiveTimer?.Stop();
+        _dpKeyLiveTimer = null;
         DpGifAnimator.StopAll();
         DpFullscreenAnimator.StopAll();
         _dpEngine?.Dispose();

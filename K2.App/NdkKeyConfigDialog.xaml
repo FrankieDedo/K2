@@ -3,100 +3,120 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
         Title="Configure display key"
-        Width="480" SizeToContent="Height"
-        MinWidth="420"
+        Width="520" SizeToContent="Height"
+        MinWidth="480"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         ResizeMode="NoResize"
         Style="{DynamicResource K2WindowStyle}">
 
+    <!-- Layout mirrors DpKeyConfigDialog exactly (user request 2026-08-24: the Everest
+         display keys get the SAME interface as the DisplayPad ones) — top-down "what does
+         this key DO" then "what does it LOOK like", with the picture driven by a "Default
+         icon" checkbox and all crop/rotate/text editing living behind "Edit icon". -->
     <Grid Margin="14">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>  <!-- title row -->
+            <RowDefinition Height="Auto"/>  <!-- header -->
             <RowDefinition Height="12"/>
-            <RowDefinition Height="Auto"/>  <!-- main content -->
+            <RowDefinition Height="Auto"/>  <!-- action section -->
             <RowDefinition Height="14"/>
-            <RowDefinition Height="Auto"/>  <!-- buttons -->
+            <RowDefinition Height="Auto"/>  <!-- separator -->
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="Auto"/>  <!-- icon section -->
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>  <!-- OK / Cancel -->
         </Grid.RowDefinitions>
 
-        <!-- Header -->
         <TextBlock x:Name="LblHeader" Grid.Row="0"
                    FontSize="16" FontWeight="Bold"/>
 
-        <!-- Main content: left=image, right=action -->
-        <Grid Grid.Row="2">
+        <!-- ───────────────── Action ───────────────── -->
+        <StackPanel Grid.Row="2">
+            <TextBlock Text="{loc:Get dp_action_section}"
+                       FontSize="13" FontWeight="SemiBold"
+                       Margin="0,0,0,6"/>
+
+            <Border Background="#1C1C22"
+                    BorderBrush="#333" BorderThickness="1"
+                    CornerRadius="3"
+                    Padding="8,6"
+                    Margin="0,0,0,8">
+                <TextBlock x:Name="LblActionSummary"
+                           TextWrapping="Wrap"
+                           FontSize="12"
+                           Foreground="#CCC"/>
+            </Border>
+
+            <StackPanel Orientation="Horizontal">
+                <Button Content="{loc:Get dp_configure_action}"
+                        Width="150"
+                        Click="BtnConfigureAction_Click"
+                        Margin="0,0,8,0"/>
+                <Button Content="{loc:Get dp_remove_action}"
+                        Width="150"
+                        Click="BtnRemoveAction_Click"/>
+            </StackPanel>
+        </StackPanel>
+
+        <Border Grid.Row="4" Height="1" Background="#2E2E36"/>
+
+        <!-- ───────────────── Icon ───────────────── -->
+        <Grid Grid.Row="6">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="16"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>   <!-- checkbox + preview -->
+                <ColumnDefinition Width="18"/>
+                <ColumnDefinition Width="*"/>      <!-- every other image control -->
             </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>     <!-- section label -->
+                <RowDefinition Height="Auto"/>     <!-- "Default icon" checkbox -->
+                <RowDefinition Height="Auto"/>     <!-- preview -->
+            </Grid.RowDefinitions>
 
-            <!-- ─── Image section ─── -->
-            <StackPanel Grid.Column="0" Width="140">
+            <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+                       Text="{loc:Get dp_icon_section}"
+                       FontSize="13" FontWeight="SemiBold"
+                       Margin="0,0,0,6"/>
 
-                <Border Width="120" Height="120"
-                        Background="#222228"
-                        BorderBrush="#444" BorderThickness="1"
-                        CornerRadius="4"
-                        HorizontalAlignment="Center">
-                    <Grid>
-                        <TextBlock x:Name="LblNoImage"
-                                   Text="No image"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Foreground="#555" FontSize="12"/>
-                        <Image x:Name="ImgPreview" Stretch="Uniform" Margin="4"/>
-                    </Grid>
-                </Border>
+            <CheckBox x:Name="ChkDefaultIcon" Grid.Row="1" Grid.Column="0"
+                      Content="{loc:Get dp_gallery_icon}"
+                      IsChecked="True"
+                      Checked="ChkDefaultIcon_Changed" Unchecked="ChkDefaultIcon_Changed"
+                      Margin="0,0,0,8"/>
 
-                <Button Content="{loc:Get dp_load_image}"
-                        Margin="0,10,0,0"
-                        Click="BtnLoadImage_Click"/>
-
-                <Button Content="{loc:Get dp_remove_image}"
-                        Margin="0,4,0,0"
-                        Click="BtnRemoveImage_Click"/>
-
-                <Button Content="{loc:Get dp_add_text}"
-                        Margin="0,4,0,0"
-                        Click="BtnAddText_Click"/>
-
-                <Button x:Name="BtnGalleryIcon"
-                        Content="{loc:Get dp_gallery_icon}"
-                        Margin="0,4,0,0"
-                        Click="BtnGalleryIcon_Click"/>
+            <!-- Preview host: populated in code-behind — "No image" placeholder, or the
+                 view-only CropEditor viewport (drag/zoom happen inside "Edit icon", which
+                 borrows this same instance). See RefreshImagePreview(). -->
+            <StackPanel Grid.Row="2" Grid.Column="0" Width="210">
+                <TextBlock x:Name="LblNoImage"
+                           Text="No image"
+                           HorizontalAlignment="Center"
+                           Margin="0,30"
+                           Foreground="#555" FontSize="12"/>
+                <StackPanel x:Name="PreviewHost" HorizontalAlignment="Center"/>
             </StackPanel>
 
-            <!-- ─── Action section ─── -->
-            <StackPanel Grid.Column="2" VerticalAlignment="Top">
+            <!-- Right column: every remaining image control, spanning checkbox + preview. -->
+            <StackPanel Grid.Row="1" Grid.RowSpan="2" Grid.Column="2" VerticalAlignment="Top">
 
-                <TextBlock Text="{loc:Get dp_action_section}"
-                           FontSize="13" FontWeight="SemiBold"
-                           Margin="0,0,0,8"/>
+                <Button x:Name="BtnLoadImage"
+                        Content="{loc:Get dp_load_image}"
+                        Click="BtnLoadImage_Click"/>
 
-                <Border Background="#1C1C22"
-                        BorderBrush="#333" BorderThickness="1"
-                        CornerRadius="3"
-                        Padding="8,6"
-                        Margin="0,0,0,10">
-                    <TextBlock x:Name="LblActionSummary"
-                               TextWrapping="Wrap"
-                               FontSize="12"
-                               Foreground="#CCC"/>
-                </Border>
+                <Button x:Name="BtnRemoveImage"
+                        Content="{loc:Get dp_remove_image}"
+                        Margin="0,6,0,0"
+                        Click="BtnRemoveImage_Click"/>
 
-                <Button Content="Select action…"
-                        Click="BtnConfigureAction_Click"
-                        Margin="0,0,0,6"/>
-
-                <Button Content="{loc:Get dp_remove_action}"
-                        Click="BtnRemoveAction_Click"/>
-
+                <Button x:Name="BtnEditIcon"
+                        Content="{loc:Get dp_add_text}"
+                        Margin="0,6,0,0"
+                        Click="BtnAddText_Click"/>
             </StackPanel>
         </Grid>
 
         <!-- OK / Cancel -->
-        <StackPanel Grid.Row="4"
+        <StackPanel Grid.Row="8"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right">
             <Button Content="{loc:Get ok}"

@@ -81,12 +81,18 @@ internal sealed class CropEditor
     private readonly Canvas _viewport;
     private readonly Border _viewportBorder;
     private readonly Slider _zoomSlider;
-    private readonly CheckBox _chkNoCrop;
-    private readonly CheckBox _chkShowGrid;
+    private readonly CheckBox? _chkNoCrop;
+    private readonly CheckBox? _chkShowGrid;
     private readonly TextBlock _hint;
     private readonly StackPanel _controlsPanel;
 
     private readonly double _maxViewportPx;
+
+    /// <summary>Raised whenever the on-screen crop (pan/zoom, via drag, the zoom slider, or
+    /// <see cref="ResetView"/>) changes — hosts that show a SEPARATE composited preview elsewhere
+    /// (e.g. <c>TextIconDialog</c>'s "on top of image" text overlay) subscribe to this to keep
+    /// that preview in sync instead of polling.</summary>
+    public event EventHandler? Changed;
 
     /// <summary>The pannable/zoomable image viewport ONLY — host dialogs that also preview
     /// device rotation should attach a <see cref="RotateTransform"/> to THIS element's
@@ -127,8 +133,15 @@ internal sealed class CropEditor
     /// corner pixels themselves are painted over. Leave false for crop targets that aren't a
     /// single rounded-bezel key screen (multi-key fullscreen grid, keycap legend images,
     /// Display Dial's round face).</param>
+    /// <param name="showLegacyToggles">If true (default), the "insert as-is (no crop/zoom)" and
+    /// "show key outline" checkboxes are built into <see cref="ControlsPanel"/> — the original
+    /// standalone-popup behavior (<see cref="ImageCropDialog"/>, the DisplayPad fullscreen
+    /// dialog). Pass false for a host that dropped those two toggles from its own UI (the
+    /// DisplayPad key popup, 2026-08-24 rework: "insert as-is" became <c>ResetView</c> on an
+    /// external "Reset icon" button, "show key outline" was removed outright) — the checkboxes
+    /// are then never created and every check against them below treats them as unchecked.</param>
     public CropEditor(int targetW, int targetH, double maxViewportPx = 260, bool animateGifs = false,
-        bool bakeRoundedCorners = false)
+        bool bakeRoundedCorners = false, bool showLegacyToggles = true)
     {
         _targetW = targetW;
         _targetH = targetH;
@@ -150,29 +163,36 @@ internal sealed class CropEditor
         _zoomSlider = new Slider { Margin = new Thickness(0, 6, 0, 0) };
         _zoomSlider.ValueChanged += ZoomSlider_ValueChanged;
 
-        _chkNoCrop = new CheckBox
+        if (showLegacyToggles)
         {
-            Content = Loc.Get("crop_no_crop"),
-            Foreground = Brushes.White,
-            Margin = new Thickness(0, 8, 0, 0),
-        };
-        _chkNoCrop.Checked += (_, _) => UpdateMode();
-        _chkNoCrop.Unchecked += (_, _) => UpdateMode();
+            _chkNoCrop = new CheckBox
+            {
+                Content = Loc.Get("crop_no_crop"),
+                Foreground = Brushes.White,
+                Margin = new Thickness(0, 8, 0, 0),
+            };
+            _chkNoCrop.Checked += (_, _) => UpdateMode();
+            _chkNoCrop.Unchecked += (_, _) => UpdateMode();
 
-        _chkShowGrid = new CheckBox
-        {
-            Content = Loc.Get("crop_show_grid"),
-            Foreground = Brushes.White,
-            Margin = new Thickness(0, 4, 0, 0),
-        };
-        _chkShowGrid.Checked += (_, _) => _gridOverlay.Visibility = Visibility.Visible;
-        _chkShowGrid.Unchecked += (_, _) => _gridOverlay.Visibility = Visibility.Collapsed;
+            _chkShowGrid = new CheckBox
+            {
+                Content = Loc.Get("crop_show_grid"),
+                Foreground = Brushes.White,
+                Margin = new Thickness(0, 4, 0, 0),
+            };
+            _chkShowGrid.Checked += (_, _) => _gridOverlay.Visibility = Visibility.Visible;
+            _chkShowGrid.Unchecked += (_, _) => _gridOverlay.Visibility = Visibility.Collapsed;
+        }
 
         _hint = new TextBlock
         {
             Text = Loc.Get("crop_hint"),
             Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
             FontSize = 10,
+            // Wraps rather than running off to the right: hosts that pin ControlsPanel to the
+            // viewport's width (TextIconDialog's Icon section) would otherwise be stretched by
+            // this one long line, pushing the zoom slider off-centre under the picture.
+            TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 4, 0, 0),
         };
 
@@ -183,11 +203,21 @@ internal sealed class CropEditor
 
         _controlsPanel = new StackPanel();
         _controlsPanel.Children.Add(_zoomSlider);
-        _controlsPanel.Children.Add(_chkNoCrop);
-        _controlsPanel.Children.Add(_chkShowGrid);
+        if (_chkNoCrop is not null) _controlsPanel.Children.Add(_chkNoCrop);
+        if (_chkShowGrid is not null) _controlsPanel.Children.Add(_chkShowGrid);
         _controlsPanel.Children.Add(_hint);
 
         ResizeViewport();
+    }
+
+    /// <summary>Resets pan/zoom back to the default "contain" fit for the currently loaded
+    /// source — the "Reset icon" button's action (replaces the old "insert as-is" checkbox,
+    /// 2026-08-24). No-op when nothing is loaded.</summary>
+    public void ResetView()
+    {
+        if (_sourcePath is null) return;
+        if (_chkNoCrop is not null) _chkNoCrop.IsChecked = false;
+        FitCover();
     }
 
     /// <summary>Sets the key-outline overlay's grid: 1×1 (default) draws a single
@@ -301,7 +331,7 @@ internal sealed class CropEditor
                 _img.Source = frames[0].Frame;
                 ScheduleGifTick();
 
-                _chkNoCrop.IsChecked = false;
+                if (_chkNoCrop is not null) _chkNoCrop.IsChecked = false;
                 FitCover();
                 return true;
             }
@@ -332,7 +362,7 @@ internal sealed class CropEditor
         wpfSrc.Freeze();
         _img.Source = wpfSrc;
 
-        _chkNoCrop.IsChecked = false;   // fresh image always starts in normal crop mode
+        if (_chkNoCrop is not null) _chkNoCrop.IsChecked = false;   // fresh image always starts in normal crop mode
         FitCover();
         return true;
     }
@@ -434,19 +464,28 @@ internal sealed class CropEditor
         double coverScale = Math.Max(vw / _srcW, vh / _srcH);
         _minScale = Math.Min(vw / _srcW, vh / _srcH);
         _maxScale = coverScale * 4;
+
+        _zoomSlider.Minimum = _minScale;
+        _zoomSlider.Maximum = _maxScale;
+        _zoomSlider.Value = _minScale;
+
+        // Re-pin the final frame explicitly instead of trusting whatever the Minimum/Maximum/
+        // Value assignments above left behind: WPF's RangeBase re-coerces Value as soon as
+        // Minimum changes, which can fire ZoomSlider_ValueChanged mid-sequence (against a still
+        // relevant old Maximum, or before Value's own explicit set below runs) and land on a
+        // frame other than the true minimum (2026-08-25, user report: a freshly loaded icon
+        // wasn't actually showing at minimum zoom). This is the single source of truth for
+        // "freshly loaded = minimum zoom, centered".
         _scale = _minScale;
         _tx = (vw - _srcW * _scale) / 2;
         _ty = (vh - _srcH * _scale) / 2;
-        _zoomSlider.Minimum = _minScale;
-        _zoomSlider.Maximum = _maxScale;
-        _zoomSlider.Value = _scale;
         UpdateMode();
     }
 
     private void UpdateMode()
     {
         if (_sourcePath is null) return;
-        bool noCrop = _chkNoCrop.IsChecked == true;
+        bool noCrop = _chkNoCrop?.IsChecked == true;
         _zoomSlider.IsEnabled = !noCrop;
         _viewport.Cursor = noCrop ? Cursors.Arrow : Cursors.SizeAll;
 
@@ -471,6 +510,7 @@ internal sealed class CropEditor
         _img.Height = _srcH * _scale;
         Canvas.SetLeft(_img, _tx);
         Canvas.SetTop(_img, _ty);
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Keeps the image covering the viewport on each axis where it does (normal
@@ -491,7 +531,7 @@ internal sealed class CropEditor
 
     private void Viewport_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (_chkNoCrop.IsChecked == true || _sourcePath is null) return;
+        if (_chkNoCrop?.IsChecked == true || _sourcePath is null) return;
         _dragStart = e.GetPosition(_viewport);
         _dragStartTx = _tx; _dragStartTy = _ty;
         _viewport.CaptureMouse();
@@ -509,7 +549,7 @@ internal sealed class CropEditor
 
     private void Viewport_MouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (_chkNoCrop.IsChecked == true || _sourcePath is null) return;
+        if (_chkNoCrop?.IsChecked == true || _sourcePath is null) return;
         double factor = e.Delta > 0 ? 1.1 : 1 / 1.1;
         _zoomSlider.Value = Math.Clamp(_scale * factor, _minScale, _maxScale);
     }
@@ -540,7 +580,7 @@ internal sealed class CropEditor
         if (_fileBytes is null) return null;
         using var srcBmp = new System.Drawing.Bitmap(new MemoryStream(_fileBytes));
 
-        bool noCrop = _chkNoCrop.IsChecked == true;
+        bool noCrop = _chkNoCrop?.IsChecked == true;
         System.Drawing.RectangleF rect;
         if (noCrop)
         {
@@ -643,7 +683,7 @@ internal sealed class CropEditor
     private string? GetGifCropRefPath()
     {
         if (_sourcePath is null) return null;
-        bool noCrop = _chkNoCrop.IsChecked == true;
+        bool noCrop = _chkNoCrop?.IsChecked == true;
         CroppedGifRef cref;
         if (noCrop)
         {

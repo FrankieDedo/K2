@@ -65,6 +65,14 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
                 var bmp = new BitmapImage();
                 bmp.BeginInit();
                 bmp.CacheOption = BitmapCacheOption.OnLoad;
+                // WPF keeps its OWN internal decode cache keyed by URI, separate from
+                // CacheOption above — without this flag, re-loading the SAME path (a live tile:
+                // clock/PC monitor/speed test, whose file is overwritten in place every second
+                // by DpRefreshLiveKeyPreviews) silently returns yesterday's decoded bitmap
+                // instead of re-reading the changed bytes on disk. Every other picture in K2
+                // gets a fresh fingerprinted filename per change and never hits this, which is
+                // why it went unnoticed until a key started reusing one path forever.
+                bmp.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
                 bmp.UriSource = new System.Uri(_imagePath);
                 bmp.EndInit();
                 bmp.Freeze();
@@ -104,7 +112,20 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
         return result;
     }
 
+    /// <summary>Forces <see cref="Preview"/> to re-read its file from disk WITHOUT touching
+    /// <see cref="ImagePath"/> — for a live tile (clock / PC monitor / speed test) whose PATH
+    /// stays constant tick to tick but whose CONTENT underneath it changes every second: the
+    /// <see cref="ImagePath"/> setter's no-op-on-same-value guard would otherwise swallow the
+    /// refresh entirely after the first tick.</summary>
+    public void TouchPreview() => OnChanged(nameof(Preview));
+
     public bool HasImage => !string.IsNullOrEmpty(_imagePath);
+
+    /// <summary>Icon settings this key's picture was built with (<see cref="K2.Core.KeyIconSpec"/>
+    /// JSON, null for a key configured before they existed) — carried between the store and
+    /// <c>DpKeyConfigDialog</c> so reopening the dialog resumes from the same choices instead
+    /// of only inheriting the rendered PNG. Not bindable: nothing in the grid shows it.</summary>
+    public string? IconSpecJson { get; set; }
 
     /// <summary>True when the key has an image but no action assigned.
     /// Used to show a warning indicator in the UI.</summary>
@@ -202,6 +223,12 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
                     "exec"      => Path.GetFileName(_actionValue ?? ""),
                     "dp_folder" => "▸",   // folder — label comes from image
                     "dp_back"   => "◂",   // back — label comes from image
+                    "dp_emojibrowser" => "☺",  // emoji browser — label comes from image
+                    // Live tiles (clock / PC monitor / speed test): normally they DO have a
+                    // picture, so this only shows in the moment between assigning the action and
+                    // the tile being rendered.
+                    "dp_clock" or "dp_sysmon" or "dp_speedtest"
+                                => ActionTypeHelper.LiveTileSummary(_actionType, _actionValue),
                     "macro"     => ActionTypeHelper.MacroSummary(_actionValue),
                     _           => ActionTypeHelper.IsUnrecognized(_actionType) ? Loc.Get("act_unrecognized") : _actionType ?? "",
                 };

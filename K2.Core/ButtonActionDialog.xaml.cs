@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -30,8 +30,9 @@ public partial class ButtonActionDialog : Window
         // meaningfully navigate a DisplayPad page.
         if (_host?.SupportsPages != true)
         {
-            var pageItem = CbType.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == "dp_folder");
-            if (pageItem is not null) CbType.Items.Remove(pageItem);
+            foreach (var dpOnly in CbType.Items.OfType<ComboBoxItem>()
+                         .Where(i => (string?)i.Tag is "dp_folder" or "dp_emojibrowser" or "dp_clock" or "dp_sysmon" or "dp_speedtest").ToList())
+                CbType.Items.Remove(dpOnly);
         }
 
         // Set BEFORE SetType(): assigning CbType.SelectedItem below fires
@@ -65,7 +66,8 @@ public partial class ButtonActionDialog : Window
             LoadProfileSpec(ProfileTargetPayload.Parse(currentValue)
                 ?? LegacyProfileSpec(currentValue));
         }
-        else if (currentType is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify")
+        else if (currentType is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
+                 or "dp_clock" or "dp_sysmon" or "dp_speedtest")
         {
             LoadComboSpec(currentType, currentValue ?? "");
         }
@@ -160,16 +162,20 @@ public partial class ButtonActionDialog : Window
             "googlehome" => ("Google Home action:",         ""),
             "obs"        => ("OBS Studio command:",         ""),
             "twitch"     => ("Twitch action:",              ""),
+            "discord"    => ("Discord action:",             ""),
             "spotify"    => ("Spotify action:",             ""),
+            "audiodevice" => ("Windows audio device:",      ""),
             "youtube"    => ("YouTube live chat message:",  ""),
             "pyscript" => ("Python Script",                ""),
+            "dp_emojibrowser" => ("Emoji browser (no payload)", ""),
             "disable"  => ("Key disabled (no payload)",    ""),
             _          => ("No action",                    "")
         };
         LblPayload.Text      = label;
-        TxtPayload.IsEnabled = tag is not ("none" or "disable");
+        TxtPayload.IsEnabled = tag is not ("none" or "disable" or "dp_emojibrowser");
         if (string.IsNullOrEmpty(TxtPayload.Text)) TxtPayload.Tag = hint;
 
+        UpdateBreadcrumb(tag);
         UpdatePanels();
     }
 
@@ -183,14 +189,16 @@ public partial class ButtonActionDialog : Window
         bool page    = tag == "dp_folder";
         bool browser = tag == "browser";
         bool profile = tag == "profile";
-        bool combo   = tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify";
+        bool combo   = tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
+                              or "dp_clock" or "dp_sysmon" or "dp_speedtest";
         bool keys    = tag == "keys";
         bool hotkeyswitch = tag == "hotkeyswitch";
         bool multi   = tag == "multi";
         bool appShortcut = tag is "adobe" or "davinci" or "zoom";
         bool youtube = tag == "youtube";
         bool emoji   = tag == "emoji";
-        bool std     = !py && !exec && !folder && !page && !browser && !profile && !combo && !keys && !hotkeyswitch && !multi && !appShortcut && !youtube && !emoji;
+        bool emojiBrowser = tag == "dp_emojibrowser";
+        bool std     = !py && !exec && !folder && !page && !browser && !profile && !combo && !keys && !hotkeyswitch && !multi && !appShortcut && !youtube && !emoji && !emojiBrowser;
 
         PyPanel.Visibility       = py      ? Visibility.Visible : Visibility.Collapsed;
         ExecPanel.Visibility     = exec    ? Visibility.Visible : Visibility.Collapsed;
@@ -297,7 +305,8 @@ public partial class ButtonActionDialog : Window
         {
             ActionValue = SaveProfileSpec().ToJson();
         }
-        else if (tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify")
+        else if (tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
+                 or "dp_clock" or "dp_sysmon" or "dp_speedtest")
         {
             ActionValue = SaveComboSpec();
         }
@@ -324,6 +333,12 @@ public partial class ButtonActionDialog : Window
         else if (tag == "emoji")
         {
             ActionValue = SaveEmojiSpec();
+        }
+        else if (tag == "dp_emojibrowser")
+        {
+            // The whole browser lives in MainWindow.DisplayPad.EmojiBrowser.cs; the key
+            // binding is just the "open it" marker, with nothing to configure.
+            ActionValue = "";
         }
         else if (tag == "disable")
         {

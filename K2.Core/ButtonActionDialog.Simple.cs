@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using K2.Core.Services;
@@ -65,6 +65,10 @@ public partial class ButtonActionDialog
     private static readonly ComboOption[] SpotifyOptions =
         ActionTypeHelper.SpotifyCommands.Select(m => new ComboOption(m.Value, m.LocKey)).ToArray();
 
+    /// <summary>Built from <see cref="ActionTypeHelper.DiscordCommands"/> — mirrors <see cref="MediaOptions"/>.</summary>
+    private static readonly ComboOption[] DiscordOptions =
+        ActionTypeHelper.DiscordCommands.Select(m => new ComboOption(m.Value, m.LocKey)).ToArray();
+
     /// <summary>OBS commands that take a free-text argument (scene/profile/source/transition
     /// name, or a numeric duration/volume) — see the class remarks for the wire format.</summary>
     private static readonly System.Collections.Generic.HashSet<string> ObsCommandsNeedingArg = new()
@@ -98,14 +102,48 @@ public partial class ButtonActionDialog
         "volume_up", "volume_down", "volume_set", "save_playlist", "remove_playlist",
     };
 
+    /// <summary>Discord commands that take an argument: a volume (absolute "70" or relative
+    /// "+10"/"-10"), a voice-channel id, a "userId:percent" pair, a user id, or the webhook
+    /// message text — see the class remarks for the wire format.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> DiscordCommandsNeedingArg = new()
+    {
+        "input_volume", "output_volume", "join_voice", "user_volume", "user_mute_toggle", "send_message",
+    };
+
+    /// <summary>Discord's one list-backed argument: the voice channel to join, populated live
+    /// from the connected Discord client (<see cref="Services.DiscordBridge.ListVoiceChannels"/>)
+    /// exactly like OBS's scene/profile/source names.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> DiscordListArgCommands = new()
+    {
+        "join_voice",
+    };
+
+    /// <summary>Built from <see cref="ActionTypeHelper.ClockModes"/>/<c>SysMonMetrics</c>/
+    /// <c>SpeedTestMetrics</c> — the live DisplayPad tiles (clock face, PC monitor gauge,
+    /// speed-test readout), mirroring <see cref="MediaOptions"/>.</summary>
+    private static readonly ComboOption[] ClockOptions =
+        ActionTypeHelper.ClockModes.Select(m => new ComboOption(m.Value, m.LocKey)).ToArray();
+
+    /// <inheritdoc cref="ClockOptions"/>
+    private static readonly ComboOption[] SysMonOptions =
+        ActionTypeHelper.SysMonMetrics.Select(m => new ComboOption(m.Value, m.LocKey)).ToArray();
+
+    /// <inheritdoc cref="ClockOptions"/>
+    private static readonly ComboOption[] SpeedTestOptions =
+        ActionTypeHelper.SpeedTestMetrics.Select(m => new ComboOption(m.Value, m.LocKey)).ToArray();
+
     private static ComboOption[] OptionsFor(string tag) => tag switch
     {
+        "dp_clock"     => ClockOptions,
+        "dp_sysmon"    => SysMonOptions,
+        "dp_speedtest" => SpeedTestOptions,
         "oscmd"   => OsCmdOptions,
         "media"   => MediaOptions,
         "mouse"   => MouseOptions,
         "obs"     => ObsOptions,
         "twitch"  => TwitchOptions,
         "spotify" => SpotifyOptions,
+        "discord" => DiscordOptions,
         _         => System.Array.Empty<ComboOption>(),
     };
 
@@ -119,16 +157,22 @@ public partial class ButtonActionDialog
         "obs"        => "act_obs",
         "twitch"     => "act_twitch",
         "spotify"    => "act_spotify",
+        "discord"    => "act_discord",
+        "audiodevice" => "act_audiodevice",
+        "dp_clock"     => "act_dp_clock",
+        "dp_sysmon"    => "act_dp_sysmon",
+        "dp_speedtest" => "act_dp_speedtest",
         _            => "dlg_value",
     };
 
     /// <summary>Whether <paramref name="tag"/>'s picker shows the extra argument textbox for
-    /// the given command value — currently "obs"/"twitch"/"spotify" only.</summary>
+    /// the given command value — currently "obs"/"twitch"/"spotify"/"discord" only.</summary>
     private static bool CommandNeedsArg(string tag, string command) => tag switch
     {
         "obs"     => ObsCommandsNeedingArg.Contains(command),
         "twitch"  => TwitchCommandsNeedingArg.Contains(command),
         "spotify" => SpotifyCommandsNeedingArg.Contains(command),
+        "discord" => DiscordCommandsNeedingArg.Contains(command),
         _         => false,
     };
 
@@ -152,7 +196,7 @@ public partial class ButtonActionDialog
         _comboPanelTag = tag;
         LblComboPanel.Text = Loc.Get(LabelKeyFor(tag));
 
-        if (tag is "obs" or "twitch" or "spotify")
+        if (tag is "obs" or "twitch" or "spotify" or "discord")
         {
             var (cmd, arg) = SplitComboValue(currentValue);
             PopulateCombo(tag, cmd);
@@ -171,6 +215,8 @@ public partial class ButtonActionDialog
         BtnObsSettings.Visibility = tag == "obs" ? Visibility.Visible : Visibility.Collapsed;
         BtnTwitchSettings.Visibility = tag == "twitch" ? Visibility.Visible : Visibility.Collapsed;
         BtnSpotifySettings.Visibility = tag == "spotify" ? Visibility.Visible : Visibility.Collapsed;
+        BtnDiscordSettings.Visibility = tag == "discord" ? Visibility.Visible : Visibility.Collapsed;
+        BtnAudioDeviceRefresh.Visibility = tag == "audiodevice" ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private static (string Command, string Arg) SplitComboValue(string value)
@@ -179,7 +225,11 @@ public partial class ButtonActionDialog
         return i < 0 ? (value, "") : (value[..i], value[(i + 1)..]);
     }
 
-    private void CbComboValue_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateComboArgVisibility();
+    private void CbComboValue_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateComboArgVisibility();
+        UpdateSubActionCrumb();
+    }
 
     /// <summary>Shows the right argument control for the selected command — the live-list
     /// <see cref="CbComboArgList"/> for scene/profile/source/transition names (kicking off an
@@ -191,13 +241,25 @@ public partial class ButtonActionDialog
     {
         string? cmd = CbComboValue.SelectedItem is ComboBoxItem ci ? ci.Tag as string : null;
         bool needsArg = _comboPanelTag is not null && cmd is not null && CommandNeedsArg(_comboPanelTag, cmd);
-        bool listArg = needsArg && _comboPanelTag == "obs" && ObsListArgCommands.Contains(cmd!);
+        bool listArg = needsArg && IsListArgCommand(_comboPanelTag!, cmd!);
 
         CbComboArgList.Visibility = listArg ? Visibility.Visible : Visibility.Collapsed;
         TxtComboArg.Visibility = needsArg && !listArg ? Visibility.Visible : Visibility.Collapsed;
+        // The textbox hint is OBS-worded by default (it was OBS-only first) — Discord's
+        // arguments are volumes/user ids/message text, so it gets its own.
+        TxtComboArg.ToolTip = Loc.Get(_comboPanelTag == "discord" ? "discord_arg_hint" : "obs_arg_hint");
 
-        if (listArg) PopulateObsArgList(cmd!, presetArg ?? CbComboArgList.Text);
+        if (listArg) PopulateListArg(_comboPanelTag!, cmd!, presetArg ?? CbComboArgList.Text);
     }
+
+    /// <summary>Whether the argument for <paramref name="command"/> is picked from a list
+    /// fetched live from the target app, rather than typed free-hand.</summary>
+    private static bool IsListArgCommand(string tag, string command) => tag switch
+    {
+        "obs"     => ObsListArgCommands.Contains(command),
+        "discord" => DiscordListArgCommands.Contains(command),
+        _         => false,
+    };
 
     /// <summary>Fetches the live names for an OBS list-backed command off the UI thread —
     /// <see cref="Services.ObsBridge"/>'s <c>List*Names()</c> connect on demand and can block
@@ -205,12 +267,12 @@ public partial class ButtonActionDialog
     /// <c>ObsBridge.EnsureConnected</c>'s remarks). <see cref="_obsArgFetchToken"/> discards a
     /// stale result if the user picks a different command before this one finishes — the combo
     /// stays editable throughout so typing a name works even while (or instead of) waiting.</summary>
-    private void PopulateObsArgList(string command, string? preselect)
+    private void PopulateListArg(string tag, string command, string? preselect)
     {
         int token = ++_obsArgFetchToken;
         CbComboArgList.Text = preselect ?? "";
 
-        System.Threading.Tasks.Task.Run(() => FetchObsListArg(command))
+        System.Threading.Tasks.Task.Run(() => FetchListArg(tag, command))
             .ContinueWith(t =>
             {
                 if (token != _obsArgFetchToken) return;
@@ -219,7 +281,9 @@ public partial class ButtonActionDialog
             }, System.Threading.Tasks.TaskScheduler.FromCurrentSynchronizationContext());
     }
 
-    private static string[] FetchObsListArg(string command) => command switch
+    private static string[] FetchListArg(string tag, string command) => tag == "discord"
+        ? DiscordBridge.ListVoiceChannels()
+        : command switch
     {
         "Set Current Scene" => ObsBridge.ListSceneNames(),
         "Set Current Profile" => ObsBridge.ListProfileNames(),
@@ -246,6 +310,22 @@ public partial class ButtonActionDialog
         wnd.ShowDialog();
     }
 
+    private void BtnDiscordSettings_Click(object sender, RoutedEventArgs e)
+    {
+        var wnd = new DiscordSettingsWindow { Owner = this };
+        wnd.ShowDialog();
+    }
+
+    /// <summary>Re-scans Windows playback devices without closing the dialog — the list
+    /// only refreshes on open/type-switch otherwise, so plugging a headset in mid-dialog
+    /// would otherwise need a cancel+reopen to show up. Keeps the current selection when
+    /// it's still present.</summary>
+    private void BtnAudioDeviceRefresh_Click(object sender, RoutedEventArgs e)
+    {
+        string? current = CbComboValue.SelectedItem is ComboBoxItem ci ? (string?)ci.Tag : null;
+        PopulateCombo("audiodevice", current);
+    }
+
     private void PopulateCombo(string tag, string? selectValue)
     {
         CbComboValue.Items.Clear();
@@ -269,6 +349,18 @@ public partial class ButtonActionDialog
             foreach (var binding in GoogleHomeStore.List().Where(b => b.IsEnabled))
                 CbComboValue.Items.Add(new ComboBoxItem { Content = binding.Name, Tag = binding.Id });
         }
+        else if (tag == "audiodevice")
+        {
+            // Dynamic list too, but sourced live from Windows itself (not a stored
+            // catalog) — Tag carries the full AudioDevicePayload JSON (id+name) so it can
+            // be saved as-is, and re-matched below by name as well as by id.
+            foreach (var dev in Services.AudioDeviceService.ListPlaybackDevices())
+                CbComboValue.Items.Add(new ComboBoxItem
+                {
+                    Content = dev.Name,
+                    Tag = new AudioDevicePayload { Id = dev.Id, Name = dev.Name }.ToJson(),
+                });
+        }
         else
         {
             foreach (var opt in OptionsFor(tag))
@@ -284,14 +376,32 @@ public partial class ButtonActionDialog
 
         var match = CbComboValue.Items.OfType<ComboBoxItem>()
             .FirstOrDefault(i => string.Equals((string?)i.Tag, selectValue, System.StringComparison.OrdinalIgnoreCase));
-        // For "macro"/"googlehome" (dynamic library lists), no match is a real, expected
-        // state — an imported Base Camp named-macro reference that didn't resolve to any
-        // macro in the user's K2 library (see BaseCampDbImporter.TranslateDefaultAction), or
-        // a Google Home binding the user has since deleted. Defaulting to the first item in
-        // the list here would silently bind the key to an unrelated target the moment the
-        // user opens and saves the dialog without noticing. Fixed enums (oscmd/media/mouse)
-        // keep the old fallback since a mismatch there shouldn't happen.
-        bool dynamicList = tag is "macro" or "googlehome";
+
+        // Id-based match failed — for "audiodevice" specifically, that's the expected
+        // shape of "device was unplugged and reconnected" (Windows can hand it a new
+        // persistent id), not a real mismatch. Fall back to a name match among the
+        // devices currently plugged in, same resolution AudioDeviceService.
+        // TryResolveDeviceId uses at execution time, so the dialog's preselection agrees
+        // with what pressing the key would actually do.
+        if (match is null && tag == "audiodevice" && !string.IsNullOrEmpty(selectValue))
+        {
+            var wanted = AudioDevicePayload.Parse(selectValue);
+            if (wanted is not null && wanted.Name.Length > 0)
+                match = CbComboValue.Items.OfType<ComboBoxItem>()
+                    .FirstOrDefault(i => string.Equals(
+                        AudioDevicePayload.Parse((string?)i.Tag)?.Name, wanted.Name,
+                        System.StringComparison.OrdinalIgnoreCase));
+        }
+
+        // For "macro"/"googlehome"/"audiodevice" (dynamic, live-sourced lists), no match is
+        // a real, expected state — an imported Base Camp named-macro reference that didn't
+        // resolve to any macro in the user's K2 library (see BaseCampDbImporter.
+        // TranslateDefaultAction), a Google Home binding the user has since deleted, or an
+        // audio device that's genuinely not connected right now. Defaulting to the first
+        // item in the list here would silently bind the key to an unrelated target the
+        // moment the user opens and saves the dialog without noticing. Fixed enums
+        // (oscmd/media/mouse) keep the old fallback since a mismatch there shouldn't happen.
+        bool dynamicList = tag is "macro" or "googlehome" or "audiodevice";
         CbComboValue.SelectedItem = match ?? (dynamicList ? null : (CbComboValue.Items.Count > 0 ? CbComboValue.Items[0] : null));
     }
 

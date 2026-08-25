@@ -86,7 +86,20 @@ public partial class MainWindow
         byte page = info.byMMDockMenuIndex;
 
         if (page != _dockLastPage)
+        {
+            // Deliberately App.WriteLog and not LogEverest: this is the only window K2 has
+            // onto what the dock actually does, and it has to survive on a machine whose
+            // log level is turned down (2026-08-23 — a dock screensaver that engages on one
+            // keyboard and not on another, diagnosable only by comparing these lines).
+            // Page codes are listed in this file's header; a page the menu cannot reach
+            // (bitmask bit clear) means the firmware took the screen over by itself, i.e.
+            // the screensaver engaged.
+            App.WriteLog($"[DOCK] page {_dockLastPage} -> {page} after " +
+                         $"{(DateTime.UtcNow - _dockPageSince).TotalSeconds:F0}s  " +
+                         $"(menu=0x{info.byMMDockShowMenu:X2} screenSetup=0x{info.byMMDockScreenSetup:X2} " +
+                         $"ss={info.wMMDockScreenSaver} off={info.wMMDockTurnOff})");
             _dockPageSince = DateTime.UtcNow;
+        }
 
         if (!DockShouldStopFeeding(info))
             FeedDockPage(page);

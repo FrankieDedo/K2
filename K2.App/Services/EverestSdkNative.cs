@@ -196,6 +196,21 @@ internal static class EverestSdkNative
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool GetFWInfo(ref FWInfo fwInfo);
 
+    /// <summary>
+    /// Firmware version of one ATTACHED ACCESSORY, which runs its own MCU and its own
+    /// firmware, independent of the keyboard's: <c>0</c> = Media Dock, <c>1</c> = numpad
+    /// (the same target-device numbering as <c>PicUpdateInfo.byTargetDev</c>; Base Camp
+    /// queries exactly those two, see <c>BaseCamp.Service.Helpers/Everest.cs</c>).
+    /// Returns false for anything else.
+    /// <para>Bound 2026-08-23 while chasing a Media Dock screensaver that engages on one
+    /// keyboard and not on another with identical <c>byMMDockScreenSetup</c> and identical
+    /// keyboard firmware — the dock's own version is the obvious thing to compare, and
+    /// nothing in K2 could read it.</para>
+    /// </summary>
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool GetSubDeviceInfo(int targetDev, ref int fwVer);
+
     /// <summary>Reads the effect table for all profiles.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
