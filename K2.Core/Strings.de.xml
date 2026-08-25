@@ -755,6 +755,9 @@
   <string name="txt_bg_color">Hintergrund:</string>
   <string name="txt_color">Text:</string>
   <string name="txt_position_label">Position:</string>
+  <string name="txt_icon_source_label">Symbolquelle:</string>
+  <string name="txt_icon_source_basecamp">Base Camp</string>
+  <string name="txt_icon_source_k2">K2</string>
   <string name="txt_generate_failed">Das Textbild konnte nicht erstellt werden.</string>
   <string name="dp_open_bc_profile">BaseCamp-Profil öffnen</string>
   <string name="dp_filter_bc_xml">BaseCamp-Profil (*.xml)|*.xml|Alle Dateien|*.*</string>
@@ -871,4 +874,28 @@
   <string name="unhandled_error_domain">Unbehandelter Fehler (Domäne)</string>
   <string name="veh_no_return">Frame-walk: Keine Rücksprungadresse außerhalb von SDKDLL.dll gefunden</string>
   <string name="profile_switch_unsupported">Profil: Profilwechsel auf MacroPad noch nicht unterstützt</string>
+  <!-- DisplayPad live tiles: clock / PC monitor / speed test (dp_clock, dp_sysmon, dp_speedtest) -->
+  <string name="act_dp_clock">Uhr</string>
+  <string name="act_dp_sysmon">PC-Monitor</string>
+  <string name="act_dp_speedtest">Speedtest</string>
+  <string name="cat_live">Live-Kacheln</string>
+  <string name="clock_mode_analog">Analoguhr</string>
+  <string name="clock_mode_digital24">Digitaluhr (24 h)</string>
+  <string name="clock_mode_digital12">Digitaluhr (12 h)</string>
+  <string name="clock_mode_vert24">Vertikale Uhr (24 h)</string>
+  <string name="clock_mode_vert12">Vertikale Uhr (12 h)</string>
+  <string name="clock_mode_hours">Nur Stunden (24 h)</string>
+  <string name="clock_mode_hours12">Nur Stunden (12 h)</string>
+  <string name="clock_mode_minutes">Nur Minuten</string>
+  <string name="clock_mode_seconds">Nur Sekunden</string>
+  <string name="clock_mode_date">Datum</string>
+  <string name="sysmon_cpu">CPU-Auslastung</string>
+  <string name="sysmon_ram">RAM-Auslastung</string>
+  <string name="sysmon_gpu">GPU-Auslastung</string>
+  <string name="sysmon_disk">Datenträgerauslastung</string>
+  <string name="sysmon_net_down">Downloadgeschwindigkeit</string>
+  <string name="sysmon_net_up">Uploadgeschwindigkeit</string>
+  <string name="speedtest_down">Speedtest - Download</string>
+  <string name="speedtest_up">Speedtest - Upload</string>
+  <string name="speedtest_ping">Speedtest - Ping</string>
 </strings>

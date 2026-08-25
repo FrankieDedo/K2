@@ -3373,9 +3373,34 @@ public partial class MainWindow
         ApplyCurrentEffect();
     }
 
+    /// <summary>Debounce timer for the speed slider — see <see cref="SldEvSpeed_ValueChanged"/>.</summary>
+    private DispatcherTimer? _evSpeedApplyTimer;
+
+    /// <summary>
+    /// Speed slider. The slider has 1-unit granularity (0..100, no tick snapping) so the
+    /// firmware's whole speed range can be explored — useful when trying to line the Wave
+    /// up against another device, whose firmware clock runs at a different rate. The wire
+    /// byte is passed through raw all the way to ChangeEffect/ChangeBlockEffect, so every
+    /// intermediate value is actually sent (whether the firmware resolves them all is a
+    /// separate question — that's exactly what the fine slider is for).
+    /// Because of that granularity a drag now produces dozens of ValueChanged events, so
+    /// the apply is DEBOUNCED: without it each one would fire a ChangeEffect plus a
+    /// debounced SaveFlash, flooding the device (and wearing the flash) mid-drag.
+    /// </summary>
     private void SldEvSpeed_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
     {
         if (LblEvSpeed != null) LblEvSpeed.Text = $"{(int)SldEvSpeed.Value}%";
+
+        _evSpeedApplyTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        _evSpeedApplyTimer.Stop();
+        _evSpeedApplyTimer.Tick -= EvSpeedApplyTick;
+        _evSpeedApplyTimer.Tick += EvSpeedApplyTick;
+        _evSpeedApplyTimer.Start();
+    }
+
+    private void EvSpeedApplyTick(object? sender, EventArgs e)
+    {
+        _evSpeedApplyTimer?.Stop();
         ApplyCurrentEffect();
     }
 
@@ -3506,7 +3531,7 @@ public partial class MainWindow
         }
         var caps   = CapsFor(effect);
 
-        // Speed: slider already snaps to 0/25/50/75/100 (scale 0..100, 0=slow, 100=fast).
+        // Speed: raw slider value (scale 0..100, 0=slow, 100=fast, 1-unit steps).
         // The DLL transforms internally for both ChangeEffect and ChangeBlockEffect.
         int speedByte = caps.Speed ? (int)SldEvSpeed.Value : -1;
 

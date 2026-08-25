@@ -51,12 +51,21 @@ public static class GoogleHomeIconCatalog
     /// icon plus its name. Shared by the DisplayPad and Everest numpad key dialogs so the two
     /// don't each re-resolve the binding. False when the binding no longer exists — the caller
     /// then leaves the key's picture alone, same as any other failed auto-icon.</summary>
-    public static bool TryGenerateKeyIcon(string? bindingId, int size, string outputPngPath)
+    public static bool TryGenerateKeyIcon(string? bindingId, int size, string outputPngPath, bool showCaption = true)
     {
         var binding = GoogleHomeStore.Find(bindingId);
         if (binding is null) return false;
         return K2.Core.IconImageGenerator.TryGenerateGoogleHomeIcon(
-            binding.IconName, DeviceNameOnly(binding.Name), size, outputPngPath);
+            binding.IconName, DeviceNameOnly(binding.Name), size, outputPngPath, showCaption);
+    }
+
+    /// <summary>The exact caption <see cref="TryGenerateKeyIcon"/> bakes into the tile for
+    /// this binding — exposed so the key-config dialogs can prefill "Add/Edit text" with it
+    /// instead of stacking new text on top of the already-captioned default icon.</summary>
+    public static string? CaptionFor(string? bindingId)
+    {
+        var binding = GoogleHomeStore.Find(bindingId);
+        return binding is null ? null : DeviceNameOnly(binding.Name);
     }
 
     /// <summary>Drops the room prefix from a "Room / Device" name for use as a key caption: a

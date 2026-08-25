@@ -59,7 +59,6 @@
        embedded so TryGenerateFolderIcon can tint+composite it without depending
        on a font glyph or any file on disk. -->
   <ItemGroup>
-    <EmbeddedResource Include="Assets\dp_folder_template.png" />
   </ItemGroup>
 
   <!-- Emoji catalog: name + category per emoji, generated from Unicode's own
@@ -69,6 +68,17 @@
        tables at runtime (see EmojiGlyphRenderer). -->
   <ItemGroup>
     <EmbeddedResource Include="Assets\emoji_catalog.tsv" />
+  </ItemGroup>
+
+  <!-- Action-picker brand icons that can't be a single-color vector path: the two
+       multi-color logos the user supplied (DaVinci Resolve's app icon, Google Home's
+       four-color house). Everything else in the picker is a single-path vector in
+       ButtonActionDialog.Icons.cs — only these two need a bitmap. Cropped to their
+       alpha bounds and downscaled to 64 px, so both together are under 10 KB.
+       Resource (not Content): referenced from ButtonActionDialog.xaml by pack URI. -->
+  <ItemGroup>
+    <Resource Include="Assets\ActionIcons\davinci.png" />
+    <Resource Include="Assets\ActionIcons\googlehome.png" />
   </ItemGroup>
 
   <!-- Roboto font (SIL OFL 1.1, see Fonts/LICENSE.Roboto.txt): embedded as

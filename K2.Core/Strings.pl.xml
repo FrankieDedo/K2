@@ -756,6 +756,9 @@
   <string name="txt_bg_color">Tło:</string>
   <string name="txt_color">Tekst:</string>
   <string name="txt_position_label">Pozycja:</string>
+  <string name="txt_icon_source_label">Źródło ikony:</string>
+  <string name="txt_icon_source_basecamp">Base Camp</string>
+  <string name="txt_icon_source_k2">K2</string>
   <string name="txt_generate_failed">Nie udało się wygenerować obrazu tekstu.</string>
   <string name="dp_open_bc_profile">Otwórz profil BaseCamp</string>
   <string name="dp_filter_bc_xml">Profil BaseCamp (*.xml)|*.xml|Wszystkie pliki|*.*</string>
@@ -872,4 +875,28 @@
   <string name="unhandled_error_domain">Nieobsłużony błąd (domena)</string>
   <string name="veh_no_return">Frame-walk: nie znaleziono adresu powrotu poza SDKDLL.dll</string>
   <string name="profile_switch_unsupported">profil: zmiana profilu nie jest jeszcze obsługiwana na MacroPad</string>
+  <!-- DisplayPad live tiles: clock / PC monitor / speed test (dp_clock, dp_sysmon, dp_speedtest) -->
+  <string name="act_dp_clock">Zegar</string>
+  <string name="act_dp_sysmon">Monitor PC</string>
+  <string name="act_dp_speedtest">Test prędkości</string>
+  <string name="cat_live">Klawisze na żywo</string>
+  <string name="clock_mode_analog">Zegar analogowy</string>
+  <string name="clock_mode_digital24">Zegar cyfrowy (24 h)</string>
+  <string name="clock_mode_digital12">Zegar cyfrowy (12 h)</string>
+  <string name="clock_mode_vert24">Zegar pionowy (24 h)</string>
+  <string name="clock_mode_vert12">Zegar pionowy (12 h)</string>
+  <string name="clock_mode_hours">Tylko godziny (24 h)</string>
+  <string name="clock_mode_hours12">Tylko godziny (12 h)</string>
+  <string name="clock_mode_minutes">Tylko minuty</string>
+  <string name="clock_mode_seconds">Tylko sekundy</string>
+  <string name="clock_mode_date">Data</string>
+  <string name="sysmon_cpu">Użycie CPU</string>
+  <string name="sysmon_ram">Użycie RAM</string>
+  <string name="sysmon_gpu">Użycie GPU</string>
+  <string name="sysmon_disk">Użycie dysku</string>
+  <string name="sysmon_net_down">Prędkość pobierania</string>
+  <string name="sysmon_net_up">Prędkość wysyłania</string>
+  <string name="speedtest_down">Test prędkości - pobieranie</string>
+  <string name="speedtest_up">Test prędkości - wysyłanie</string>
+  <string name="speedtest_ping">Test prędkości - ping</string>
 </strings>

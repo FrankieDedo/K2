@@ -246,6 +246,20 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex) { App.WriteLog("[Everest.Init] GetFWInfo threw: " + ex); }
 
+        // Accessory firmware versions. The Media Dock and the numpad each run their own
+        // MCU, so "same keyboard firmware" says nothing about them — and the dock's
+        // version is the first thing to compare when the dock behaves differently on two
+        // otherwise identical setups (2026-08-23, screensaver investigation).
+        try
+        {
+            int dockVer = 0, numpadVer = 0;
+            bool d = EverestSdkNative.GetSubDeviceInfo(0, ref dockVer);
+            bool n = EverestSdkNative.GetSubDeviceInfo(1, ref numpadVer);
+            App.WriteLog($"[Everest.Init] GetSubDeviceInfo dock={d} 0x{dockVer:X4}  " +
+                         $"numpad={n} 0x{numpadVer:X4}");
+        }
+        catch (Exception ex) { App.WriteLog("[Everest.Init] GetSubDeviceInfo threw: " + ex); }
+
         try
         {
             var effectMenu = new EverestSdkNative.EffectMenu();
@@ -731,7 +745,7 @@ public sealed class EverestService : IDisposable
         {
             bool rainbowB = randomColor || def.ByRandColor != 0;
             // bySpeed: scale 0..100 (0=slow, 100=fast) for both block and non-block.
-            // The UI sends 0/25/50/75/100 directly (5 positions).
+            // The UI sends any value in 0..100 (1-unit granularity).
             // If the JSON has bySpeed >= 0 it's used as an override.
             byte spdB = (byte)(effSpeed >= 0 ? Math.Clamp(effSpeed, 0, 100) : 50);
             byte dirB     = (byte)(effDir >= 0 ? effDir : 0);

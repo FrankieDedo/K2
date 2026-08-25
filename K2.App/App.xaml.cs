@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -264,6 +264,11 @@ public partial class App : Application
         // Same idea for the app-wide accent color theme (Settings > Accent color:
         // K2 Red vs Mountain Blue) — see AccentCatalog.Apply.
         AccentCatalog.Apply(AppSettings.AccentTheme);
+
+        // The Discord connect/OAuth flow has no per-call log action of its own (it runs from
+        // a settings window, not from ButtonActionEngine) — give it the app log so a failed
+        // connection leaves a trace instead of only a message on screen.
+        Core.Services.DiscordBridge.Log = WriteLog;
 
         if (!_singleInstanceGranted)
         {

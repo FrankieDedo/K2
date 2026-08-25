@@ -743,6 +743,9 @@
   <string name="txt_bg_color">Fond :</string>
   <string name="txt_color">Texte :</string>
   <string name="txt_position_label">Position :</string>
+  <string name="txt_icon_source_label">Source de l'icône :</string>
+  <string name="txt_icon_source_basecamp">Base Camp</string>
+  <string name="txt_icon_source_k2">K2</string>
   <string name="txt_generate_failed">Impossible de générer l'image de texte.</string>
   <string name="dp_open_bc_profile">Ouvrir un profil BaseCamp</string>
   <string name="dp_filter_bc_xml">Profil BaseCamp (*.xml)|*.xml|Tous les fichiers|*.*</string>
@@ -857,4 +860,28 @@
   <string name="unhandled_error_domain">Erreur non gérée (domaine)</string>
   <string name="veh_no_return">Frame-walk : aucune adresse de retour trouvée hors de SDKDLL.dll</string>
   <string name="profile_switch_unsupported">profil : changement de profil pas encore pris en charge sur MacroPad</string>
+  <!-- DisplayPad live tiles: clock / PC monitor / speed test (dp_clock, dp_sysmon, dp_speedtest) -->
+  <string name="act_dp_clock">Horloge</string>
+  <string name="act_dp_sysmon">Moniteur PC</string>
+  <string name="act_dp_speedtest">Test de débit</string>
+  <string name="cat_live">Touches live</string>
+  <string name="clock_mode_analog">Horloge analogique</string>
+  <string name="clock_mode_digital24">Horloge numérique (24 h)</string>
+  <string name="clock_mode_digital12">Horloge numérique (12 h)</string>
+  <string name="clock_mode_vert24">Horloge verticale (24 h)</string>
+  <string name="clock_mode_vert12">Horloge verticale (12 h)</string>
+  <string name="clock_mode_hours">Heures seules (24 h)</string>
+  <string name="clock_mode_hours12">Heures seules (12 h)</string>
+  <string name="clock_mode_minutes">Minutes seules</string>
+  <string name="clock_mode_seconds">Secondes seules</string>
+  <string name="clock_mode_date">Date</string>
+  <string name="sysmon_cpu">Utilisation CPU</string>
+  <string name="sysmon_ram">Utilisation RAM</string>
+  <string name="sysmon_gpu">Utilisation GPU</string>
+  <string name="sysmon_disk">Utilisation disque</string>
+  <string name="sysmon_net_down">Débit descendant</string>
+  <string name="sysmon_net_up">Débit montant</string>
+  <string name="speedtest_down">Test de débit - descendant</string>
+  <string name="speedtest_up">Test de débit - montant</string>
+  <string name="speedtest_ping">Test de débit - ping</string>
 </strings>

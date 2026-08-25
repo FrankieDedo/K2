@@ -943,12 +943,12 @@
                                                         BorderThickness="1" ClipToBounds="True">
                                                         <Grid>
                                                             <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="5"/>
+                                                                <ColumnDefinition Width="9"/>
                                                                 <ColumnDefinition Width="*"/>
                                                             </Grid.ColumnDefinitions>
                                                             <Border Grid.Column="0"
                                                                 Background="{DynamicResource K2AccentBrush}"
-                                                                CornerRadius="5,0,0,5"/>
+                                                                CornerRadius="13,0,0,13"/>
                                                             <Image Grid.Column="1" Source="{Binding ImagePath}"
                                                                Stretch="Uniform" HorizontalAlignment="Right"
                                                                VerticalAlignment="Bottom"
@@ -1322,7 +1322,7 @@
                                                             <StackPanel x:Name="PnlEvSpeed" Orientation="Horizontal" Margin="0,0,12,0">
                                                                 <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                                                 <Slider x:Name="SldEvSpeed" Minimum="0" Maximum="100" Width="110"
-                                                                    TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                                                                    TickFrequency="25" SmallChange="1" LargeChange="5" TickPlacement="BottomRight"
                                                                     ValueChanged="SldEvSpeed_ValueChanged" VerticalAlignment="Center"/>
                                                                 <TextBlock x:Name="LblEvSpeed" Text="50%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
                                                             </StackPanel>
@@ -1458,7 +1458,7 @@
                                                                     <StackPanel Orientation="Horizontal">
                                                                         <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                                                         <Slider x:Name="SldCustomFxSpeed" Minimum="0" Maximum="100" Width="100"
-                                                                            TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                                                                            TickFrequency="25" SmallChange="1" LargeChange="5" TickPlacement="BottomRight"
                                                                             ValueChanged="SldCustomFxSpeed_ValueChanged" VerticalAlignment="Center"/>
                                                                         <TextBlock x:Name="LblCustomFxSpeed" Text="50%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
                                                                     </StackPanel>
@@ -2702,7 +2702,7 @@
                                                         <StackPanel x:Name="PnlMpSpeed" Orientation="Horizontal" >
                                                             <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" />
                                                             <Slider x:Name="SldMacroSpeed" Minimum="0" Maximum="100" Width="110"
-                                                        TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                                                        TickFrequency="25" SmallChange="1" LargeChange="5" TickPlacement="BottomRight"
                                                         ValueChanged="SldMacroSpeed_ValueChanged" VerticalAlignment="Center" Margin="10,0,0,0"/>
                                                             <TextBlock x:Name="LblMacroSpeed" Text="50%" VerticalAlignment="Center"  MinWidth="36" Margin="10,0,0,0"/>
                                                         </StackPanel>
@@ -2799,7 +2799,7 @@
                                                             <StackPanel Orientation="Horizontal">
                                                                 <TextBlock Text="{loc:Get rgb_speed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                                                 <Slider x:Name="SldMpCustomFxSpeed" Minimum="0" Maximum="100" Width="100"
-                                                                TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                                                                TickFrequency="25" SmallChange="1" LargeChange="5" TickPlacement="BottomRight"
                                                                 ValueChanged="SldMpCustomFxSpeed_ValueChanged" VerticalAlignment="Center"/>
                                                                 <TextBlock x:Name="LblMpCustomFxSpeed" Text="50%" VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="36"/>
                                                             </StackPanel>
@@ -3657,12 +3657,6 @@
                                       Click="CkStartMinToTray_Click" FontSize="14" Margin="0,12,0,0"/>
                                     <TextBlock Text="{loc:Get settings_start_min_tray_hint}" Foreground="#9A9AA2"
                                        TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
-                                    <Button x:Name="BtnAppExportLog" Content="{loc:Get settings_export_log_btn}"
-                                    Padding="8,4" HorizontalAlignment="Left" Margin="0,16,0,0"
-                                    Click="BtnAppExportLog_Click"
-                                    Style="{StaticResource K2IconButton}" Tag="&#xE898;"/>
-                                    <TextBlock Text="{loc:Get settings_export_log_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
                                 </StackPanel>
                             </GroupBox>
 
@@ -3692,6 +3686,12 @@
                                       SelectionChanged="CmbAppAccentColor_SelectionChanged"/>
                                     <TextBlock Text="{loc:Get settings_accent_color_hint}" Foreground="#9A9AA2"
                                        TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
+
+                                    <TextBlock Text="{loc:Get settings_icon_color}" FontSize="14" Margin="0,16,0,0"/>
+                                    <ComboBox x:Name="CmbAppIconColor" Width="220" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                      SelectionChanged="CmbAppIconColor_SelectionChanged"/>
+                                    <TextBlock Text="{loc:Get settings_icon_color_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
                                 </StackPanel>
                             </GroupBox>
 
@@ -3710,15 +3710,6 @@
                                 </StackPanel>
                             </GroupBox>
 
-                            <CheckBox x:Name="CkAppDebugMode" Content="{loc:Get settings_debug_mode}"
-                              Click="CkAppDebugMode_Click" FontSize="14"/>
-                            <TextBlock Text="{loc:Get settings_debug_mode_hint}" Foreground="#9A9AA2"
-                               TextWrapping="Wrap" Margin="20,4,0,20" FontSize="12"/>
-
-                            <!-- Native USB engines (DisplayPad/Everest raw-HID) are hardcoded ON —
-                         see AppSettings.DisplayPadNativeEngine. The Debug Mode opt-out
-                         checkboxes that used to live here were removed 2026-07-16. -->
-
                             <GroupBox x:Name="GbAppLogLevel" Header="{loc:Get settings_log_level}" Margin="0,4,0,0">
                                 <StackPanel Margin="8">
                                     <RadioButton x:Name="RbLogOff"     Content="{loc:Get log_off}"
@@ -3727,32 +3718,48 @@
                                          GroupName="AppLogLevel" Margin="0,4" Checked="RbLogLevel_Checked"/>
                                     <RadioButton x:Name="RbLogVerbose" Content="{loc:Get log_verbose}"
                                          GroupName="AppLogLevel" Margin="0,4" Checked="RbLogLevel_Checked"/>
+
+                                    <Button x:Name="BtnAppExportLog" Content="{loc:Get settings_export_log_btn}"
+                                    Padding="8,4" HorizontalAlignment="Left" Margin="0,16,0,0"
+                                    Click="BtnAppExportLog_Click"
+                                    Style="{StaticResource K2IconButton}" Tag="&#xE898;"/>
+                                    <TextBlock Text="{loc:Get settings_export_log_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
                                 </StackPanel>
                             </GroupBox>
 
-                            <CheckBox x:Name="CkAutoStopBaseCamp" Content="{loc:Get settings_auto_stop_bc}"
-                              Click="CkAutoStopBaseCamp_Click" FontSize="14" Margin="0,20,0,0"/>
-                            <TextBlock Text="{loc:Get settings_auto_stop_bc_hint}" Foreground="#9A9AA2"
-                               TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                            <GroupBox x:Name="GbAppBcInteractions" Header="{loc:Get settings_bc_interactions_group}" Margin="0,20,0,0">
+                                <StackPanel Margin="8">
+                                    <CheckBox x:Name="CkAutoStopBaseCamp" Content="{loc:Get settings_auto_stop_bc}"
+                                      Click="CkAutoStopBaseCamp_Click" FontSize="14"/>
+                                    <TextBlock Text="{loc:Get settings_auto_stop_bc_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
 
-                            <CheckBox x:Name="CkKillBcWorker" Content="{loc:Get settings_kill_bc_worker}"
-                              Click="CkKillBcWorker_Click" FontSize="14" Margin="0,16,0,0"/>
-                            <TextBlock Text="{loc:Get settings_kill_bc_worker_hint}" Foreground="#9A9AA2"
-                               TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                                    <CheckBox x:Name="CkKillBcWorker" Content="{loc:Get settings_kill_bc_worker}"
+                                      Click="CkKillBcWorker_Click" FontSize="14" Margin="0,16,0,0"/>
+                                    <TextBlock Text="{loc:Get settings_kill_bc_worker_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
 
-                            <CheckBox x:Name="CkRestartBcOnClose" Content="{loc:Get settings_restart_bc_on_close}"
-                              Click="CkRestartBcOnClose_Click" FontSize="14" Margin="0,16,0,0"/>
-                            <TextBlock Text="{loc:Get settings_restart_bc_on_close_hint}" Foreground="#9A9AA2"
-                               TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                                    <CheckBox x:Name="CkRestartBcOnClose" Content="{loc:Get settings_restart_bc_on_close}"
+                                      Click="CkRestartBcOnClose_Click" FontSize="14" Margin="0,16,0,0"/>
+                                    <TextBlock Text="{loc:Get settings_restart_bc_on_close_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
 
-                            <CheckBox x:Name="CkBcAutostart" Content="{loc:Get settings_bc_autostart}"
-                              Click="CkBcAutostart_Click" FontSize="14" Margin="0,16,0,0"/>
-                            <TextBlock x:Name="TxtBcAutostartHint" Text="{loc:Get settings_bc_autostart_hint}"
-                               Foreground="#9A9AA2" TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                                    <CheckBox x:Name="CkBcAutostart" Content="{loc:Get settings_bc_autostart}"
+                                      Click="CkBcAutostart_Click" FontSize="14" Margin="0,16,0,0"/>
+                                    <TextBlock x:Name="TxtBcAutostartHint" Text="{loc:Get settings_bc_autostart_hint}"
+                                       Foreground="#9A9AA2" TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                                </StackPanel>
+                            </GroupBox>
 
                             <GroupBox x:Name="GbAppDanger" Header="{loc:Get settings_danger_zone}"
                               Margin="0,24,0,0" BorderBrush="{StaticResource K2DangerBrush}">
                                 <StackPanel Margin="8">
+                                    <CheckBox x:Name="CkAppDebugMode" Content="{loc:Get settings_debug_mode}"
+                                      Click="CkAppDebugMode_Click" FontSize="14"/>
+                                    <TextBlock Text="{loc:Get settings_debug_mode_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="20,4,0,16" FontSize="12"/>
+
                                     <Button x:Name="BtnAppRestoreDefaults" Content="{loc:Get restore_defaults_app}"
                                     Padding="8,4" HorizontalAlignment="Left"
                                     Click="BtnAppRestoreDefaults_Click"

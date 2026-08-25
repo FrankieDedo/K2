@@ -736,6 +736,9 @@
   <string name="txt_bg_color">背景:</string>
   <string name="txt_color">テキスト:</string>
   <string name="txt_position_label">位置:</string>
+  <string name="txt_icon_source_label">アイコンの元:</string>
+  <string name="txt_icon_source_basecamp">Base Camp</string>
+  <string name="txt_icon_source_k2">K2</string>
   <string name="txt_generate_failed">テキスト画像を生成できませんでした。</string>
   <string name="dp_open_bc_profile">BaseCamp プロファイルを開く</string>
   <string name="dp_filter_bc_xml">BaseCamp プロファイル (*.xml)|*.xml|すべてのファイル|*.*</string>
@@ -848,4 +851,28 @@
   <string name="unhandled_error_domain">未処理のエラー (ドメイン)</string>
   <string name="veh_no_return">Frame-walk: SDKDLL.dll 外の戻りアドレスが見つかりませんでした</string>
   <string name="profile_switch_unsupported">プロファイル: MacroPad でのプロファイル切り替えはまだ未対応です</string>
+  <!-- DisplayPad live tiles: clock / PC monitor / speed test (dp_clock, dp_sysmon, dp_speedtest) -->
+  <string name="act_dp_clock">時計</string>
+  <string name="act_dp_sysmon">PC モニター</string>
+  <string name="act_dp_speedtest">スピードテスト</string>
+  <string name="cat_live">ライブキー</string>
+  <string name="clock_mode_analog">アナログ時計</string>
+  <string name="clock_mode_digital24">デジタル時計 (24時間)</string>
+  <string name="clock_mode_digital12">デジタル時計 (12時間)</string>
+  <string name="clock_mode_vert24">縦型時計 (24時間)</string>
+  <string name="clock_mode_vert12">縦型時計 (12時間)</string>
+  <string name="clock_mode_hours">時のみ (24時間)</string>
+  <string name="clock_mode_hours12">時のみ (12時間)</string>
+  <string name="clock_mode_minutes">分のみ</string>
+  <string name="clock_mode_seconds">秒のみ</string>
+  <string name="clock_mode_date">日付</string>
+  <string name="sysmon_cpu">CPU 使用率</string>
+  <string name="sysmon_ram">RAM 使用率</string>
+  <string name="sysmon_gpu">GPU 使用率</string>
+  <string name="sysmon_disk">ディスク使用率</string>
+  <string name="sysmon_net_down">ダウンロード速度</string>
+  <string name="sysmon_net_up">アップロード速度</string>
+  <string name="speedtest_down">スピードテスト - ダウンロード</string>
+  <string name="speedtest_up">スピードテスト - アップロード</string>
+  <string name="speedtest_ping">スピードテスト - ping</string>
 </strings>

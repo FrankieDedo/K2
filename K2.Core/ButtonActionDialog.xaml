@@ -1,4 +1,4 @@
-<Window x:Class="K2.Core.ButtonActionDialog"
+﻿<Window x:Class="K2.Core.ButtonActionDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:K2.Core"
@@ -36,6 +36,58 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Shared chrome for the breadcrumb crumbs (type trigger) AND every picker-overlay
+             card (category/action/sub-action) — same accent-stripe + rounded card look
+             throughout, just sized differently (crumbs: Auto width, content-sized; overlay
+             cards: stretch to fill their UniformGrid cell). -->
+        <ControlTemplate x:Key="CrumbCardTemplate" TargetType="Button">
+            <Border x:Name="Card" CornerRadius="8" Background="#221F26"
+                    BorderBrush="#2A2A32" BorderThickness="1" ClipToBounds="True">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="4"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Background="{DynamicResource K2AccentBrush}"
+                            CornerRadius="8,0,0,8"/>
+                    <ContentPresenter Grid.Column="1" Margin="10,6,12,6"
+                                       VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource K2AccentBrush}"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- Card chrome shared by all three picker-overlay grids (category/action/sub-action):
+             accent stripe + rounded border, same family as CrumbCardTemplate above. Each
+             item's DataTemplate sets Content to a Grid with the icon (bottom-right, a little
+             breathing room, never overflowing) + normal-case name (top-left) bound to the
+             item VM — mirrors the crumb's ContentPresenter approach so hover/click stay
+             simple ControlTemplate.Triggers instead of RelativeSource DataTriggers. -->
+        <ControlTemplate x:Key="PickerCardTemplate" TargetType="Button">
+            <Border x:Name="Card" CornerRadius="10" Background="#221F26"
+                    BorderBrush="#2A2A32" BorderThickness="1" ClipToBounds="True">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="6"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Background="{DynamicResource K2AccentBrush}"
+                            CornerRadius="10,0,0,10"/>
+                    <ContentPresenter Grid.Column="1"/>
+                </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource K2AccentBrush}"/>
+                    <Setter TargetName="Card" Property="Background" Value="{DynamicResource K2AccentBrush}"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
     </Window.Resources>
     <Grid Margin="14">
         <Grid.RowDefinitions>
@@ -50,8 +102,54 @@
                    Text="{loc:Get dlg_button_label}"
                    FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
 
-        <TextBlock Grid.Row="1" Text="{loc:Get dlg_action_type}" Margin="0,0,0,4"/>
-        <ComboBox  Grid.Row="2" x:Name="CbType"
+        <TextBlock x:Name="LblActionType" Grid.Row="1" Text="{loc:Get dlg_action_type}" Margin="0,0,0,4"/>
+
+        <!-- Type trigger: a breadcrumb of 2-3 clickable crumbs (Category > Action [> Sub-action])
+             showing the selection tree, each reopening the inline PickerPanel at its own level
+             so any step can be changed without re-walking the whole tree. CbType/CbComboValue
+             stay in the tree (Collapsed) as the single source of truth every other panel/
+             handler already reads from — see ButtonActionDialog.TypePicker.cs.
+             Hidden (with its label) while the picker is open: mid-pick the chain still shows
+             the PREVIOUS selection, which reads as stale/contradictory next to the grid the
+             user is choosing from — the picker's own title + back arrow carry the context
+             there instead. -->
+        <StackPanel x:Name="PnlBreadcrumb" Grid.Row="2" Orientation="Horizontal">
+            <Button x:Name="BtnCrumbCategory" Click="BtnCrumbCategory_Click" Height="40"
+                    Cursor="Hand" Background="Transparent" BorderThickness="0" Padding="0"
+                    Template="{StaticResource CrumbCardTemplate}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="TxtCrumbCategoryGlyph" FontSize="16" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtCrumbCategoryName" FontSize="13" VerticalAlignment="Center"
+                               Margin="8,0,0,0" Foreground="{StaticResource K2TextBrush}"/>
+                </StackPanel>
+            </Button>
+            <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                       Foreground="#6A6A72" VerticalAlignment="Center" Margin="6,0"/>
+            <Button x:Name="BtnCrumbAction" Click="BtnCrumbAction_Click" Height="40"
+                    Cursor="Hand" Background="Transparent" BorderThickness="0" Padding="0"
+                    Template="{StaticResource CrumbCardTemplate}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="TxtCrumbActionGlyph" FontSize="16" VerticalAlignment="Center"/>
+                    <Path x:Name="PathCrumbActionIcon" Stretch="Uniform"
+                          VerticalAlignment="Center" Visibility="Collapsed"/>
+                    <Image x:Name="ImgCrumbActionIcon" Width="16" Height="16" Stretch="Uniform"
+                           RenderOptions.BitmapScalingMode="HighQuality"
+                           VerticalAlignment="Center" Visibility="Collapsed"/>
+                    <TextBlock x:Name="TxtCrumbActionName" FontSize="13" VerticalAlignment="Center"
+                               Margin="8,0,0,0" Foreground="{StaticResource K2TextBrush}"/>
+                </StackPanel>
+            </Button>
+            <TextBlock x:Name="TxtCrumbChevron2" Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                       Foreground="#6A6A72" VerticalAlignment="Center" Margin="6,0" Visibility="Collapsed"/>
+            <Button x:Name="BtnCrumbSubAction" Click="BtnCrumbSubAction_Click" Height="40"
+                    Cursor="Hand" Background="Transparent" BorderThickness="0" Padding="0"
+                    Visibility="Collapsed" Template="{StaticResource CrumbCardTemplate}">
+                <TextBlock x:Name="TxtCrumbSubActionName" FontSize="13" VerticalAlignment="Center"
+                           Foreground="{StaticResource K2TextBrush}"/>
+            </Button>
+        </StackPanel>
+
+        <ComboBox  Grid.Row="2" x:Name="CbType" Visibility="Collapsed"
                    SelectionChanged="CbType_SelectionChanged">
             <ComboBoxItem Content="{loc:Get act_none}"                  Tag="none"/>
             <ComboBoxItem Content="{loc:Get act_disable}"           Tag="disable"/>
@@ -70,6 +168,10 @@
             <ComboBoxItem Content="{loc:Get act_command}"         Tag="command"/>
             <ComboBoxItem Content="{loc:Get act_text}"            Tag="text"/>
             <ComboBoxItem Content="{loc:Get act_emoji}"           Tag="emoji"/>
+            <ComboBoxItem Content="{loc:Get act_emojibrowser}"    Tag="dp_emojibrowser"/>
+            <ComboBoxItem Content="{loc:Get act_dp_clock}"        Tag="dp_clock"/>
+            <ComboBoxItem Content="{loc:Get act_dp_sysmon}"       Tag="dp_sysmon"/>
+            <ComboBoxItem Content="{loc:Get act_dp_speedtest}"    Tag="dp_speedtest"/>
             <ComboBoxItem Content="{loc:Get act_macro}"            Tag="macro"/>
             <ComboBoxItem Content="{loc:Get act_googlehome}"       Tag="googlehome"/>
             <ComboBoxItem Content="{loc:Get act_adobe}"            Tag="adobe"/>
@@ -78,12 +180,15 @@
             <ComboBoxItem Content="{loc:Get act_obs}"              Tag="obs"/>
             <ComboBoxItem Content="{loc:Get act_twitch}"           Tag="twitch"/>
             <ComboBoxItem Content="{loc:Get act_spotify}"          Tag="spotify"/>
+            <ComboBoxItem Content="{loc:Get act_discord}"          Tag="discord"/>
+            <ComboBoxItem Content="{loc:Get act_audiodevice}"      Tag="audiodevice"/>
             <ComboBoxItem Content="{loc:Get act_youtube}"          Tag="youtube"/>
             <ComboBoxItem Content="{loc:Get act_pyscript}"         Tag="pyscript"/>
         </ComboBox>
 
-        <!-- Content area: standard panel OR Python Script panel -->
-        <Grid Grid.Row="3" Margin="0,12,0,0">
+        <!-- Content area: standard panel OR Python Script panel. Hidden as a whole while
+             the inline type picker (PickerPanel, same Grid.Row) is showing. -->
+        <Grid x:Name="ConfigPanels" Grid.Row="3" Margin="0,12,0,0">
 
             <!-- Standard panel (all types except pyscript) -->
             <Grid x:Name="StandardPanel">
@@ -321,8 +426,13 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
-                <TextBlock x:Name="LblComboPanel" Grid.Row="0" Margin="0,0,0,4"/>
-                <ComboBox  x:Name="CbComboValue" Grid.Row="1" SelectionChanged="CbComboValue_SelectionChanged"/>
+                <!-- The value itself is now picked via the breadcrumb's 3rd crumb (see
+                     ButtonActionDialog.TypePicker.cs) — Label+ComboBox stay in the tree
+                     (Collapsed) as CbComboValue is still the source of truth every handler
+                     below (arg textbox/list, save) reads from. -->
+                <TextBlock x:Name="LblComboPanel" Grid.Row="0" Margin="0,0,0,4" Visibility="Collapsed"/>
+                <ComboBox  x:Name="CbComboValue" Grid.Row="1" Visibility="Collapsed"
+                           SelectionChanged="CbComboValue_SelectionChanged"/>
                 <TextBox   x:Name="TxtComboArg" Grid.Row="2" Height="25" Margin="0,8,0,0"
                            Visibility="Collapsed" ToolTip="{loc:Get obs_arg_hint}"/>
                 <ComboBox  x:Name="CbComboArgList" Grid.Row="2" Margin="0,8,0,0" IsEditable="True"
@@ -339,6 +449,12 @@
                 <Button    x:Name="BtnSpotifySettings" Grid.Row="3" Margin="0,8,0,0"
                            Content="{loc:Get spotify_settings_button}" HorizontalAlignment="Left"
                            Visibility="Collapsed" Click="BtnSpotifySettings_Click"/>
+                <Button    x:Name="BtnDiscordSettings" Grid.Row="3" Margin="0,8,0,0"
+                           Content="{loc:Get discord_settings_button}" HorizontalAlignment="Left"
+                           Visibility="Collapsed" Click="BtnDiscordSettings_Click"/>
+                <Button    x:Name="BtnAudioDeviceRefresh" Grid.Row="3" Margin="0,8,0,0"
+                           Content="{loc:Get audiodevice_refresh_button}" HorizontalAlignment="Left"
+                           Visibility="Collapsed" Click="BtnAudioDeviceRefresh_Click"/>
             </Grid>
 
             <!-- Keys panel -->
@@ -576,5 +692,159 @@
             <Button Content="{loc:Get save}"   Width="90" Padding="6,2" Margin="8,0,0,0"
                     IsDefault="True"  Click="BtnSave_Click"/>
         </StackPanel>
+
+        <!-- Type picker, INLINE in the dialog's own content row (same Grid.Row as
+             ConfigPanels above, shown instead of it — not a floating overlay/second popup):
+             category cards (level 1) -> action cards (level 2) -> sub-action cards (level 3).
+             Replaces CbType/CbComboValue's native dropdowns. See ButtonActionDialog.TypePicker.cs. -->
+        <Grid x:Name="PickerPanel" Grid.Row="3" Margin="0,12,0,0" Visibility="Collapsed">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="BtnPickerBack" Grid.Column="0" Content="&#xE72B;"
+                                FontFamily="Segoe MDL2 Assets" FontSize="15"
+                                Background="Transparent" BorderThickness="0" Foreground="{StaticResource K2TextBrush}"
+                                Cursor="Hand" Padding="6,2" Margin="0,0,10,0"
+                                ToolTip="{loc:Get picker_back}" Visibility="Collapsed"
+                                Click="BtnPickerBack_Click"/>
+                        <TextBlock x:Name="LblPickerTitle" Grid.Column="1" Text="{loc:Get picker_pick_category}"
+                                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <Button x:Name="BtnPickerClose" Grid.Column="2" Content="&#xE711;"
+                                FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                Background="Transparent" BorderThickness="0" Foreground="#9A9AA2"
+                                Cursor="Hand" Padding="6,2" Click="BtnPickerClose_Click"/>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <!-- Top-aligned: without it the ScrollViewer stretches this Grid to
+                             the full viewport height and the UniformGrid inside splits that
+                             height evenly across its rows, leaving a big gap between card
+                             rows whenever the grid is shorter than the dialog. -->
+                        <Grid VerticalAlignment="Top">
+                            <ItemsControl x:Name="IcPickerCategories">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="4"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button x:Name="ItemBtn" Click="CategoryCard_Click" Tag="{Binding Key}"
+                                                Cursor="Hand" Margin="4" Height="88"
+                                                Background="Transparent" BorderThickness="0" Padding="0"
+                                                HorizontalContentAlignment="Stretch"
+                                                Template="{StaticResource PickerCardTemplate}">
+                                            <Grid>
+                                                <TextBlock Text="{Binding Glyph}" FontSize="20"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                           Margin="0,0,10,8"/>
+                                                <TextBlock x:Name="TxtName" Text="{Binding Name}"
+                                                           FontSize="13" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource K2TextBrush}"
+                                                           Margin="12,8,8,8" TextWrapping="Wrap"
+                                                           VerticalAlignment="Top"/>
+                                            </Grid>
+                                        </Button>
+                                        <DataTemplate.Triggers>
+                                            <Trigger SourceName="ItemBtn" Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="TxtName" Property="Foreground" Value="White"/>
+                                            </Trigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <ItemsControl x:Name="IcPickerActions" Visibility="Collapsed">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="4"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button x:Name="ItemBtn" Click="ActionCard_Click" Tag="{Binding Tag}"
+                                                Cursor="Hand" Margin="4" Height="88"
+                                                Background="Transparent" BorderThickness="0" Padding="0"
+                                                HorizontalContentAlignment="Stretch"
+                                                Template="{StaticResource PickerCardTemplate}">
+                                            <Grid>
+                                                <TextBlock Text="{Binding Glyph}" FontSize="20"
+                                                           Visibility="{Binding GlyphVisibility}"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                           Margin="0,0,10,8"/>
+                                                <Path Data="{Binding IconPathData}" Fill="{Binding IconColor}"
+                                                      Stretch="Uniform"
+                                                      Width="{Binding IconWidth}" Height="{Binding IconHeight}"
+                                                      Visibility="{Binding IconVisibility}"
+                                                      HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                      Margin="0,0,10,8"/>
+                                                <Image Source="{Binding IconImageUri}"
+                                                       Width="{Binding IconWidth}" Height="{Binding IconHeight}"
+                                                       Stretch="Uniform"
+                                                       Visibility="{Binding ImageVisibility}"
+                                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                       Margin="0,0,10,8"/>
+                                                <TextBlock x:Name="TxtName" Text="{Binding Name}"
+                                                           FontSize="13" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource K2TextBrush}"
+                                                           Margin="12,8,8,8" TextWrapping="Wrap"
+                                                           VerticalAlignment="Top"/>
+                                            </Grid>
+                                        </Button>
+                                        <DataTemplate.Triggers>
+                                            <Trigger SourceName="ItemBtn" Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="TxtName" Property="Foreground" Value="White"/>
+                                            </Trigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <ItemsControl x:Name="IcPickerSubActions" Visibility="Collapsed">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="4"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button x:Name="ItemBtn" Click="SubActionCard_Click" Tag="{Binding Value}"
+                                                Cursor="Hand" Margin="4" Height="88"
+                                                Background="Transparent" BorderThickness="0" Padding="0"
+                                                HorizontalContentAlignment="Stretch"
+                                                Template="{StaticResource PickerCardTemplate}">
+                                            <Grid>
+                                                <TextBlock Text="{Binding Glyph}" FontSize="20"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                           Margin="0,0,10,8"/>
+                                                <TextBlock x:Name="TxtName" Text="{Binding Name}"
+                                                           FontSize="13" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource K2TextBrush}"
+                                                           Margin="12,8,8,8" TextWrapping="Wrap"
+                                                           VerticalAlignment="Top"/>
+                                            </Grid>
+                                        </Button>
+                                        <DataTemplate.Triggers>
+                                            <Trigger SourceName="ItemBtn" Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="TxtName" Property="Foreground" Value="White"/>
+                                            </Trigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
+        </Grid>
     </Grid>
 </Window>

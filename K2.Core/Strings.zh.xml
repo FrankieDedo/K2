@@ -743,6 +743,9 @@
   <string name="txt_bg_color">背景:</string>
   <string name="txt_color">文字:</string>
   <string name="txt_position_label">位置:</string>
+  <string name="txt_icon_source_label">图标来源:</string>
+  <string name="txt_icon_source_basecamp">Base Camp</string>
+  <string name="txt_icon_source_k2">K2</string>
   <string name="txt_generate_failed">无法生成文字图片。</string>
   <string name="dp_open_bc_profile">打开 BaseCamp 配置文件</string>
   <string name="dp_filter_bc_xml">BaseCamp 配置文件 (*.xml)|*.xml|所有文件|*.*</string>
@@ -857,4 +860,28 @@
   <string name="unhandled_error_domain">未处理的错误 (域)</string>
   <string name="veh_no_return">Frame-walk：未找到 SDKDLL.dll 外部的返回地址</string>
   <string name="profile_switch_unsupported">配置文件：MacroPad 暂不支持配置文件切换</string>
+  <!-- DisplayPad live tiles: clock / PC monitor / speed test (dp_clock, dp_sysmon, dp_speedtest) -->
+  <string name="act_dp_clock">时钟</string>
+  <string name="act_dp_sysmon">电脑监控</string>
+  <string name="act_dp_speedtest">测速</string>
+  <string name="cat_live">实时按键</string>
+  <string name="clock_mode_analog">模拟时钟</string>
+  <string name="clock_mode_digital24">数字时钟 (24 小时)</string>
+  <string name="clock_mode_digital12">数字时钟 (12 小时)</string>
+  <string name="clock_mode_vert24">竖排时钟 (24 小时)</string>
+  <string name="clock_mode_vert12">竖排时钟 (12 小时)</string>
+  <string name="clock_mode_hours">仅小时 (24 小时)</string>
+  <string name="clock_mode_hours12">仅小时 (12 小时)</string>
+  <string name="clock_mode_minutes">仅分钟</string>
+  <string name="clock_mode_seconds">仅秒</string>
+  <string name="clock_mode_date">日期</string>
+  <string name="sysmon_cpu">CPU 占用率</string>
+  <string name="sysmon_ram">内存占用率</string>
+  <string name="sysmon_gpu">GPU 占用率</string>
+  <string name="sysmon_disk">磁盘占用率</string>
+  <string name="sysmon_net_down">下载速度</string>
+  <string name="sysmon_net_up">上传速度</string>
+  <string name="speedtest_down">测速 - 下载</string>
+  <string name="speedtest_up">测速 - 上传</string>
+  <string name="speedtest_ping">测速 - ping</string>
 </strings>

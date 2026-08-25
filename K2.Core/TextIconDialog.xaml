@@ -1,10 +1,10 @@
-<Window x:Class="K2.Core.TextIconDialog"
+﻿<Window x:Class="K2.Core.TextIconDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:K2.Core"
         Title="{loc:Get txt_dialog_title}"
-        Width="340" SizeToContent="Height"
-        MinWidth="340"
+        Width="660" SizeToContent="Height"
+        MinWidth="660"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         ResizeMode="NoResize"
@@ -38,24 +38,30 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Implicit (untyped-key) style — auto-applies to every plain StackPanel in this
+             window. A default icon's layout is owned by the generator, so BgModePanel/
+             AnchorPanel go IsEnabled="False" in code-behind (see TextIconDialog.xaml.cs);
+             this dims them to a visibly "greyed out" look instead of leaving their custom-
+             templated children (which don't react to IsEnabled on their own) looking fully
+             active but inert. No-op for every other StackPanel, which never goes disabled. -->
+        <Style TargetType="StackPanel">
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.35"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>  <!-- header -->
-            <RowDefinition Height="10"/>
-            <RowDefinition Height="Auto"/>  <!-- preview -->
-            <RowDefinition Height="10"/>
-            <RowDefinition Height="Auto"/>  <!-- text input -->
-            <RowDefinition Height="10"/>
-            <RowDefinition Height="Auto"/>  <!-- font family + size -->
-            <RowDefinition Height="10"/>
-            <RowDefinition Height="Auto"/>  <!-- background mode -->
-            <RowDefinition Height="8"/>
-            <RowDefinition Height="Auto"/>  <!-- colors -->
-            <RowDefinition Height="10"/>
-            <RowDefinition Height="Auto"/>  <!-- text position anchor -->
-            <RowDefinition Height="14"/>
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="Auto"/>  <!-- icon section (left) + preview (top-right) -->
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>  <!-- text section, full width -->
+            <RowDefinition Height="16"/>
             <RowDefinition Height="Auto"/>  <!-- buttons -->
         </Grid.RowDefinitions>
 
@@ -63,88 +69,199 @@
                    Text="{loc:Get txt_dialog_title}"
                    FontSize="16" FontWeight="Bold"/>
 
-        <Border Grid.Row="2" Width="140" Height="140"
-                HorizontalAlignment="Center"
-                Background="#222228"
-                BorderBrush="#444" BorderThickness="1"
-                CornerRadius="4">
-            <Image x:Name="ImgPreview" Stretch="Uniform" Margin="4"/>
-        </Border>
-
-        <StackPanel Grid.Row="4">
-            <TextBlock Text="{loc:Get txt_label}"
-                       Foreground="#AAA" FontSize="11" Margin="0,0,0,4"/>
-            <TextBox x:Name="TxtInput"
-                     AcceptsReturn="True" TextWrapping="Wrap"
-                     Height="56" MaxLength="60"
-                     TextChanged="TxtInput_TextChanged"/>
-        </StackPanel>
-
-        <StackPanel Grid.Row="6">
-            <TextBlock Text="{loc:Get txt_font_label}"
-                       Foreground="#AAA" FontSize="11" Margin="0,0,0,4"/>
-            <ComboBox x:Name="CbFontFamily" Margin="0,0,0,8"
-                      SelectionChanged="Font_Changed"/>
+        <!-- ───────────────── Icon ───────────────── -->
+        <StackPanel x:Name="IconSectionPanel" Grid.Row="2">
+            <TextBlock Text="{loc:Get txt_icon_section}"
+                       FontSize="13" FontWeight="SemiBold"
+                       Margin="0,0,0,8"/>
 
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="30"/>
+                    <ColumnDefinition Width="Auto"/>  <!-- preview + zoom slider -->
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="*"/>     <!-- reset + rotation -->
                 </Grid.ColumnDefinitions>
-                <CheckBox x:Name="ChkAutoSize" Grid.Column="0"
-                          Content="{loc:Get txt_font_size_auto}"
-                          IsChecked="True"
-                          Checked="AutoSize_Changed" Unchecked="AutoSize_Changed"
-                          VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <Slider x:Name="SldFontSize" Grid.Column="1"
-                        Minimum="8" Maximum="80" IsEnabled="False"
-                        VerticalAlignment="Center"
-                        ValueChanged="SldFontSize_ValueChanged"/>
-                <TextBlock x:Name="LblFontSizeValue" Grid.Column="2"
-                           TextAlignment="Right" VerticalAlignment="Center"
-                           Foreground="#AAA"/>
+
+                <StackPanel x:Name="IconEditorHost" Grid.Column="0" HorizontalAlignment="Left">
+                    <!-- ONE preview (user request 2026-08-24): the caller's CropEditor viewport
+                         is inserted UNDERNEATH PreviewFrame in code-behind, and PreviewFrame's
+                         ImgPreview — the fully composited tile, picture + text — is redrawn from
+                         the live crop on every pan/zoom. PreviewFrame is IsHitTestVisible="False",
+                         so drag/scroll still reach the viewport below it.
+                         With no croppable source (default-icon mode) the frame keeps its own
+                         140×140 box and simply shows the generated tile. -->
+                    <Grid x:Name="IconViewportHost" HorizontalAlignment="Center">
+                        <Border x:Name="PreviewFrame"
+                                Width="140" Height="140"
+                                IsHitTestVisible="False"
+                                Background="#222228"
+                                BorderBrush="#444" BorderThickness="1"
+                                CornerRadius="4">
+                            <Image x:Name="ImgPreview" Stretch="Uniform" Margin="4"/>
+                        </Border>
+                    </Grid>
+                    <!-- CropEditor.ControlsPanel (zoom slider + hint) is appended here. -->
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" VerticalAlignment="Top">
+                    <Button x:Name="BtnResetIcon"
+                            Content="{loc:Get txt_reset_icon}"
+                            HorizontalAlignment="Left"
+                            MinWidth="120"
+                            Click="BtnResetIcon_Click"/>
+
+                    <TextBlock x:Name="LblRotate"
+                               Text="{loc:Get dp_rotate_image}"
+                               Margin="0,16,0,4"
+                               Foreground="#AAA" FontSize="11"/>
+                    <UniformGrid x:Name="RotatePanel" Columns="2" Rows="2"
+                                 Width="140" HorizontalAlignment="Left">
+                        <RadioButton x:Name="Rb0"   Content="0°"   GroupName="TxtImgRot" Tag="0"
+                                     IsChecked="True" Checked="RotRadio_Checked"
+                                     Margin="0,0,8,4"/>
+                        <RadioButton x:Name="Rb90"  Content="90°"  GroupName="TxtImgRot" Tag="90"
+                                     Checked="RotRadio_Checked"
+                                     Margin="0,0,0,4"/>
+                        <RadioButton x:Name="Rb180" Content="180°" GroupName="TxtImgRot" Tag="180"
+                                     Checked="RotRadio_Checked"
+                                     Margin="0,0,8,0"/>
+                        <RadioButton x:Name="Rb270" Content="270°" GroupName="TxtImgRot" Tag="270"
+                                     Checked="RotRadio_Checked"/>
+                    </UniformGrid>
+                </StackPanel>
             </Grid>
         </StackPanel>
 
-        <StackPanel Grid.Row="8">
-            <RadioButton x:Name="RbBgSolid" GroupName="TxtBgMode"
-                         Content="{loc:Get txt_bg_solid}"
-                         IsChecked="True" Checked="BgMode_Changed"
-                         Margin="0,0,0,4"/>
-            <RadioButton x:Name="RbBgImage" GroupName="TxtBgMode"
-                         Content="{loc:Get txt_bg_image}"
-                         Checked="BgMode_Changed"/>
+        <!-- ───────────────── Text (full width, below) ───────────────── -->
+        <StackPanel Grid.Row="4">
+            <TextBlock Text="{loc:Get txt_text_section}"
+                       FontSize="13" FontWeight="SemiBold"
+                       Margin="0,0,0,8"/>
+
+            <StackPanel Margin="0,0,0,10">
+                <TextBlock Text="{loc:Get txt_label}"
+                           Foreground="#AAA" FontSize="11" Margin="0,0,0,4"/>
+                <TextBox x:Name="TxtInput"
+                         AcceptsReturn="True" TextWrapping="Wrap"
+                         Height="56" MaxLength="60"
+                         TextChanged="TxtInput_TextChanged"/>
+            </StackPanel>
+
+            <!-- Default-icon-only options (2026-08-25): whether the generator draws a caption
+                 strip at all, and which icon set it prefers — both meaningless for a custom
+                 text tile, so this row is disabled outside "default icon" mode (see
+                 TextIconDialog.xaml.cs constructor). -->
+            <StackPanel x:Name="DefaultIconOptionsPanel" Orientation="Horizontal" Margin="0,0,0,14">
+                <StackPanel Orientation="Horizontal" Margin="0,0,28,0">
+                    <RadioButton x:Name="RbShowTextOn" Content="{loc:Get dp_gallery_icon_with_text}"
+                                 GroupName="TxtShowText" Checked="ShowText_Changed"
+                                 Margin="0,0,10,0"/>
+                    <RadioButton x:Name="RbShowTextOff" Content="{loc:Get dp_gallery_icon_without_text}"
+                                 GroupName="TxtShowText" Checked="ShowText_Changed"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{loc:Get txt_icon_source_label}"
+                               VerticalAlignment="Center"
+                               Foreground="#AAA" FontSize="11" Margin="0,0,8,0"/>
+                    <RadioButton x:Name="RbIconSourceBaseCamp" Content="{loc:Get txt_icon_source_basecamp}"
+                                 GroupName="TxtIconSource" Checked="IconSource_Changed"
+                                 Margin="0,0,10,0"/>
+                    <RadioButton x:Name="RbIconSourceK2" Content="{loc:Get txt_icon_source_k2}"
+                                 GroupName="TxtIconSource" Checked="IconSource_Changed"/>
+                </StackPanel>
+            </StackPanel>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="250"/>   <!-- font family + size -->
+                    <ColumnDefinition Width="24"/>
+                    <ColumnDefinition Width="*"/>     <!-- background mode + colors -->
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="Auto"/>  <!-- text position anchor -->
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="{loc:Get txt_font_label}"
+                               Foreground="#AAA" FontSize="11" Margin="0,0,0,4"/>
+                    <ComboBox x:Name="CbFontFamily" Margin="0,0,0,8"
+                              SelectionChanged="Font_Changed"/>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="30"/>
+                        </Grid.ColumnDefinitions>
+                        <CheckBox x:Name="ChkAutoSize" Grid.Column="0"
+                                  Content="{loc:Get txt_font_size_auto}"
+                                  IsChecked="True"
+                                  Checked="AutoSize_Changed" Unchecked="AutoSize_Changed"
+                                  VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <Slider x:Name="SldFontSize" Grid.Column="1"
+                                Minimum="8" Maximum="80" IsEnabled="False"
+                                VerticalAlignment="Center"
+                                ValueChanged="SldFontSize_ValueChanged"/>
+                        <TextBlock x:Name="LblFontSizeValue" Grid.Column="2"
+                                   TextAlignment="Right" VerticalAlignment="Center"
+                                   Foreground="#AAA"/>
+                    </Grid>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" VerticalAlignment="Top">
+                    <!-- Empty stand-in for the "Font:"/"Position:" caption next to it, so the
+                         radio pair lines up with the font ComboBox rather than with its label. -->
+                    <TextBlock Text=" " FontSize="11" Margin="0,0,0,4"/>
+
+                    <!-- Radios only: the color buttons below stay OUTSIDE this panel because a
+                         default icon disables the background MODE (the generator owns the layout)
+                         while still honouring the two colors. -->
+                    <StackPanel x:Name="BgModePanel">
+                        <RadioButton x:Name="RbBgSolid" GroupName="TxtBgMode"
+                                     Content="{loc:Get txt_bg_solid}"
+                                     IsChecked="True" Checked="BgMode_Changed"
+                                     Margin="0,0,0,4"/>
+                        <RadioButton x:Name="RbBgImage" GroupName="TxtBgMode"
+                                     Content="{loc:Get txt_bg_image}"
+                                     Checked="BgMode_Changed"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                        <TextBlock Text="{loc:Get txt_bg_color}"
+                                   VerticalAlignment="Center"
+                                   Foreground="#AAA" FontSize="11" Margin="0,0,6,0"/>
+                        <!-- Both swatches are repainted from the live colors in the constructor
+                             (ApplyColorButton); these are just the designer placeholders. -->
+                        <Button x:Name="BtnBgColor" Width="28" Height="28"
+                                Background="Black" BorderThickness="2" BorderBrush="#3A3A40"
+                                Click="BtnBgColor_Click"/>
+                        <TextBlock Text="{loc:Get txt_color}"
+                                   VerticalAlignment="Center"
+                                   Foreground="#AAA" FontSize="11" Margin="16,0,6,0"/>
+                        <Button x:Name="BtnTextColor" Width="28" Height="28"
+                                Background="White" BorderThickness="2" BorderBrush="#3A3A40"
+                                Click="BtnTextColor_Click"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel x:Name="AnchorPanel" Grid.Column="4" VerticalAlignment="Top">
+                    <TextBlock Text="{loc:Get txt_position_label}"
+                               Foreground="#AAA" FontSize="11" Margin="0,0,0,4"/>
+                    <UniformGrid Rows="3" Columns="3" Width="90" HorizontalAlignment="Left">
+                        <RadioButton GroupName="TxtAnchor" Tag="TopLeft"      Content="&#x2196;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+                        <RadioButton GroupName="TxtAnchor" Tag="TopCenter"    Content="&#x2191;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+                        <RadioButton GroupName="TxtAnchor" Tag="TopRight"     Content="&#x2197;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+                        <RadioButton GroupName="TxtAnchor" Tag="MiddleLeft"   Content="&#x2190;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+                        <RadioButton GroupName="TxtAnchor" Tag="MiddleCenter" Content="&#x25CF;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked" IsChecked="True"/>
+                        <RadioButton GroupName="TxtAnchor" Tag="MiddleRight"  Content="&#x2192;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+                        <RadioButton GroupName="TxtAnchor" Tag="BottomLeft"   Content="&#x2199;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+                        <RadioButton GroupName="TxtAnchor" Tag="BottomCenter" Content="&#x2193;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+                        <RadioButton GroupName="TxtAnchor" Tag="BottomRight"  Content="&#x2198;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
+                    </UniformGrid>
+                </StackPanel>
+            </Grid>
         </StackPanel>
 
-        <WrapPanel Grid.Row="10" Orientation="Horizontal">
-            <TextBlock Text="{loc:Get txt_bg_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <Button x:Name="BtnBgColor" Width="30" Height="30"
-                    Background="#1A1A1E" BorderThickness="2" BorderBrush="#3A3A40"
-                    Click="BtnBgColor_Click" Margin="0,0,10,0"/>
-            <TextBlock Text="{loc:Get txt_color}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <Button x:Name="BtnTextColor" Width="30" Height="30"
-                    Background="White" BorderThickness="2" BorderBrush="#3A3A40"
-                    Click="BtnTextColor_Click"/>
-        </WrapPanel>
-
-        <StackPanel Grid.Row="12">
-            <TextBlock Text="{loc:Get txt_position_label}"
-                       Foreground="#AAA" FontSize="11" Margin="0,0,0,4"/>
-            <UniformGrid Rows="3" Columns="3" Width="90" HorizontalAlignment="Left">
-                <RadioButton GroupName="TxtAnchor" Tag="TopLeft"      Content="&#x2196;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
-                <RadioButton GroupName="TxtAnchor" Tag="TopCenter"    Content="&#x2191;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
-                <RadioButton GroupName="TxtAnchor" Tag="TopRight"     Content="&#x2197;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
-                <RadioButton GroupName="TxtAnchor" Tag="MiddleLeft"   Content="&#x2190;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
-                <RadioButton GroupName="TxtAnchor" Tag="MiddleCenter" Content="&#x25CF;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked" IsChecked="True"/>
-                <RadioButton GroupName="TxtAnchor" Tag="MiddleRight"  Content="&#x2192;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
-                <RadioButton GroupName="TxtAnchor" Tag="BottomLeft"   Content="&#x2199;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
-                <RadioButton GroupName="TxtAnchor" Tag="BottomCenter" Content="&#x2193;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
-                <RadioButton GroupName="TxtAnchor" Tag="BottomRight"  Content="&#x2198;" Style="{StaticResource TxtAnchorButtonStyle}" Checked="Anchor_Checked"/>
-            </UniformGrid>
-        </StackPanel>
-
-        <StackPanel Grid.Row="14"
+        <StackPanel Grid.Row="6"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right">
             <Button Content="{loc:Get ok}"

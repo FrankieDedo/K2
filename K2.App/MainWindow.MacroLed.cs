@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using K2.App.Services;
 using K2.Core.Services;
 
@@ -13,7 +14,8 @@ namespace K2.App;
 /// Structurally aligned to the Everest RGB panel (MainWindow.Everest.cs, "RGB
 /// lighting panel" region) 2026-07-09: same per-effect capability gating
 /// (speed/direction/rainbow enable-disable, direction options depend on the
-/// effect), same 5-position speed scale (0/25/50/75/100), same re-send-on-
+/// effect), same 0..100 speed scale at 1-unit granularity (ticks every 25 are
+/// only visual guides — see SldMacroSpeed_ValueChanged), same re-send-on-
 /// reopen combo behavior. Drives the SLOT of the selected MacroPad device
 /// (<see cref="CurrentDeviceId"/>): every native MacroPad command takes the
 /// slot id as last parameter.
@@ -202,7 +204,7 @@ public partial class MainWindow
             CbMacroEffect.DisplayMemberPath = "Label";
 
             CbMacroEffect.SelectedIndex    = 2; // Wave
-            SldMacroSpeed.Value             = 50; // wire scale 0/25/50/75/100, same as Everest.
+            SldMacroSpeed.Value             = 50; // wire scale 0..100, same as Everest.
             SldMacroBrightness.Value       = 100;
             RbMacroColorSingle.IsChecked    = true; // default, overridden by LoadMacroLedFromStore if persisted
 
@@ -411,9 +413,30 @@ public partial class MainWindow
         ApplyCurrentMacroEffect();
     }
 
+    /// <summary>Debounce timer for the speed slider — see <see cref="SldMacroSpeed_ValueChanged"/>.</summary>
+    private DispatcherTimer? _mpSpeedApplyTimer;
+
+    /// <summary>
+    /// Speed slider. 1-unit granularity (0..100, no tick snapping), same rationale as
+    /// Everest's <c>SldEvSpeed_ValueChanged</c>: the byte reaches ChangeEffect/
+    /// ChangeBlockEffect raw, so the full firmware range is reachable for manually
+    /// matching the Wave against another device. The apply is debounced because a drag
+    /// now fires dozens of ValueChanged events.
+    /// </summary>
     private void SldMacroSpeed_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (LblMacroSpeed != null) LblMacroSpeed.Text = $"{(int)SldMacroSpeed.Value}%";
+
+        _mpSpeedApplyTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        _mpSpeedApplyTimer.Stop();
+        _mpSpeedApplyTimer.Tick -= MpSpeedApplyTick;
+        _mpSpeedApplyTimer.Tick += MpSpeedApplyTick;
+        _mpSpeedApplyTimer.Start();
+    }
+
+    private void MpSpeedApplyTick(object? sender, EventArgs e)
+    {
+        _mpSpeedApplyTimer?.Stop();
         ApplyCurrentMacroEffect();
     }
 
@@ -529,7 +552,7 @@ public partial class MainWindow
 
         var caps   = CapsFor(effect);
 
-        // Speed: slider already snaps to 0/25/50/75/100 (scale 0..100, 0=slow, 100=fast).
+        // Speed: raw slider value (scale 0..100, 0=slow, 100=fast, 1-unit steps).
         // Static/Off ignore it (EffData.New/BlockData.New force bySpeed=255 for
         // Static; Off doesn't reach either path with a meaningful value).
         byte speedByte = (byte)(caps.Speed ? (int)SldMacroSpeed.Value : 0);

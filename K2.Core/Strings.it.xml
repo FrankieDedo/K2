@@ -68,6 +68,14 @@
   <string name="dlg_button_label">Tasto #?</string>
   <string name="dlg_action_type">Tipo di azione:</string>
   <string name="dlg_value">Valore:</string>
+  <string name="picker_pick_category">Scegli una categoria</string>
+  <string name="picker_pick_action">Scegli un'azione</string>
+  <string name="picker_back">Indietro</string>
+  <string name="cat_system">Sistema</string>
+  <string name="cat_navigation">Navigazione</string>
+  <string name="cat_input">Input</string>
+  <string name="cat_content">Contenuti</string>
+  <string name="cat_apps">App e servizi</string>
   <string name="act_none">Nessuna</string>
   <string name="act_disable">Tasto disabilitato</string>
   <string name="act_url">Apri URL</string>
@@ -97,8 +105,11 @@
   <string name="act_zoom">Zoom</string>
   <string name="act_obs">OBS Studio</string>
   <string name="act_twitch">Twitch</string>
+  <string name="act_discord">Discord</string>
   <string name="act_spotify">Spotify</string>
   <string name="act_youtube">YouTube</string>
+  <string name="act_audiodevice">Dispositivo audio</string>
+  <string name="audiodevice_refresh_button">Aggiorna dispositivi</string>
   <string name="appshortcut_app_label">Applicazione:</string>
   <string name="appshortcut_action_label">Azione:</string>
   <string name="appshortcut_custom">Personalizzato…</string>
@@ -195,6 +206,40 @@
   <string name="spotify_cmd_volume_set">Imposta volume</string>
   <string name="spotify_cmd_save_playlist">Salva brano in playlist</string>
   <string name="spotify_cmd_remove_playlist">Rimuovi brano da playlist</string>
+  <string name="discord_settings_title">Impostazioni Discord</string>
+  <string name="discord_hint">I comandi vocali pilotano l’app DESKTOP di Discord tramite la sua pipe RPC locale e richiedono una tua applicazione Discord; "Invia messaggio" richiede solo l’URL di un webhook del canale.</string>
+  <string name="discord_setup_guide">1. Vai su discord.com/developers/applications e clicca "New Application".
+2. OAuth2 &gt; Redirects: aggiungi http://localhost:17564/callback
+3. Copia il Client ID e clicca "Reset Secret" per il Client Secret.
+4. Clicca Connetti: sarà Discord stesso a chiederti l’autorizzazione (devi essere il proprietario dell’app).</string>
+  <string name="discord_client_id_label">Client ID:</string>
+  <string name="discord_client_secret_label">Client Secret:</string>
+  <string name="discord_webhook_label">URL webhook (opzionale):</string>
+  <string name="discord_webhook_hint">Discord &gt; Impostazioni server &gt; Integrazioni &gt; Webhook &gt; Nuovo webhook &gt; Copia URL webhook. Serve solo a "Invia messaggio", senza app né login.</string>
+  <string name="discord_connect">Connetti</string>
+  <string name="discord_connecting">In attesa dell’autorizzazione in Discord…</string>
+  <string name="discord_disconnect">Disconnetti</string>
+  <string name="discord_connected_as">Connesso come</string>
+  <string name="discord_settings_button">Impostazioni Discord…</string>
+  <string name="discord_cmd_mute_toggle">Attiva/disattiva microfono</string>
+  <string name="discord_cmd_mute_on">Disattiva microfono</string>
+  <string name="discord_cmd_mute_off">Attiva microfono</string>
+  <string name="discord_cmd_deafen_toggle">Attiva/disattiva audio (deafen)</string>
+  <string name="discord_cmd_deafen_on">Disattiva audio (deafen)</string>
+  <string name="discord_cmd_deafen_off">Riattiva audio</string>
+  <string name="discord_cmd_input_mode_toggle">Alterna Push-to-Talk / Attività vocale</string>
+  <string name="discord_cmd_input_volume">Imposta volume microfono</string>
+  <string name="discord_cmd_output_volume">Imposta volume uscita</string>
+  <string name="discord_cmd_join_voice">Entra nel canale vocale</string>
+  <string name="discord_cmd_leave_voice">Esci dal canale vocale</string>
+  <string name="discord_cmd_user_volume">Imposta volume utente</string>
+  <string name="discord_cmd_user_mute_toggle">Silenzia/riattiva utente</string>
+  <string name="discord_cmd_send_message">Invia messaggio (webhook)</string>
+  <string name="discord_arg_hint">Volume: 70 (assoluto) oppure +10 / -10 (relativo) — Volume utente: idUtente:70 — Messaggio: il testo da pubblicare</string>
+  <string name="discord_key_mic_on">Mic on</string>
+  <string name="discord_key_mic_off">Mic off</string>
+  <string name="discord_key_audio_on">Audio on</string>
+  <string name="discord_key_audio_off">Audio off</string>
   <string name="youtube_settings_title">Impostazioni YouTube</string>
   <string name="youtube_hint">Crea un client OAuth per app desktop su console.cloud.google.com con l'API YouTube Data v3 abilitata, poi incolla qui il Client ID/Secret.</string>
   <string name="youtube_setup_guide">1. Vai su console.cloud.google.com, crea/seleziona un progetto, poi abilita "YouTube Data API v3" (APIs &amp; Services -&gt; Library).
@@ -209,6 +254,18 @@
   <string name="act_command">Comando shell</string>
   <string name="act_text">Incolla testo</string>
   <string name="act_emoji">Emoji</string>
+  <string name="act_emojibrowser">Browser emoji</string>
+  <string name="emb_grp_smileys">Faccine</string>
+  <string name="emb_grp_people">Persone</string>
+  <string name="emb_grp_animals">Animali</string>
+  <string name="emb_grp_food">Cibo</string>
+  <string name="emb_grp_travel">Viaggi</string>
+  <string name="emb_grp_activities">Attività</string>
+  <string name="emb_grp_objects">Oggetti</string>
+  <string name="emb_grp_symbols">Simboli</string>
+  <string name="emb_grp_flags">Bandiere</string>
+  <string name="emb_caption">Emoji</string>
+  <string name="emb_close">Chiudi</string>
   <string name="act_macro">Riproduci macro</string>
 
   <!-- Azione emoji + browser emoji (EmojiPickerDialog) -->
@@ -314,6 +371,7 @@
   <string name="settings_dp_native_hint">Pilota il DisplayPad direttamente via USB invece che tramite l'SDK Mountain: trasferimenti confermati (niente icone corrotte), nessun processo satellite. La persistenza dei profili sul dispositivo non è disponibile; le immagini vengono ricaricate dal database di K2. Ha effetto al riavvio di K2.</string>
   <string name="settings_ev_native">Everest Max: motore USB nativo (sperimentale, parziale)</string>
   <string name="settings_ev_native_hint">Pilota la connessione dell'Everest Max e i 4 tasti display del numpad direttamente via USB invece che tramite SDKDLL.dll — elimina il crash cronico del thread timer di quella DLL per quello che copre. Effetti RGB, icone numpad, Media Dock e gli eventi di remap dell'intera tastiera passano ancora da SDKDLL.dll (non ancora portati). Ha effetto al riavvio di K2.</string>
+  <string name="settings_bc_interactions_group">Interazioni con Base Camp</string>
   <string name="settings_auto_stop_bc">Ferma automaticamente Base Camp all'avvio</string>
   <string name="settings_auto_stop_bc_hint">Ogni volta che K2 si avvia, ferma il servizio Windows di Base Camp e chiude tutti i suoi processi (GUI, servizio, worker, Makalu monitor) ancora in esecuzione o riavviati dall'avvio automatico di Windows — così K2 sostituisce completamente Base Camp invece di girare insieme ad esso. Disattiva questa opzione se vuoi ancora usare Base Camp insieme a K2.</string>
   <string name="settings_kill_bc_worker">Termina il worker DisplayPad di Base Camp</string>
@@ -392,6 +450,10 @@
   <string name="settings_accent_color_hint">Cambia subito il colore d'accento in tutta l'app, senza riavvio.</string>
   <string name="settings_accent_k2red">Rosso K2</string>
   <string name="settings_accent_mountainblue">Blu Mountain</string>
+  <string name="settings_icon_color">Colore icone</string>
+  <string name="settings_icon_color_hint">Colore usato per le icone generate automaticamente. Di default segue il colore d'accento sopra, oppure puoi fissarlo su un colore specifico.</string>
+  <string name="settings_icon_color_default">Come il colore d'accento</string>
+  <string name="settings_icon_color_white">Bianco</string>
   <string name="settings_icon_style">Stile icona predefinita</string>
   <string name="settings_icon_style_black">Nero</string>
   <string name="settings_icon_style_color">Colore</string>
@@ -758,8 +820,11 @@
   <string name="dp_delete_page">Elimina</string>
   <string name="dp_delete_page_title">Elimina pagina</string>
   <string name="dp_delete_page_confirm">Eliminare la pagina "{0}"? I tasti che la aprono smetteranno di funzionare.</string>
-  <string name="dp_add_text">Aggiungi testo…</string>
+  <string name="dp_add_text">Modifica icona…</string>
+  <string name="dp_icon_section">Icona</string>
   <string name="dp_gallery_icon">Icona predefinita</string>
+  <string name="dp_gallery_icon_with_text">Con testo</string>
+  <string name="dp_gallery_icon_without_text">Senza testo</string>
   <string name="gallery_dialog_title">Galleria icone</string>
   <string name="gallery_category_label">Categoria:</string>
   <string name="gallery_tint_accent">Colora con l'accento</string>
@@ -778,6 +843,9 @@
   <string name="gallery_cat_pcinfo_clock">Info PC / Orologio</string>
   <string name="gallery_cat_pcinfo_icons">Icone Info PC</string>
   <string name="txt_dialog_title">Inserisci testo</string>
+  <string name="txt_icon_section">Icona</string>
+  <string name="txt_text_section">Testo</string>
+  <string name="txt_reset_icon">Reimposta icona</string>
   <string name="txt_label">Testo:</string>
   <string name="txt_font_label">Carattere:</string>
   <string name="txt_font_size_auto">Dimensione automatica</string>
@@ -786,6 +854,9 @@
   <string name="txt_bg_color">Sfondo:</string>
   <string name="txt_color">Testo:</string>
   <string name="txt_position_label">Posizione:</string>
+  <string name="txt_icon_source_label">Sorgente icona:</string>
+  <string name="txt_icon_source_basecamp">Base Camp</string>
+  <string name="txt_icon_source_k2">K2</string>
   <string name="txt_generate_failed">Impossibile generare l'immagine di testo.</string>
   <string name="dp_open_bc_profile">Apri profilo BaseCamp</string>
   <string name="dp_filter_bc_xml">Profilo BaseCamp (*.xml)|*.xml|Tutti i file|*.*</string>
@@ -899,4 +970,28 @@
   <string name="unhandled_error_domain">Errore non gestito (dominio)</string>
   <string name="veh_no_return">Frame-walk: nessun indirizzo di ritorno fuori da SDKDLL.dll trovato</string>
   <string name="profile_switch_unsupported">profilo: cambio profilo non ancora supportato sul MacroPad</string>
+  <!-- DisplayPad live tiles: clock / PC monitor / speed test (dp_clock, dp_sysmon, dp_speedtest) -->
+  <string name="act_dp_clock">Orologio</string>
+  <string name="act_dp_sysmon">Monitor PC</string>
+  <string name="act_dp_speedtest">Speed test</string>
+  <string name="cat_live">Tasti live</string>
+  <string name="clock_mode_analog">Orologio analogico</string>
+  <string name="clock_mode_digital24">Orologio digitale (24h)</string>
+  <string name="clock_mode_digital12">Orologio digitale (12h)</string>
+  <string name="clock_mode_vert24">Orologio verticale (24h)</string>
+  <string name="clock_mode_vert12">Orologio verticale (12h)</string>
+  <string name="clock_mode_hours">Solo ore (24h)</string>
+  <string name="clock_mode_hours12">Solo ore (12h)</string>
+  <string name="clock_mode_minutes">Solo minuti</string>
+  <string name="clock_mode_seconds">Solo secondi</string>
+  <string name="clock_mode_date">Data</string>
+  <string name="sysmon_cpu">Uso CPU</string>
+  <string name="sysmon_ram">Uso RAM</string>
+  <string name="sysmon_gpu">Uso GPU</string>
+  <string name="sysmon_disk">Uso disco</string>
+  <string name="sysmon_net_down">Velocità di download</string>
+  <string name="sysmon_net_up">Velocità di upload</string>
+  <string name="speedtest_down">Speed test - download</string>
+  <string name="speedtest_up">Speed test - upload</string>
+  <string name="speedtest_ping">Speed test - ping</string>
 </strings>

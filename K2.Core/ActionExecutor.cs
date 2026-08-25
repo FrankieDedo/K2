@@ -141,6 +141,30 @@ public static class ActionExecutor
         log($"[EXEC] media -> {key}");
     }
 
+    // ── Audio device ──────────────────────────────
+
+    /// <summary>Switches the Windows default playback device to the one saved in an
+    /// "audiodevice" action's payload. Resolves by id first, falling back to a name match
+    /// (see <see cref="AudioDevicePayload"/>) so the binding keeps working after the
+    /// physical device is unplugged and reconnected under a different id.</summary>
+    public static void SetAudioDevice(string? value, Action<string> log)
+    {
+        var spec = AudioDevicePayload.Parse(value);
+        if (spec is null || string.IsNullOrWhiteSpace(spec.Id))
+        {
+            log("[EXEC] audiodevice: no device configured");
+            return;
+        }
+        string? resolvedId = Services.AudioDeviceService.TryResolveDeviceId(spec);
+        if (resolvedId is null)
+        {
+            log($"[EXEC] audiodevice: \"{spec.Name}\" not found (disconnected?)");
+            return;
+        }
+        bool ok = Services.AudioDeviceService.SetDefaultPlaybackDevice(resolvedId);
+        log($"[EXEC] audiodevice -> {spec.Name} = {ok}");
+    }
+
     // ── Mouse ──────────────────────────────────
 
     public static void DoMouse(string action, Action<string> log)

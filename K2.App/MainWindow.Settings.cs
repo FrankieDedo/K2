@@ -316,6 +316,7 @@ public partial class MainWindow
 
         InitAppFontCombo();
         InitAppAccentCombo();
+        InitAppIconColorCombo();
         InitIconGalleryStyleRadios();
         InitUpdatesPanel();
 
@@ -418,6 +419,39 @@ public partial class MainWindow
         "MountainBlue" => "settings_accent_mountainblue",
         _               => "settings_accent_k2red",
     };
+
+    /// <summary>Populates the Icon color combo: the default "Same as accent color"
+    /// (empty key) first, then every <see cref="AccentCatalog.Options"/> entry, then
+    /// "White" — and selects the persisted choice (default: same as accent). See
+    /// <see cref="AppSettings.IconColorTheme"/> / <c>IconImageGenerator.ResolveIconColor</c>.</summary>
+    private void InitAppIconColorCombo()
+    {
+        CmbAppIconColor.Items.Clear();
+        CmbAppIconColor.Items.Add(new ComboBoxItem { Content = Loc.Get("settings_icon_color_default"), Tag = "" });
+        foreach (var opt in AccentCatalog.Options)
+            CmbAppIconColor.Items.Add(new ComboBoxItem { Content = Loc.Get(AccentDisplayNameKey(opt.Key)), Tag = opt.Key });
+        CmbAppIconColor.Items.Add(new ComboBoxItem { Content = Loc.Get("settings_icon_color_white"), Tag = "White" });
+
+        string current = AppSettings.IconColorTheme;
+        CmbAppIconColor.SelectedIndex = 0;
+        for (int i = 0; i < CmbAppIconColor.Items.Count; i++)
+        {
+            if ((string)((ComboBoxItem)CmbAppIconColor.Items[i]).Tag == current)
+            {
+                CmbAppIconColor.SelectedIndex = i;
+                break;
+            }
+        }
+    }
+
+    /// <summary>Persists the chosen icon color theme. Not applied live like the accent
+    /// color — icons are one-shot GDI+ renders (see IconImageGenerator), so this only
+    /// affects icons generated from now on.</summary>
+    private void CmbAppIconColor_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (CmbAppIconColor.SelectedItem is not ComboBoxItem item) return;
+        AppSettings.SetIconColorTheme((string)item.Tag);
+    }
 
     /// <summary>"DisplayPad device mapping" button — opens the popup that lets the user
     /// fix which stable logical id a pad's raw SDK id resolves to (see

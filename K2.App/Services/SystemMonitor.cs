@@ -25,6 +25,7 @@
 // never take down the dock poller (MainWindow.MediaDock.cs) that calls it.
 
 using System;
+using System.Collections.Generic;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 
@@ -32,6 +33,39 @@ namespace K2.App.Services;
 
 internal static class SystemMonitor
 {
+    // ───────────────────── Sampling cache ─────────────────────
+    //
+    // Two independent consumers now read these numbers: the Media Dock poller
+    // (MainWindow.MediaDock.cs, 1 Hz) and the DisplayPad live tiles (DpLiveTileService,
+    // up to 1 Hz per key). The delta-based metrics — CPU and the two network rates —
+    // CONSUME their baseline on every call: two callers a few milliseconds apart would
+    // leave the second one dividing by a near-zero interval and reading nonsense (a CPU
+    // key showing 0% or 100% at random while the dock read fine). So every getter goes
+    // through this cache: the first caller in a MinSampleMs window takes a real sample,
+    // everyone else gets the same value back. It also keeps the PDH/COM work down to
+    // one pass per second no matter how many keys are on screen.
+
+    private const int MinSampleMs = 700;
+
+    private static readonly object _cacheGate = new();
+    private static readonly Dictionary<string, (DateTime At, int Value)> _cache = new();
+
+    /// <summary>Returns <paramref name="sample"/>'s value, re-sampling at most once every
+    /// <see cref="MinSampleMs"/> per metric key.</summary>
+    private static int Cached(string key, Func<int> sample)
+    {
+        lock (_cacheGate)
+        {
+            if (_cache.TryGetValue(key, out var hit)
+                && (DateTime.UtcNow - hit.At).TotalMilliseconds < MinSampleMs)
+                return hit.Value;
+
+            int value = sample();
+            _cache[key] = (DateTime.UtcNow, value);
+            return value;
+        }
+    }
+
     // ─────────────────────────── CPU ───────────────────────────
 
     [DllImport("kernel32.dll", SetLastError = true)]
@@ -43,7 +77,9 @@ internal static class SystemMonitor
     /// <summary>Total CPU load, 0..100. Derived from GetSystemTimes deltas between
     /// calls (kernel time already includes idle time), so the first call after
     /// startup has no baseline and reports 0.</summary>
-    public static int CpuPercent()
+    public static int CpuPercent() => Cached("cpu", CpuPercentSample);
+
+    private static int CpuPercentSample()
     {
         try
         {
@@ -80,7 +116,9 @@ internal static class SystemMonitor
     /// <summary>Physical memory in use, 0..100 — <c>dwMemoryLoad</c> is exactly the
     /// (total-free)/total ratio Base Camp computes from Win32_OperatingSystem, without
     /// the WMI query.</summary>
-    public static int RamPercent()
+    public static int RamPercent() => Cached("ram", RamPercentSample);
+
+    private static int RamPercentSample()
     {
         try
         {
@@ -92,33 +130,49 @@ internal static class SystemMonitor
 
     // ─────────────────────── Network download ───────────────────────
 
-    private static long _prevRxBytes;
-    private static DateTime _prevRxAt;
+    private static long _prevRxBytes, _prevTxBytes;
+    private static DateTime _prevRxAt, _prevTxAt;
 
     /// <summary>Download speed in whole MB/s across all interfaces that are up — the unit
     /// Base Camp sends (LHM's bytes/s "Download Speed" divided by 1e6 and rounded).
     /// Loopback and tunnels are excluded, as in any real throughput reading.</summary>
-    public static int DownloadMbPerSec()
+    public static int DownloadMbPerSec() => (int)Math.Round(DownloadBytesPerSec() / 1_000_000.0);
+
+    /// <summary>Upload counterpart of <see cref="DownloadMbPerSec"/> — same interfaces, same
+    /// unit. Base Camp never sends this one to the dock (its PC Info pages have no upload
+    /// page); it exists for the DisplayPad "net_up" tile.</summary>
+    public static int UploadMbPerSec() => (int)Math.Round(UploadBytesPerSec() / 1_000_000.0);
+
+    /// <summary>Raw throughput in bytes/s — what the DisplayPad tiles format themselves
+    /// (a key showing "0 MB/s" for anything under half a megabyte reads as broken, so they
+    /// scale the unit down to KB/s instead of rounding to whole MB like the dock page).</summary>
+    public static int DownloadBytesPerSec() => Cached("net_down", () => NetBytesPerSecSample(upload: false));
+
+    /// <inheritdoc cref="DownloadBytesPerSec"/>
+    public static int UploadBytesPerSec() => Cached("net_up", () => NetBytesPerSecSample(upload: true));
+
+    private static int NetBytesPerSecSample(bool upload)
     {
         try
         {
-            long rx = 0;
+            long total = 0;
             foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
             {
                 if (ni.OperationalStatus != OperationalStatus.Up) continue;
                 if (ni.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel)
                     continue;
-                rx += ni.GetIPv4Statistics().BytesReceived;
+                var stats = ni.GetIPv4Statistics();
+                total += upload ? stats.BytesSent : stats.BytesReceived;
             }
             var now = DateTime.UtcNow;
-            long prev = _prevRxBytes;
-            var prevAt = _prevRxAt;
-            _prevRxBytes = rx;
-            _prevRxAt = now;
+            long prev = upload ? _prevTxBytes : _prevRxBytes;
+            var prevAt = upload ? _prevTxAt : _prevRxAt;
+            if (upload) { _prevTxBytes = total; _prevTxAt = now; }
+            else        { _prevRxBytes = total; _prevRxAt = now; }
             if (prevAt == default) return 0;             // no baseline yet
             double secs = (now - prevAt).TotalSeconds;
-            if (secs <= 0 || rx < prev) return 0;        // clock jump / counter reset
-            return Clamp((int)Math.Round((rx - prev) / secs / 1_000_000.0), 0, int.MaxValue);
+            if (secs <= 0 || total < prev) return 0;     // clock jump / counter reset
+            return Clamp((int)Math.Round((total - prev) / secs), 0, int.MaxValue);
         }
         catch { return 0; }
     }
@@ -210,7 +264,9 @@ internal static class SystemMonitor
     /// <summary>Disk activity, 0..100. "% Disk Time" can read above 100 on a busy
     /// multi-queue disk (Base Camp doesn't clamp it either), but the dock draws a
     /// percentage, so it is capped here.</summary>
-    public static int DiskPercent()
+    public static int DiskPercent() => Cached("disk", DiskPercentSample);
+
+    private static int DiskPercentSample()
     {
         try
         {
@@ -230,7 +286,9 @@ internal static class SystemMonitor
     private static readonly PdhCounter _gpuCounter = new(@"\GPU Engine(*)\Utilization Percentage");
 
     /// <summary>GPU 3D-engine load, 0..100 (summed across processes).</summary>
-    public static int GpuPercent()
+    public static int GpuPercent() => Cached("gpu", GpuPercentSample);
+
+    private static int GpuPercentSample()
     {
         try
         {
@@ -305,7 +363,9 @@ internal static class SystemMonitor
 
     /// <summary>Master output volume, 0..100 — the value Base Camp's PcInfo_timer sends
     /// with SetVolumeInfo while the dock shows its Volume page.</summary>
-    public static int VolumePercent()
+    public static int VolumePercent() => Cached("volume", VolumePercentSample);
+
+    private static int VolumePercentSample()
     {
         object? volObj = null;
         try

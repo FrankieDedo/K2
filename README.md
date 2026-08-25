@@ -35,7 +35,8 @@ Start as admin and keep in mind that it should close all Base Camp process autom
   <li><strong>Macro</strong>: recording (keyboard+mouse), library, playback (once/repeat/while-held/toggle), assignable as an action on any key of any device</li>
   <li><strong>Assignable action types</strong>: keyboard shortcut, launch program (with icon), open folder, open browser (detects installed Chrome/Edge/Firefox/Opera/Brave), OS command, media keys, mouse actions, play macro, cross-device profile switch, Python script (with an HTTP bridge to K2)</li>
   <li><strong>Profile import</strong> from Base Camp's database/XML</li>
-  <li><strong>Shared dark theme</strong>, <strong>selectable font</strong> (8 options including OpenDyslexic for accessibility) with adjustable size</li>
+  <li><strong>Shared dark theme</strong> with a selectable accent color, <strong>selectable font</strong> (8 options including OpenDyslexic for accessibility) with adjustable size</li>
+  <li><strong>Backlight auto-off</strong> after N idle seconds (Everest Max/60, MacroPad)</li>
   <li><strong>Drag &amp; drop</strong> to swap action+icon between two keys (even across different devices)</li>
   <li><strong>Windows installer</strong> Setup + portable ZIP package</li>
   <li><strong>Profiles</strong> Supports Base Camp XMLs and direct import from Base Camp database</li>
@@ -59,6 +60,8 @@ Start as admin and keep in mind that it should close all Base Camp process autom
   <li><strong>Python script</strong> — run a pasted script or a .py file</li>
   <li><strong>Emojis</strong> — map any emoji to a key, display keys show the mapped emoji</li>
   <li><strong>Google Home integration</strong> — Switch on and off lights and switches</li>
+  <li><strong>Discord integration</strong> — mute/deafen, push-to-talk toggle, mic/output volume, join/leave a voice channel, per-user volume/mute, send a message; mute/deafen keys show your live status</li>
+  <li><strong>Switch audio output device</strong> — send sound to a different speaker/headset with one key</li>
   <li><strong>Third party application commands</strong> — Same as Base Camp, support Adobe Suite, DaVinci Resolve, Zoom, OBS, Twitch, Youtube, Spotify</li>
 </ul>
 <p><em>Available on every device — MacroPad, Everest Max/60, DisplayPad — through the same "Configure action" dialog.</em></p>
@@ -108,6 +111,9 @@ Start as admin and keep in mind that it should close all Base Camp process autom
   <li>Set a device rotation 90°/270° (if you keep them vertical, the software will behave accordingly)</li>
   <li>More than two DisplayPads at once are supported (Base Camp goes crazy with three or more)</li>
   <li>Fullscreen images are supported (only as a still background picture for now) and GIFs as well, but performance is abysmal and only works good with low framerate GIFs, because of Displaypad's hardware specifications, probably unfixable</li>
+  <li>Screensaver — the fullscreen image/GIF can kick in after an idle delay instead of always showing, and any key press brings the icons back</li>
+  <li>Emoji browser — a key can turn the whole panel into an emoji picker for quick access to any emoji</li>
+  <li>Backlight auto-off after N idle seconds</li>
 </ul>
 </details>
 

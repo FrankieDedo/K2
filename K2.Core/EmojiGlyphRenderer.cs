@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -37,7 +37,34 @@ public static class EmojiGlyphRenderer
     /// <summary>Tile background of every generated key PNG — same value as
     /// <see cref="IconImageGenerator"/>'s (that one is a GDI+ <c>System.Drawing.Color</c>,
     /// this one a WPF <c>Media.Color</c>, hence the duplicate rather than a shared constant).</summary>
-    private static readonly Color TileBackground = Color.FromRgb(0x1A, 0x1A, 0x1E);
+    private static readonly Color DefaultTileBackground = Color.FromRgb(0x1A, 0x1A, 0x1E);
+
+    /// <summary>Tile background, honouring the per-key override pushed by
+    /// <see cref="IconStyleScope"/> ("Edit icon" &gt; background color) — the WPF-side twin of
+    /// <c>IconImageGenerator.BackgroundColor</c>.</summary>
+    private static Color TileBackground
+    {
+        get
+        {
+            var o = IconStyleScope.OverrideBg;
+            return o is null ? DefaultTileBackground : Color.FromRgb(o.Value.R, o.Value.G, o.Value.B);
+        }
+    }
+
+    /// <summary>Caption brush — <see cref="IconStyleScope"/>'s text color override, else white.</summary>
+    private static Brush CaptionBrush
+    {
+        get
+        {
+            var o = IconStyleScope.OverrideText;
+            return o is null ? Brushes.White
+                : new SolidColorBrush(Color.FromRgb(o.Value.R, o.Value.G, o.Value.B));
+        }
+    }
+
+    /// <summary>Caption typeface — <see cref="IconStyleScope"/>'s font override, else Segoe UI.</summary>
+    private static Typeface CaptionTypeface =>
+        new(IconStyleScope.OverrideFontFamily ?? "Segoe UI");
 
     /// <summary>Same ratio as <see cref="IconImageGenerator"/>'s <c>KeyCornerRadiusRatio</c> —
     /// keeps an emoji tile's baked rounded corners identical to every other generated icon.</summary>
@@ -113,10 +140,15 @@ public static class EmojiGlyphRenderer
     /// image for a display key bound to an "emoji" action. Same contract as every
     /// <c>IconImageGenerator.TryGenerate*</c> method: false (caller keeps whatever image it
     /// already had) rather than an exception when the emoji has no color art.
+    ///
+    /// With a non-empty <paramref name="caption"/> the emoji shrinks into the same square
+    /// icon area <c>IconImageGenerator.IconBox</c> uses and the caption is drawn below it,
+    /// so an emoji tile lines up pixel-for-pixel with the hand-drawn folder/back/nav tiles
+    /// (that is what the emoji browser's category tiles are made of).
     /// </summary>
     /// <remarks>Must be called from an STA thread — <see cref="RenderTargetBitmap"/> is a WPF
-    /// object; every call site is a dialog running on the UI thread.</remarks>
-    public static bool TryGenerateEmojiIcon(string? emoji, int size, string outputPngPath)
+    /// object; every call site is a dialog or the UI thread.</remarks>
+    public static bool TryGenerateEmojiIcon(string? emoji, int size, string outputPngPath, string caption = "")
     {
         try
         {
@@ -134,7 +166,15 @@ public static class EmojiGlyphRenderer
                 dc.DrawRectangle(new SolidColorBrush(TileBackground), null, new Rect(0, 0, size, size));
                 dc.PushClip(new RectangleGeometry(new Rect(0, 0, size, size),
                     size * KeyCornerRadiusRatio, size * KeyCornerRadiusRatio));
-                DrawCentered(dc, drawing, size);
+                if (string.IsNullOrEmpty(caption))
+                {
+                    DrawCentered(dc, drawing, size);
+                }
+                else
+                {
+                    DrawInBox(dc, drawing, new Rect(size * 0.22, size * 0.08, size * 0.56, size * 0.56));
+                    DrawCaption(dc, size, caption);
+                }
                 dc.Pop();
             }
 
@@ -155,6 +195,80 @@ public static class EmojiGlyphRenderer
             return false;
         }
     }
+
+    /// <summary>Scales <paramref name="drawing"/> to fit <paramref name="box"/> and centers
+    /// it there on its own ink bounds — the captioned-tile counterpart of
+    /// <see cref="DrawCentered"/> (which is the same math against the whole tile).</summary>
+    private static void DrawInBox(DrawingContext dc, DrawingGroup drawing, Rect box)
+    {
+        Rect b = drawing.Bounds;
+        if (b.Width <= 0 || b.Height <= 0) return;
+
+        double scale = Math.Min(box.Width / b.Width, box.Height / b.Height);
+        dc.PushTransform(new TranslateTransform(
+            box.X + box.Width / 2 - (b.X + b.Width / 2) * scale,
+            box.Y + box.Height / 2 - (b.Y + b.Height / 2) * scale));
+        dc.PushTransform(new ScaleTransform(scale, scale));
+        dc.DrawDrawing(drawing);
+        dc.Pop();
+        dc.Pop();
+    }
+
+    /// <summary>Caption strip below the icon area — deliberately the same geometry and font
+    /// size as <c>IconImageGenerator.DrawCaption</c> (a GDI+ method, hence the reimplementation
+    /// rather than a shared call) so captioned emoji tiles and captioned hand-drawn tiles are
+    /// indistinguishable side by side on the panel. Long names wrap and the font shrinks
+    /// (down to <see cref="MinCaptionFontSize"/>) rather than being cut short with "…" —
+    /// ellipsis is wired up only as a last-resort safety net for text that still doesn't fit
+    /// at the smallest size.</summary>
+    private static void DrawCaption(DrawingContext dc, double size, string caption)
+    {
+        double maxWidth = size * 0.88;
+        double maxHeight = size * 0.30;
+        double startFontSize = IconStyleScope.OverrideFontSize ?? Math.Max(9.0, size * 0.13) + 4.0;
+        var typeface = CaptionTypeface;
+        var brush = CaptionBrush;
+        caption = IconStyleScope.OverrideCaption ?? caption;   // see IconImageGenerator.DrawCaption
+
+        for (double fontSize = startFontSize; fontSize >= MinCaptionFontSize; fontSize -= 1.0)
+        {
+            var candidate = new FormattedText(
+                caption,
+                System.Globalization.CultureInfo.CurrentUICulture,
+                FlowDirection.LeftToRight,
+                typeface,
+                fontSize,
+                brush,
+                1.0)
+            {
+                MaxTextWidth = maxWidth,
+                TextAlignment = TextAlignment.Center,
+            };
+            if (candidate.Height <= maxHeight)
+            {
+                dc.DrawText(candidate, new Point(size * 0.06, size * 0.68));
+                return;
+            }
+        }
+
+        var fallback = new FormattedText(
+            caption,
+            System.Globalization.CultureInfo.CurrentUICulture,
+            FlowDirection.LeftToRight,
+            typeface,
+            MinCaptionFontSize,
+            brush,
+            1.0)
+        {
+            MaxTextWidth = maxWidth,
+            MaxTextHeight = maxHeight,
+            TextAlignment = TextAlignment.Center,
+            Trimming = TextTrimming.CharacterEllipsis,
+        };
+        dc.DrawText(fallback, new Point(size * 0.06, size * 0.68));
+    }
+
+    private const double MinCaptionFontSize = 7.0;
 
     /// <summary>Scales <paramref name="drawing"/> to <see cref="GlyphFillRatio"/> of the tile
     /// and centers it on the glyph's own ink bounds — glyph outlines sit on a baseline with

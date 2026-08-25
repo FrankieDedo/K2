@@ -1,10 +1,9 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.IO;
-using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace K2.Core;
@@ -21,20 +20,61 @@ namespace K2.Core;
 /// </summary>
 public static class IconImageGenerator
 {
-    private static readonly Color BackgroundColor = ColorTranslator.FromHtml("#1A1A1E");
-    private static readonly Color FolderBackgroundColor = Color.Black;
+    private static readonly Color DefaultBackgroundColor = Color.Black;
+    private static readonly Color DefaultFolderBackgroundColor = Color.Black;
+
+    /// <summary>Tile background — the per-key override pushed by <see cref="IconStyleScope"/>
+    /// when the user picked a background color for this icon ("Edit icon"), otherwise the
+    /// stock look. Read per render (a property, not the former constant field) so a scope
+    /// pushed around a single TryGenerate* call is honoured without touching its signature.</summary>
+    private static Color BackgroundColor => IconStyleScope.OverrideBg ?? DefaultBackgroundColor;
+
+    /// <summary>Same as <see cref="BackgroundColor"/> for the black-tile flavours (folder,
+    /// back, glyph, nav, Google Home).</summary>
+    private static Color FolderBackgroundColor => IconStyleScope.OverrideBg ?? DefaultFolderBackgroundColor;
 
     /// <summary>Read live (not cached) so newly-generated icons follow the current
-    /// Settings &gt; Accent color theme (K2 Red / Mountain Blue) — see AccentCatalog.
-    /// Icons generated before a theme switch are not retroactively repainted, same as
-    /// every other one-shot GDI+ render in this class.</summary>
+    /// Settings &gt; Accent color &gt; Icon color (default: same as the app-wide accent
+    /// theme; can also be pinned to K2 Red / Mountain Blue / White independently — see
+    /// AppSettings.IconColorTheme). Icons generated before a change are not
+    /// retroactively repainted, same as every other one-shot GDI+ render in this class.</summary>
     private static Color AccentColor
     {
         get
         {
-            var c = Services.AccentCatalog.Resolve(AppSettings.AccentTheme).Accent;
+            var c = ResolveIconColor();
             return Color.FromArgb(c.A, c.R, c.G, c.B);
         }
+    }
+
+    /// <summary>The tile background/accent as <see cref="LiveTileRenderer"/> sees them —
+    /// the live-updating clock/monitor tiles are drawn by that class (their content changes
+    /// every second, so they can't go through the cached TryGenerate* path) but must look
+    /// like they came out of this one: same black rounded tile, same accent, same per-key
+    /// <see cref="IconStyleScope"/> overrides.</summary>
+    internal static Color TileBackground => FolderBackgroundColor;
+
+    /// <inheritdoc cref="TileBackground"/>
+    internal static Color TileAccent => AccentColor;
+
+    /// <summary>Accent color to tint a "full color" Base Camp gallery icon with (see
+    /// <see cref="TryGenerateGalleryIcon"/>). White is a fine accent for the hand-drawn glyph
+    /// tiles (a light line on the dark tile background) but breaks <see cref="TintBlueHueToAccent"/>:
+    /// with a white target hue/saturation are meaningless (both 0) and lightness only pushes
+    /// every recolored pixel further TOWARD white, washing the icon's own shading out against
+    /// the gallery art's own white highlights/background — user report 2026-08-25. Black is the
+    /// closest fixed color that still reads as a real recolor (matches the tile's own background)
+    /// instead of erasing the icon, so it's substituted only for this one tinting step.</summary>
+    private static Color GalleryTintColor => AccentColor is { R: 255, G: 255, B: 255 } ? Color.Black : AccentColor;
+
+    private static System.Windows.Media.Color ResolveIconColor()
+    {
+        string theme = AppSettings.IconColorTheme;
+        if (string.IsNullOrEmpty(theme))
+            return Services.AccentCatalog.Resolve(AppSettings.AccentTheme).Accent;
+        if (theme == "White")
+            return System.Windows.Media.Colors.White;
+        return Services.AccentCatalog.Resolve(theme).Accent;
     }
 
     /// <summary>Same ratio as CropEditor's KeyCornerRadiusRatio (kept independent rather than
@@ -50,7 +90,7 @@ public static class IconImageGenerator
     /// rounded rect — call right after <see cref="Graphics.Clear"/> (which ignores the
     /// clip region and always fills the whole bitmap) so the cut corners fall through to
     /// the background color already painted there.</summary>
-    private static void ClipToRoundedTile(Graphics g, int size)
+    internal static void ClipToRoundedTile(Graphics g, int size)
     {
         float radius = size * KeyCornerRadiusRatio;
         using var path = RoundedRectPath(0, 0, size, size, radius);
@@ -109,15 +149,13 @@ public static class IconImageGenerator
     }
 
     /// <summary>
-    /// Renders Base Camp's own DisplayPad folder tile art (<c>Assets/dp_folder_template.png</c>,
-    /// embedded — see <see cref="LoadFolderTemplate"/>) tinted to the K2 accent color, plus
-    /// <paramref name="name"/> as a caption, on a size×size black canvas, saved as PNG,
-    /// upright — for a DisplayPad "page" created from the UI (action "dp_folder"): a
-    /// virtual folder with no real filesystem path behind it, so there is no Windows icon
-    /// to extract (see <see cref="TryGenerateDiskFolderIcon"/> for an actual on-disk
-    /// folder). Falls back to a plain caption-only tile if the template can't be loaded.
+    /// Renders a flat folder silhouette in the K2 accent color plus <paramref name="name"/>
+    /// as a caption, on a size×size black canvas, saved as PNG, upright — for a DisplayPad
+    /// "page" created from the UI (action "dp_folder"): a virtual folder with no real
+    /// filesystem path behind it, so there is no Windows icon to extract (see
+    /// <see cref="TryGenerateDiskFolderIcon"/> for an actual on-disk folder).
     /// </summary>
-    public static bool TryGenerateFolderIcon(string name, int size, string outputPngPath)
+    public static bool TryGenerateFolderIcon(string name, int size, string outputPngPath, bool showCaption = true)
     {
         try
         {
@@ -130,8 +168,8 @@ public static class IconImageGenerator
                 g.Clear(FolderBackgroundColor);
                 ClipToRoundedTile(g, size);
 
-                DrawFolderTemplate(g, size);
-                DrawCaption(g, size, name);
+                DrawFlatFolder(g, size, centered: !showCaption);
+                if (showCaption) DrawCaption(g, size, name);
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
@@ -145,9 +183,9 @@ public static class IconImageGenerator
     }
 
     /// <summary>
-    /// Renders a hand-drawn "back" glyph (Segoe MDL2 Assets, same icon-font already used for
-    /// every other chrome glyph in K2 — see <c>K2Theme.xaml</c>'s <c>K2IconButton</c>) tinted
-    /// to the K2 accent color, plus <paramref name="caption"/> as a caption, on a size×size
+    /// Renders the flat "back" arrow (<see cref="NavShape.Back"/>, the same shape the emoji
+    /// browser's own back key uses) tinted to the K2 accent color, plus
+    /// <paramref name="caption"/> as a caption, on a size×size
     /// black canvas, saved as PNG, upright — for a DisplayPad key bound to the "dp_back"
     /// action (both the explicit "Set as Back button" context-menu item and the automatic
     /// default Key #0 of a freshly-opened folder sub-page, see
@@ -155,7 +193,7 @@ public static class IconImageGenerator
     /// layout as <see cref="TryGenerateFolderIcon"/>, so a "back" tile and a "folder" tile
     /// line up.
     /// </summary>
-    public static bool TryGenerateBackIcon(string caption, int size, string outputPngPath)
+    public static bool TryGenerateBackIcon(string caption, int size, string outputPngPath, bool showCaption = true)
     {
         try
         {
@@ -168,8 +206,9 @@ public static class IconImageGenerator
                 g.Clear(FolderBackgroundColor);
                 ClipToRoundedTile(g, size);
 
-                DrawBackGlyph(g, size);
-                DrawCaption(g, size, caption);
+                var (backLeft, backTop, backSize) = IconBox(size, centered: !showCaption);
+                DrawNavShape(g, new RectangleF(backLeft, backTop, backSize, backSize), NavShape.Back);
+                if (showCaption) DrawCaption(g, size, caption);
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
@@ -201,16 +240,9 @@ public static class IconImageGenerator
                 g.Clear(FolderBackgroundColor);
                 ClipToRoundedTile(g, size);
 
-                using var font = new Font("Segoe UI", size * 0.16f, FontStyle.Regular, GraphicsUnit.Pixel);
                 using var brush = new SolidBrush(Color.White);
                 var rect = new RectangleF(size * 0.08f, 0, size * 0.84f, size);
-                using var format = new StringFormat
-                {
-                    Alignment = StringAlignment.Center,
-                    LineAlignment = StringAlignment.Center,
-                    Trimming = StringTrimming.EllipsisCharacter,
-                };
-                g.DrawString(caption, font, brush, rect, format);
+                DrawWrappedShrunkText(g, caption, rect, size * 0.16f, brush, StringAlignment.Center);
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
@@ -234,10 +266,11 @@ public static class IconImageGenerator
     /// see <c>GoogleHomeJs.renderIcons</c>), which is why this takes an icon NAME rather than a
     /// path: "no icon" is an expected, non-exceptional case here.
     /// </summary>
-    public static bool TryGenerateGoogleHomeIcon(string? iconName, string caption, int size, string outputPngPath)
+    public static bool TryGenerateGoogleHomeIcon(string? iconName, string caption, int size, string outputPngPath, bool showCaption = true)
     {
         string? glyphPath = Services.GoogleHomeIconCatalog.TryGetCachedPng(iconName);
-        if (glyphPath is null) return TryGenerateCaptionIcon(caption, size, outputPngPath);
+        if (glyphPath is null)
+            return showCaption && TryGenerateCaptionIcon(caption, size, outputPngPath);
 
         try
         {
@@ -252,12 +285,13 @@ public static class IconImageGenerator
 
                 using (var glyph = LoadDetached(glyphPath))
                 {
-                    if (glyph is null) return TryGenerateCaptionIcon(caption, size, outputPngPath);
-                    var (boxLeft, boxTop, boxSize) = IconBox(size);
+                    if (glyph is null)
+                        return showCaption && TryGenerateCaptionIcon(caption, size, outputPngPath);
+                    var (boxLeft, boxTop, boxSize) = IconBox(size, centered: !showCaption);
                     g.DrawImage(glyph, boxLeft, boxTop, boxSize, boxSize);
                 }
 
-                DrawCaption(g, size, caption);
+                if (showCaption) DrawCaption(g, size, caption);
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
@@ -289,7 +323,7 @@ public static class IconImageGenerator
         {
             using var source = LoadBitmapWithRetry(sourceImagePath);
             if (source is null) return false;
-            using var tinted = tintToAccent ? TintBlueHueToAccent(source, AccentColor) : new Bitmap(source);
+            using var tinted = tintToAccent ? TintBlueHueToAccent(source, GalleryTintColor) : new Bitmap(source);
 
             using var canvas = new Bitmap(size, size);
             using (var g = Graphics.FromImage(canvas))
@@ -405,9 +439,8 @@ public static class IconImageGenerator
     /// <summary>
     /// Recolors the blue hue band of <paramref name="source"/> to <paramref name="accent"/>'s
     /// exact hue/saturation/lightness (see <see cref="RemapLightness"/> for why lightness is
-    /// remapped rather than copied verbatim) — a generalization of <see cref="TintFromBlueChannel"/>
-    /// for gallery art that mixes blue with black/white line art or other brand colors, not just
-    /// flat blue-on-black. Grayscale pixels (the black/white part of the art — near-zero
+    /// remapped rather than copied verbatim) — for gallery art that mixes blue with
+    /// black/white line art or other brand colors, not just flat blue-on-black. Grayscale pixels (the black/white part of the art — near-zero
     /// saturation) are naturally left untouched by the saturation gate below, no explicit
     /// black/white detection needed. See <see cref="TryGenerateGalleryIcon"/>.
     /// </summary>
@@ -477,17 +510,203 @@ public static class IconImageGenerator
         }
     }
 
-    /// <summary>Draws the Segoe MDL2 Assets "Back" glyph (U+E72B) centered in the same
-    /// square icon area <see cref="TryGenerateFolderIcon"/>/<see cref="TryGenerateDiskFolderIcon"/>
-    /// use, so all three auto-generated tile flavors align.</summary>
-    private static void DrawBackGlyph(Graphics g, int size)
+    /// <summary>Draws an arbitrary Segoe MDL2 Assets glyph, thickened, in the shared
+    /// <see cref="IconBox"/> area and tinted to the accent color — used by
+    /// <see cref="TryGenerateGlyphIcon"/>, i.e. by every <see cref="Services.ActionIconFallback"/>
+    /// default tile. Shapes K2 draws itself (folder, back, the emoji browser's scroll keys)
+    /// go through <see cref="DrawNavShape"/>/<see cref="DrawFlatFolder"/> instead.</summary>
+    private static void DrawGlyph(Graphics g, int size, string glyph, bool centered = false)
     {
-        var (boxLeft, boxTop, boxSize) = IconBox(size);
-        using var font = new Font("Segoe MDL2 Assets", boxSize * 0.75f, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var brush = new SolidBrush(AccentColor);
-        using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        var (boxLeft, boxTop, boxSize) = IconBox(size, centered);
         var rect = new RectangleF(boxLeft, boxTop, boxSize, boxSize);
-        g.DrawString("", font, brush, rect, format);
+        using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        using var brush = new SolidBrush(AccentColor);
+
+        // Segoe MDL2 Assets is a hairline outline font: drawn as-is at 102 px the strokes are
+        // about two pixels wide and all but vanish on the panel. Taking the glyph as a PATH
+        // and stroking it with a round-joined pen ON TOP of the fill thickens every stroke
+        // uniformly and softens the corners, which is what gives these tiles the same flat,
+        // chunky look as the hand-drawn shapes in DrawNavShape.
+        try
+        {
+            using var family = new FontFamily("Segoe MDL2 Assets");
+            using var path = new GraphicsPath();
+            path.AddString(glyph, family, (int)FontStyle.Regular, boxSize * 0.72f, rect, format);
+            using var pen = new Pen(AccentColor, boxSize * GlyphStrokeRatio)
+            {
+                LineJoin = LineJoin.Round,
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+            };
+            g.FillPath(brush, path);
+            g.DrawPath(pen, path);
+        }
+        catch
+        {
+            // Font missing, or GDI+ refusing to hand out its outlines: a thin glyph still
+            // beats an empty tile.
+            using var font = new Font("Segoe MDL2 Assets", boxSize * 0.75f, FontStyle.Regular, GraphicsUnit.Pixel);
+            g.DrawString(glyph, font, brush, rect, format);
+        }
+    }
+
+    /// <summary>How much of the icon box the glyph-thickening stroke adds — see
+    /// <see cref="DrawGlyph"/>. Tuned by eye against the busiest glyphs in
+    /// <see cref="Services.ActionIconFallback"/> (calculator, keyboard): any thicker and their
+    /// internal detail fills in.</summary>
+    private const float GlyphStrokeRatio = 0.034f;
+
+    /// <summary>
+    /// Same tile as <see cref="TryGenerateBackIcon"/> but with an arbitrary Segoe MDL2 Assets
+    /// <paramref name="glyph"/> (a one-character string) and an optional <paramref name="caption"/>
+    /// below it. Used by <see cref="Services.ActionIconFallback"/> for the "no art anywhere else"
+    /// default tile of an action key. Pass an empty caption for a glyph-only tile.
+    /// </summary>
+    public static bool TryGenerateGlyphIcon(string glyph, string caption, int size, string outputPngPath, bool showCaption = true)
+    {
+        try
+        {
+            using var canvas = new Bitmap(size, size);
+            using (var g = Graphics.FromImage(canvas))
+            {
+                g.SmoothingMode = SmoothingMode.HighQuality;
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                g.Clear(FolderBackgroundColor);
+                ClipToRoundedTile(g, size);
+
+                bool drawCaption = showCaption && !string.IsNullOrEmpty(caption);
+                DrawGlyph(g, size, glyph, centered: !drawCaption);
+                if (drawCaption) DrawCaption(g, size, caption);
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
+            canvas.Save(outputPngPath, ImageFormat.Png);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Flat navigation shapes drawn by <see cref="TryGenerateNavIcon"/>.</summary>
+    public enum NavShape
+    {
+        /// <summary>Solid left arrow (head + shaft) — "go back one level".</summary>
+        Back,
+        /// <summary>Thick X — "close/dismiss".</summary>
+        Close,
+        /// <summary>Scroll triangles. Which pair is used depends on how the panel is
+        /// mounted: up/down on an unrotated 2×6 pad, left/right on a 90°/270° one.</summary>
+        Up, Down, Left, Right,
+    }
+
+    /// <summary>
+    /// Same tile flavour as <see cref="TryGenerateBackIcon"/> (black rounded square, accent
+    /// color, optional caption below) but with a hand-drawn FLAT shape instead of an icon-font
+    /// glyph: the Segoe MDL2 chevrons are thin outlines that all but vanish on a 102 px key,
+    /// so the emoji browser's own navigation keys use solid shapes with softened corners
+    /// (triangles for scrolling, a filled arrow for back, a thick cross for close).
+    /// Pass an empty caption for a shape-only tile — it then gets a bigger, vertically
+    /// centered shape instead of the caption layout's top-aligned <see cref="IconBox"/>.
+    /// </summary>
+    public static bool TryGenerateNavIcon(NavShape shape, string caption, int size, string outputPngPath)
+    {
+        try
+        {
+            using var canvas = new Bitmap(size, size);
+            using (var g = Graphics.FromImage(canvas))
+            {
+                g.SmoothingMode = SmoothingMode.HighQuality;
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                g.Clear(FolderBackgroundColor);
+                ClipToRoundedTile(g, size);
+
+                RectangleF box;
+                if (string.IsNullOrEmpty(caption))
+                {
+                    float side = size * 0.58f;
+                    box = new RectangleF((size - side) / 2f, (size - side) / 2f, side, side);
+                }
+                else
+                {
+                    var (boxLeft, boxTop, boxSize) = IconBox(size);
+                    box = new RectangleF(boxLeft, boxTop, boxSize, boxSize);
+                    DrawCaption(g, size, caption);
+                }
+
+                DrawNavShape(g, box, shape);
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
+            canvas.Save(outputPngPath, ImageFormat.Png);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Paints one <see cref="NavShape"/> filled in the accent color inside
+    /// <paramref name="box"/>. Corners are softened by stroking the same path with a
+    /// round-joined pen of the same color on top of the fill — cheaper and more even than
+    /// building per-corner arcs, and the stroke's half-width is why the polygons below stop
+    /// short of the box edges.</summary>
+    private static void DrawNavShape(Graphics g, RectangleF box, NavShape shape)
+    {
+        float b = Math.Min(box.Width, box.Height);
+        float x = box.X, y = box.Y;
+        using var brush = new SolidBrush(AccentColor);
+        using var pen = new Pen(AccentColor, b * 0.13f)
+        {
+            LineJoin = LineJoin.Round,
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round,
+        };
+
+        if (shape == NavShape.Close)
+        {
+            using var bar = new Pen(AccentColor, b * 0.20f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            g.DrawLine(bar, x + b * 0.24f, y + b * 0.24f, x + b * 0.76f, y + b * 0.76f);
+            g.DrawLine(bar, x + b * 0.76f, y + b * 0.24f, x + b * 0.24f, y + b * 0.76f);
+            return;
+        }
+
+        if (shape == NavShape.Back)
+        {
+            // Head + shaft, so "back" stays readable next to the plain scroll triangles.
+            using var head = new GraphicsPath();
+            head.AddPolygon(new[]
+            {
+                new PointF(x + b * 0.12f, y + b * 0.50f),
+                new PointF(x + b * 0.50f, y + b * 0.20f),
+                new PointF(x + b * 0.50f, y + b * 0.80f),
+            });
+            g.FillPath(brush, head);
+            g.DrawPath(pen, head);
+
+            using var shaft = new GraphicsPath();
+            shaft.AddRectangle(new RectangleF(x + b * 0.46f, y + b * 0.40f, b * 0.40f, b * 0.20f));
+            g.FillPath(brush, shaft);
+            g.DrawPath(pen, shaft);
+            return;
+        }
+
+        PointF[] triangle = shape switch
+        {
+            NavShape.Up   => new[] { new PointF(x + b * 0.50f, y + b * 0.22f), new PointF(x + b * 0.84f, y + b * 0.72f), new PointF(x + b * 0.16f, y + b * 0.72f) },
+            NavShape.Down => new[] { new PointF(x + b * 0.50f, y + b * 0.78f), new PointF(x + b * 0.16f, y + b * 0.28f), new PointF(x + b * 0.84f, y + b * 0.28f) },
+            NavShape.Left => new[] { new PointF(x + b * 0.22f, y + b * 0.50f), new PointF(x + b * 0.72f, y + b * 0.16f), new PointF(x + b * 0.72f, y + b * 0.84f) },
+            _             => new[] { new PointF(x + b * 0.78f, y + b * 0.50f), new PointF(x + b * 0.28f, y + b * 0.84f), new PointF(x + b * 0.28f, y + b * 0.16f) },
+        };
+
+        using var path = new GraphicsPath();
+        path.AddPolygon(triangle);
+        g.FillPath(brush, path);
+        g.DrawPath(pen, path);
     }
 
     /// <summary>
@@ -498,13 +717,13 @@ public static class IconImageGenerator
     /// on-disk directory. Falls back to <see cref="TryGenerateFolderIcon"/>'s hand-drawn
     /// glyph if the shell can't produce an icon for the path (e.g. it no longer exists).
     /// </summary>
-    public static bool TryGenerateDiskFolderIcon(string folderPath, int size, string outputPngPath)
+    public static bool TryGenerateDiskFolderIcon(string folderPath, int size, string outputPngPath, bool showCaption = true)
     {
         string name = SafeFolderName(folderPath);
         try
         {
             using var icon = GetBestIcon(folderPath, size);
-            if (icon is null) return TryGenerateFolderIcon(name, size, outputPngPath);
+            if (icon is null) return TryGenerateFolderIcon(name, size, outputPngPath, showCaption);
 
             using var canvas = new Bitmap(size, size);
             using (var g = Graphics.FromImage(canvas))
@@ -515,10 +734,10 @@ public static class IconImageGenerator
                 g.Clear(FolderBackgroundColor);
                 ClipToRoundedTile(g, size);
 
-                var (offsetX, offsetY, iconSize) = IconBox(size);
+                var (offsetX, offsetY, iconSize) = IconBox(size, centered: !showCaption);
                 g.DrawImage(icon, offsetX, offsetY, iconSize, iconSize);
 
-                DrawCaption(g, size, name);
+                if (showCaption) DrawCaption(g, size, name);
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
@@ -533,130 +752,163 @@ public static class IconImageGenerator
 
     /// <summary>Folder name caption, centered below the icon area — shared layout
     /// between <see cref="TryGenerateFolderIcon"/> and <see cref="TryGenerateDiskFolderIcon"/>.</summary>
-    private static void DrawCaption(Graphics g, int size, string name)
+    internal static void DrawCaption(Graphics g, int size, string name)
     {
-        float labelSize = Math.Max(9f, size * 0.13f) + 4f;
-        using var labelFont = new Font("Segoe UI", labelSize, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var labelBrush = new SolidBrush(Color.White);
+        // Both the size and the color can be overridden per key from "Edit icon" — the size
+        // acts as a STARTING size, since DrawWrappedShrunkText still shrinks from there when
+        // the text doesn't fit the caption strip ("segue le attuali regole").
+        float labelSize = (float)(IconStyleScope.OverrideFontSize ?? Math.Max(9f, size * 0.13f) + 4f);
+        using var labelBrush = new SolidBrush(IconStyleScope.OverrideText ?? Color.White);
+        // The user's own wording wins over whatever the generator derived (folder name,
+        // device name, action summary) — see IconStyleScope.OverrideCaption.
+        name = IconStyleScope.OverrideCaption ?? name;
         var rect = new RectangleF(size * 0.06f, size * 0.68f, size * 0.88f, size * 0.28f);
-        using var format = new StringFormat
+        DrawWrappedShrunkText(g, name, rect, labelSize, labelBrush, StringAlignment.Near);
+    }
+
+    /// <summary>
+    /// Draws <paramref name="text"/> centered horizontally in <paramref name="rect"/>,
+    /// word-wrapping across as many lines as fit and shrinking the font (down to
+    /// <see cref="MinLabelFontSize"/>) rather than truncating with an ellipsis — a long
+    /// folder/action name reads better on two smaller lines than cut short with "…".
+    /// The ellipsis trimming stays wired up only as a last-resort safety net for the
+    /// pathological case where even the smallest font doesn't fit (e.g. a single very
+    /// long unbroken word).
+    /// </summary>
+    private static void DrawWrappedShrunkText(Graphics g, string text, RectangleF rect,
+        float startFontSize, Brush brush, StringAlignment lineAlignment)
+    {
+        for (float fontSize = startFontSize; fontSize >= MinLabelFontSize; fontSize -= 1f)
+        {
+            using var candidate = CaptionFont(fontSize);
+            using var format = new StringFormat
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = lineAlignment,
+                FormatFlags = StringFormatFlags.LineLimit,
+            };
+            SizeF measured = g.MeasureString(text, candidate, (int)rect.Width, format);
+            if (measured.Height <= rect.Height)
+            {
+                g.DrawString(text, candidate, brush, rect, format);
+                return;
+            }
+        }
+
+        using var fallbackFont = CaptionFont(MinLabelFontSize);
+        using var fallbackFormat = new StringFormat
         {
             Alignment = StringAlignment.Center,
-            LineAlignment = StringAlignment.Near,
+            LineAlignment = lineAlignment,
             Trimming = StringTrimming.EllipsisCharacter,
             FormatFlags = StringFormatFlags.LineLimit,
         };
-        g.DrawString(name, labelFont, labelBrush, rect, format);
+        g.DrawString(text, fallbackFont, brush, rect, fallbackFormat);
     }
 
-    /// <summary>Tight crop of the shape within <c>dp_folder_template.png</c>'s 294×294
-    /// canvas (measured once from the source asset, plus a little anti-aliasing padding) —
-    /// everything outside this is empty black margin.</summary>
-    private static readonly Rectangle FolderTemplateCrop = new(56, 76, 182, 148);
+    private const float MinLabelFontSize = 7f;
 
-    /// <summary>Icon area shared by both folder-tile flavors — a real on-disk folder's
-    /// Windows icon (<see cref="TryGenerateDiskFolderIcon"/>) and this hand-tinted
-    /// template (<see cref="TryGenerateFolderIcon"/>) — so a "page" tile and a "real
-    /// folder" tile line up at the same size/position on the DisplayPad grid instead of
-    /// one looking smaller/lower than the other.</summary>
-    private static (float Left, float Top, float Size) IconBox(int size)
+    /// <summary>"Segoe UI Semibold" resolved once, or null when that family isn't installed.
+    /// It has to be probed through <see cref="FontFamily"/>'s constructor (which throws for an
+    /// unknown family) because <see cref="Font"/>'s constructor SILENTLY substitutes a default
+    /// family instead of failing — so a plain <c>new Font("Segoe UI Semibold", ...)</c> would
+    /// quietly render in Microsoft Sans Serif on a machine without it.</summary>
+    private static readonly FontFamily? SemiboldFamily = TryGetFamily("Segoe UI Semibold");
+
+    private static FontFamily? TryGetFamily(string name)
+    {
+        try { return new FontFamily(name); }
+        catch (ArgumentException) { return null; }
+    }
+
+    /// <summary>Font used by EVERY auto-generated caption/label in this class — semibold, by
+    /// explicit user request: on Windows "Segoe UI Semibold" is a separate FAMILY, not a
+    /// <see cref="FontStyle"/>, so the weight can't be asked for through the style flags.
+    /// Falls back to Segoe UI Bold (the closest available weight) when it isn't installed.</summary>
+    internal static Font CaptionFont(float sizePx)
+    {
+        // Per-key font picked in "Edit icon" (see IconStyleScope); an unusable family name
+        // falls through to the stock face rather than throwing mid-render.
+        if (IconStyleScope.OverrideFontFamily is string family)
+        {
+            try { return new Font(family, sizePx, FontStyle.Bold, GraphicsUnit.Pixel); }
+            catch { }
+        }
+        return SemiboldFamily is not null
+            ? new Font(SemiboldFamily, sizePx, FontStyle.Regular, GraphicsUnit.Pixel)
+            : new Font("Segoe UI", sizePx, FontStyle.Bold, GraphicsUnit.Pixel);
+    }
+
+    /// <summary>Icon area shared by every generated tile flavor — a real on-disk folder's
+    /// Windows icon (<see cref="TryGenerateDiskFolderIcon"/>), the hand-drawn folder/nav
+    /// shapes, the thickened MDL2 glyphs and a captioned emoji alike — so they all line up
+    /// at the same size/position on the DisplayPad grid instead of one looking smaller or
+    /// lower than the others.</summary>
+    /// <summary>Pass <paramref name="centered"/> true (no caption drawn below) to vertically
+    /// center the box on the tile instead of the default top-offset layout that leaves room
+    /// for <see cref="DrawCaption"/>'s bottom strip.</summary>
+    private static (float Left, float Top, float Size) IconBox(int size, bool centered = false)
     {
         float iconSize = size * 0.56f;
-        return ((size - iconSize) / 2f, size * 0.08f, iconSize);
+        float top = centered ? (size - iconSize) / 2f : size * 0.08f;
+        return ((size - iconSize) / 2f, top, iconSize);
     }
 
     /// <summary>
-    /// Draws Base Camp's own folder-tile art (see <see cref="LoadFolderTemplate"/>),
-    /// cropped to its shape and tinted to <see cref="AccentColor"/>, into the same
-    /// square <see cref="IconBox"/> <see cref="TryGenerateDiskFolderIcon"/> uses for a
-    /// real folder's Windows icon (letterboxed within it, since the folder shape itself
-    /// is wider than tall) — see <see cref="TryGenerateFolderIcon"/>.
+    /// Draws a flat folder silhouette — a rounded body with a tab stub on top-left, filled in
+    /// <see cref="AccentColor"/> — letterboxed into the same square <see cref="IconBox"/>
+    /// <see cref="TryGenerateDiskFolderIcon"/> uses for a real folder's Windows icon, so a
+    /// "page" tile and a "real folder" tile line up. Replaces the outline art K2 used to tint
+    /// out of Base Camp's own <c>dp_folder_template.png</c>: that shape was a hairline outline
+    /// that disappeared on a 102 px key, and hand-drawing it also drops the dependency on a
+    /// Base Camp asset. Same fill+round-joined-stroke construction as
+    /// <see cref="DrawNavShape"/>.
     /// </summary>
-    private static void DrawFolderTemplate(Graphics g, int size)
+    private static void DrawFlatFolder(Graphics g, int size, bool centered = false)
     {
-        using var template = LoadFolderTemplate();
-        if (template is null) return; // caption-only fallback — see TryGenerateFolderIcon
+        var (boxLeft, boxTop, boxSize) = IconBox(size, centered);
+        // The folder shape is wider than tall, so it is letterboxed in the square icon box.
+        float w = boxSize, h = boxSize * 0.80f;
+        float x = boxLeft, y = boxTop + (boxSize - h) / 2f;
 
-        using var cropped = template.Clone(FolderTemplateCrop, template.PixelFormat);
-        using var tinted = TintFromBlueChannel(cropped, AccentColor);
+        float stroke = h * 0.13f;
+        float inset = stroke / 2f;                 // the stroke grows the shape outwards
+        float tabH = h * 0.18f;
 
-        var (boxLeft, boxTop, boxSize) = IconBox(size);
+        using var brush = new SolidBrush(AccentColor);
+        using var pen = new Pen(AccentColor, stroke)
+        {
+            LineJoin = LineJoin.Round,
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round,
+        };
 
-        float shapeAspect = (float)FolderTemplateCrop.Width / FolderTemplateCrop.Height;
-        float drawW = boxSize, drawH = drawW / shapeAspect;
-        if (drawH > boxSize) { drawH = boxSize; drawW = drawH * shapeAspect; }
-        float drawX = boxLeft + (boxSize - drawW) / 2f;
-        float drawY = boxTop + (boxSize - drawH) / 2f;
-
-        g.DrawImage(tinted, drawX, drawY, drawW, drawH);
+        // Tab first, body second: the body's own rounded corners then win where they overlap.
+        // Tab length: this is the RECT, and the round-joined stroke below grows it by a
+        // further half-stroke on each side, so the drawn tab is wider than the rect —
+        // 0.32 draws ~24 px of the 57 px shape at the DisplayPad's 102 px tile. Tuned
+        // against the real panel over three rounds of user feedback (2026-08-23):
+        // 0.42 (~53%, read as a second slab) -> 0.22 (18 px, too stubby) -> 0.27
+        // (21 px, still short) -> 0.32.
+        using (var tab = new GraphicsPath())
+        {
+            tab.AddRectangle(new RectangleF(x + inset, y + inset, w * 0.32f, tabH * 2f));
+            g.FillPath(brush, tab);
+            g.DrawPath(pen, tab);
+        }
+        using (var body = new GraphicsPath())
+        {
+            body.AddRectangle(new RectangleF(x + inset, y + tabH + inset, w - stroke, h - tabH - stroke));
+            g.FillPath(brush, body);
+            g.DrawPath(pen, body);
+        }
     }
 
-    /// <summary>Loads the embedded <c>Assets/dp_folder_template.png</c> (Base Camp's own
-    /// DisplayPad folder-tile art — solid black background, the shape drawn in a fixed
-    /// blue), or null if the resource can't be found/read.</summary>
-    private static Bitmap? LoadFolderTemplate()
-    {
-        try
-        {
-            using var stream = Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("K2.Core.Assets.dp_folder_template.png");
-            if (stream is null) return null;
-
-            // Bitmap(Stream) can lazily reference the stream for later pixel access
-            // (a well-known GDI+ gotcha) — copy-construct to fully detach before the
-            // `using` above disposes it out from under the caller.
-            using var lazy = new Bitmap(stream);
-            return new Bitmap(lazy);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Recolors a black-background/solid-blue source image to black-background/<paramref name="accent"/>,
-    /// using the source's own blue channel as a per-pixel coverage mask (it varies smoothly
-    /// from 0 at the background to 255 at the shape's fill, including anti-aliased edges) —
-    /// avoids depending on alpha transparency, which <c>dp_folder_template.png</c> doesn't have.
-    /// </summary>
-    private static Bitmap TintFromBlueChannel(Bitmap source, Color accent)
-    {
-        var result = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
-        var rect = new Rectangle(0, 0, source.Width, source.Height);
-        var src32 = source.PixelFormat == PixelFormat.Format32bppArgb
-            ? source : source.Clone(rect, PixelFormat.Format32bppArgb);
-        try
-        {
-            var srcData = src32.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-            var dstData = result.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-            try
-            {
-                int bytes = Math.Abs(srcData.Stride) * source.Height;
-                var buf = new byte[bytes];
-                Marshal.Copy(srcData.Scan0, buf, 0, bytes);
-                for (int i = 0; i < bytes; i += 4)
-                {
-                    double coverage = buf[i] / 255.0; // Format32bppArgb byte order: B,G,R,A
-                    buf[i]     = (byte)(accent.B * coverage);
-                    buf[i + 1] = (byte)(accent.G * coverage);
-                    buf[i + 2] = (byte)(accent.R * coverage);
-                    buf[i + 3] = 255;
-                }
-                Marshal.Copy(buf, 0, dstData.Scan0, bytes);
-            }
-            finally
-            {
-                src32.UnlockBits(srcData);
-                result.UnlockBits(dstData);
-            }
-        }
-        finally
-        {
-            if (!ReferenceEquals(src32, source)) src32.Dispose();
-        }
-        return result;
-    }
+    /// <summary>The exact caption <see cref="TryGenerateDiskFolderIcon"/> bakes into the tile
+    /// for a real on-disk folder — exposed so the key-config dialogs can prefill "Add/Edit
+    /// text" with it instead of stacking new text on top of the already-captioned default
+    /// icon.</summary>
+    public static string GetDiskFolderCaption(string folderPath) => SafeFolderName(folderPath);
 
     private static string SafeFolderName(string folderPath)
     {

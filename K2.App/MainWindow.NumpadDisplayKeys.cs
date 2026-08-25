@@ -36,6 +36,13 @@ public partial class MainWindow
     /// <summary>Action associated with each display key (type, value).</summary>
     private readonly (string? Type, string? Value)[] _ndkActions = new (string?, string?)[NdkCount];
 
+    /// <summary>Persisted icon settings per display key (<c>KeyIconSpec</c> JSON) — the
+    /// "default icon" flag, caption, font, colors and rotation chosen in
+    /// <see cref="NdkKeyConfigDialog"/>, so reopening it resumes from the same settings
+    /// instead of only inheriting the rendered PNG. Mirrors the DisplayPad's
+    /// <c>DisplayPadKey.IconSpecJson</c>.</summary>
+    private readonly string?[] _ndkIconSpecs = new string?[NdkCount];
+
     /// <summary>Resting border accent (teal) — also the "un-pressed" target for
     /// <see cref="NdkHighlightButton"/>.</summary>
     private static readonly SolidColorBrush s_ndkBorderBrush = new(Color.FromRgb(0x5B, 0xBE, 0xC3));
@@ -163,6 +170,7 @@ public partial class MainWindow
                 _evStore.GetSetting($"ndk.{profile}.{i}.actionType"),
                 _evStore.GetSetting($"ndk.{profile}.{i}.actionValue")
             );
+            _ndkIconSpecs[i] = _evStore.GetSetting($"ndk.{profile}.{i}.iconSpec");
 
             if (!string.IsNullOrEmpty(_ndkImagePaths[i]) && File.Exists(_ndkImagePaths[i]))
                 NdkSetThumbnail(i, _ndkImagePaths[i]!);
@@ -179,6 +187,7 @@ public partial class MainWindow
         _evStore.SetSetting($"ndk.{profile}.{index}.imagePath", _ndkImagePaths[index] ?? "");
         _evStore.SetSetting($"ndk.{profile}.{index}.actionType", _ndkActions[index].Type ?? "");
         _evStore.SetSetting($"ndk.{profile}.{index}.actionValue", _ndkActions[index].Value ?? "");
+        _evStore.SetSetting($"ndk.{profile}.{index}.iconSpec", _ndkIconSpecs[index] ?? "");
     }
 
     // ─────────────────────── Thumbnail ───────────────────────
@@ -248,11 +257,13 @@ public partial class MainWindow
     private void ConfigureNdkKey(int keyIndex)
     {
         var dlg = new NdkKeyConfigDialog(
-            keyIndex, _ndkImagePaths[keyIndex], _ndkActions[keyIndex].Type, _ndkActions[keyIndex].Value, _evActionHost)
+            keyIndex, _ndkImagePaths[keyIndex], _ndkActions[keyIndex].Type, _ndkActions[keyIndex].Value,
+            _evActionHost, _ndkIconSpecs[keyIndex])
         { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
         _ndkActions[keyIndex] = (dlg.ActionType, dlg.ActionValue);
+        _ndkIconSpecs[keyIndex] = dlg.IconSpecJson;
 
         if (dlg.ImageChanged)
         {
@@ -322,6 +333,7 @@ public partial class MainWindow
 
         (_ndkActions[sourceIndex], _ndkActions[targetIndex])       = (_ndkActions[targetIndex], _ndkActions[sourceIndex]);
         (_ndkImagePaths[sourceIndex], _ndkImagePaths[targetIndex]) = (_ndkImagePaths[targetIndex], _ndkImagePaths[sourceIndex]);
+        (_ndkIconSpecs[sourceIndex], _ndkIconSpecs[targetIndex])   = (_ndkIconSpecs[targetIndex], _ndkIconSpecs[sourceIndex]);
 
         NdkRefreshAfterSwap(sourceIndex);
         NdkRefreshAfterSwap(targetIndex);
@@ -590,6 +602,7 @@ public partial class MainWindow
     {
         _ndkActions[idx] = (null, null);
         _ndkImagePaths[idx] = null;
+        _ndkIconSpecs[idx] = null;
         NdkClearThumbnail(idx);
         SaveNdkKey(idx);
         EvRefreshNdkInKeyList();

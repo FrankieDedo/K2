@@ -735,6 +735,9 @@
   <string name="txt_bg_color">배경:</string>
   <string name="txt_color">텍스트:</string>
   <string name="txt_position_label">위치:</string>
+  <string name="txt_icon_source_label">아이콘 소스:</string>
+  <string name="txt_icon_source_basecamp">Base Camp</string>
+  <string name="txt_icon_source_k2">K2</string>
   <string name="txt_generate_failed">텍스트 이미지를 생성할 수 없습니다.</string>
   <string name="dp_open_bc_profile">BaseCamp 프로파일 열기</string>
   <string name="dp_filter_bc_xml">BaseCamp 프로파일 (*.xml)|*.xml|모든 파일|*.*</string>
@@ -847,4 +850,28 @@
   <string name="unhandled_error_domain">처리되지 않은 오류 (도메인)</string>
   <string name="veh_no_return">Frame-walk: SDKDLL.dll 외부의 반환 주소를 찾을 수 없습니다</string>
   <string name="profile_switch_unsupported">프로파일: MacroPad에서의 프로파일 전환은 아직 지원되지 않습니다</string>
+  <!-- DisplayPad live tiles: clock / PC monitor / speed test (dp_clock, dp_sysmon, dp_speedtest) -->
+  <string name="act_dp_clock">시계</string>
+  <string name="act_dp_sysmon">PC 모니터</string>
+  <string name="act_dp_speedtest">속도 테스트</string>
+  <string name="cat_live">라이브 키</string>
+  <string name="clock_mode_analog">아날로그 시계</string>
+  <string name="clock_mode_digital24">디지털 시계 (24시간)</string>
+  <string name="clock_mode_digital12">디지털 시계 (12시간)</string>
+  <string name="clock_mode_vert24">세로 시계 (24시간)</string>
+  <string name="clock_mode_vert12">세로 시계 (12시간)</string>
+  <string name="clock_mode_hours">시만 표시 (24시간)</string>
+  <string name="clock_mode_hours12">시만 표시 (12시간)</string>
+  <string name="clock_mode_minutes">분만 표시</string>
+  <string name="clock_mode_seconds">초만 표시</string>
+  <string name="clock_mode_date">날짜</string>
+  <string name="sysmon_cpu">CPU 사용률</string>
+  <string name="sysmon_ram">RAM 사용률</string>
+  <string name="sysmon_gpu">GPU 사용률</string>
+  <string name="sysmon_disk">디스크 사용률</string>
+  <string name="sysmon_net_down">다운로드 속도</string>
+  <string name="sysmon_net_up">업로드 속도</string>
+  <string name="speedtest_down">속도 테스트 - 다운로드</string>
+  <string name="speedtest_up">속도 테스트 - 업로드</string>
+  <string name="speedtest_ping">속도 테스트 - 핑</string>
 </strings>

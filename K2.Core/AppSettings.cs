@@ -41,6 +41,7 @@ public static class AppSettings
         public string? Everest60DeviceName { get; set; }
         public string AppFontFamily { get; set; } = Services.FontCatalog.DefaultKey;
         public string AccentTheme { get; set; } = Services.AccentCatalog.DefaultKey;
+        public string IconColorTheme { get; set; } = "";
         public string IconGalleryStyle { get; set; } = "color";
         public bool BcImportPromptShown { get; set; }
         public string? BaseCampDllFolder { get; set; }
@@ -291,6 +292,28 @@ public static class AppSettings
         {
             if (_data.AccentTheme == key) return;
             _data.AccentTheme = key;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>Key into <see cref="Services.AccentCatalog.Options"/> for auto-generated
+    /// icon glyph/tint color (Settings &gt; Accent color &gt; Icon color), independent of
+    /// <see cref="AccentTheme"/>. Empty string is the default "Same as accent color" —
+    /// see <c>IconImageGenerator.IconColor</c>. The special value "White" resolves to
+    /// plain white rather than an AccentCatalog key.</summary>
+    public static string IconColorTheme
+    {
+        get { EnsureLoaded(); return _data.IconColorTheme; }
+    }
+
+    public static void SetIconColorTheme(string key)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.IconColorTheme == key) return;
+            _data.IconColorTheme = key;
             Save();
         }
         Changed?.Invoke();
