@@ -90,7 +90,6 @@ Start as admin and keep in mind that it should close all Base Camp process autom
   <li>RGB lighting (same presets as Everest Max) + 44-LED side ring + per-key Key Lighting with live preview</li>
   <li>Keycap and keyboard customization: You can put in the UI the actual style of your keyboard, with Normal/Pudding/ReversePudding keycaps, including translucent legends. Also, you can put any image on there, to emulate custom keycaps.</li>
 </ul>
-<p><em>Not yet verified on physical hardware — functionally complete but untested on a real device.</em></p>
 </details>
 
 <details open>
