@@ -2577,8 +2577,8 @@ public partial class MainWindow
         _ev60SettingsSuppress = true;
         try
         {
-            CbEv60KeycapStyle.ItemsSource       = KeycapStyleChoices;
-            CbEv60KeycapStyle.DisplayMemberPath = "Label";
+            CbEv60KeycapStyle.ItemsSource  = KeycapStyleChoices;
+            CbEv60KeycapStyle.ItemTemplate = (DataTemplate)FindResource("KeycapStyleItemTemplate");
 
             // Keycap Appearance is a cosmetic, device-wide preference, not per-profile
             // (user request 2026-08-22: split into its own Appearance section) — always the

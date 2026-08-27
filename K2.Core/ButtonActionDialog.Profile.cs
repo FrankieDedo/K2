@@ -28,14 +28,24 @@ public partial class ButtonActionDialog
 
     private List<ProfileTargetOption> BuildDeviceChoices()
     {
-        var selfProfiles = _host is not null
-            ? Enumerable.Range(1, System.Math.Max(1, _host.ProfileCount)).ToList()
-            : new List<int> { 1 };
+        var targets = _host?.ListProfileTargets() ?? (IReadOnlyList<ProfileTargetOption>)new List<ProfileTargetOption>();
+
+        // "This device": reuse the entry the host publishes for itself (so the profile picker
+        // shows the device's REAL profile names); fall back to generic "Profile N" slots when
+        // the host does not identify itself (SelfTargetKey == "").
+        var self = string.IsNullOrEmpty(_host?.SelfTargetKey)
+            ? null
+            : targets.FirstOrDefault(t => t.Key == _host!.SelfTargetKey);
+        var selfProfiles = self?.Profiles
+            ?? Enumerable.Range(1, System.Math.Max(1, _host?.ProfileCount ?? 1))
+                         .Select(n => new ProfileChoice(n, Loc.Get("profile_n", n)))
+                         .ToList();
+
         var list = new List<ProfileTargetOption>
         {
             new("", Loc.Get("profile_this_device"), selfProfiles),
         };
-        if (_host is not null) list.AddRange(_host.ListProfileTargets());
+        list.AddRange(targets);
         return list;
     }
 
@@ -141,7 +151,7 @@ public partial class ButtonActionDialog
         cbWhat.Items.Add(new ComboBoxItem { Content = Loc.Get("profile_next"), Tag = "Next" });
         cbWhat.Items.Add(new ComboBoxItem { Content = Loc.Get("profile_previous"), Tag = "Previous" });
         foreach (var p in device.Profiles)
-            cbWhat.Items.Add(new ComboBoxItem { Content = Loc.Get("profile_n", p), Tag = p.ToString() });
+            cbWhat.Items.Add(new ComboBoxItem { Content = p.Name, Tag = p.Slot.ToString() });
 
         var match = cbWhat.Items.OfType<ComboBoxItem>()
             .FirstOrDefault(i => (string?)i.Tag == selectTag);

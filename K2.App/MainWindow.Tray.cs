@@ -49,6 +49,7 @@ public partial class MainWindow
         if (icon is not null) _trayIcon.Icon = icon;
         _trayIcon.Visible = true;
         _trayIcon.DoubleClick += (_, _) => RestoreFromTray();
+        _trayIcon.BalloonClick += (_, _) => OpenSettingsFromNotification();
 
         var menu = new ContextMenuStrip();
         menu.Items.Add(Loc.Get("tray_show"), null, (_, _) => RestoreFromTray());
@@ -80,6 +81,32 @@ public partial class MainWindow
         Show();
         WindowState = WindowState.Normal;
         Activate();
+    }
+
+    /// <summary>Startup "an update is available" toast (see MainWindow.Settings.cs,
+    /// the silent check kicked off by InitUpdatesPanel). It is a tray balloon, which
+    /// Windows 10/11 renders as a normal toast and files in the Action Center; if the
+    /// user has K2's notifications turned off the shell just drops it, and the badge
+    /// on the Settings gear (SetUpdateBadge) is then the only cue — by design, a
+    /// missed toast should never be the only way to learn about an update.</summary>
+    internal void ShowUpdateNotification(string version)
+    {
+        _trayIcon?.ShowBalloon(
+            Loc.Get("update_notify_title"),
+            Loc.Get("update_notify_body", version));
+    }
+
+    /// <summary>Click on the update toast: bring K2 back up (it may well be hidden in
+    /// the tray, since the check runs at startup) and land on Settings, scrolled to the
+    /// Updates group so the Download button is right there.</summary>
+    private void OpenSettingsFromNotification()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            RestoreFromTray();
+            BtnSettingsTab_Click(this, new RoutedEventArgs());
+            GbAppUpdate.BringIntoView();
+        });
     }
 
     private void ExitFromTray()

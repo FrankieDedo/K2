@@ -13,11 +13,29 @@ public sealed record HostButton(
     string? ActionValue);
 
 /// <summary>
+/// One profile of a device, as offered by the "switch profile" action picker:
+/// <see cref="Slot"/> is the number persisted in the action payload ("1".."N"),
+/// <see cref="Name"/> the user-visible profile name (the real name the user gave it,
+/// falling back to "Profile N" for unnamed slots).
+/// </summary>
+public sealed record ProfileChoice(int Slot, string Name)
+{
+    // WPF renders the closed ComboBox via ToString() in some states (see LayoutChoice
+    // in MainWindow.Everest.cs) - keep it equal to the label shown in the dropdown.
+    public override string ToString() => Name;
+}
+
+/// <summary>
 /// One device a "switch profile" action can target, offered by <see cref="IActionHost.ListProfileTargets"/>.
 /// <see cref="Key"/> format is <c>"{kind}:{id}"</c> (e.g. <c>"macropad:1"</c>, <c>"displaypad:2"</c>,
-/// <c>"everest:1"</c>); <see cref="Profiles"/> lists that specific device's existing profile numbers.
+/// <c>"everest:1"</c>); <see cref="Profiles"/> lists that specific device's existing profiles.
 /// </summary>
-public sealed record ProfileTargetOption(string Key, string Label, IReadOnlyList<int> Profiles);
+public sealed record ProfileTargetOption(string Key, string Label, IReadOnlyList<ProfileChoice> Profiles)
+{
+    // Without this the device ComboBox (which uses DisplayMemberPath="Label") can fall back
+    // to the record's synthesized ToString() and show "ProfileTargetOption { Key = ... }".
+    public override string ToString() => Label;
+}
 
 /// <summary>
 /// Abstraction of the "device host" for the shared action engine.
@@ -70,6 +88,14 @@ public interface IActionHost
     /// devices.
     /// </summary>
     IReadOnlyList<ProfileTargetOption> ListProfileTargets();
+
+    /// <summary>
+    /// Key (see <see cref="ProfileTargetOption.Key"/>) identifying THIS host's own device inside
+    /// <see cref="ListProfileTargets"/>. Used by the action dialog to show the real profile names
+    /// of the "this device" self-target; "" when the host cannot name itself (the picker then
+    /// falls back to generic "Profile N" entries).
+    /// </summary>
+    string SelfTargetKey => "";
 
     /// <summary>Button states for the current profile (for the <c>get_buttons</c> API).</summary>
     IReadOnlyList<HostButton> GetButtons();

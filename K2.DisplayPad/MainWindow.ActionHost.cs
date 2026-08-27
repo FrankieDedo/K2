@@ -57,11 +57,18 @@ public partial class MainWindow : IActionHost
         ExecuteProfileSwitch(id, target);
     }
 
+    // The standalone K2.DisplayPad has no per-profile names (that concept lives in the
+    // unified K2.App shell's store) - profiles are offered as generic "Profile N".
     IReadOnlyList<ProfileTargetOption> IActionHost.ListProfileTargets()
         => _deviceIds.Select(id => new ProfileTargetOption(
                $"displaypad:{id}", $"DisplayPad {id}",
-               Enumerable.Range(1, DisplayPadService.ProfileCount).ToList()))
+               Enumerable.Range(1, DisplayPadService.ProfileCount)
+                         .Select(slot => new ProfileChoice(slot, Loc.Get("profile_n", slot)))
+                         .ToList()))
            .ToList();
+
+    string IActionHost.SelfTargetKey =>
+        CbDevice.SelectedItem is int d ? $"displaypad:{d}" : "";
 
     IReadOnlyList<HostButton> IActionHost.GetButtons()
         => _cells.Select(c => new HostButton(

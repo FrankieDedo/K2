@@ -519,6 +519,21 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
+        <!-- Keycap-type ComboBox item template: the open dropdown shows the full localized
+             label ("Normal (halo around the key)", …); the collapsed selection box shows
+             only the style name ("Normal" / "Pudding" / "Reverse pudding"). When rendered
+             in the selection box there is no ComboBoxItem ancestor, so the trigger swaps
+             Text to ShortLabel. Shared by CbEvKeycapStyle / CbEv60KeycapStyle /
+             CbMpKeycapStyle (wired in code-behind). -->
+        <DataTemplate x:Key="KeycapStyleItemTemplate">
+            <TextBlock x:Name="KeycapStyleText" Text="{Binding Label}" VerticalAlignment="Center"/>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType={x:Type ComboBoxItem}}}" Value="{x:Null}">
+                    <Setter TargetName="KeycapStyleText" Property="Text" Value="{Binding ShortLabel}"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
         <Style x:Key="K2SideProfileItemStyle" TargetType="ListBoxItem">
             <Setter Property="Foreground" Value="#9A9AA2"/>
             <Setter Property="Background" Value="Transparent"/>
@@ -828,6 +843,19 @@
                         </ControlTemplate>
                     </Button.Template>
                 </Button>
+
+                <!-- "Update available" badge: an accent dot over the gear's top-right
+                     corner, toggled by MainWindow.Settings.cs (SetUpdateBadge) when the
+                     startup check finds a newer release. Same cell as BtnSettingsTab so
+                     it overlays it; IsHitTestVisible=False so the gear still takes the
+                     click. DynamicResource, not Static: the accent brush is re-set live
+                     by Settings > Accent color. -->
+                <Ellipse x:Name="DotUpdateBadge" Grid.Column="2" Visibility="Collapsed"
+                         Width="9" Height="9" Margin="0,-24,5,0"
+                         HorizontalAlignment="Right" VerticalAlignment="Center"
+                         IsHitTestVisible="False"
+                         Fill="{DynamicResource K2AccentBrush}"
+                         Stroke="{DynamicResource K2BgBrush}" StrokeThickness="1.5"/>
             </Grid>
 
             <!-- Brightness bar: top-right, below the settings icon + divider.

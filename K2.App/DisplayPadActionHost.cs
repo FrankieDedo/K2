@@ -38,6 +38,9 @@ internal sealed class DisplayPadActionHost : IActionHost
 
     IReadOnlyList<ProfileTargetOption> IActionHost.ListProfileTargets() => _win.ListAllProfileTargets();
 
+    // Foreground DisplayPad tab: self-target is the DisplayPad currently shown.
+    string IActionHost.SelfTargetKey => _win._activeDpDeviceId is int id ? $"displaypad:{id}" : "";
+
     IReadOnlyList<HostButton> IActionHost.GetButtons() =>
         _win._dpKeys.Select(k => new HostButton(
             k.Index, k.KeyMatrix, k.HasImage, k.ImagePath, k.ActionType, k.ActionValue))
@@ -114,6 +117,9 @@ internal sealed class DisplayPadBackgroundActionHost : IActionHost
     }
 
     IReadOnlyList<ProfileTargetOption> IActionHost.ListProfileTargets() => _win.ListAllProfileTargets();
+
+    // Background host: self-target is the specific DisplayPad this host was created for.
+    string IActionHost.SelfTargetKey => $"displaypad:{_deviceId}";
 
     IReadOnlyList<HostButton> IActionHost.GetButtons()
     {

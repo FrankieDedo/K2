@@ -29,6 +29,9 @@ public static class DiscordStore
         public DateTime ExpiresAtUtc { get; set; }
         public string WebhookUrlProtected { get; set; } = "";
         public string WebcamHotkey { get; set; } = DefaultWebcamHotkey;
+        public string PushToTalkHotkey { get; set; } = "";
+        public bool VoicePageReturnEnabled { get; set; } = true;
+        public int VoicePageReturnSeconds { get; set; } = DefaultVoicePageReturnSeconds;
     }
 
     private static Data _data = new();
@@ -59,6 +62,37 @@ public static class DiscordStore
     /// <summary>Ctrl+Shift+V is free in Discord's own defaults, so proposing it as the camera
     /// shortcut can't collide with an existing binding.</summary>
     public const string DefaultWebcamHotkey = "Ctrl+Shift+V";
+
+    /// <summary>Shortcut the voice page's push-to-talk key holds down for exactly as long as the
+    /// physical key is pressed. Discord's RPC has no "transmit now" command (its voice surface is
+    /// settings + channel selection only), so momentary PTT can only be driven by replaying the
+    /// keybind the user set in Discord ▸ Settings ▸ Keybinds ▸ Push to Talk. No sensible default —
+    /// Discord ships none — so it starts empty and the key is inert until recorded in
+    /// <see cref="DiscordProfileConfigWindow"/>.</summary>
+    public static string PushToTalkHotkey
+    {
+        get { EnsureLoaded(); return _data.PushToTalkHotkey; }
+        set { EnsureLoaded(); lock (_lock) { _data.PushToTalkHotkey = string.IsNullOrWhiteSpace(value) ? "" : value.Trim(); Save(); } }
+    }
+
+    /// <summary>When true, the DisplayPad Discord voice page reopens on its own
+    /// <see cref="VoicePageReturnSeconds"/> after the user has left it for a normal profile while a
+    /// call is still running — a screensaver-style comeback. When false the page only returns on a
+    /// new call or a key bound to <c>discord ▸ voice page</c>.</summary>
+    public static bool VoicePageReturnEnabled
+    {
+        get { EnsureLoaded(); return _data.VoicePageReturnEnabled; }
+        set { EnsureLoaded(); lock (_lock) { _data.VoicePageReturnEnabled = value; Save(); } }
+    }
+
+    /// <summary>Idle delay for <see cref="VoicePageReturnEnabled"/>, clamped to a sane range.</summary>
+    public static int VoicePageReturnSeconds
+    {
+        get { EnsureLoaded(); return _data.VoicePageReturnSeconds; }
+        set { EnsureLoaded(); lock (_lock) { _data.VoicePageReturnSeconds = Math.Clamp(value, 3, 3600); Save(); } }
+    }
+
+    public const int DefaultVoicePageReturnSeconds = 5;
 
     /// <summary>True once the OAuth flow has produced a token — the voice commands need it.
     /// The webhook command works independently (see <see cref="HasWebhook"/>).</summary>

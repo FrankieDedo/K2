@@ -63,6 +63,13 @@ public partial class MainWindow
     /// <summary>Channel the dismissals above belong to.</summary>
     private string? _dvpLastChannel;
 
+    /// <summary>Per-device one-shot timers that bring the voice page back on their own after the
+    /// user left it for a normal profile mid-call — the screensaver-style comeback gated by
+    /// <see cref="DiscordStore.VoicePageReturnEnabled"/>/<see cref="DiscordStore.VoicePageReturnSeconds"/>
+    /// (set in <c>DiscordProfileConfigWindow</c>). Armed by <see cref="DvpDismiss"/>, cancelled the
+    /// moment the page is shown again or the call ends.</summary>
+    private readonly Dictionary<int, DispatcherTimer> _dvpReturnTimers = new();
+
     private sealed class DvpState
     {
         /// <summary>Rotation and the visual→physical key map captured when the page opened, so
@@ -120,13 +127,20 @@ public partial class MainWindow
     private void DvpOnRoomChanged()
     {
         string? channel = DiscordVoiceRoom.ChannelId;
-        if (channel != _dvpLastChannel) { _dvpLastChannel = channel; _dvpDismissed.Clear(); }
+        if (channel != _dvpLastChannel)
+        {
+            _dvpLastChannel = channel;
+            _dvpDismissed.Clear();
+            // Dismissals of the previous call are gone — any pending "bring it back" belongs to
+            // that call and must not fire onto this one.
+            DvpCancelAllReturnTimers();
+        }
 
         bool inCall = channel is not null;
         foreach (int id in _dpDeviceIds.ToList())
         {
             if (inCall && DpHasDedicated(id, "Discord") && !_dvpDismissed.Contains(id)) DvpOpen(id);
-            else if (!inCall) DvpExit(id);
+            else if (!inCall) DvpExit(id);   // DvpExit also drops any pending return timer
         }
     }
 
@@ -137,6 +151,45 @@ public partial class MainWindow
     {
         _dvpDismissed.Add(devId);
         DvpExit(devId);
+        DvpArmReturnTimer(devId);
+    }
+
+    /// <summary>Starts (or restarts) the screensaver-style return countdown for <paramref name="devId"/>.
+    /// A no-op unless the feature is on and a call is actually running — there would be nothing to
+    /// come back to otherwise.</summary>
+    private void DvpArmReturnTimer(int devId)
+    {
+        DvpCancelReturnTimer(devId);
+        if (!DiscordStore.VoicePageReturnEnabled || DiscordVoiceRoom.ChannelId is null) return;
+        if (!DpHasDedicated(devId, "Discord")) return;
+
+        var timer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(Math.Max(1, DiscordStore.VoicePageReturnSeconds)),
+        };
+        timer.Tick += (_, _) =>
+        {
+            DvpCancelReturnTimer(devId);
+            // Conditions may have moved on while the clock ran (call ended, page already back,
+            // pad gone). DvpReopen re-checks the call/dedicated state; guard the rest here.
+            if (!_dvpDismissed.Contains(devId) || !_dpDeviceIds.Contains(devId)) return;
+            if (_dpDiscordRoom.ContainsKey(devId) || DpEmojiBrowserActive(devId)) return;
+            DpLog($"[DVP] device {devId}: return timer elapsed — reopening voice page");
+            DvpReopen(devId);
+        };
+        _dvpReturnTimers[devId] = timer;
+        timer.Start();
+    }
+
+    private void DvpCancelReturnTimer(int devId)
+    {
+        if (_dvpReturnTimers.Remove(devId, out var timer)) timer.Stop();
+    }
+
+    private void DvpCancelAllReturnTimers()
+    {
+        foreach (var timer in _dvpReturnTimers.Values) timer.Stop();
+        _dvpReturnTimers.Clear();
     }
 
     /// <summary>Manual re-entry from a key bound to <c>discord ▸ voice page</c>. Does nothing
@@ -199,6 +252,10 @@ public partial class MainWindow
     /// roster change never resets the scroll position.</summary>
     private void DvpOpen(int devId)
     {
+        // However the page comes back — new call, manual key, or the return timer — a pending
+        // countdown has done its job.
+        DvpCancelReturnTimer(devId);
+
         if (_dpDiscordRoom.ContainsKey(devId)) { DvpPaint(devId); return; }
 
         // The emoji browser owns the panel while it is up — a call arriving underneath must not
@@ -221,6 +278,14 @@ public partial class MainWindow
     /// open, so every caller can call it blindly.</summary>
     private void DvpExit(int devId)
     {
+        // DvpDismiss re-arms straight after this call; every other caller (call ended, profile
+        // deleted, tab teardown) wants any pending countdown gone.
+        DvpCancelReturnTimer(devId);
+
+        // A push-to-talk key still held when the page goes away would otherwise stay pressed
+        // system-wide.
+        if (_dvpPttHeld) DvpPushToTalk(false);
+
         if (!_dpDiscordRoom.Remove(devId)) return;
         DpLog($"[DVP] device {devId}: Discord voice page closed — restoring page icons");
         DvpSyncDedicatedUi(devId, active: false);
@@ -252,14 +317,17 @@ public partial class MainWindow
         int slot = Array.IndexOf(st.V2P, btnIndex);
         if (slot < 0) return;   // not one of ours (remapped pad)
 
-        // Push-to-talk answers with a green tile while it is held and goes back to black on
-        // release (user request) — the shrink-on-press used everywhere else would say nothing
-        // about whether the mic is open right now.
+        // Push-to-talk: hold Discord's PTT keybind for exactly as long as the physical key is
+        // down. It answers with a green tile while held (the shrink-on-press used everywhere else
+        // would say nothing about whether the mic is open right now) and never falls through to
+        // the press-only switch below — the key-up edge matters here.
         if (slot == DvpPttSlot)
         {
             string? tile = DvpControlTile("ptt", Loc.Get("dvp_ptt"), highlight: pressed);
             st.Tiles[btnIndex] = tile;
             if (tile is not null) DvpUpload(devId, tile, btnIndex, st.Rotation, shrink: false);
+            DvpPushToTalk(pressed);
+            return;
         }
         // Same shrink-on-press feedback as the emoji browser (see DpEmojiBrowserKey).
         else if (st.Tiles[btnIndex] is string tile && File.Exists(tile))
@@ -281,7 +349,7 @@ public partial class MainWindow
                 return;
             case 1: Rpc(log => DiscordBridge.ToggleMute(log)); return;
             case 2: Rpc(log => DiscordBridge.ToggleDeaf(log)); return;
-            case 3: Rpc(log => DiscordBridge.ToggleInputMode(log)); return;
+            // slot 3 (push-to-talk) is fully handled above, on both key edges.
             case 4: DvpToggleWebcam(); return;
             case 5:
                 Rpc(log => DiscordBridge.LeaveVoiceChannel(log));
@@ -315,15 +383,15 @@ public partial class MainWindow
     /// Discord's RPC exposes no video command (its whole surface is voice settings + channel
     /// selection), and unlike mute/deafen the camera has no default keyboard shortcut either, so
     /// there is no way to drive it that works out of the box. The key therefore replays the
-    /// shortcut recorded in Settings ▸ Discord (<see cref="DiscordStore.WebcamHotkey"/>), which the
-    /// user assigns once in <b>Discord ▸ Settings ▸ Keybinds ▸ Toggle Camera</b>.
+    /// shortcut recorded in the Discord profile config popup (<see cref="DiscordStore.WebcamHotkey"/>),
+    /// which the user assigns once in <b>Discord ▸ Settings ▸ Keybinds ▸ Toggle Camera</b>.
     /// </para></summary>
     private void DvpToggleWebcam()
     {
         string hotkey = DiscordStore.WebcamHotkey;
         if (string.IsNullOrWhiteSpace(hotkey))
         {
-            DpLog("[DVP] webcam: no shortcut recorded (Settings > Discord)");
+            DpLog("[DVP] webcam: no shortcut recorded (Discord profile config)");
             return;
         }
         // SendInput, not SendKeys: Discord's Keybinds are watched with a low-level keyboard hook,
@@ -336,6 +404,44 @@ public partial class MainWindow
                 ? $"[DVP] webcam: sent {hotkey}"
                 : $"[DVP] webcam: cannot send \"{hotkey}\" — {error}");
         });
+    }
+
+    /// <summary>State-tracking for <see cref="DvpPushToTalk"/> so a key held when the page closes
+    /// can still be released.</summary>
+    private bool _dvpPttHeld;
+
+    /// <summary>Serializes the PTT down/up SendInput bursts in submission order — a fast tap must
+    /// not let the release run before the press.</summary>
+    private Task _dvpPttChain = Task.CompletedTask;
+
+    /// <summary>
+    /// Push-to-talk key: holds Discord's PTT keybind down while the physical key is pressed and
+    /// releases it on key-up, so the mic is open for exactly that long.
+    ///
+    /// <para>Discord's RPC has no "transmit now" command — its whole voice surface is settings +
+    /// channel selection — so momentary PTT can only be driven by replaying the keybind the user
+    /// set in <b>Discord ▸ Settings ▸ Keybinds ▸ Push to Talk</b>, recorded once in the Discord
+    /// profile config popup (<see cref="DiscordStore.PushToTalkHotkey"/>). SendInput, not SendKeys:
+    /// Discord watches the input stream with a low-level hook — see <see cref="HotkeySender"/>.</para>
+    /// </summary>
+    private void DvpPushToTalk(bool pressed)
+    {
+        string hotkey = DiscordStore.PushToTalkHotkey;
+        if (string.IsNullOrWhiteSpace(hotkey))
+        {
+            if (pressed) DpLog("[DVP] push-to-talk: no shortcut recorded (Discord profile config)");
+            return;
+        }
+
+        _dvpPttHeld = pressed;
+        _dvpPttChain = _dvpPttChain.ContinueWith(_ =>
+        {
+            bool ok = pressed
+                ? HotkeySender.TryHoldDown(hotkey, out string error)
+                : HotkeySender.TryHoldUp(hotkey, out error);
+            if (!ok)
+                DpLogAsync($"[DVP] push-to-talk: cannot {(pressed ? "press" : "release")} \"{hotkey}\" — {error}");
+        }, TaskScheduler.Default);
     }
 
     // ================================================================

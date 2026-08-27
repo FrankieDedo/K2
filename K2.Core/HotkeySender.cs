@@ -34,11 +34,46 @@ public static class HotkeySender
     /// current keyboard layout. Blocks for a few ms — call it off the UI thread.</summary>
     public static bool TrySend(string? hotkey, out string error)
     {
+        if (!TryParse(hotkey, out var mods, out ushort key, out error)) return false;
+
+        foreach (var m in mods) { Send(m, down: true); Thread.Sleep(5); }
+        Send(key, down: true);
+        Thread.Sleep(30);
+        Send(key, down: false);
+        for (int i = mods.Count - 1; i >= 0; i--) { Thread.Sleep(5); Send(mods[i], down: false); }
+        return true;
+    }
+
+    /// <summary>Presses <paramref name="hotkey"/> and LEAVES it held down — for momentary actions
+    /// like push-to-talk. Every successful call must be paired with <see cref="TryHoldUp"/>, or the
+    /// keys stay pressed system-wide.</summary>
+    public static bool TryHoldDown(string? hotkey, out string error)
+    {
+        if (!TryParse(hotkey, out var mods, out ushort key, out error)) return false;
+        foreach (var m in mods) { Send(m, down: true); Thread.Sleep(5); }
+        Send(key, down: true);
+        return true;
+    }
+
+    /// <summary>Releases what <see cref="TryHoldDown"/> pressed — the key first, then the modifiers
+    /// in reverse order.</summary>
+    public static bool TryHoldUp(string? hotkey, out string error)
+    {
+        if (!TryParse(hotkey, out var mods, out ushort key, out error)) return false;
+        Send(key, down: false);
+        for (int i = mods.Count - 1; i >= 0; i--) { Thread.Sleep(5); Send(mods[i], down: false); }
+        return true;
+    }
+
+    /// <summary>Splits "Ctrl+Shift+V" into its modifier VKs and the single non-modifier key,
+    /// resolving each on the current keyboard layout. Shared by the one-shot and the hold paths.</summary>
+    private static bool TryParse(string? hotkey, out List<ushort> mods, out ushort key, out string error)
+    {
+        mods = new List<ushort>();
+        key = 0;
         error = "";
         if (string.IsNullOrWhiteSpace(hotkey)) { error = "empty shortcut"; return false; }
 
-        var mods = new List<ushort>();
-        ushort key = 0;
         foreach (var raw in hotkey.Split(new[] { '+', '-' }, StringSplitOptions.RemoveEmptyEntries))
         {
             string part = raw.Trim();
@@ -55,12 +90,6 @@ public static class HotkeySender
             }
         }
         if (key == 0) { error = "no key in the shortcut"; return false; }
-
-        foreach (var m in mods) { Send(m, down: true); Thread.Sleep(5); }
-        Send(key, down: true);
-        Thread.Sleep(30);
-        Send(key, down: false);
-        for (int i = mods.Count - 1; i >= 0; i--) { Thread.Sleep(5); Send(mods[i], down: false); }
         return true;
     }
 

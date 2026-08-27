@@ -213,8 +213,8 @@ public partial class MainWindow
     /// switch (see ReloadCurrentProfile, MainWindow.Keys.cs).</summary>
     private void InitMpSettingsPanel()
     {
-        CbMpKeycapStyle.ItemsSource       = KeycapStyleChoices;
-        CbMpKeycapStyle.DisplayMemberPath = "Label";
+        CbMpKeycapStyle.ItemsSource  = KeycapStyleChoices;
+        CbMpKeycapStyle.ItemTemplate = (DataTemplate)FindResource("KeycapStyleItemTemplate");
 
         _mpSettingsSuppress = true;
         try { LoadMpKeycapAppearanceFromStore(); }

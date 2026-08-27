@@ -89,6 +89,9 @@ internal sealed class Ev60ActionHost : IActionHost
 
     IReadOnlyList<ProfileTargetOption> IActionHost.ListProfileTargets() => _listAllProfileTargets();
 
+    // Everest 60 is single-device: conventional key "everest60:1" (see MainWindow.ListAllProfileTargets).
+    string IActionHost.SelfTargetKey => "everest60:1";
+
     IReadOnlyList<HostButton> IActionHost.GetButtons() => _getButtons();
 
     void IActionHost.PressButton(int index) => _pressButton(index);

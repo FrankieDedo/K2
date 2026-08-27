@@ -198,9 +198,9 @@ public partial class MainWindow
                 // The current profile deliberately stays where it was: the Discord page shows up
                 // when a call starts, and the pad must keep working normally until then.
                 DvpReopen(id);
-                // No account connected yet — send the user straight to the panel that fixes that,
-                // which is the only configuration this profile has.
-                if (!DiscordStore.IsConnected) DpShowDedicatedConfig("Discord");
+                // No account connected yet — send the user straight to the account window (the
+                // config popup only links to it, one extra click that first-run doesn't need).
+                if (!DiscordStore.IsConnected) new DiscordSettingsWindow { Owner = this }.ShowDialog();
                 return;
             }
         }
@@ -227,15 +227,16 @@ public partial class MainWindow
         menu.IsOpen = true;
     }
 
-    /// <summary>The dedicated profile's own configuration. Discord's is the account it connects
-    /// with (client id/secret + the "go live" shortcut); Spotify has nothing to configure — it
-    /// reads whatever the desktop player is doing.</summary>
+    /// <summary>The dedicated profile's own configuration. Discord opens a small popup with the
+    /// voice-page knobs (webcam shortcut, screensaver-style return timer) and a button through to
+    /// the account window; Spotify has nothing to configure — it reads whatever the desktop player
+    /// is doing.</summary>
     private void DpShowDedicatedConfig(string id)
     {
         switch (id)
         {
             case "Discord":
-                new DiscordSettingsWindow { Owner = this }.ShowDialog();
+                new DiscordProfileConfigWindow { Owner = this }.ShowDialog();
                 break;
             default:
                 MessageBox.Show(Loc.Get("dedicated_no_config"), Loc.Get("dedicated_configure"),

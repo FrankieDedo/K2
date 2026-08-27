@@ -260,6 +260,19 @@ public partial class MainWindow
     private sealed record KeycapStyleChoice(KeycapStyle Style, string Label)
     {
         public override string ToString() => Label;
+
+        /// <summary>Just the style name (Normal / Pudding / Reverse pudding), without the
+        /// "(...)" description. Shown in the ComboBox's collapsed selection box; the open
+        /// dropdown still shows the full <see cref="Label"/> — see KeycapStyleItemTemplate
+        /// in MainWindow.xaml.</summary>
+        public string ShortLabel
+        {
+            get
+            {
+                int paren = Label.IndexOf(" (", StringComparison.Ordinal);
+                return paren > 0 ? Label[..paren] : Label;
+            }
+        }
     }
 
     private static readonly KeycapStyleChoice[] KeycapStyleChoices =
@@ -273,8 +286,8 @@ public partial class MainWindow
     /// before LoadEverestSettingsFromStore populates the values.</summary>
     private void InitKeycapAppearanceControls()
     {
-        CbEvKeycapStyle.ItemsSource       = KeycapStyleChoices;
-        CbEvKeycapStyle.DisplayMemberPath = "Label";
+        CbEvKeycapStyle.ItemsSource  = KeycapStyleChoices;
+        CbEvKeycapStyle.ItemTemplate = (DataTemplate)FindResource("KeycapStyleItemTemplate");
     }
 
     /// <summary>Loads settings.keycap_* from the Everest store into the cache fields and the

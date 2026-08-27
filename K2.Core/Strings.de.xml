@@ -383,6 +383,8 @@
   <string name="settings_update_downloading">Wird heruntergeladen…</string>
   <string name="settings_update_install_confirm">Version {0} herunterladen und das Installationsprogramm ausführen? K2 wird geschlossen, sobald das Installationsprogramm startet, damit es aktualisiert werden kann.</string>
   <string name="settings_update_zip_done">Gespeichert unter {0}</string>
+  <string name="update_notify_title">K2-Update verfügbar</string>
+  <string name="update_notify_body">Version {0} ist verfügbar. Klicke hier, um die Einstellungen zu öffnen und sie zu installieren.</string>
   <!-- Standardwerte wiederherstellen -->
   <string name="settings_danger_zone">Gefahrenzone</string>
   <string name="restore_defaults">Standardwerte wiederherstellen</string>
@@ -992,8 +994,15 @@
   <string name="dvp_disconnect">Trennen</string>
   <string name="discord_webcam_hotkey_label">Webcam-Tastenkürzel:</string>
   <string name="discord_webcam_hotkey_tip">Discord hat keinen RPC-Befehl für die Kamera: Klicke auf Aufnehmen und tippe die Tastenkombination, weise dann dieselbe in Discord &gt; Einstellungen &gt; Tastenbelegung &gt; Kamera umschalten zu.</string>
+  <string name="discord_ptt_hotkey_label">Push-to-Talk-Tastenkürzel:</string>
+  <string name="discord_ptt_hotkey_tip">Wird genau so lange gedrückt gehalten, wie die Push-to-Talk-Taste der Sprachseite gedrückt ist. Discord hat dafür keinen RPC-Befehl: Klicke auf Aufnehmen, tippe die Tastenkombination und stelle dieselbe in Discord &gt; Einstellungen &gt; Tastenbelegung &gt; Push-to-Talk ein.</string>
   <string name="hotkey_record">Aufnehmen</string>
   <string name="hotkey_recording">Tasten drücken… (Esc zum Abbrechen)</string>
+  <string name="discord_profile_config_title">Discord-Sprachprofil</string>
+  <string name="discord_profile_config_hint">Einstellungen für die Discord-Sprachseite des DisplayPads.</string>
+  <string name="discord_account_button">Discord-Konto (Client ID / Secret)…</string>
+  <string name="discord_voicepage_return_label">Sprachseite zurückholen nach</string>
+  <string name="discord_voicepage_return_hint">Wenn du während eines Anrufs die Sprachseite für ein normales Profil verlässt, kommt sie von selbst zurück, sobald so viele Sekunden vergangen sind, ohne dass du zu ihr zurückkehrst — wie ein Bildschirmschoner. Aus = sie kehrt nur bei einem neuen Anruf oder über eine „Sprachseite“-Taste zurück.</string>
   <string name="act_emojibrowser">Emoji-Browser</string>
   <string name="emb_grp_smileys">Smileys</string>
   <string name="emb_grp_people">Personen</string>

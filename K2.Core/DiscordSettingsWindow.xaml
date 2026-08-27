@@ -52,24 +52,9 @@
         <TextBlock Grid.Row="9" Text="{loc:Get discord_webhook_hint}" TextWrapping="Wrap"
                    Foreground="#9A9AA2" FontSize="11" Margin="0,0,0,10"/>
 
-        <!-- Webcam shortcut. Sits in the "*" filler row (11) rather than in rows of its own so
-             the rows above/below keep their indices; aligned Top, which is what that row was
-             absorbing anyway. Read-only on purpose: it is filled by RECORDING the combination
-             (BtnDiscordRecordHotkey), never typed, so what is stored can't disagree with what
-             the keyboard actually sends. -->
-        <StackPanel Grid.Row="11" VerticalAlignment="Top" Margin="0,4,0,0">
-            <TextBlock Text="{loc:Get discord_webcam_hotkey_label}" Margin="0,0,0,4"/>
-            <Grid ToolTip="{loc:Get discord_webcam_hotkey_tip}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBox x:Name="TxtDiscordWebcamHotkey" Grid.Column="0" Height="25" IsReadOnly="True"
-                         VerticalContentAlignment="Center" Focusable="False"/>
-                <Button x:Name="BtnDiscordRecordHotkey" Grid.Column="1" Content="{loc:Get hotkey_record}"
-                        Padding="10,2" Margin="6,0,0,0" Click="BtnDiscordRecordHotkey_Click"/>
-            </Grid>
-        </StackPanel>
+        <!-- The webcam shortcut used to sit here (row 11); it moved to DiscordProfileConfigWindow
+             alongside the voice-page return timer, since both are voice-page settings, not part of
+             connecting the account. Row 11 stays as the "*" spacer it always was. -->
 
         <TextBlock x:Name="TxtDiscordStatus" Grid.Row="10" TextWrapping="Wrap" Foreground="#9A9AA2" Margin="0,0,0,4"/>
 
