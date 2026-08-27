@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -220,7 +220,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
                 {
                     "keys"      => _actionValue ?? "",
                     "url"       => "URL",
-                    "exec"      => Path.GetFileName(_actionValue ?? ""),
+                    "exec"      => Path.GetFileName(K2.Core.ExecActionPayload.PathOf(_actionValue)),
                     "dp_folder" => "▸",   // folder — label comes from image
                     "dp_back"   => "◂",   // back — label comes from image
                     "dp_emojibrowser" => "☺",  // emoji browser — label comes from image

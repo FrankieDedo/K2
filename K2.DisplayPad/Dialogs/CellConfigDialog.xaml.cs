@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -182,7 +182,7 @@ public partial class CellConfigDialog : Window
         Directory.CreateDirectory(AutoIconCacheRoot);
 
         long mtime = 0;
-        if (kind == "exec") { try { mtime = File.GetLastWriteTimeUtc(sourceValue).Ticks; } catch { } }
+        if (kind == "exec") { try { mtime = File.GetLastWriteTimeUtc(ExecActionPayload.PathOf(sourceValue)).Ticks; } catch { } }
         byte[] hash = System.Security.Cryptography.SHA1.HashData(
             System.Text.Encoding.UTF8.GetBytes($"{kind}|{sourceValue}|{mtime}"));
         return Path.Combine(AutoIconCacheRoot, Convert.ToHexString(hash).ToLowerInvariant() + $"_{kind}.png");
@@ -210,7 +210,7 @@ public partial class CellConfigDialog : Window
         LblActionSummary.Text = ActionType switch
         {
             "keys"     => $"Keys: {val}",
-            "exec"     => $"Run: {Path.GetFileName(val)}",
+            "exec"     => $"Run: {Path.GetFileName(ExecActionPayload.PathOf(val))}",
             "folder"   => $"Folder: {val}",
             "url"      => $"URL: {val}",
             "browser"  => $"Browser: {val}",

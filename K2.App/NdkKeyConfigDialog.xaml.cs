@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Media;
@@ -450,7 +450,7 @@ public partial class NdkKeyConfigDialog : Window
         Directory.CreateDirectory(cacheRoot);
 
         long mtime = 0;
-        if (kind == "exec") { try { mtime = File.GetLastWriteTimeUtc(sourceValue).Ticks; } catch { } }
+        if (kind == "exec") { try { mtime = File.GetLastWriteTimeUtc(ExecActionPayload.PathOf(sourceValue)).Ticks; } catch { } }
         byte[] hash = System.Security.Cryptography.SHA1.HashData(
             System.Text.Encoding.UTF8.GetBytes($"{kind}|{sourceValue}|{mtime}|{IconSize}"));
         return Path.Combine(cacheRoot, Convert.ToHexString(hash).ToLowerInvariant() + $"_{kind}.png");

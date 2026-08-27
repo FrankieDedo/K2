@@ -20,7 +20,7 @@
   <string name="refresh">Aggiorna</string>
   <string name="refresh_devices">Aggiorna dispositivi</string>
   <string name="debug_group">Debug</string>
-  <string name="profile">Profilo</string>
+  <string name="profile">Profili</string>
   <string name="device">Dispositivo</string>
   <string name="positioning">Posizionamento</string>
   <string name="backlight_auto_off_group">Spegnimento automatico retroilluminazione</string>
@@ -240,6 +240,19 @@
   <string name="discord_key_mic_off">Mic off</string>
   <string name="discord_key_audio_on">Audio on</string>
   <string name="discord_key_audio_off">Audio off</string>
+  <string name="dp_dedicated_profiles">Profili dedicati</string>
+  <string name="dedicated_spotify">Spotify — in riproduzione</string>
+  <string name="dedicated_configure">Configura…</string>
+  <string name="dedicated_no_config">Questo profilo dedicato non ha nulla da configurare.</string>
+  <string name="dedicated_discord">Discord — chiamata vocale</string>
+  <string name="discord_cmd_voice_page">Mostra pagina vocale (DisplayPad)</string>
+  <string name="dvp_ptt">Push-to-talk</string>
+  <string name="dvp_webcam">Webcam</string>
+  <string name="dvp_disconnect">Disconnetti</string>
+  <string name="discord_webcam_hotkey_label">Scorciatoia webcam:</string>
+  <string name="discord_webcam_hotkey_tip">Discord non ha un comando RPC per la videocamera: premi Registra e digita la combinazione, poi assegna la stessa in Discord &gt; Impostazioni &gt; Scorciatoie &gt; Attiva/disattiva videocamera.</string>
+  <string name="hotkey_record">Registra</string>
+  <string name="hotkey_recording">Premi i tasti… (Esc per annullare)</string>
   <string name="youtube_settings_title">Impostazioni YouTube</string>
   <string name="youtube_hint">Crea un client OAuth per app desktop su console.cloud.google.com con l'API YouTube Data v3 abilitata, poi incolla qui il Client ID/Secret.</string>
   <string name="youtube_setup_guide">1. Vai su console.cloud.google.com, crea/seleziona un progetto, poi abilita "YouTube Data API v3" (APIs &amp; Services -&gt; Library).
@@ -297,6 +310,9 @@
   <string name="py_timeout">Timeout (s, 0 = nessuno):</string>
   <string name="py_hint">Nello script usa 'import k2' per chiamare le funzioni K2 (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...). stdout/stderr vanno nel log K2.</string>
   <string name="exec_path_label">Percorso eseguibile / file:</string>
+  <string name="exec_batch_mode_label">Script batch:</string>
+  <string name="exec_batch_hidden">Esegui in background (nessuna finestra)</string>
+  <string name="exec_batch_console">Esegui in un terminale visibile</string>
   <string name="folder_path_label">Percorso cartella:</string>
   <string name="recent_paths">Recenti:</string>
   <string name="remove_recent">Rimuovi dai recenti</string>
@@ -360,6 +376,9 @@
        TAB IMPOSTAZIONI GENERALI
        ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_settings">Impostazioni</string>
+  <string name="settings_extra_title">Extra</string>
+  <string name="settings_extra_3dprinting">Stampa 3D</string>
+  <string name="settings_extra_other_projects">Altri progetti</string>
   <string name="tab_macro">Macro</string>
   <string name="settings_debug_mode">Modalità debug</string>
   <string name="settings_debug_mode_hint">Abilita gli strumenti di debug (apri/chiudi driver, controlli AP, log eventi) su tutti i dispositivi.</string>
@@ -385,6 +404,26 @@
   <string name="settings_export_log_btn">Esporta log…</string>
   <string name="settings_export_log_hint">Copia il log corrente di K2.App (e il crash log, se presente) in una cartella a tua scelta — utile da allegare quando segnali un problema.</string>
   <string name="settings_export_log_done">Log esportato in {0}</string>
+  <!-- Convivenza con SignalRGB -->
+  <string name="settings_signalrgb_group">SignalRGB</string>
+  <string name="settings_signalrgb_hint">SignalRGB include i propri plugin per i dispositivi Mountain e parlano esattamente con le stesse interfacce USB che K2 usa per pilotare i LED. Con entrambi i programmi attivi i due flussi di illuminazione si accavallano e i LED sfarfallano. Qui decidi chi comanda l'illuminazione — tutto il resto di K2 (tasti, macro, tasti display, Media Dock, profili) continua a funzionare in ogni caso.</string>
+  <string name="settings_signalrgb_mode_off">Ignora SignalRGB</string>
+  <string name="settings_signalrgb_mode_off_hint">K2 pilota l'illuminazione in ogni caso. Scegli questa opzione solo se non usi mai SignalRGB con i dispositivi Mountain, o se vuoi vedere di persona come si manifesta il conflitto.</string>
+  <string name="settings_signalrgb_mode_yield">Lascia l'illuminazione a SignalRGB (consigliato)</string>
+  <string name="settings_signalrgb_mode_yield_hint">Mentre SignalRGB è in esecuzione, K2 smette di scrivere effetti, colori per-tasto e luminosità sui dispositivi. Appena SignalRGB viene chiuso, K2 riapplica la propria illuminazione. Tutto ciò che non è illuminazione continua a funzionare senza interruzioni.</string>
+  <string name="settings_signalrgb_mode_stop">Chiudi SignalRGB all'avvio di K2</string>
+  <string name="settings_signalrgb_mode_stop_hint">Ad ogni avvio K2 chiude SignalRGB (il motore e il suo launcher), come già fa con Base Camp. Il servizio Windows di SignalRGB non viene toccato — non pilota i LED.</string>
+  <string name="settings_signalrgb_status_installed">SignalRGB rilevato: {0}</string>
+  <string name="settings_signalrgb_status_missing">SignalRGB non risulta installato su questo PC.</string>
+  <string name="settings_signalrgb_status_running">SignalRGB è in esecuzione — K2 al momento non sta scrivendo l'illuminazione.</string>
+  <string name="settings_signalrgb_plugins">Plugin K2 per SignalRGB</string>
+  <string name="settings_signalrgb_plugins_hint">Installa i plugin K2 per i dispositivi Mountain nella cartella plugin utente di SignalRGB (Documenti\WhirlwindFX\Plugins). Sostituiscono quelli inclusi con layout e mappe LED presi dal reverse engineering di K2. Riavvia SignalRGB dopo l'installazione.</string>
+  <string name="settings_signalrgb_install_plugins">Installa i plugin K2</string>
+  <string name="settings_signalrgb_remove_plugins">Rimuovi i plugin K2</string>
+  <string name="settings_signalrgb_open_plugin_folder">Apri la cartella plugin</string>
+  <string name="settings_signalrgb_plugins_installed">{0} plugin installati. Riavvia SignalRGB per caricarli.</string>
+  <string name="settings_signalrgb_plugins_removed">{0} plugin rimossi. Riavvia SignalRGB per tornare a quelli inclusi.</string>
+  <string name="settings_signalrgb_plugins_none">Nessun file di plugin da installare.</string>
   <!-- Prompt importazione da Base Camp -->
   <string name="settings_bc_import_group">Importazione da Base Camp</string>
   <string name="settings_bc_import_btn">Importa da Base Camp…</string>
@@ -424,6 +463,7 @@
   <string name="restore_defaults_app">Ripristina tutti i predefiniti</string>
   <string name="restore_defaults_app_hint">Ripristina tutte le preferenze dell'app sopra elencate E cancella ogni profilo, tasto assegnato, impostazione di illuminazione e macro salvati per ogni dispositivo (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). L'operazione non può essere annullata.</string>
   <string name="restore_defaults_app_confirm">Questo ripristina TUTTE le preferenze dell'app e CANCELLA ogni profilo, tasto assegnato, impostazione di illuminazione e macro salvati per ogni dispositivo (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). L'operazione non può essere annullata. Continuare?</string>
+  <string name="settings_acknowledgements_group">Ringraziamenti</string>
   <string name="restore_defaults_app_done">Tutte le impostazioni dell'app e i profili dei dispositivi sono stati ripristinati ai valori predefiniti.</string>
   <string name="settings_general">Opzioni generali</string>
   <string name="settings_close_to_tray">Chiudi nella system tray invece di uscire</string>
@@ -444,6 +484,8 @@
   <string name="dp_devicemap_none_connected">Nessun DisplayPad è attualmente collegato — collega i pad da rimappare e riapri questa finestra.</string>
   <string name="dp_devicemap_duplicate_error">Due pad non possono avere lo stesso numero di scheda. Assegna un numero diverso a ciascuno.</string>
   <string name="dp_devicemap_invalid_number">I numeri di scheda devono essere numeri interi positivi.</string>
+  <string name="settings_language">Lingua</string>
+  <string name="settings_language_hint">Cambia la lingua dell'app. L'app si riavvia per applicarla.</string>
   <string name="settings_font_family">Carattere</string>
   <string name="settings_font_family_hint">Cambia subito il carattere dell'interfaccia in tutta l'app, senza riavvio.</string>
   <string name="settings_accent_color">Colore accento</string>
@@ -477,6 +519,9 @@
   <string name="hw_busy_importing_profile">Importazione profilo in corso, attendere…</string>
   <string name="hw_busy_importing_profiles">Importazione profili in corso, attendere…</string>
   <string name="hw_busy_restoring_defaults">Ripristino dei valori predefiniti, attendere…</string>
+  <string name="hw_busy_restoring_key_images">Ripristino delle immagini predefinite dei tasti display, attendere…</string>
+  <string name="hw_busy_clearing_image">Cancellazione dell’immagine dal tasto display, attendere…</string>
+  <string name="hw_busy_writing_key_bindings">Scrittura delle azioni dei tasti display sulla tastiera, attendere…</string>
   <string name="ev_crash_recovering">Driver in crash — tentativo di recovery tra 3 s…</string>
   <string name="ev_crash_recovered">Driver recuperato — LED preview riavviata.</string>
   <string name="ev_crash_recovery_failed">Recovery fallita — riavviare K2.App.</string>
@@ -809,6 +854,11 @@
   <string name="dp_action_section">Azione</string>
   <string name="dp_configure_action">Configura azione…</string>
   <string name="dp_remove_action">Rimuovi azione</string>
+  <string name="act_copy_action">Copia azione</string>
+  <string name="act_cut_action">Taglia azione</string>
+  <string name="act_paste_action">Incolla azione</string>
+  <string name="paste_unsupported_title">Impossibile incollare</string>
+  <string name="paste_unsupported_message">Questa azione non è supportata su questo dispositivo.</string>
   <string name="dp_change_image">Cambia immagine…</string>
   <string name="dp_remove_image">Rimuovi immagine</string>
   <string name="dp_create_folder">Crea pagina cartella…</string>

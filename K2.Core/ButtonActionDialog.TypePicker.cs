@@ -101,9 +101,10 @@ public partial class ButtonActionDialog
         PickerCategories.FirstOrDefault(c => c.Tags.Contains(tag)).Key ?? "system";
 
     /// <summary>The card visual for a tag: a bitmap logo, a vector logo, or the emoji
-    /// fallback (exactly one is non-empty). dp_folder's color isn't baked into
-    /// ButtonActionDialogIcons since it must track the live accent color (Settings > Accent
-    /// color), same as every other K2 folder glyph.</summary>
+    /// fallback (exactly one is non-empty). dp_folder is left with an empty Color in
+    /// ButtonActionDialogIcons because the actual DisplayPad page-key tile (IconImageGenerator.cs)
+    /// tracks the live accent color, but this picker card is not a display-key icon — it stays
+    /// a fixed white here regardless of Settings > Accent color.</summary>
     private static (string Glyph, string PathData, string Color, string ImageUri, double W, double H) IconFor(string tag)
     {
         if (ButtonActionDialogIcons.ImagesByTag.TryGetValue(tag, out var img))
@@ -111,15 +112,12 @@ public partial class ButtonActionDialog
 
         if (ButtonActionDialogIcons.IconsByTag.TryGetValue(tag, out var icon))
         {
-            string color = icon.Color.Length > 0 ? icon.Color : AccentHex();
+            string color = icon.Color.Length > 0 ? icon.Color : "#FFFFFF";
             return ("", icon.PathData, color, "", icon.Width, icon.Height);
         }
 
         return (ActionGlyphs.TryGetValue(tag, out var g) ? g : "⚙", "", "", "", 20, 20);
     }
-
-    private static string AccentHex() =>
-        Application.Current.TryFindResource("K2AccentBrush") is SolidColorBrush b ? b.Color.ToString() : "#C0392B";
 
     /// <summary>Swaps the dialog's content row between the config panels and the inline
     /// picker — the picker is NOT a second popup, it takes over the same area (breadcrumb

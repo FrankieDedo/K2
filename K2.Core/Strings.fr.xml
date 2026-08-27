@@ -21,7 +21,7 @@
   <string name="refresh">Actualiser</string>
   <string name="refresh_devices">Actualiser les appareils</string>
   <string name="debug_group">Débogage</string>
-  <string name="profile">Profil</string>
+  <string name="profile">Profils</string>
   <string name="device">Appareil</string>
   <string name="positioning">Positionnement</string>
   <string name="backlight_auto_off_group">Extinction automatique du rétroéclairage</string>
@@ -241,6 +241,9 @@
   <string name="py_timeout">Délai (s, 0 = aucun) :</string>
   <string name="py_hint">Dans le script, utilisez 'import k2' pour appeler les fonctions K2 (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...). stdout/stderr vont dans le journal K2.</string>
   <string name="exec_path_label">Executable / file path:</string>
+  <string name="exec_batch_mode_label">Script batch :</string>
+  <string name="exec_batch_hidden">Exécuter en arrière-plan (sans fenêtre)</string>
+  <string name="exec_batch_console">Exécuter dans un terminal visible</string>
   <string name="folder_path_label">Folder path:</string>
   <string name="recent_paths">Recent:</string>
   <string name="remove_recent">Remove from recent</string>
@@ -304,6 +307,9 @@
        ONGLET PARAMÈTRES GÉNÉRAUX
        ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_settings">Paramètres</string>
+  <string name="settings_extra_title">Extra</string>
+  <string name="settings_extra_3dprinting">Impression 3D</string>
+  <string name="settings_extra_other_projects">Autres projets</string>
   <string name="tab_macro">Macro</string>
   <string name="settings_debug_mode">Mode débogage</string>
   <string name="settings_debug_mode_hint">Active les outils de débogage (ouverture/fermeture du pilote, contrôles AP, journal d'événements) sur chaque appareil.</string>
@@ -328,6 +334,26 @@
   <string name="settings_export_log_btn">Exporter le journal…</string>
   <string name="settings_export_log_hint">Copie le journal actuel de K2.App (et le journal de plantage, le cas échéant) dans un dossier de votre choix — pratique à joindre lors du signalement d'un problème.</string>
   <string name="settings_export_log_done">Journal exporté vers {0}</string>
+  <!-- SignalRGB coexistence -->
+  <string name="settings_signalrgb_group">SignalRGB</string>
+  <string name="settings_signalrgb_hint">SignalRGB embarque ses propres plugins Mountain et ils dialoguent avec exactement les mêmes interfaces USB que K2 utilise pour piloter les LED. Avec les deux programmes lancés, les deux flux d’éclairage se chevauchent et les LED clignotent. Choisissez ici qui commande l’éclairage — tout le reste de K2 (touches, macros, touches écran, Media Dock, profils) continue de fonctionner dans les deux cas.</string>
+  <string name="settings_signalrgb_mode_off">Ignorer SignalRGB</string>
+  <string name="settings_signalrgb_mode_off_hint">K2 pilote l’éclairage quoi qu’il arrive. Ne choisissez ceci que si vous n’utilisez jamais SignalRGB avec votre matériel Mountain, ou si vous voulez constater vous-même à quoi ressemble le conflit.</string>
+  <string name="settings_signalrgb_mode_yield">Laisser SignalRGB piloter l’éclairage (recommandé)</string>
+  <string name="settings_signalrgb_mode_yield_hint">Tant que SignalRGB tourne, K2 cesse d’écrire les effets, les couleurs par touche et la luminosité sur les appareils. Dès que SignalRGB se ferme, K2 réapplique son propre éclairage. Tout ce qui n’est pas éclairage continue de fonctionner pendant ce temps.</string>
+  <string name="settings_signalrgb_mode_stop">Fermer SignalRGB au démarrage de K2</string>
+  <string name="settings_signalrgb_mode_stop_hint">À chaque démarrage, K2 ferme SignalRGB (le moteur et son lanceur), comme il le fait déjà avec Base Camp. Le service Windows de SignalRGB n’est pas touché — il ne pilote pas les LED.</string>
+  <string name="settings_signalrgb_status_installed">SignalRGB détecté : {0}</string>
+  <string name="settings_signalrgb_status_missing">SignalRGB ne semble pas installé sur ce PC.</string>
+  <string name="settings_signalrgb_status_running">SignalRGB est en cours d’exécution — K2 n’écrit pas l’éclairage pour le moment.</string>
+  <string name="settings_signalrgb_plugins">Plugins K2 pour SignalRGB</string>
+  <string name="settings_signalrgb_plugins_hint">Installe les plugins d’appareils Mountain propres à K2 dans votre dossier de plugins utilisateur SignalRGB (Documents\WhirlwindFX\Plugins). Ils remplacent ceux fournis, avec des dispositions et des cartes de LED issues du reverse engineering de K2. Redémarrez SignalRGB après l’installation.</string>
+  <string name="settings_signalrgb_install_plugins">Installer les plugins K2</string>
+  <string name="settings_signalrgb_remove_plugins">Supprimer les plugins K2</string>
+  <string name="settings_signalrgb_open_plugin_folder">Ouvrir le dossier des plugins</string>
+  <string name="settings_signalrgb_plugins_installed">{0} plugins installés. Redémarrez SignalRGB pour les charger.</string>
+  <string name="settings_signalrgb_plugins_removed">{0} plugins supprimés. Redémarrez SignalRGB pour revenir à ceux fournis.</string>
+  <string name="settings_signalrgb_plugins_none">Aucun fichier de plugin à installer n’a été trouvé.</string>
   <!-- Invite d'importation Base Camp -->
   <string name="settings_bc_import_group">Importation Base Camp</string>
   <string name="settings_bc_import_btn">Importer depuis Base Camp…</string>
@@ -365,6 +391,7 @@
   <string name="restore_defaults_app">Restaurer tous les paramètres par défaut</string>
   <string name="restore_defaults_app_hint">Réinitialise toutes les préférences de l'application ci-dessus ET efface tous les profils, assignations de touches, paramètres d'éclairage et macros enregistrés pour chaque appareil (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). Cette action est irréversible.</string>
   <string name="restore_defaults_app_confirm">Cette opération réinitialise TOUTES les préférences de l'application et EFFACE tous les profils, assignations de touches, paramètres d'éclairage et macros enregistrés pour chaque appareil (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). Cette action est irréversible. Continuer ?</string>
+  <string name="settings_acknowledgements_group">Remerciements</string>
   <string name="restore_defaults_app_done">Tous les paramètres de l'application et les profils des appareils ont été restaurés à leurs valeurs par défaut.</string>
   <string name="settings_general">Options générales</string>
   <string name="settings_close_to_tray">Réduire dans la zone de notification au lieu de quitter</string>
@@ -385,6 +412,8 @@
   <string name="dp_devicemap_none_connected">Aucun DisplayPad n'est actuellement connecté — branchez les pads à réattribuer puis rouvrez cette fenêtre.</string>
   <string name="dp_devicemap_duplicate_error">Deux pads ne peuvent pas utiliser le même numéro de carte. Attribuez un numéro différent à chacun.</string>
   <string name="dp_devicemap_invalid_number">Les numéros de carte doivent être des entiers positifs.</string>
+  <string name="settings_language">Langue</string>
+  <string name="settings_language_hint">Change la langue de l’application. L’application redémarre pour l’appliquer.</string>
   <string name="settings_font_family">Police</string>
   <string name="settings_font_family_hint">Change immédiatement la police de l'interface dans toute l'application, sans redémarrage.</string>
   <string name="tray_show">Afficher K2</string>
@@ -406,6 +435,9 @@
   <string name="hw_busy_importing_profile">Importation du profil en cours, veuillez patienter…</string>
   <string name="hw_busy_importing_profiles">Importation des profils en cours, veuillez patienter…</string>
   <string name="hw_busy_restoring_defaults">Restauration des valeurs par défaut, veuillez patienter…</string>
+  <string name="hw_busy_restoring_key_images">Restauration des images par défaut des touches à écran, veuillez patienter…</string>
+  <string name="hw_busy_clearing_image">Effacement de l’image de la touche à écran, veuillez patienter…</string>
+  <string name="hw_busy_writing_key_bindings">Écriture des actions des touches à écran sur le clavier, veuillez patienter…</string>
   <string name="ev_crash_recovering">Le pilote a planté — tentative de récupération automatique dans 3 s…</string>
   <string name="ev_crash_recovered">Pilote récupéré — aperçu LED redémarré.</string>
   <string name="ev_crash_recovery_failed">Échec de la récupération du pilote — veuillez redémarrer K2.App.</string>
@@ -722,6 +754,11 @@
   <string name="dp_action_section">Action</string>
   <string name="dp_configure_action">Configurer l'action…</string>
   <string name="dp_remove_action">Supprimer l'action</string>
+  <string name="act_copy_action">Copier l’action</string>
+  <string name="act_cut_action">Couper l’action</string>
+  <string name="act_paste_action">Coller l’action</string>
+  <string name="paste_unsupported_title">Collage impossible</string>
+  <string name="paste_unsupported_message">Cette action n’est pas prise en charge sur cet appareil.</string>
   <string name="dp_change_image">Changer l'image…</string>
   <string name="dp_remove_image">Supprimer l'image</string>
   <string name="dp_create_folder">Créer une page dossier…</string>
@@ -930,6 +967,19 @@
   <string name="discord_key_mic_off">Micro coupé</string>
   <string name="discord_key_audio_on">Audio activé</string>
   <string name="discord_key_audio_off">Audio coupé</string>
+  <string name="dp_dedicated_profiles">Profils dédiés</string>
+  <string name="dedicated_spotify">Spotify — en lecture</string>
+  <string name="dedicated_configure">Configurer…</string>
+  <string name="dedicated_no_config">Ce profil dédié n’a rien à configurer.</string>
+  <string name="dedicated_discord">Discord — appel vocal</string>
+  <string name="discord_cmd_voice_page">Afficher la page vocale (DisplayPad)</string>
+  <string name="dvp_ptt">Push-to-talk</string>
+  <string name="dvp_webcam">Webcam</string>
+  <string name="dvp_disconnect">Se déconnecter</string>
+  <string name="discord_webcam_hotkey_label">Raccourci webcam :</string>
+  <string name="discord_webcam_hotkey_tip">Discord n’a pas de commande RPC pour la caméra : appuyez sur Enregistrer et tapez la combinaison, puis attribuez la même dans Discord &gt; Paramètres &gt; Raccourcis clavier &gt; Activer/désactiver la caméra.</string>
+  <string name="hotkey_record">Enregistrer</string>
+  <string name="hotkey_recording">Appuyez sur les touches… (Échap pour annuler)</string>
   <string name="act_emojibrowser">Navigateur d'emojis</string>
   <string name="emb_grp_smileys">Smileys</string>
   <string name="emb_grp_people">Personnes</string>

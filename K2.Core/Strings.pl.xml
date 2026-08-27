@@ -20,7 +20,7 @@
   <string name="refresh">Odśwież</string>
   <string name="refresh_devices">Odśwież urządzenia</string>
   <string name="debug_group">Debugowanie</string>
-  <string name="profile">Profil</string>
+  <string name="profile">Profile</string>
   <string name="device">Urządzenie</string>
   <string name="positioning">Pozycjonowanie</string>
   <string name="backlight_auto_off_group">Automatyczne wyłączanie podświetlenia</string>
@@ -240,6 +240,9 @@
   <string name="py_timeout">Limit czasu (s, 0 = brak):</string>
   <string name="py_hint">W skrypcie użyj 'import k2', aby wywołać funkcje K2 (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...). stdout/stderr trafiają do dziennika K2.</string>
   <string name="exec_path_label">Executable / file path:</string>
+  <string name="exec_batch_mode_label">Skrypt wsadowy:</string>
+  <string name="exec_batch_hidden">Uruchom w tle (bez okna)</string>
+  <string name="exec_batch_console">Uruchom w widocznym terminalu</string>
   <string name="folder_path_label">Folder path:</string>
   <string name="recent_paths">Recent:</string>
   <string name="remove_recent">Remove from recent</string>
@@ -303,6 +306,9 @@
        ZAKŁADKA USTAWIENIA OGÓLNE
        ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_settings">Ustawienia</string>
+  <string name="settings_extra_title">Dodatki</string>
+  <string name="settings_extra_3dprinting">Druk 3D</string>
+  <string name="settings_extra_other_projects">Inne projekty</string>
   <string name="tab_macro">Makro</string>
   <string name="settings_debug_mode">Tryb debugowania</string>
   <string name="settings_debug_mode_hint">Włącza narzędzia debugowania (otwieranie/zamykanie sterownika, sterowanie AP, dziennik zdarzeń) dla każdego urządzenia.</string>
@@ -327,6 +333,26 @@
   <string name="settings_export_log_btn">Eksportuj dziennik…</string>
   <string name="settings_export_log_hint">Kopiuje bieżący dziennik K2.App (oraz dziennik awarii, jeśli istnieje) do wybranego folderu — przydatne przy zgłaszaniu problemu.</string>
   <string name="settings_export_log_done">Dziennik wyeksportowano do {0}</string>
+  <!-- SignalRGB coexistence -->
+  <string name="settings_signalrgb_group">SignalRGB</string>
+  <string name="settings_signalrgb_hint">SignalRGB ma własne wtyczki do urządzeń Mountain i korzystają one dokładnie z tych samych interfejsów USB, których K2 używa do sterowania diodami LED. Gdy oba programy działają jednocześnie, dwa strumienie podświetlenia nakładają się na siebie i diody migoczą. Tutaj decydujesz, kto odpowiada za podświetlenie — cała reszta K2 (klawisze, makra, klawisze z wyświetlaczem, Media Dock, profile) działa tak samo w obu przypadkach.</string>
+  <string name="settings_signalrgb_mode_off">Ignoruj SignalRGB</string>
+  <string name="settings_signalrgb_mode_off_hint">K2 steruje podświetleniem bez względu na wszystko. Wybierz to tylko, jeśli nigdy nie używasz SignalRGB ze sprzętem Mountain albo chcesz sam zobaczyć, jak wygląda konflikt.</string>
+  <string name="settings_signalrgb_mode_yield">Pozwól SignalRGB sterować podświetleniem (zalecane)</string>
+  <string name="settings_signalrgb_mode_yield_hint">Gdy SignalRGB działa, K2 przestaje zapisywać w urządzeniach efekty, kolory poszczególnych klawiszy i jasność. Zaraz po zamknięciu SignalRGB K2 ponownie stosuje własne podświetlenie. Wszystko, co nie jest podświetleniem, działa przez cały czas.</string>
+  <string name="settings_signalrgb_mode_stop">Zamykaj SignalRGB przy starcie K2</string>
+  <string name="settings_signalrgb_mode_stop_hint">Przy każdym uruchomieniu K2 zamyka SignalRGB (silnik i jego launcher), tak samo jak robi to z Base Camp. Usługa Windows SignalRGB pozostaje nietknięta — nie steruje diodami LED.</string>
+  <string name="settings_signalrgb_status_installed">Wykryto SignalRGB: {0}</string>
+  <string name="settings_signalrgb_status_missing">SignalRGB nie wygląda na zainstalowany na tym komputerze.</string>
+  <string name="settings_signalrgb_status_running">SignalRGB jest uruchomiony — K2 w tej chwili nie zapisuje podświetlenia.</string>
+  <string name="settings_signalrgb_plugins">Wtyczki K2 do SignalRGB</string>
+  <string name="settings_signalrgb_plugins_hint">Instaluje własne wtyczki K2 dla urządzeń Mountain w folderze wtyczek użytkownika SignalRGB (Dokumenty\WhirlwindFX\Plugins). Zastępują te dołączone układami i mapami LED pochodzącymi z własnej inżynierii wstecznej K2. Po instalacji uruchom ponownie SignalRGB.</string>
+  <string name="settings_signalrgb_install_plugins">Zainstaluj wtyczki K2</string>
+  <string name="settings_signalrgb_remove_plugins">Usuń wtyczki K2</string>
+  <string name="settings_signalrgb_open_plugin_folder">Otwórz folder wtyczek</string>
+  <string name="settings_signalrgb_plugins_installed">Zainstalowano {0} wtyczek. Uruchom ponownie SignalRGB, aby je wczytać.</string>
+  <string name="settings_signalrgb_plugins_removed">Usunięto {0} wtyczek. Uruchom ponownie SignalRGB, aby wrócić do dołączonych.</string>
+  <string name="settings_signalrgb_plugins_none">Nie znaleziono pliku wtyczki do zainstalowania.</string>
   <!-- Okno importu z Base Camp -->
   <string name="settings_bc_import_group">Import z Base Camp</string>
   <string name="settings_bc_import_btn">Importuj z Base Camp…</string>
@@ -364,6 +390,7 @@
   <string name="restore_defaults_app">Przywróć wszystkie domyślne</string>
   <string name="restore_defaults_app_hint">Przywraca wszystkie powyższe preferencje aplikacji ORAZ usuwa każdy zapisany profil, przypisanie klawiszy, ustawienie podświetlenia i makro dla każdego urządzenia (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). Tej operacji nie można cofnąć.</string>
   <string name="restore_defaults_app_confirm">To przywraca WSZYSTKIE preferencje aplikacji i USUWA każdy zapisany profil, przypisanie klawiszy, ustawienie podświetlenia i makro dla każdego urządzenia (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). Tej operacji nie można cofnąć. Kontynuować?</string>
+  <string name="settings_acknowledgements_group">Podziękowania</string>
   <string name="restore_defaults_app_done">Wszystkie ustawienia aplikacji i profile urządzeń zostały przywrócone do wartości domyślnych.</string>
   <string name="settings_general">Opcje ogólne</string>
   <string name="settings_close_to_tray">Zamykaj do zasobnika systemowego zamiast wychodzić</string>
@@ -384,6 +411,8 @@
   <string name="dp_devicemap_none_connected">Obecnie nie jest podłączony żaden DisplayPad — podłącz pady, które chcesz przemapować, i otwórz ponownie to okno.</string>
   <string name="dp_devicemap_duplicate_error">Dwa pady nie mogą używać tego samego numeru płytki. Nadaj każdemu inny numer.</string>
   <string name="dp_devicemap_invalid_number">Numery płytek muszą być dodatnimi liczbami całkowitymi.</string>
+  <string name="settings_language">Język</string>
+  <string name="settings_language_hint">Zmienia język aplikacji. Aplikacja uruchomi się ponownie, aby go zastosować.</string>
   <string name="settings_font_family">Czcionka</string>
   <string name="settings_font_family_hint">Natychmiast zmienia czcionkę interfejsu w całej aplikacji, bez potrzeby ponownego uruchamiania.</string>
   <string name="tray_show">Pokaż K2</string>
@@ -405,6 +434,9 @@
   <string name="hw_busy_importing_profile">Importowanie profilu, proszę czekać…</string>
   <string name="hw_busy_importing_profiles">Importowanie profili, proszę czekać…</string>
   <string name="hw_busy_restoring_defaults">Przywracanie ustawień domyślnych, proszę czekać…</string>
+  <string name="hw_busy_restoring_key_images">Przywracanie domyślnych obrazów klawiszy z wyświetlaczem, proszę czekać…</string>
+  <string name="hw_busy_clearing_image">Usuwanie obrazu z klawisza z wyświetlaczem, proszę czekać…</string>
+  <string name="hw_busy_writing_key_bindings">Zapisywanie akcji klawiszy z wyświetlaczem w klawiaturze, proszę czekać…</string>
   <string name="ev_crash_recovering">Sterownik uległ awarii — próba automatycznego odzyskania za 3 s…</string>
   <string name="ev_crash_recovered">Sterownik odzyskany — podgląd LED uruchomiony ponownie.</string>
   <string name="ev_crash_recovery_failed">Odzyskanie sterownika nie powiodło się — uruchom ponownie K2.App.</string>
@@ -735,6 +767,11 @@
   <string name="dp_action_section">Akcja</string>
   <string name="dp_configure_action">Konfiguruj akcję…</string>
   <string name="dp_remove_action">Usuń akcję</string>
+  <string name="act_copy_action">Kopiuj akcję</string>
+  <string name="act_cut_action">Wytnij akcję</string>
+  <string name="act_paste_action">Wklej akcję</string>
+  <string name="paste_unsupported_title">Nie można wkleić</string>
+  <string name="paste_unsupported_message">Ta akcja nie jest obsługiwana na tym urządzeniu.</string>
   <string name="dp_change_image">Zmień obraz…</string>
   <string name="dp_remove_image">Usuń obraz</string>
   <string name="dp_create_folder">Utwórz stronę folderu…</string>
@@ -945,6 +982,19 @@
   <string name="discord_key_mic_off">Mikrofon wyłączony</string>
   <string name="discord_key_audio_on">Dźwięk włączony</string>
   <string name="discord_key_audio_off">Dźwięk wyłączony</string>
+  <string name="dp_dedicated_profiles">Profile dedykowane</string>
+  <string name="dedicated_spotify">Spotify — teraz odtwarzane</string>
+  <string name="dedicated_configure">Konfiguruj…</string>
+  <string name="dedicated_no_config">Ten profil dedykowany nie ma nic do skonfigurowania.</string>
+  <string name="dedicated_discord">Discord — połączenie głosowe</string>
+  <string name="discord_cmd_voice_page">Pokaż stronę głosową (DisplayPad)</string>
+  <string name="dvp_ptt">Naciśnij, aby mówić</string>
+  <string name="dvp_webcam">Kamera</string>
+  <string name="dvp_disconnect">Rozłącz</string>
+  <string name="discord_webcam_hotkey_label">Skrót kamery:</string>
+  <string name="discord_webcam_hotkey_tip">Discord nie ma polecenia RPC dla kamery: naciśnij Nagraj i wpisz kombinację, a następnie przypisz tę samą w Discord &gt; Ustawienia &gt; Skróty klawiszowe &gt; Przełącz kamerę.</string>
+  <string name="hotkey_record">Nagraj</string>
+  <string name="hotkey_recording">Naciśnij klawisze… (Esc, aby anulować)</string>
   <string name="act_emojibrowser">Przeglądarka emoji</string>
   <string name="emb_grp_smileys">Uśmieszki</string>
   <string name="emb_grp_people">Ludzie</string>

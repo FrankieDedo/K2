@@ -424,8 +424,18 @@ public partial class MainWindow
         miCfg.Click += MnuConfigureAction_Click;
         var miRem = new MenuItem { Header = Loc.Get("dp_remove_action") };
         miRem.Click += MnuRemoveAction_Click;
+        var miCopy = new MenuItem { Header = Loc.Get("act_copy_action") };
+        miCopy.Click += MnuCopyAction_Click;
+        var miCut = new MenuItem { Header = Loc.Get("act_cut_action") };
+        miCut.Click += MnuCutAction_Click;
+        var miPaste = new MenuItem { Header = Loc.Get("act_paste_action") };
+        miPaste.Click += MnuPasteAction_Click;
         menu.Items.Add(miCfg);
         menu.Items.Add(miRem);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miCopy);
+        menu.Items.Add(miCut);
+        menu.Items.Add(miPaste);
         return menu;
     }
 
@@ -491,6 +501,50 @@ public partial class MainWindow
         _store.SaveKey(new MacroKeyRecord(id, CurrentProfile(), key.Index, null, null));
         RefreshMpMappedKeys();
         Log($"[ACT ] key #{key.Index} action removed");
+    }
+
+    /// <summary>Copies this key's action to the app-wide clipboard (see
+    /// <see cref="K2.Core.Services.ActionClipboard"/>) — pastable onto any other key of any
+    /// device. MacroPad keys have no picture, so there is nothing else to copy.</summary>
+    private void MnuCopyAction_Click(object sender, RoutedEventArgs e)
+    {
+        if (KeyFromContextMenu(sender) is not MacroPadKey key) return;
+        K2.Core.Services.ActionClipboard.Copy(key.ActionType, key.ActionValue);
+    }
+
+    private void MnuCutAction_Click(object sender, RoutedEventArgs e)
+    {
+        if (!IsMpKeyBindingSectionActive) return;
+        if (KeyFromContextMenu(sender) is not MacroPadKey key) return;
+        if (CurrentDeviceId() is not int id) return;
+        K2.Core.Services.ActionClipboard.Copy(key.ActionType, key.ActionValue);
+        key.ActionType = null;
+        key.ActionValue = null;
+        _store.SaveKey(new MacroKeyRecord(id, CurrentProfile(), key.Index, null, null));
+        RefreshMpMappedKeys();
+        Log($"[ACT ] key #{key.Index} action cut");
+    }
+
+    /// <summary>Pastes the clipboard's action onto this key — rejected (with an error) if it's
+    /// a DisplayPad-page action, which has no meaning on a MacroPad key (see
+    /// <see cref="K2.Core.Services.ActionClipboard.CanPasteOn"/>).</summary>
+    private void MnuPasteAction_Click(object sender, RoutedEventArgs e)
+    {
+        if (!IsMpKeyBindingSectionActive) return;
+        if (KeyFromContextMenu(sender) is not MacroPadKey key) return;
+        if (CurrentDeviceId() is not int id) return;
+        if (!K2.Core.Services.ActionClipboard.HasContent) return;
+        if (!K2.Core.Services.ActionClipboard.CanPasteOn(this))
+        {
+            K2.Core.Services.ActionClipboard.ShowPasteUnsupportedError(this);
+            return;
+        }
+
+        key.ActionType  = K2.Core.Services.ActionClipboard.ActionType;
+        key.ActionValue = K2.Core.Services.ActionClipboard.ActionValue;
+        _store.SaveKey(new MacroKeyRecord(id, CurrentProfile(), key.Index, key.ActionType, key.ActionValue));
+        RefreshMpMappedKeys();
+        Log($"[ACT ] key #{key.Index} <- pasted action");
     }
 
     /// <summary>Rebuilds the Key Binding section's mapped-keys list (LvMpKeys)

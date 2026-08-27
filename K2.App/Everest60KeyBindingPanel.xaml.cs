@@ -242,6 +242,42 @@ public partial class Everest60KeyBindingPanel : UserControl
         bool hasSelection = LvEv60Keys.SelectedItem is not null;
         BtnEv60Configure.IsEnabled = hasSelection;
         BtnEv60Remove.IsEnabled = hasSelection;
+        BtnEv60Copy.IsEnabled  = hasSelection;
+        BtnEv60Cut.IsEnabled   = hasSelection;
+        BtnEv60Paste.IsEnabled = hasSelection;
+    }
+
+    /// <summary>Copies the selected key's action to the app-wide clipboard (see
+    /// <see cref="K2.Core.Services.ActionClipboard"/>) — Everest 60 keys have no picture, so
+    /// there's nothing else to copy.</summary>
+    private void BtnEv60Copy_Click(object sender, RoutedEventArgs e)
+    {
+        if (LvEv60Keys.SelectedItem is not Ev60Key key) return;
+        K2.Core.Services.ActionClipboard.Copy(key.ActionType, key.ActionValue);
+    }
+
+    private void BtnEv60Cut_Click(object sender, RoutedEventArgs e)
+    {
+        if (LvEv60Keys.SelectedItem is not Ev60Key key) return;
+        K2.Core.Services.ActionClipboard.Copy(key.ActionType, key.ActionValue);
+        BtnEv60Remove_Click(sender, e);
+    }
+
+    /// <summary>Pastes the clipboard's action onto the selected key — rejected (with an error)
+    /// for a DisplayPad-page action, which makes no sense here (see
+    /// <see cref="K2.Core.Services.ActionClipboard.CanPasteOn"/>).</summary>
+    private void BtnEv60Paste_Click(object sender, RoutedEventArgs e)
+    {
+        if (LvEv60Keys.SelectedItem is not Ev60Key key) return;
+        if (!K2.Core.Services.ActionClipboard.HasContent) return;
+        if (!K2.Core.Services.ActionClipboard.CanPasteOn(_actionHost))
+        {
+            K2.Core.Services.ActionClipboard.ShowPasteUnsupportedError(Window.GetWindow(this));
+            return;
+        }
+        key.ActionType  = K2.Core.Services.ActionClipboard.ActionType;
+        key.ActionValue = K2.Core.Services.ActionClipboard.ActionValue;
+        PersistOrDiscardKey(key);
     }
 
     private void LvEv60Keys_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateListButtons();

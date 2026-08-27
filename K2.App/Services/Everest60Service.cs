@@ -150,6 +150,7 @@ internal sealed class Everest60Service
     public bool SetEffect(Everest60Protocol.Effect effect, int speedPct, int brightnessPct,
         (byte r, byte g, byte b) primary, (byte r, byte g, byte b)? secondary,
         bool rainbow, byte direction) =>
+        SignalRgbGuard.BlockLighting("Ev60.SetEffect") ||
         WithDevice(h =>
         {
             var mode = rainbow ? Everest60Protocol.ColorMode.Rainbow
@@ -173,6 +174,7 @@ internal sealed class Everest60Service
         IReadOnlyList<(byte r, byte g, byte b)> numpadColors,
         IReadOnlyList<(byte r, byte g, byte b)> numpadRingColors,
         int brightnessPct) =>
+        SignalRgbGuard.BlockLighting("Ev60.SetCustomLighting") ||
         WithDevice(h => Everest60Protocol.SendCustom(h, keys, brightnessPct, sideColors, numpadColors, numpadRingColors, _log));
 
     /// <summary>

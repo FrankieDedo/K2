@@ -69,7 +69,16 @@
                         Click="BtnEv60Configure_Click" HorizontalAlignment="Stretch" Margin="0,0,0,4"
                         IsEnabled="False"/>
                 <Button x:Name="BtnEv60Remove" Content="{loc:Get ev_remove}" Padding="8,4"
-                        Click="BtnEv60Remove_Click" HorizontalAlignment="Stretch"
+                        Click="BtnEv60Remove_Click" HorizontalAlignment="Stretch" Margin="0,0,0,10"
+                        IsEnabled="False"/>
+                <Button x:Name="BtnEv60Copy" Content="{loc:Get act_copy_action}" Padding="8,4"
+                        Click="BtnEv60Copy_Click" HorizontalAlignment="Stretch" Margin="0,0,0,4"
+                        IsEnabled="False"/>
+                <Button x:Name="BtnEv60Cut" Content="{loc:Get act_cut_action}" Padding="8,4"
+                        Click="BtnEv60Cut_Click" HorizontalAlignment="Stretch" Margin="0,0,0,4"
+                        IsEnabled="False"/>
+                <Button x:Name="BtnEv60Paste" Content="{loc:Get act_paste_action}" Padding="8,4"
+                        Click="BtnEv60Paste_Click" HorizontalAlignment="Stretch"
                         IsEnabled="False"/>
             </StackPanel>
         </Grid>

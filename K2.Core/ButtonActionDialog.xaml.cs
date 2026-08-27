@@ -31,7 +31,7 @@ public partial class ButtonActionDialog : Window
         if (_host?.SupportsPages != true)
         {
             foreach (var dpOnly in CbType.Items.OfType<ComboBoxItem>()
-                         .Where(i => (string?)i.Tag is "dp_folder" or "dp_emojibrowser" or "dp_clock" or "dp_sysmon" or "dp_speedtest").ToList())
+                         .Where(i => Array.IndexOf(ActionTypeHelper.PageOnlyActionTypes, (string?)i.Tag) >= 0).ToList())
                 CbType.Items.Remove(dpOnly);
         }
 
@@ -50,7 +50,12 @@ public partial class ButtonActionDialog : Window
         }
         else if (currentType == "exec")
         {
-            TxtExecPath.Text = currentValue ?? "";
+            var (execPath, execConsole) = ExecActionPayload.Split(currentValue);
+            TxtExecPath.Text = execPath;
+            // Set after the Text (TextChanged toggles the panel's visibility) and never from
+            // XAML: an IsChecked="True" attribute fires Checked mid-InitializeComponent.
+            RbExecBatchConsole.IsChecked = execConsole;
+            RbExecBatchHidden.IsChecked  = !execConsole;
         }
         else if (currentType == "folder")
         {
@@ -285,8 +290,10 @@ public partial class ButtonActionDialog : Window
         }
         else if (tag == "exec")
         {
-            ActionValue = TxtExecPath.Text?.Trim() ?? "";
-            if (ActionValue.Length > 0) AppSettings.AddRecentExecPath(ActionValue);
+            var execPath = TxtExecPath.Text?.Trim() ?? "";
+            ActionValue = ExecActionPayload.Build(execPath, RbExecBatchConsole.IsChecked == true);
+            // The recent list stores bare paths only — the terminal flag is per-binding.
+            if (execPath.Length > 0) AppSettings.AddRecentExecPath(execPath);
         }
         else if (tag == "folder")
         {

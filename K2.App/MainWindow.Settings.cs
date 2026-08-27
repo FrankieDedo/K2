@@ -1,8 +1,11 @@
 // MainWindow.Settings.cs — partial class: centralized General Settings tab.
 //
-// Replaces the old per-device "Debug" checkboxes (Everest/MacroPad/DisplayPad):
-// a single Debug toggle here now drives debug UI/behavior on every device via
-// AppSettings.DebugMode. Logging is independent of the Debug flag — the Log
+// Debug UI/behavior on every device comes from the single AppSettings.DebugMode
+// flag, read from the plain-text %LOCALAPPDATA%\K2\k2_debug.cfg (see
+// K2.Core/DebugConfig.cs). It has no toggle in this tab (the old per-device
+// checkboxes, then the app-wide one here, were both removed — 2026-08-27) and is
+// applied once at startup by ApplyDebugModeToAllDevices.
+// Logging is independent of the Debug flag — the Log
 // level (Off/Normal/Verbose, default Normal) is always active/visible in this
 // tab and controls logging verbosity across the app (see AppSettings.LogLevel —
 // key-press logs and the LED-poll diagnostic log only fire at Verbose).
@@ -10,9 +13,14 @@
 using System;
 using System.Diagnostics;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Input;
+using System.Windows.Media.Imaging;
+using K2.App.Models;
 using K2.App.Services;
 using K2.Core;
 using K2.Core.Services;
@@ -293,8 +301,10 @@ public partial class MainWindow
     /// after all Init*Module() calls so their controls/fields already exist.</summary>
     private void InitAppSettingsPanel()
     {
+        // Debug mode is no longer a checkbox here: it is read from the plain-text
+        // %LOCALAPPDATA%\K2\k2_debug.cfg (K2.Core/DebugConfig.cs), default off, and
+        // only applied at startup — see ApplyDebugModeToAllDevices at the end.
         bool debug = AppSettings.DebugMode;
-        CkAppDebugMode.IsChecked = debug;
 
         switch (AppSettings.LogLevel)
         {
@@ -308,6 +318,8 @@ public partial class MainWindow
         CkRestartBcOnClose.IsChecked = AppSettings.RestartBaseCampOnClose;
         InitBcAutostartCheckbox();
 
+        InitSignalRgbPanel();
+
         InitBcDllFolderPanel();
 
         CkCloseToTray.IsChecked = AppSettings.CloseToTray;
@@ -319,8 +331,110 @@ public partial class MainWindow
         InitAppIconColorCombo();
         InitIconGalleryStyleRadios();
         InitUpdatesPanel();
+        InitAcknowledgementsPanel();
+        InitExtraLinksPanel();
 
         ApplyDebugModeToAllDevices(debug);
+    }
+
+    /// <summary>Reference links shown as cards in the Settings tab's "Extra" section
+    /// (see THANKS.md), grouped into labeled sub-sections. Add more groups/links here
+    /// as they come up — each card fetches its own preview title/image from the linked
+    /// page (LinkPreviewService), so nothing else needs updating.</summary>
+    private static readonly (string GroupTitleKey, (string Url, string FallbackTitle)[] Links)[] ExtraLinkGroups =
+    {
+        ("settings_extra_3dprinting", new[]
+        {
+            ("https://cults3d.com/en/3d-model/gadget/sidepad-everest-keyboard-support-for-displaypad-and-macropad", "SidePad Everest — DisplayPad/MacroPad support"),
+            ("https://cults3d.com/en/3d-model/gadget/display-dial-riser-stand-for-everest-keyboard-minifig-stand", "Display Dial riser stand for Everest keyboard"),
+        }),
+        ("settings_extra_other_projects", new[]
+        {
+            ("https://github.com/ramisotti13-eng/BaseCamp-Linux", "BaseCamp-Linux (ramisotti13-eng)"),
+            ("https://gitlab.com/FransM/Sherpa", "Sherpa (FransM)"),
+        }),
+    };
+
+    /// <summary>Populates the "Extra" section with <see cref="ExtraLinkGroups"/> and
+    /// kicks off an async Open Graph preview fetch (title + image) for every card —
+    /// cards start showing the fallback title with no image and update in place as
+    /// previews land (or stay on the fallback if the fetch fails, e.g. offline).</summary>
+    private void InitExtraLinksPanel()
+    {
+        var groups = ExtraLinkGroups
+            .Select(g => new ExtraLinkGroup(Loc.Get(g.GroupTitleKey),
+                g.Links.Select(l => new ExtraLinkItem(l.Url, l.FallbackTitle)).ToList()))
+            .ToList();
+
+        IcExtraLinkGroups.ItemsSource = groups;
+        foreach (var item in groups.SelectMany(g => g.Items))
+            _ = LoadExtraLinkPreviewAsync(item);
+    }
+
+    private async Task LoadExtraLinkPreviewAsync(ExtraLinkItem item)
+    {
+        var preview = await LinkPreviewService.GetPreviewAsync(item.Url);
+        if (!string.IsNullOrWhiteSpace(preview.Title))
+            item.Title = preview.Title!;
+
+        if (preview.ImagePath is null) return;
+        try
+        {
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.UriSource = new Uri(preview.ImagePath);
+            bmp.EndInit();
+            bmp.Freeze();
+            item.Image = bmp;
+        }
+        catch { /* corrupt/unreadable cached image — card just stays without one */ }
+    }
+
+    /// <summary>Click handler for an "Extra" card — opens its link in the default
+    /// browser. Bound directly in the DataTemplate (MainWindow.xaml), so the sender's
+    /// DataContext is the clicked ExtraLinkItem.</summary>
+    private void ExtraLinkCard_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (((FrameworkElement)sender).DataContext is not ExtraLinkItem item) return;
+        Process.Start(new ProcessStartInfo(item.Url) { UseShellExecute = true });
+    }
+
+    private static readonly Regex UrlRegex = new(@"https?://\S+", RegexOptions.Compiled);
+
+    /// <summary>Loads THANKS.md (shipped next to K2.App.exe, see the csproj's
+    /// Content entry linking it from the repo's K2/THANKS.md) into the Settings
+    /// tab's bottom box, turning any http(s) URL into a clickable Hyperlink that
+    /// opens in the default browser. Missing/unreadable file just leaves the box
+    /// empty — not worth bothering the user about.</summary>
+    private void InitAcknowledgementsPanel()
+    {
+        TxtAppAcknowledgements.Inlines.Clear();
+        try
+        {
+            string path = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "THANKS.md");
+            if (!System.IO.File.Exists(path)) return;
+            string text = System.IO.File.ReadAllText(path);
+
+            int last = 0;
+            foreach (Match m in UrlRegex.Matches(text))
+            {
+                if (m.Index > last) TxtAppAcknowledgements.Inlines.Add(new Run(text[last..m.Index]));
+                var link = new Hyperlink(new Run(m.Value)) { NavigateUri = new Uri(m.Value) };
+                link.RequestNavigate += (s, e) =>
+                {
+                    Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+                    e.Handled = true;
+                };
+                TxtAppAcknowledgements.Inlines.Add(link);
+                last = m.Index + m.Length;
+            }
+            if (last < text.Length) TxtAppAcknowledgements.Inlines.Add(new Run(text[last..]));
+        }
+        catch
+        {
+            TxtAppAcknowledgements.Inlines.Clear();
+        }
     }
 
     /// <summary>Populates the Font combo with <see cref="FontCatalog.Options"/> and
@@ -519,6 +633,115 @@ public partial class MainWindow
         AppSettings.SetRestartBaseCampOnClose(CkRestartBcOnClose.IsChecked == true);
     }
 
+    // ================================================================
+    // SignalRGB coexistence (see Services/SignalRgbGuard.cs)
+    // ================================================================
+
+    /// <summary>True while InitSignalRgbPanel is setting the radio buttons, so their
+    /// Checked handler doesn't re-arm the guard for a value it just read back.</summary>
+    private bool _signalRgbInit;
+
+    private void InitSignalRgbPanel()
+    {
+        _signalRgbInit = true;
+        try
+        {
+            switch (AppSettings.SignalRgbMode)
+            {
+                case SignalRgbMode.Off:  RbSignalRgbOff.IsChecked  = true; break;
+                case SignalRgbMode.Stop: RbSignalRgbStop.IsChecked = true; break;
+                default:                 RbSignalRgbYield.IsChecked = true; break;
+            }
+        }
+        finally { _signalRgbInit = false; }
+
+        RefreshSignalRgbStatus();
+
+        // Keep the status line honest while the user has the tab open: the guard already
+        // polls, we just mirror its transitions onto the UI thread.
+        Services.SignalRgbGuard.StateChanged -= OnSignalRgbStateChanged;
+        Services.SignalRgbGuard.StateChanged += OnSignalRgbStateChanged;
+        Services.SignalRgbGuard.LightingReclaimed -= OnSignalRgbLightingReclaimed;
+        Services.SignalRgbGuard.LightingReclaimed += OnSignalRgbLightingReclaimed;
+    }
+
+    /// <summary>SignalRGB just closed (or the user turned coexistence off): push K2's own
+    /// lighting back onto the devices, otherwise they keep whatever frame SignalRGB left
+    /// behind until the user touches a slider. Everest 60 and Makalu have no single
+    /// "reapply everything" entry point yet, so they come back on the next UI change.</summary>
+    private void OnSignalRgbLightingReclaimed() => Dispatcher.BeginInvoke(new Action(() =>
+    {
+        try { ApplyCurrentEffect(); }      catch (Exception ex) { App.WriteLog("[SignalRGB] Everest reapply failed: " + ex.Message); }
+        try { ApplyCurrentMacroEffect(); } catch (Exception ex) { App.WriteLog("[SignalRGB] MacroPad reapply failed: " + ex.Message); }
+    }));
+
+    private void OnSignalRgbStateChanged(bool running)
+        => Dispatcher.BeginInvoke(new Action(RefreshSignalRgbStatus));
+
+    private void RefreshSignalRgbStatus()
+    {
+        string? install = Services.SignalRgbGuard.InstallDirectory();
+        string text = install is null
+            ? Loc.Get("settings_signalrgb_status_missing")
+            : string.Format(Loc.Get("settings_signalrgb_status_installed"), install);
+
+        if (Services.SignalRgbGuard.LightingYielded)
+            text += Environment.NewLine + Loc.Get("settings_signalrgb_status_running");
+
+        TxtSignalRgbStatus.Text = text;
+
+        bool installed = Services.SignalRgbGuard.K2PluginsInstalled();
+        BtnSignalRgbRemovePlugins.IsEnabled = installed;
+    }
+
+    private void RbSignalRgbMode_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_signalRgbInit) return;
+
+        SignalRgbMode mode = sender == RbSignalRgbOff  ? SignalRgbMode.Off
+                           : sender == RbSignalRgbStop ? SignalRgbMode.Stop
+                                                       : SignalRgbMode.Yield;
+        AppSettings.SetSignalRgbMode(mode);
+
+        // Stop mode only acts at startup (like AutoStopBaseCamp) — but if SignalRGB is up
+        // right now, close it immediately so the user sees the setting do something.
+        if (mode == SignalRgbMode.Stop)
+            Services.SignalRgbGuard.KillSignalRgb(App.WriteLog);
+
+        Services.SignalRgbGuard.Start(App.WriteLog);
+        RefreshSignalRgbStatus();
+    }
+
+    private void BtnSignalRgbInstallPlugins_Click(object sender, RoutedEventArgs e)
+    {
+        int n = Services.SignalRgbGuard.InstallK2Plugins(App.WriteLog);
+        MessageBox.Show(this,
+            n > 0 ? string.Format(Loc.Get("settings_signalrgb_plugins_installed"), n)
+                  : Loc.Get("settings_signalrgb_plugins_none"),
+            Loc.Get("settings_signalrgb_group"), MessageBoxButton.OK, MessageBoxImage.Information);
+        RefreshSignalRgbStatus();
+    }
+
+    private void BtnSignalRgbRemovePlugins_Click(object sender, RoutedEventArgs e)
+    {
+        int n = Services.SignalRgbGuard.RemoveK2Plugins(App.WriteLog);
+        MessageBox.Show(this,
+            string.Format(Loc.Get("settings_signalrgb_plugins_removed"), n),
+            Loc.Get("settings_signalrgb_group"), MessageBoxButton.OK, MessageBoxImage.Information);
+        RefreshSignalRgbStatus();
+    }
+
+    private void BtnSignalRgbOpenPluginFolder_Click(object sender, RoutedEventArgs e)
+    {
+        string dir = Services.SignalRgbGuard.UserPluginDirectory;
+        try
+        {
+            System.IO.Directory.CreateDirectory(dir);
+            Process.Start(new ProcessStartInfo(dir) { UseShellExecute = true });
+        }
+        catch (Exception ex) { App.WriteLog("[SignalRGB] cannot open plugin folder: " + ex.Message); }
+    }
+
     /// <summary>Copies the current app log (and crash log, if any) to a user-chosen
     /// folder — "Export log" button in the General group.</summary>
     private void BtnAppExportLog_Click(object sender, RoutedEventArgs e)
@@ -553,13 +776,6 @@ public partial class MainWindow
         LblStatus.Text = Loc.Get("settings_bc_autostart_done", changed);
         // Re-read the real state (HKLM entries may have failed without admin rights).
         InitBcAutostartCheckbox();
-    }
-
-    private void CkAppDebugMode_Click(object sender, RoutedEventArgs e)
-    {
-        bool debug = CkAppDebugMode.IsChecked == true;
-        AppSettings.SetDebugMode(debug);
-        ApplyDebugModeToAllDevices(debug);
     }
 
     private void RbLogLevel_Checked(object sender, RoutedEventArgs e)

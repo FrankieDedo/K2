@@ -176,6 +176,116 @@ public static class LiveTileRenderer
         catch { return false; }
     }
 
+    /// <summary>Widest string each of the speed-test tile's three bands ever has to hold across
+    /// ping/download/upload — used to pick ONE font size per band up front (see
+    /// <see cref="TryRenderSpeedTile"/>'s remarks) rather than letting each tile's own, often
+    /// shorter, text auto-grow to fill the band and end up a different size from its siblings.</summary>
+    private const string SpeedValueSizeReference = "888.8";
+    private const string SpeedCaptionSizeReference = "download";
+    private const string SpeedUnitSizeReference = "Mbps";
+
+    /// <summary>
+    /// Speed-test variant of <see cref="TryRenderGauge"/>: caption strip above ("ping" /
+    /// "upload" / "download"), value in the middle, unit strip below ("ms" / "Mbps") — three
+    /// stacked bands instead of TryRenderGauge's caption-below layout.
+    /// <para>
+    /// The caption and unit strips are always sized from the widest text that band ever has to
+    /// hold (<see cref="SpeedCaptionSizeReference"/>, <see cref="SpeedUnitSizeReference"/>), so
+    /// "ping"/"ms" render at the same size as their longer siblings "download"/"Mbps" instead
+    /// of auto-growing to fill their own box. The value, by contrast, sizes itself from its OWN
+    /// text via <paramref name="ownValueSize"/> — up/down share a size the way the strips do
+    /// (<see cref="SpeedValueSizeReference"/>), but ping's few digits are allowed to fill the
+    /// tile the way a lone reading normally would. <paramref name="valueTopPad"/> nudges the
+    /// caption+value block down by that fraction of the tile (unit strip unaffected) — ping uses
+    /// it to keep its bigger self-sized number clear of the top edge.
+    /// </para>
+    /// <para>
+    /// The ring (shown mid-run, before a leg has its own number yet) is sized to the band left
+    /// between the two text strips rather than the whole tile.
+    /// </para>
+    /// </summary>
+    public static bool TryRenderSpeedTile(string valueText, double? fraction, string caption,
+                                          string unitText, int size, string outputPngPath,
+                                          bool ownValueSize = false, float valueTopPad = 0f)
+    {
+        try
+        {
+            using var canvas = new Bitmap(size, size);
+            using (var g = NewGraphics(canvas, size))
+            {
+                bool withCaption = caption.Length > 0;
+                bool withUnit = unitText.Length > 0;
+                float captionH = withCaption ? size * 0.22f : 0f;
+                float unitH = withUnit ? size * 0.22f : 0f;
+                float pad = size * valueTopPad;
+                float midTop = captionH + pad;
+                float midHeight = size - captionH - unitH - pad;
+
+                var captionRect = new RectangleF(0, pad, size, captionH);
+                var unitRect = new RectangleF(0, size - unitH, size, unitH);
+                var valueRect = new RectangleF(size * 0.04f, midTop, size * 0.92f, midHeight);
+
+                if (fraction is double f)
+                {
+                    float ring = Math.Min(size * 0.9f, midHeight) * 0.92f;
+                    float left = (size - ring) / 2f;
+                    float top = midTop + (midHeight - ring) / 2f;
+                    float thickness = Math.Max(3f, size * 0.075f);
+
+                    var rect = new RectangleF(left + thickness / 2f, top + thickness / 2f,
+                                              ring - thickness, ring - thickness);
+
+                    using (var track = new Pen(Dim(TextColor, 0.25f), thickness) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                        g.DrawArc(track, rect, 135f, 270f);
+
+                    float sweep = (float)(Math.Clamp(f, 0d, 1d) * 270d);
+                    if (sweep > 0.5f)
+                        using (var pen = new Pen(IconImageGenerator.TileAccent, thickness) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                            g.DrawArc(pen, rect, 135f, sweep);
+
+                    float inner = ring * 0.62f;
+                    DrawFitted(g, valueText,
+                               new RectangleF(left + (ring - inner) / 2f, top + (ring - inner) / 2f, inner, inner),
+                               size * 0.30f, TextColor);
+                }
+                else
+                {
+                    float valuePx = FitFontSize(g, ownValueSize ? valueText : SpeedValueSizeReference,
+                                                 valueRect, size * 0.62f);
+                    DrawFitted(g, valueText, valueRect, valuePx, TextColor);
+                }
+
+                if (withCaption)
+                {
+                    float captionPx = FitFontSize(g, SpeedCaptionSizeReference, captionRect, size * 0.16f);
+                    DrawFitted(g, caption, captionRect, captionPx, TextColor);
+                }
+                if (withUnit)
+                {
+                    float unitPx = FitFontSize(g, SpeedUnitSizeReference, unitRect, size * 0.20f);
+                    DrawFitted(g, unitText, unitRect, unitPx, TextColor);
+                }
+            }
+            return Save(canvas, outputPngPath);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>The largest font size (down to the same 8px floor <see cref="DrawFitted"/>
+    /// uses) at which <paramref name="text"/> fits <paramref name="rect"/> both ways — the
+    /// measuring half of <see cref="DrawFitted"/>'s shrink loop, split out so a band's size can
+    /// be decided from a reference string instead of the text actually being drawn.</summary>
+    private static float FitFontSize(Graphics g, string text, RectangleF rect, float startPx)
+    {
+        for (float px = startPx; px >= 8f; px -= 1f)
+        {
+            using var font = IconImageGenerator.CaptionFont(px);
+            SizeF measured = g.MeasureString(text, font);
+            if (measured.Width <= rect.Width && measured.Height <= rect.Height) return px;
+        }
+        return 8f;
+    }
+
     // ─────────────────────────── Drawing helpers ───────────────────────────
 
     /// <summary>Text/hand color — the per-key "Edit icon" text color when set, white otherwise

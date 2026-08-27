@@ -20,7 +20,7 @@
   <string name="refresh">Aktualisieren</string>
   <string name="refresh_devices">Geräte aktualisieren</string>
   <string name="debug_group">Debug</string>
-  <string name="profile">Profil</string>
+  <string name="profile">Profile</string>
   <string name="device">Gerät</string>
   <string name="positioning">Positionierung</string>
   <string name="backlight_auto_off_group">Automatische Abschaltung der Hintergrundbeleuchtung</string>
@@ -240,6 +240,9 @@
   <string name="py_timeout">Zeitlimit (s, 0 = keines):</string>
   <string name="py_hint">Im Skript 'import k2' verwenden, um K2-Funktionen aufzurufen (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...). stdout/stderr gehen in das K2-Protokoll.</string>
   <string name="exec_path_label">Executable / file path:</string>
+  <string name="exec_batch_mode_label">Batch-Skript:</string>
+  <string name="exec_batch_hidden">Versteckt ausführen (kein Fenster)</string>
+  <string name="exec_batch_console">In sichtbarem Terminal ausführen</string>
   <string name="folder_path_label">Folder path:</string>
   <string name="recent_paths">Recent:</string>
   <string name="remove_recent">Remove from recent</string>
@@ -303,6 +306,9 @@
        TAB ALLGEMEINE EINSTELLUNGEN
        ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_settings">Einstellungen</string>
+  <string name="settings_extra_title">Extra</string>
+  <string name="settings_extra_3dprinting">3D-Druck</string>
+  <string name="settings_extra_other_projects">Weitere Projekte</string>
   <string name="tab_macro">Makro</string>
   <string name="settings_debug_mode">Debug-Modus</string>
   <string name="settings_debug_mode_hint">Aktiviert Debug-Werkzeuge (Treiber öffnen/schließen, AP-Steuerung, Ereignisprotokoll) für jedes Gerät.</string>
@@ -327,6 +333,26 @@
   <string name="settings_export_log_btn">Protokoll exportieren…</string>
   <string name="settings_export_log_hint">Kopiert das aktuelle K2.App-Protokoll (und ggf. das Absturzprotokoll) in einen Ordner deiner Wahl — praktisch zum Weitergeben beim Melden eines Problems.</string>
   <string name="settings_export_log_done">Protokoll exportiert nach {0}</string>
+  <!-- SignalRGB coexistence -->
+  <string name="settings_signalrgb_group">SignalRGB</string>
+  <string name="settings_signalrgb_hint">SignalRGB bringt eigene Mountain-Plugins mit, und die sprechen genau dieselben USB-Schnittstellen an, über die K2 die LEDs ansteuert. Laufen beide Programme gleichzeitig, überlagern sich die beiden Beleuchtungsströme und die LEDs flackern. Lege hier fest, wem die Beleuchtung gehört — alles andere in K2 (Tasten, Makros, Display-Tasten, Media Dock, Profile) funktioniert in beiden Fällen weiter.</string>
+  <string name="settings_signalrgb_mode_off">SignalRGB ignorieren</string>
+  <string name="settings_signalrgb_mode_off_hint">K2 steuert die Beleuchtung in jedem Fall. Wähle das nur, wenn du SignalRGB nie mit deiner Mountain-Hardware benutzt oder selbst sehen willst, wie sich der Konflikt äußert.</string>
+  <string name="settings_signalrgb_mode_yield">SignalRGB die Beleuchtung überlassen (empfohlen)</string>
+  <string name="settings_signalrgb_mode_yield_hint">Solange SignalRGB läuft, schreibt K2 keine Effekte, Einzeltastenfarben und Helligkeitswerte mehr an die Geräte. Sobald SignalRGB geschlossen wird, wendet K2 seine eigene Beleuchtung wieder an. Alles, was nicht Beleuchtung ist, funktioniert durchgehend weiter.</string>
+  <string name="settings_signalrgb_mode_stop">SignalRGB beim Start von K2 schließen</string>
+  <string name="settings_signalrgb_mode_stop_hint">Bei jedem Start schließt K2 SignalRGB (die Engine und ihren Launcher), genau wie bei Base Camp. Der Windows-Dienst von SignalRGB bleibt unangetastet — er steuert die LEDs nicht.</string>
+  <string name="settings_signalrgb_status_installed">SignalRGB erkannt: {0}</string>
+  <string name="settings_signalrgb_status_missing">SignalRGB scheint auf diesem PC nicht installiert zu sein.</string>
+  <string name="settings_signalrgb_status_running">SignalRGB läuft — K2 schreibt gerade keine Beleuchtung.</string>
+  <string name="settings_signalrgb_plugins">K2-Plugins für SignalRGB</string>
+  <string name="settings_signalrgb_plugins_hint">Installiert die eigenen Mountain-Geräte-Plugins von K2 in deinen SignalRGB-Benutzer-Plugin-Ordner (Dokumente\WhirlwindFX\Plugins). Sie ersetzen die mitgelieferten durch Layouts und LED-Karten aus dem Reverse Engineering von K2. Starte SignalRGB nach der Installation neu.</string>
+  <string name="settings_signalrgb_install_plugins">K2-Plugins installieren</string>
+  <string name="settings_signalrgb_remove_plugins">K2-Plugins entfernen</string>
+  <string name="settings_signalrgb_open_plugin_folder">Plugin-Ordner öffnen</string>
+  <string name="settings_signalrgb_plugins_installed">{0} Plugins installiert. Starte SignalRGB neu, um sie zu laden.</string>
+  <string name="settings_signalrgb_plugins_removed">{0} Plugins entfernt. Starte SignalRGB neu, um zu den mitgelieferten zurückzukehren.</string>
+  <string name="settings_signalrgb_plugins_none">Keine Plugin-Datei zum Installieren gefunden.</string>
   <!-- Base-Camp-Import-Hinweis -->
   <string name="settings_bc_import_group">Base-Camp-Import</string>
   <string name="settings_bc_import_btn">Aus Base Camp importieren…</string>
@@ -364,6 +390,7 @@
   <string name="restore_defaults_app">Alle Standardwerte wiederherstellen</string>
   <string name="restore_defaults_app_hint">Setzt alle oben genannten App-Einstellungen zurück UND löscht jedes gespeicherte Profil, jede Tastenbelegung, Beleuchtungseinstellung und Makro für jedes Gerät (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). Dies kann nicht rückgängig gemacht werden.</string>
   <string name="restore_defaults_app_confirm">Dies setzt ALLE App-Einstellungen zurück und LÖSCHT jedes gespeicherte Profil, jede Tastenbelegung, Beleuchtungseinstellung und Makro für jedes Gerät (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). Dies kann nicht rückgängig gemacht werden. Fortfahren?</string>
+  <string name="settings_acknowledgements_group">Danksagungen</string>
   <string name="restore_defaults_app_done">Alle App-Einstellungen und Geräteprofile wurden auf die Standardwerte zurückgesetzt.</string>
   <string name="settings_general">Allgemeine Optionen</string>
   <string name="settings_close_to_tray">In die Taskleiste minimieren statt beenden</string>
@@ -384,6 +411,8 @@
   <string name="dp_devicemap_none_connected">Aktuell ist kein DisplayPad angeschlossen — schließe die neu zuzuordnenden Pads an und öffne dieses Fenster erneut.</string>
   <string name="dp_devicemap_duplicate_error">Zwei Pads können nicht dieselbe Board-Nummer verwenden. Vergib für jedes eine andere Nummer.</string>
   <string name="dp_devicemap_invalid_number">Board-Nummern müssen positive ganze Zahlen sein.</string>
+  <string name="settings_language">Sprache</string>
+  <string name="settings_language_hint">Ändert die Sprache der App. Die App startet neu, um sie zu übernehmen.</string>
   <string name="settings_font_family">Schriftart</string>
   <string name="settings_font_family_hint">Ändert die App-weite UI-Schriftart sofort, kein Neustart erforderlich.</string>
   <string name="tray_show">K2 anzeigen</string>
@@ -405,6 +434,9 @@
   <string name="hw_busy_importing_profile">Profil wird importiert, bitte warten…</string>
   <string name="hw_busy_importing_profiles">Profile werden importiert, bitte warten…</string>
   <string name="hw_busy_restoring_defaults">Standardwerte werden wiederhergestellt, bitte warten…</string>
+  <string name="hw_busy_restoring_key_images">Standardbilder der Display-Tasten werden wiederhergestellt, bitte warten…</string>
+  <string name="hw_busy_clearing_image">Bild der Display-Taste wird gelöscht, bitte warten…</string>
+  <string name="hw_busy_writing_key_bindings">Aktionen der Display-Tasten werden auf die Tastatur geschrieben, bitte warten…</string>
   <string name="ev_crash_recovering">Treiber abgestürzt — automatische Wiederherstellung in 3 s wird versucht…</string>
   <string name="ev_crash_recovered">Treiber wiederhergestellt — LED-Vorschau neu gestartet.</string>
   <string name="ev_crash_recovery_failed">Treiberwiederherstellung fehlgeschlagen — bitte K2.App neu starten.</string>
@@ -734,6 +766,11 @@
   <string name="dp_action_section">Aktion</string>
   <string name="dp_configure_action">Aktion konfigurieren…</string>
   <string name="dp_remove_action">Aktion entfernen</string>
+  <string name="act_copy_action">Aktion kopieren</string>
+  <string name="act_cut_action">Aktion ausschneiden</string>
+  <string name="act_paste_action">Aktion einfügen</string>
+  <string name="paste_unsupported_title">Einfügen nicht möglich</string>
+  <string name="paste_unsupported_message">Diese Aktion wird auf diesem Gerät nicht unterstützt.</string>
   <string name="dp_change_image">Bild ändern…</string>
   <string name="dp_remove_image">Bild entfernen</string>
   <string name="dp_create_folder">Ordnerseite erstellen…</string>
@@ -944,6 +981,19 @@
   <string name="discord_key_mic_off">Mikro aus</string>
   <string name="discord_key_audio_on">Audio an</string>
   <string name="discord_key_audio_off">Audio aus</string>
+  <string name="dp_dedicated_profiles">Dedizierte Profile</string>
+  <string name="dedicated_spotify">Spotify — läuft gerade</string>
+  <string name="dedicated_configure">Konfigurieren…</string>
+  <string name="dedicated_no_config">Für dieses dedizierte Profil gibt es nichts zu konfigurieren.</string>
+  <string name="dedicated_discord">Discord — Sprachanruf</string>
+  <string name="discord_cmd_voice_page">Sprachseite anzeigen (DisplayPad)</string>
+  <string name="dvp_ptt">Push-to-Talk</string>
+  <string name="dvp_webcam">Webcam</string>
+  <string name="dvp_disconnect">Trennen</string>
+  <string name="discord_webcam_hotkey_label">Webcam-Tastenkürzel:</string>
+  <string name="discord_webcam_hotkey_tip">Discord hat keinen RPC-Befehl für die Kamera: Klicke auf Aufnehmen und tippe die Tastenkombination, weise dann dieselbe in Discord &gt; Einstellungen &gt; Tastenbelegung &gt; Kamera umschalten zu.</string>
+  <string name="hotkey_record">Aufnehmen</string>
+  <string name="hotkey_recording">Tasten drücken… (Esc zum Abbrechen)</string>
   <string name="act_emojibrowser">Emoji-Browser</string>
   <string name="emb_grp_smileys">Smileys</string>
   <string name="emb_grp_people">Personen</string>

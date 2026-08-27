@@ -1291,6 +1291,18 @@
                                                             IsEnabled="False"/>
                                                         <Button x:Name="BtnEvRemove" Content="{loc:Get ev_remove}"
                                                             Padding="8,4" Click="BtnEvRemove_Click"
+                                                            HorizontalAlignment="Stretch" Margin="0,0,0,10"
+                                                            IsEnabled="False"/>
+                                                        <Button x:Name="BtnEvCopy" Content="{loc:Get act_copy_action}"
+                                                            Padding="8,4" Click="BtnEvCopy_Click"
+                                                            HorizontalAlignment="Stretch" Margin="0,0,0,4"
+                                                            IsEnabled="False"/>
+                                                        <Button x:Name="BtnEvCut" Content="{loc:Get act_cut_action}"
+                                                            Padding="8,4" Click="BtnEvCut_Click"
+                                                            HorizontalAlignment="Stretch" Margin="0,0,0,4"
+                                                            IsEnabled="False"/>
+                                                        <Button x:Name="BtnEvPaste" Content="{loc:Get act_paste_action}"
+                                                            Padding="8,4" Click="BtnEvPaste_Click"
                                                             HorizontalAlignment="Stretch"
                                                             IsEnabled="False"/>
                                                     </StackPanel>
@@ -3246,6 +3258,22 @@
                                     <ListBox x:Name="LstDpProfile" Style="{StaticResource K2SideProfileList}"
                                          SelectionChanged="LstDpProfile_SelectionChanged"/>
 
+                                    <!-- Dedicated profiles: the alternative panels that TAKE THE
+                                         PAD OVER on their own trigger (Spotify's now-playing
+                                         layout, the live Discord voice page) and hand it back to
+                                         the normal profile when they're done — see
+                                         MainWindow.DisplayPad.Dedicated.cs. Created from the
+                                         "+ New profile" dialog like any other profile, but listed
+                                         apart from (and filtered out of) the profile list above:
+                                         picking one is not "switch profile", it's "arm this
+                                         takeover". The whole block stays collapsed until this
+                                         device actually has one. -->
+                                    <StackPanel x:Name="PnlDpDedicated" Visibility="Collapsed">
+                                        <TextBlock Text="{loc:Get dp_dedicated_profiles}" Style="{StaticResource K2SideGroupHeader}"/>
+                                        <ListBox x:Name="LstDpDedicated" Style="{StaticResource K2SideProfileList}"
+                                             Height="64" SelectionChanged="LstDpDedicated_SelectionChanged"/>
+                                    </StackPanel>
+
                                     <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
                                     <TextBlock Text="{loc:Get dp_fullscreen_group}" Style="{StaticResource K2SideGroupHeader}"/>
                                     <Button x:Name="BtnDpFullscreen" Content="{loc:Get dp_fullscreen_set}"
@@ -3574,7 +3602,11 @@
 
                 <!-- ==================== General Settings ==================== -->
                 <Grid x:Name="PnlSettings" Visibility="Collapsed">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="480"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="24" MaxWidth="480" HorizontalAlignment="Left">
                             <TextBlock Text="{loc:Get tab_settings}" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
 
@@ -3671,6 +3703,15 @@
                                 </StackPanel>
                             </GroupBox>
 
+                            <GroupBox x:Name="GbAppLanguage" Header="{loc:Get settings_language}" Margin="0,0,0,20">
+                                <StackPanel Margin="8">
+                                    <ComboBox x:Name="CmbAppLanguage" Width="220" HorizontalAlignment="Left"
+                                      SelectionChanged="CmbAppLanguage_SelectionChanged"/>
+                                    <TextBlock Text="{loc:Get settings_language_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
+                                </StackPanel>
+                            </GroupBox>
+
                             <GroupBox x:Name="GbAppFont" Header="{loc:Get settings_font_family}" Margin="0,0,0,20">
                                 <StackPanel Margin="8">
                                     <ComboBox x:Name="CmbAppFont" Width="220" HorizontalAlignment="Left"
@@ -3752,14 +3793,55 @@
                                 </StackPanel>
                             </GroupBox>
 
+                            <GroupBox x:Name="GbAppSignalRgb" Header="{loc:Get settings_signalrgb_group}" Margin="0,20,0,0">
+                                <StackPanel Margin="8">
+                                    <TextBlock Text="{loc:Get settings_signalrgb_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,0,0,12" FontSize="12"/>
+
+                                    <TextBlock x:Name="TxtSignalRgbStatus" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,0,0,12" FontSize="12"/>
+
+                                    <RadioButton x:Name="RbSignalRgbYield" Content="{loc:Get settings_signalrgb_mode_yield}"
+                                         GroupName="SignalRgbMode" FontSize="14" Checked="RbSignalRgbMode_Checked"/>
+                                    <TextBlock Text="{loc:Get settings_signalrgb_mode_yield_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+
+                                    <RadioButton x:Name="RbSignalRgbStop" Content="{loc:Get settings_signalrgb_mode_stop}"
+                                         GroupName="SignalRgbMode" FontSize="14" Margin="0,16,0,0" Checked="RbSignalRgbMode_Checked"/>
+                                    <TextBlock Text="{loc:Get settings_signalrgb_mode_stop_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+
+                                    <RadioButton x:Name="RbSignalRgbOff" Content="{loc:Get settings_signalrgb_mode_off}"
+                                         GroupName="SignalRgbMode" FontSize="14" Margin="0,16,0,0" Checked="RbSignalRgbMode_Checked"/>
+                                    <TextBlock Text="{loc:Get settings_signalrgb_mode_off_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+
+                                    <TextBlock Text="{loc:Get settings_signalrgb_plugins}" FontWeight="SemiBold"
+                                       Margin="0,20,0,0" FontSize="14"/>
+                                    <TextBlock Text="{loc:Get settings_signalrgb_plugins_hint}" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,4,0,8" FontSize="12"/>
+                                    <!-- WrapPanel, not a horizontal StackPanel: the three labels are
+                                         localized and the settings column is narrow, so on a StackPanel
+                                         the third button was clipped off the right edge (user report
+                                         2026-08-27). Wrapping keeps every button reachable whatever the
+                                         language does to the label widths. -->
+                                    <WrapPanel Margin="0,0,0,-8">
+                                        <Button x:Name="BtnSignalRgbInstallPlugins" Content="{loc:Get settings_signalrgb_install_plugins}"
+                                        Padding="8,4" Margin="0,0,8,8" Click="BtnSignalRgbInstallPlugins_Click"
+                                        Style="{StaticResource K2IconButton}" Tag="&#xE896;"/>
+                                        <Button x:Name="BtnSignalRgbRemovePlugins" Content="{loc:Get settings_signalrgb_remove_plugins}"
+                                        Padding="8,4" Margin="0,0,8,8" Click="BtnSignalRgbRemovePlugins_Click"
+                                        Style="{StaticResource K2IconButton}" Tag="&#xE74D;"/>
+                                        <Button x:Name="BtnSignalRgbOpenPluginFolder" Content="{loc:Get settings_signalrgb_open_plugin_folder}"
+                                        Padding="8,4" Margin="0,0,8,8" Click="BtnSignalRgbOpenPluginFolder_Click"
+                                        Style="{StaticResource K2IconButton}" Tag="&#xE838;"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </GroupBox>
+
                             <GroupBox x:Name="GbAppDanger" Header="{loc:Get settings_danger_zone}"
                               Margin="0,24,0,0" BorderBrush="{StaticResource K2DangerBrush}">
                                 <StackPanel Margin="8">
-                                    <CheckBox x:Name="CkAppDebugMode" Content="{loc:Get settings_debug_mode}"
-                                      Click="CkAppDebugMode_Click" FontSize="14"/>
-                                    <TextBlock Text="{loc:Get settings_debug_mode_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="20,4,0,16" FontSize="12"/>
-
                                     <Button x:Name="BtnAppRestoreDefaults" Content="{loc:Get restore_defaults_app}"
                                     Padding="8,4" HorizontalAlignment="Left"
                                     Click="BtnAppRestoreDefaults_Click"
@@ -3768,8 +3850,71 @@
                                        TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
                                 </StackPanel>
                             </GroupBox>
+
+                            <GroupBox x:Name="GbAppAcknowledgements" Header="{loc:Get settings_acknowledgements_group}"
+                              Margin="0,24,0,0">
+                                <StackPanel Margin="8">
+                                    <TextBlock x:Name="TxtAppAcknowledgements" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" FontSize="12"/>
+                                </StackPanel>
+                            </GroupBox>
                         </StackPanel>
                     </ScrollViewer>
+
+                    <!-- "Extra" — scrollable list of external reference links, one card per
+                         row (see MainWindow.Settings.cs's InitExtraLinksPanel /
+                         LinkPreviewService). Each card shows the linked page's own Open Graph
+                         preview image on the left and title/url on the right, and opens the
+                         link in the default browser on click. Left margin of 40 (vs. the
+                         Settings column's own 24) keeps its content clear of the Settings
+                         ScrollViewer's scrollbar on narrower windows. -->
+                    <StackPanel Grid.Column="1" Margin="40,24,24,24" VerticalAlignment="Top">
+                        <TextBlock Text="{loc:Get settings_extra_title}" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="IcExtraLinkGroups">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,0,0,8">
+                                            <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold"
+                                               Foreground="#9A9AA2" Margin="0,0,0,10"/>
+                                            <ItemsControl ItemsSource="{Binding Items}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Height="140" Margin="0,0,0,16" CornerRadius="8"
+                                                        ClipToBounds="True" Background="#14141A" BorderBrush="#2A2A33"
+                                                        BorderThickness="1" Cursor="Hand" MouseLeftButtonUp="ExtraLinkCard_Click"
+                                                        ToolTip="{Binding Url}" MaxWidth="640" HorizontalAlignment="Left">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Style.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource K2AccentBrush}"/>
+                                                                        </Trigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <DockPanel Margin="12">
+                                                                <Border DockPanel.Dock="Left" Width="180" CornerRadius="6"
+                                                                ClipToBounds="True" Background="#101014">
+                                                                    <Image Source="{Binding Image}" Stretch="UniformToFill"/>
+                                                                </Border>
+                                                                <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
+                                                                    <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold"
+                                                                       TextWrapping="Wrap" MaxHeight="60"/>
+                                                                    <TextBlock Text="{Binding Url}" FontSize="11" Foreground="#9A9AA2"
+                                                                       TextTrimming="CharacterEllipsis" Margin="0,10,0,0"/>
+                                                                </StackPanel>
+                                                            </DockPanel>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
                 </Grid>
                 <!-- end PnlSettings -->
 
@@ -3778,37 +3923,10 @@
         </Grid>
         <!-- end outer device Grid -->
 
-        <!-- Status bar -->
-        <StatusBar Grid.Row="1" Margin="0,8,0,0">
-            <StatusBar.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <DockPanel LastChildFill="True"/>
-                </ItemsPanelTemplate>
-            </StatusBar.ItemsPanel>
-            <StatusBarItem DockPanel.Dock="Right" Padding="0,0,4,0">
-                <Button x:Name="BtnLang" Click="BtnLang_Click"
-                        Background="Transparent" BorderThickness="0"
-                        Cursor="Hand" Padding="6,2" VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#x1F310; "/>
-                        <TextBlock x:Name="TxtLangLabel" Text="EN"/>
-                    </StackPanel>
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="English"    Tag="en" Click="MnuLang_Click"/>
-                            <MenuItem Header="Italiano"   Tag="it" Click="MnuLang_Click"/>
-                            <MenuItem Header="Español"    Tag="es" Click="MnuLang_Click"/>
-                            <MenuItem Header="Français"   Tag="fr" Click="MnuLang_Click"/>
-                            <MenuItem Header="Deutsch"    Tag="de" Click="MnuLang_Click"/>
-                            <MenuItem Header="Português"  Tag="pt" Click="MnuLang_Click"/>
-                            <MenuItem Header="Polski"     Tag="pl" Click="MnuLang_Click"/>
-                            <MenuItem Header="日本語"      Tag="ja" Click="MnuLang_Click"/>
-                            <MenuItem Header="中文"        Tag="zh" Click="MnuLang_Click"/>
-                            <MenuItem Header="한국어"      Tag="ko" Click="MnuLang_Click"/>
-                        </ContextMenu>
-                    </Button.ContextMenu>
-                </Button>
-            </StatusBarItem>
+        <!-- Status bar — kept in the tree (LblStatus is still written to from many
+             code-behind files) but hidden from view per user request; language
+             switching moved to Settings > Language (GbAppLanguage). -->
+        <StatusBar Grid.Row="1" Margin="0,8,0,0" Visibility="Collapsed">
             <StatusBarItem>
                 <TextBlock x:Name="LblStatus" Text="{loc:Get driver_not_opened}"/>
             </StatusBarItem>

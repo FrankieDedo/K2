@@ -38,6 +38,15 @@ public partial class MainWindow
     /// <summary>Maps ledIndex (GetColorData) → the Button + LedHalo border for the Everest preview.</summary>
     private readonly Dictionary<int, KeyVisual> _evKeyVisuals = new();
 
+    /// <summary>Reverse of <see cref="_evKeyVisuals"/>'s key: matrix/VK (Button.Tag) → ledIndex.
+    /// Lets a single key be repainted without walking the whole dictionary — see
+    /// <see cref="RestoreEverestKeyAfterRelease"/>.</summary>
+    private readonly Dictionary<int, int> _evMatrixToLed = new();
+
+    /// <summary>Last color array received from the LED poll, kept so a single key can be
+    /// repainted with its real live color outside a poll tick (physical key release).</summary>
+    private EverestSdkNative.FWColor[]? _evLastColors;
+
     /// <summary>Maps key index (0..11) → the Button + LedHalo border for the MacroPad preview.</summary>
     private readonly Dictionary<int, KeyVisual> _mpKeyVisuals = new();
 
@@ -231,6 +240,7 @@ public partial class MainWindow
             if (btn.Template?.FindName("LedHalo", btn) is Border halo)
             {
                 _evKeyVisuals[ledIndex] = new KeyVisual(btn, halo); // last VK wins if multiple map to same ledIndex
+                _evMatrixToLed[vk] = ledIndex;
                 if (btn.Content is FrameworkElement original)
                     _evOriginalKeyContent[ledIndex] = original;
             }
@@ -268,6 +278,7 @@ public partial class MainWindow
         // dead (user report 2026-07-22). Same guard the Everest 60 preview has
         // (Everest60RgbPanel.IsPaintModeActive / OnEv60ColorsUpdated).
         if (_customPaintMode) return;
+        _evLastColors = colors;
         if (_evColorLogCount < 3)
         {
             _evColorLogCount++;
@@ -343,6 +354,39 @@ public partial class MainWindow
             var c = colors[btnIndex];
             ApplyMacroPadLedColor(v, c.r, c.g, c.b);
         }
+    }
+
+    /// <summary>
+    /// Repaints ONE key after a physical release, restoring the appearance the press
+    /// overwrote (EvHighlightKeyboardButton's release branch writes a plain legend color,
+    /// ignoring "Translucent legends" and the key's live LED tint).
+    /// <para>
+    /// Replaces the previous <c>ApplyKeycapAppearanceToAllKeys()</c> catch-up call (added
+    /// 2026-08-17), which reset EVERY key's halo/border to the "LED off" baseline on every
+    /// release: while typing with the RGB &amp; Lighting panel open the whole preview blinked
+    /// off on each keystroke and only came back on the next poll tick (user report
+    /// 2026-08-27). Touching just the released key — with its last polled color — keeps the
+    /// rest of the board untouched and leaves nothing to flash back.
+    /// </para>
+    /// </summary>
+    private void RestoreEverestKeyAfterRelease(int matrix)
+    {
+        if (!_evMatrixToLed.TryGetValue(matrix, out int led) ||
+            !_evKeyVisuals.TryGetValue(led, out var v)) return;
+
+        // Live preview running: re-apply the key's actual last color (also fixes the legend
+        // when translucent legends are on). Paint mode owns the visuals — leave them alone.
+        if (!_customPaintMode && _ledPoller is { EverestEnabled: true } &&
+            _evLastColors is { } colors && led < colors.Length)
+        {
+            var c = colors[led];
+            ApplyEverestLedColor(v, c.r, c.g, c.b);
+            return;
+        }
+
+        // No live color available: same baseline ApplyKeycapAppearanceToAllKeys would use.
+        if (_evKeycapTranslucentLegend)
+            SetLegendForeground(v.Button, Brushes.White);
     }
 
     // ==================================================================

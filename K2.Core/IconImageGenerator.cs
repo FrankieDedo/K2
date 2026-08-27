@@ -122,7 +122,8 @@ public static class IconImageGenerator
     {
         try
         {
-            using var icon = GetBestIcon(execPath, size);
+            // The stored "exec" value may carry the batch terminal marker — strip it.
+            using var icon = GetBestIcon(ExecActionPayload.PathOf(execPath), size);
             if (icon is null) return false;
 
             using var canvas = new Bitmap(size, size);

@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Documents;
 using System.Windows.Navigation;
 using K2.Core.Services;
@@ -23,8 +24,88 @@ public partial class DiscordSettingsWindow : Window
         TxtDiscordClientId.Text = DiscordStore.ClientId;
         PwdDiscordClientSecret.Password = DiscordStore.ClientSecret;
         TxtDiscordWebhook.Text = DiscordStore.WebhookUrl;
+        TxtDiscordWebcamHotkey.Text = DiscordStore.WebcamHotkey;
         RtbDiscordGuide.Document = BuildGuideDocument(Loc.Get("discord_setup_guide"));
         RefreshStatus();
+    }
+
+    // ---------------------------------------------------------------- hotkey recorder
+
+    /// <summary>True between "Record" and the first non-modifier key: every keystroke is captured
+    /// instead of reaching the window.</summary>
+    private bool _recordingHotkey;
+
+    /// <summary>Text shown in the box while recording, remembered so Esc can put back whatever was
+    /// there before.</summary>
+    private string _hotkeyBeforeRecording = "";
+
+    private void BtnDiscordRecordHotkey_Click(object sender, RoutedEventArgs e)
+    {
+        _recordingHotkey = true;
+        _hotkeyBeforeRecording = TxtDiscordWebcamHotkey.Text;
+        TxtDiscordWebcamHotkey.Text = Loc.Get("hotkey_recording");
+        // Keyboard focus has to leave the button, or Space/Enter would "press" it again instead
+        // of being recorded.
+        Keyboard.ClearFocus();
+        Focus();
+    }
+
+    /// <summary>
+    /// Captures the combination while recording. Modifier-only presses are ignored (they are read
+    /// from <see cref="Keyboard.Modifiers"/> when the real key lands), Esc cancels, and the result
+    /// is written in the same "Ctrl+Shift+V" notation <see cref="SendKeysTranslator"/> parses.
+    ///
+    /// <para>Handled at the WINDOW level rather than on the box itself: the box is not focusable
+    /// (it must never be typed into), so the keystrokes never reach it.</para>
+    /// </summary>
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        if (!_recordingHotkey) { base.OnPreviewKeyDown(e); return; }
+
+        // Alt-combinations arrive as Key.System, with the real key in SystemKey.
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift
+                or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        e.Handled = true;
+        _recordingHotkey = false;
+
+        if (key == Key.Escape)
+        {
+            TxtDiscordWebcamHotkey.Text = _hotkeyBeforeRecording;
+            return;
+        }
+
+        var mods = Keyboard.Modifiers;
+        var parts = new System.Collections.Generic.List<string>();
+        if (mods.HasFlag(ModifierKeys.Control)) parts.Add("Ctrl");
+        if (mods.HasFlag(ModifierKeys.Shift)) parts.Add("Shift");
+        if (mods.HasFlag(ModifierKeys.Alt)) parts.Add("Alt");
+        parts.Add(HotkeyKeyName(key));
+        TxtDiscordWebcamHotkey.Text = string.Join("+", parts);
+    }
+
+    /// <summary>WPF key → the name <see cref="SendKeysTranslator"/> understands. Digits come back
+    /// as <c>D4</c>/<c>NumPad4</c> from <see cref="Key"/>, which that translator would send as a
+    /// literal word instead of a digit.</summary>
+    private static string HotkeyKeyName(Key key)
+    {
+        string name = key.ToString();
+        if (name.Length == 2 && name[0] == 'D' && char.IsDigit(name[1])) return name[1].ToString();
+        if (name.StartsWith("NumPad", StringComparison.Ordinal) && name.Length == 7) return name[6].ToString();
+        return key switch
+        {
+            Key.Return => "Enter",
+            Key.Next => "PgDn",
+            Key.Prior => "PgUp",
+            Key.Back => "Backspace",
+            Key.Capital => "CapsLock",
+            _ => name,
+        };
     }
 
     /// <summary>Any developer-portal address inside the setup guide. Deliberately narrow:
@@ -90,6 +171,7 @@ public partial class DiscordSettingsWindow : Window
     {
         DiscordStore.SetAppCredentials(TxtDiscordClientId.Text.Trim(), PwdDiscordClientSecret.Password);
         DiscordStore.SetWebhookUrl(TxtDiscordWebhook.Text.Trim());
+        DiscordStore.WebcamHotkey = TxtDiscordWebcamHotkey.Text.Trim();
     }
 
     private async void BtnDiscordConnect_Click(object sender, RoutedEventArgs e)

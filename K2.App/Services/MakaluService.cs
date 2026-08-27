@@ -50,9 +50,11 @@ internal sealed class MakaluService
 
     public bool SetLighting(MakaluProtocol.Effect effect, (byte r, byte g, byte b) color,
         int brightnessPct, byte param1 = 0, byte param2 = 0, (byte r, byte g, byte b)? secondary = null) =>
+        SignalRgbGuard.BlockLighting("Makalu.SetLighting") ||
         WithDevice(h => MakaluProtocol.SetLighting(h, effect, color.r, color.g, color.b, brightnessPct, param1, param2, secondary));
 
     public bool SetLightingCustom((byte r, byte g, byte b)[] leds, int brightnessPct) =>
+        SignalRgbGuard.BlockLighting("Makalu.SetLightingCustom") ||
         WithDevice(h => MakaluProtocol.SetLightingCustom(h, leds, brightnessPct));
 
     // ---------------------------------------------------------------

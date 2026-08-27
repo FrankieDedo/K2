@@ -244,6 +244,10 @@ public sealed class ButtonActionEngine : IDisposable
                     "user_volume"       => Services.DiscordBridge.SetUserVolume(arg, Log),
                     "user_mute_toggle"  => Services.DiscordBridge.ToggleUserMute(arg, Log),
                     "send_message"      => Services.DiscordBridge.SendWebhookMessage(arg, Log),
+                    // Handled by the DisplayPad key dispatch before it ever reaches the
+                    // engine (MainWindow.DisplayPad.cs / DpHandleBackgroundKey); on any
+                    // other device there is no panel to take over.
+                    "voice_page"        => true,
                     _ => LogUnhandledDiscordCommand(cmd, Log),
                 };
                 Log($"[EXEC] discord -> {cmd}{(arg.Length > 0 ? $" ({arg})" : "")} = {ok}");
@@ -438,29 +442,32 @@ public sealed class ButtonActionEngine : IDisposable
     }
 
     /// <summary>
-    /// Runs the "exec" action. .bat/.cmd scripts are launched hidden via cmd.exe
-    /// (ShellExecute on a batch file always flashes a console window for an instant);
-    /// anything else keeps using ShellExecute so file associations/UAC still work.
+    /// Runs the "exec" action. .bat/.cmd scripts are launched hidden via cmd.exe by default
+    /// (ShellExecute on a batch file always flashes a console window for an instant); the
+    /// dialog can mark a script as "run in a visible terminal" (see <see cref="ExecActionPayload"/>),
+    /// in which case cmd.exe keeps its window. Anything else keeps using ShellExecute so
+    /// file associations/UAC still work.
     /// </summary>
     private static void RunExecAction(string value)
     {
-        var dir = Path.GetDirectoryName(value) ?? "";
-        var ext = Path.GetExtension(value);
-        if (ext.Equals(".bat", StringComparison.OrdinalIgnoreCase) || ext.Equals(".cmd", StringComparison.OrdinalIgnoreCase))
+        var (path, showConsole) = ExecActionPayload.Split(value);
+        if (string.IsNullOrWhiteSpace(path)) return;
+        var dir = Path.GetDirectoryName(path) ?? "";
+        if (ExecActionPayload.IsBatch(path))
         {
             Process.Start(new ProcessStartInfo
             {
                 FileName = "cmd.exe",
-                Arguments = $"/c \"{value}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden,
+                Arguments = $"/c \"{path}\"",
+                UseShellExecute = showConsole,
+                CreateNoWindow = !showConsole,
+                WindowStyle = showConsole ? ProcessWindowStyle.Normal : ProcessWindowStyle.Hidden,
                 WorkingDirectory = dir
             });
         }
         else
         {
-            Process.Start(new ProcessStartInfo { FileName = value, UseShellExecute = true, WorkingDirectory = dir });
+            Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true, WorkingDirectory = dir });
         }
     }
 

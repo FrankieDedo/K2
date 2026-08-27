@@ -288,7 +288,10 @@ internal static class DpLiveTileService
                 case "dp_speedtest":
                 {
                     var (text, fraction) = SpeedTestValue(key.Value);
-                    return LiveTileRenderer.TryRenderGauge(text, fraction, caption, DpHidNative.IconSize, path);
+                    bool isPing = key.Value == "ping";
+                    return LiveTileRenderer.TryRenderSpeedTile(text, fraction, caption,
+                        SpeedTestUnit(key.Value), DpHidNative.IconSize, path,
+                        ownValueSize: isPing, valueTopPad: isPing ? 0.06f : 0f);
                 }
                 default:
                     return false;
@@ -328,9 +331,9 @@ internal static class DpLiveTileService
             },
             "dp_speedtest" => value switch
             {
-                "up"   => "↑ Mbps",
-                "ping" => "PING ms",
-                _      => "↓ Mbps",
+                "up"   => "upload",
+                "ping" => "ping",
+                _      => "download",
             },
             _ => "",   // clock faces
         };
@@ -375,18 +378,31 @@ internal static class DpLiveTileService
         return "0";
     }
 
-    /// <summary>Last speed-test figure for this key, "…" while a test is running and "—" before
-    /// the first one. No ring: none of the three is a percentage.</summary>
+    /// <summary>Last speed-test figure for this key, and "—" before the first one. While a test
+    /// is running, a leg that hasn't reported its own number yet shows a progress ring instead
+    /// (ping/download/upload run one after another, not together, so at most one key is ever
+    /// mid-ring) — 0% the moment the run starts, same look as the CPU/RAM gauges. The moment a
+    /// leg's own number lands it switches to that final value immediately, without waiting for
+    /// the other two legs still running — a finished ping shows its ms right away while the
+    /// download is still filling its ring.</summary>
     private static (string Text, double? Fraction) SpeedTestValue(string metric)
     {
-        if (SpeedTestService.IsRunning) return ("…", null);
-
+        double progress = metric switch
+        {
+            "up"   => SpeedTestService.UploadProgress,
+            "ping" => SpeedTestService.PingProgress,
+            _      => SpeedTestService.DownloadProgress,
+        };
         double? value = metric switch
         {
             "up"   => SpeedTestService.LastUpMbps,
             "ping" => SpeedTestService.LastPingMs,
             _      => SpeedTestService.LastDownMbps,
         };
+
+        if (SpeedTestService.IsRunning && progress < 1)
+            return ($"{(int)Math.Round(progress * 100)}%", progress);
+
         if (value is not double v) return ("—", null);
 
         string text = metric == "ping"
@@ -394,4 +410,8 @@ internal static class DpLiveTileService
             : v.ToString(v >= 100 ? "0" : "0.0", CultureInfo.InvariantCulture);
         return (text, null);
     }
+
+    /// <summary>Small unit strip below the value — just the number's scale ("ms", "Mbps"). No
+    /// arrow: the caption above already says "download"/"upload" in words.</summary>
+    internal static string SpeedTestUnit(string metric) => metric == "ping" ? "ms" : "Mbps";
 }

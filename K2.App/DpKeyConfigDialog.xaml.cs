@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -576,12 +576,22 @@ public partial class DpKeyConfigDialog : Window
                             showCaption ? userText ?? "" : "", DpHidNative.IconSize, dest);
                     break;
                 case "dp_sysmon":
-                case "dp_speedtest":
                 {
                     var (text, fraction) = DpLiveTileService.TileValue(ActionType!, ActionValue);
                     ok = LiveTileRenderer.TryRenderGauge(text, fraction,
                             showCaption ? userText ?? DpLiveTileService.TileCaption(ActionType!, ActionValue) : "",
                             DpHidNative.IconSize, dest);
+                    break;
+                }
+                case "dp_speedtest":
+                {
+                    var (text, fraction) = DpLiveTileService.TileValue(ActionType!, ActionValue);
+                    bool isPing = ActionValue == "ping";
+                    ok = LiveTileRenderer.TryRenderSpeedTile(text, fraction,
+                            showCaption ? userText ?? DpLiveTileService.TileCaption(ActionType!, ActionValue) : "",
+                            showCaption ? DpLiveTileService.SpeedTestUnit(ActionValue ?? "") : "",
+                            DpHidNative.IconSize, dest,
+                            ownValueSize: isPing, valueTopPad: isPing ? 0.06f : 0f);
                     break;
                 }
                 default:
@@ -610,7 +620,7 @@ public partial class DpKeyConfigDialog : Window
                              ? null : IconImageGenerator.GetDiskFolderCaption(ActionValue!),
         "dp_folder"       => _dpFolderName ?? ResolvePageName(ActionValue) ?? ActionValue,
         "googlehome"      => GoogleHomeIconCatalog.CaptionFor(ActionValue) ?? ActionValue,
-        // Live tiles: the short symbol/abbreviation the tile carries by default ("CPU", "↓ Mbps"),
+        // Live tiles: the short symbol/abbreviation the tile carries by default ("CPU", "download"),
         // so "Edit icon" starts from the real wording. A clock face has none — it needs no label.
         "dp_clock" or "dp_sysmon" or "dp_speedtest"
                           => DpLiveTileService.TileCaption(ActionType!, ActionValue) is { Length: > 0 } c ? c : null,
@@ -623,7 +633,7 @@ public partial class DpKeyConfigDialog : Window
         Directory.CreateDirectory(AutoIconCacheRoot);
 
         long mtime = 0;
-        if (kind == "exec") { try { mtime = File.GetLastWriteTimeUtc(sourceValue).Ticks; } catch { } }
+        if (kind == "exec") { try { mtime = File.GetLastWriteTimeUtc(ExecActionPayload.PathOf(sourceValue)).Ticks; } catch { } }
         byte[] hash = System.Security.Cryptography.SHA1.HashData(
             System.Text.Encoding.UTF8.GetBytes($"{kind}|{sourceValue}|{mtime}"));
         return Path.Combine(AutoIconCacheRoot, Convert.ToHexString(hash).ToLowerInvariant() + $"_{kind}.png");

@@ -246,7 +246,10 @@ public static class Ev60ProfileExporter
         switch (actionType)
         {
             case "exec":
-                return string.IsNullOrEmpty(v) ? null : ("Run Program", v, v);
+            {
+                var execPath = ExecActionPayload.PathOf(v);
+                return string.IsNullOrEmpty(execPath) ? null : ("Run Program", execPath, execPath);
+            }
 
             case "folder":
                 return string.IsNullOrEmpty(v) ? null : ("Open Folder", v, v);

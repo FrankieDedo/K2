@@ -208,6 +208,7 @@ public static class ActionIconFallback
         ["output_volume"]     = "",
         ["join_voice"]        = "",
         ["leave_voice"]       = "",
+        ["voice_page"]        = "",
         ["user_volume"]       = "",
         ["user_mute_toggle"]  = "",
         ["send_message"]      = "",

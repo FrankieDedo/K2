@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -441,6 +441,7 @@ public partial class MainWindow : Window
         switch (fe.DataContext)
         {
             case DpProfileItem dp: DpShowProfileGear(dp); break;
+            case DpDedicatedItem dd: DpShowDedicatedGear(dd, fe); break;
             case EvProfileItem ev: EvShowProfileGear(ev); break;
             case Ev60ProfileItem ev60: Ev60ShowProfileGear(ev60); break;
             case MkProfileItem mk: MkShowProfileGear(mk); break;
@@ -703,6 +704,7 @@ public partial class MainWindow : Window
 
     private void OnWindowClosed(object? sender, EventArgs e)
     {
+        StopEvSoftwareFx();   // host-driven lighting animation, if running (debug-only)
         Core.Services.AccentCatalog.Applied -= RefreshNavTabAccentColors;
         Core.Services.AccentCatalog.Applied -= RefreshMkHotspotAccentColors;
         _ledPoller?.Dispose();

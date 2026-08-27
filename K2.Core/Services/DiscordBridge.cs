@@ -53,6 +53,20 @@ public static class DiscordBridge
     /// <summary>Id of the voice channel the client is currently in, or null.</summary>
     public static string? VoiceChannelId { get; private set; }
 
+    /// <summary>Current input mode as Discord reports it — <c>PUSH_TO_TALK</c> or
+    /// <c>VOICE_ACTIVITY</c> (null = unknown). Drives the caption/glyph of the voice page's
+    /// push-to-talk key, which otherwise couldn't say which mode it would switch AWAY from.</summary>
+    public static string? InputMode { get; private set; }
+
+    /// <summary>Discord user id of the authenticated account (null until AUTHENTICATE ran) —
+    /// <see cref="DiscordVoiceRoom"/> uses it to pin the local user to the first roster slot.</summary>
+    public static string? SelfUserId { get; private set; }
+
+    /// <summary>True while the RPC pipe is actually open — lets a host retry
+    /// <see cref="StartLiveVoiceState"/> later when Discord wasn't running yet at the first
+    /// attempt (that call gives up silently and nothing else in this class retries it).</summary>
+    public static bool IsRpcOpen { get { lock (_lock) return _ipc is { IsOpen: true }; } }
+
     /// <summary>Raised (on a background thread) whenever <see cref="Mute"/>/<see cref="Deaf"/>/
     /// <see cref="VoiceChannelId"/> change — hosts wanting live key icons must marshal to their
     /// own UI thread before repainting.</summary>
@@ -94,9 +108,13 @@ public static class DiscordBridge
         var data = ipc.Send("AUTHENTICATE", new { access_token = accessToken }, CommandTimeout, out error);
         if (data is null) return false;
 
-        if (data.Value.ValueKind == JsonValueKind.Object && data.Value.TryGetProperty("user", out var user)
-            && user.TryGetProperty("username", out var name))
-            userName = name.GetString() ?? "";
+        if (data.Value.ValueKind == JsonValueKind.Object && data.Value.TryGetProperty("user", out var user))
+        {
+            if (user.TryGetProperty("username", out var name)) userName = name.GetString() ?? "";
+            // Needed by DiscordVoiceRoom to tell the local user apart from the other members of
+            // the voice channel (they must always come first on the DisplayPad roster).
+            if (user.TryGetProperty("id", out var uid)) SelfUserId = uid.GetString();
+        }
 
         lock (_lock) _authenticated = true;
         SubscribeVoiceEvents(ipc);
@@ -137,6 +155,11 @@ public static class DiscordBridge
         System.Threading.Tasks.Task.Run(() => EnsureReady(_ => { }));
     }
 
+    /// <summary>A connected+authenticated RPC handle for <see cref="DiscordVoiceRoom"/>'s worker
+    /// thread (null when Discord isn't configured/running). Same path key execution takes, so the
+    /// room never opens a second pipe of its own.</summary>
+    internal static DiscordIpc? RoomIpc(Action<string> log) => EnsureReady(log);
+
     private static void SubscribeVoiceEvents(DiscordIpc ipc)
     {
         lock (_lock) { if (_subscribed) return; _subscribed = true; }
@@ -148,6 +171,11 @@ public static class DiscordBridge
 
     private static void OnRpcEvent(string evt, JsonElement data)
     {
+        // The voice-room model owns the per-channel events (roster + speaking rings); it never
+        // blocks here — every RPC call it needs is issued on its own worker, because a Send()
+        // from THIS reader thread could never be answered (the reply is dispatched by it).
+        DiscordVoiceRoom.OnRpcEvent(evt, data);
+
         switch (evt)
         {
             case "VOICE_SETTINGS_UPDATE":
@@ -156,6 +184,7 @@ public static class DiscordBridge
             case "VOICE_CHANNEL_SELECT":
                 VoiceChannelId = data.ValueKind == JsonValueKind.Object && data.TryGetProperty("channel_id", out var ch)
                     ? ch.GetString() : null;
+                DiscordVoiceRoom.OnChannelChanged(VoiceChannelId);
                 Raise();
                 break;
         }
@@ -165,7 +194,10 @@ public static class DiscordBridge
     {
         lock (_lock) { _authenticated = false; _subscribed = false; }
         Mute = Deaf = null;
+        InputMode = null;
         VoiceChannelId = null;
+        SelfUserId = null;
+        DiscordVoiceRoom.Reset();
         Raise();
     }
 
@@ -182,6 +214,7 @@ public static class DiscordBridge
         var ch = ipc.Send("GET_SELECTED_VOICE_CHANNEL", null, CommandTimeout, out _);
         VoiceChannelId = ch is { ValueKind: JsonValueKind.Object } c && c.TryGetProperty("id", out var id)
             ? id.GetString() : null;
+        DiscordVoiceRoom.OnChannelChanged(VoiceChannelId);
         Raise();
     }
 
@@ -192,6 +225,9 @@ public static class DiscordBridge
             Mute = m.GetBoolean();
         if (data.TryGetProperty("deaf", out var df) && df.ValueKind is JsonValueKind.True or JsonValueKind.False)
             Deaf = df.GetBoolean();
+        if (data.TryGetProperty("mode", out var mode) && mode.ValueKind == JsonValueKind.Object
+            && mode.TryGetProperty("type", out var modeType) && modeType.ValueKind == JsonValueKind.String)
+            InputMode = modeType.GetString();
         Raise();
     }
 

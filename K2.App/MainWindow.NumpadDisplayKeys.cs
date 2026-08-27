@@ -524,9 +524,107 @@ public partial class MainWindow
 
         var miRa = new MenuItem { Header = Loc.Get("dp_remove_action") };
         miRa.Click += NdkMnuRemoveAction_Click;
+        var miCopy = new MenuItem { Header = Loc.Get("act_copy_action") };
+        miCopy.Click += NdkMnuCopyAction_Click;
+        var miCut = new MenuItem { Header = Loc.Get("act_cut_action") };
+        miCut.Click += NdkMnuCutAction_Click;
+        var miPaste = new MenuItem { Header = Loc.Get("act_paste_action") };
+        miPaste.Click += NdkMnuPasteAction_Click;
 
         menu.Items.Add(miRa);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miCopy);
+        menu.Items.Add(miCut);
+        menu.Items.Add(miPaste);
         return menu;
+    }
+
+    /// <summary>Icon size for a numpad display key (72×72 — matches <c>NdkKeyConfigDialog</c>'s
+    /// own constant) and the cache folder for a default icon generated at paste time — same
+    /// root <see cref="NdkKeyConfigDialog"/>'s own auto-icon cache uses, just a simpler
+    /// (unstyled) cache key, so the two never collide.</summary>
+    private const int NdkIconSize = 72;
+
+    private static string NdkAutoIconCachePath(string kind, string sourceValue)
+    {
+        string cacheRoot = Path.Combine(K2Paths.For("K2.App"), "auto_icons");
+        Directory.CreateDirectory(cacheRoot);
+        byte[] hash = System.Security.Cryptography.SHA1.HashData(
+            System.Text.Encoding.UTF8.GetBytes($"{kind}|{sourceValue}|{NdkIconSize}"));
+        return Path.Combine(cacheRoot, Convert.ToHexString(hash).ToLowerInvariant() + $"_{kind}_paste.png");
+    }
+
+    /// <summary>Copies this display key's action to the app-wide clipboard (see
+    /// <see cref="K2.Core.Services.ActionClipboard"/>) — the picture is never copied, only the
+    /// action; a target key with no picture of its own gets a fresh default icon at paste
+    /// time instead (see <see cref="NdkMnuPasteAction_Click"/>).</summary>
+    private void NdkMnuCopyAction_Click(object sender, RoutedEventArgs e)
+    {
+        int index = NdkIndexFromMenu(sender);
+        if (index < 0) return;
+        K2.Core.Services.ActionClipboard.Copy(_ndkActions[index].Type, _ndkActions[index].Value);
+    }
+
+    private void NdkMnuCutAction_Click(object sender, RoutedEventArgs e)
+    {
+        int index = NdkIndexFromMenu(sender);
+        if (index < 0) return;
+        K2.Core.Services.ActionClipboard.Copy(_ndkActions[index].Type, _ndkActions[index].Value);
+        ClearNdkKey(index);
+    }
+
+    /// <summary>Pastes the clipboard's action onto this display key — rejected (with an error)
+    /// for a DisplayPad-page action (see <see cref="K2.Core.Services.ActionClipboard.CanPasteOn"/>).
+    /// When the key has no picture yet, generates the action's default icon
+    /// (<see cref="K2.Core.Services.ActionIconFallback"/>) and uploads it, same as a freshly
+    /// configured key gets from <see cref="NdkKeyConfigDialog"/>.</summary>
+    private void NdkMnuPasteAction_Click(object sender, RoutedEventArgs e)
+    {
+        int index = NdkIndexFromMenu(sender);
+        if (index < 0) return;
+        NdkPasteActionByIndex(index);
+    }
+
+    /// <summary>Shared tail of <see cref="NdkMnuPasteAction_Click"/> (from the display key's
+    /// own context menu) and <c>MainWindow.Everest.cs</c>'s <c>BtnEvPaste_Click</c> (from the
+    /// mapped-keys list, which mixes NDK entries in alongside regular keys — see
+    /// <see cref="EverestKey.NdkIndex"/>).</summary>
+    private void NdkPasteActionByIndex(int index)
+    {
+        if (!K2.Core.Services.ActionClipboard.HasContent) return;
+        if (!K2.Core.Services.ActionClipboard.CanPasteOn(_evActionHost))
+        {
+            K2.Core.Services.ActionClipboard.ShowPasteUnsupportedError(this);
+            return;
+        }
+
+        _ndkActions[index] = (K2.Core.Services.ActionClipboard.ActionType, K2.Core.Services.ActionClipboard.ActionValue);
+
+        bool hasImage = !string.IsNullOrEmpty(_ndkImagePaths[index]) && File.Exists(_ndkImagePaths[index]);
+        if (!hasImage)
+        {
+            string dest = NdkAutoIconCachePath(K2.Core.Services.ActionClipboard.ActionType!, K2.Core.Services.ActionClipboard.ActionValue ?? "");
+            if (K2.Core.Services.ActionIconFallback.TryGenerate(
+                    K2.Core.Services.ActionClipboard.ActionType, K2.Core.Services.ActionClipboard.ActionValue, NdkIconSize, dest))
+            {
+                if (_everest.IsOpen)
+                    NdkApplyImage(index, dest);
+                else
+                {
+                    // Offline: no upload possible (NdkApplyImage bails without one), but still
+                    // adopt the generated picture locally so the thumbnail/state aren't left
+                    // out of sync with the action — a reconnect resyncs it like any other
+                    // pending change (see EvUploadNdkImages).
+                    _ndkImagePaths[index] = dest;
+                    NdkSetThumbnail(index, dest);
+                }
+            }
+        }
+
+        SaveNdkKey(index);
+        EvRefreshNdkInKeyList();
+        EvSyncNdkBindingsToFw();
+        LogEverest($"[NDK] key={index} <- pasted action");
     }
 
     private static int NdkIndexFromMenu(object sender) =>
@@ -624,7 +722,7 @@ public partial class MainWindow
         _ndkUploadBusy = true;
         try
         {
-            bool ok = RunHwBusy(Loc.Get("hw_busy_uploading_image"), () =>
+            bool ok = RunHwBusy(Loc.Get("hw_busy_clearing_image"), () =>
             {
                 _everest.FlushSaveFlash();   // see NdkApplyImage
                 return RetryNdkWrite(() => _everest.ClearNumpadImage(idx, (byte)profile));

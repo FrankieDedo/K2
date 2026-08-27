@@ -211,6 +211,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
@@ -235,8 +236,19 @@
                              Click="BtnExecBrowse_Click"/>
                 </Grid>
 
-                <TextBlock Grid.Row="2" Text="{loc:Get recent_paths}" Margin="0,0,0,4" Foreground="#9A9AA2"/>
-                <ListBox x:Name="LstExecRecent" Grid.Row="3"
+                <!-- Batch scripts only: hidden (default) vs. visible terminal. -->
+                <StackPanel x:Name="ExecBatchOptions" Grid.Row="2" Visibility="Collapsed" Margin="0,0,0,10">
+                    <TextBlock Text="{loc:Get exec_batch_mode_label}" Margin="0,0,0,4" Foreground="#9A9AA2"/>
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton x:Name="RbExecBatchHidden" GroupName="ExecBatchMode"
+                                     Content="{loc:Get exec_batch_hidden}" Margin="0,0,16,0"/>
+                        <RadioButton x:Name="RbExecBatchConsole" GroupName="ExecBatchMode"
+                                     Content="{loc:Get exec_batch_console}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBlock Grid.Row="3" Text="{loc:Get recent_paths}" Margin="0,0,0,4" Foreground="#9A9AA2"/>
+                <ListBox x:Name="LstExecRecent" Grid.Row="4"
                          ItemContainerStyle="{StaticResource RecentPathItemStyle}"
                          SelectionChanged="LstExecRecent_SelectionChanged">
                     <ListBox.Template>

@@ -239,6 +239,9 @@
   <string name="py_timeout">시간 제한 (초, 0 = 없음):</string>
   <string name="py_hint">스크립트에서 'import k2'를 사용하여 K2 함수를 호출하세요 (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...). stdout/stderr는 K2 로그로 전송됩니다.</string>
   <string name="exec_path_label">Executable / file path:</string>
+  <string name="exec_batch_mode_label">배치 스크립트:</string>
+  <string name="exec_batch_hidden">숨김 실행(창 없음)</string>
+  <string name="exec_batch_console">터미널 창을 표시하여 실행</string>
   <string name="folder_path_label">Folder path:</string>
   <string name="recent_paths">Recent:</string>
   <string name="remove_recent">Remove from recent</string>
@@ -301,6 +304,9 @@
        일반 설정 탭
        ═══════════════════════════════════════════════════════════════-->
   <string name="tab_settings">설정</string>
+  <string name="settings_extra_title">기타</string>
+  <string name="settings_extra_3dprinting">3D 프린팅</string>
+  <string name="settings_extra_other_projects">다른 프로젝트</string>
   <string name="tab_macro">매크로</string>
   <string name="settings_debug_mode">디버그 모드</string>
   <string name="settings_debug_mode_hint">모든 장치에서 디버그 도구(드라이버 열기/닫기, AP 제어, 이벤트 로그)를 활성화합니다.</string>
@@ -325,6 +331,26 @@
   <string name="settings_export_log_btn">로그 내보내기…</string>
   <string name="settings_export_log_hint">현재 K2.App 로그(있는 경우 충돌 로그 포함)를 선택한 폴더로 복사합니다 — 문제를 신고할 때 공유하기 편리합니다.</string>
   <string name="settings_export_log_done">로그가 {0}에 내보내졌습니다</string>
+  <!-- SignalRGB coexistence -->
+  <string name="settings_signalrgb_group">SignalRGB</string>
+  <string name="settings_signalrgb_hint">SignalRGB에는 자체 Mountain 플러그인이 포함되어 있으며, K2가 LED를 제어할 때 사용하는 것과 완전히 동일한 USB 인터페이스를 사용합니다. 두 프로그램이 동시에 실행되면 두 조명 스트림이 겹쳐 LED가 깜박입니다. 여기에서 조명을 어느 쪽이 담당할지 선택하세요. 그 외 K2의 모든 기능(키, 매크로, 디스플레이 키, Media Dock, 프로필)은 어느 쪽을 선택하든 계속 작동합니다.</string>
+  <string name="settings_signalrgb_mode_off">SignalRGB 무시</string>
+  <string name="settings_signalrgb_mode_off_hint">무슨 일이 있어도 K2가 조명을 제어합니다. Mountain 장치에서 SignalRGB를 전혀 사용하지 않거나, 충돌이 어떤 모습인지 직접 확인하고 싶을 때만 선택하세요.</string>
+  <string name="settings_signalrgb_mode_yield">조명을 SignalRGB에 맡기기 (권장)</string>
+  <string name="settings_signalrgb_mode_yield_hint">SignalRGB가 실행되는 동안 K2는 효과, 키별 색상, 밝기를 장치에 기록하지 않습니다. SignalRGB가 종료되는 즉시 K2가 자체 조명을 다시 적용합니다. 조명 외의 기능은 그동안에도 모두 정상 작동합니다.</string>
+  <string name="settings_signalrgb_mode_stop">K2 시작 시 SignalRGB 종료</string>
+  <string name="settings_signalrgb_mode_stop_hint">K2는 시작할 때마다 SignalRGB(엔진과 런처)를 종료합니다. Base Camp에 대해 하는 것과 동일합니다. SignalRGB의 Windows 서비스는 건드리지 않습니다 — LED를 제어하지 않기 때문입니다.</string>
+  <string name="settings_signalrgb_status_installed">SignalRGB 감지됨: {0}</string>
+  <string name="settings_signalrgb_status_missing">이 PC에는 SignalRGB가 설치되어 있지 않은 것 같습니다.</string>
+  <string name="settings_signalrgb_status_running">SignalRGB 실행 중 — K2는 현재 조명을 기록하지 않습니다.</string>
+  <string name="settings_signalrgb_plugins">SignalRGB용 K2 플러그인</string>
+  <string name="settings_signalrgb_plugins_hint">K2 자체 Mountain 장치 플러그인을 SignalRGB 사용자 플러그인 폴더(문서\WhirlwindFX\Plugins)에 설치합니다. K2의 리버스 엔지니어링에서 얻은 레이아웃과 LED 맵으로 기본 제공 플러그인을 대체합니다. 설치 후 SignalRGB를 다시 시작하세요.</string>
+  <string name="settings_signalrgb_install_plugins">K2 플러그인 설치</string>
+  <string name="settings_signalrgb_remove_plugins">K2 플러그인 제거</string>
+  <string name="settings_signalrgb_open_plugin_folder">플러그인 폴더 열기</string>
+  <string name="settings_signalrgb_plugins_installed">플러그인 {0}개를 설치했습니다. 불러오려면 SignalRGB를 다시 시작하세요.</string>
+  <string name="settings_signalrgb_plugins_removed">플러그인 {0}개를 제거했습니다. 기본 제공 플러그인으로 돌아가려면 SignalRGB를 다시 시작하세요.</string>
+  <string name="settings_signalrgb_plugins_none">설치할 플러그인 파일을 찾을 수 없습니다.</string>
   <!--Base Camp 가져오기 안내-->
   <string name="settings_bc_import_group">Base Camp 가져오기</string>
   <string name="settings_bc_import_btn">Base Camp에서 가져오기…</string>
@@ -362,6 +388,7 @@
   <string name="restore_defaults_app">모든 기본값 복원</string>
   <string name="restore_defaults_app_hint">위의 모든 앱 환경설정을 초기화하고, 모든 장치(Everest Max, Everest 60, Makalu, MacroPad, DisplayPad)에 저장된 모든 프로파일, 키 바인딩, 조명 설정, 매크로를 삭제합니다. 이 작업은 되돌릴 수 없습니다.</string>
   <string name="restore_defaults_app_confirm">이 작업은 모든 앱 환경설정을 초기화하고, 모든 장치(Everest Max, Everest 60, Makalu, MacroPad, DisplayPad)에 저장된 모든 프로파일, 키 바인딩, 조명 설정, 매크로를 삭제합니다. 이 작업은 되돌릴 수 없습니다. 계속하시겠습니까?</string>
+  <string name="settings_acknowledgements_group">감사의 말</string>
   <string name="restore_defaults_app_done">모든 앱 설정과 장치 프로파일이 기본값으로 복원되었습니다.</string>
   <string name="settings_general">일반 옵션</string>
   <string name="settings_close_to_tray">종료 대신 트레이로 닫기</string>
@@ -382,6 +409,8 @@
   <string name="dp_devicemap_none_connected">현재 연결된 DisplayPad가 없습니다 — 다시 매핑할 패드를 연결한 후 이 창을 다시 여세요.</string>
   <string name="dp_devicemap_duplicate_error">두 패드가 같은 보드 번호를 사용할 수 없습니다. 각각 다른 번호를 지정하세요.</string>
   <string name="dp_devicemap_invalid_number">보드 번호는 양의 정수여야 합니다.</string>
+  <string name="settings_language">언어</string>
+  <string name="settings_language_hint">앱 언어를 변경합니다. 적용을 위해 앱이 다시 시작됩니다.</string>
   <string name="settings_font_family">글꼴</string>
   <string name="settings_font_family_hint">재시작 없이 앱 전체 UI 글꼴을 즉시 변경합니다.</string>
   <string name="tray_show">K2 표시</string>
@@ -402,6 +431,9 @@
   <string name="hw_busy_importing_profile">프로파일을 가져오는 중입니다. 잠시만 기다려 주세요…</string>
   <string name="hw_busy_importing_profiles">프로파일을 가져오는 중입니다. 잠시만 기다려 주세요…</string>
   <string name="hw_busy_restoring_defaults">기본값을 복원하는 중입니다. 잠시만 기다려 주세요…</string>
+  <string name="hw_busy_restoring_key_images">디스플레이 키의 기본 이미지를 복원하는 중입니다. 잠시만 기다려 주세요…</string>
+  <string name="hw_busy_clearing_image">디스플레이 키의 이미지를 지우는 중입니다. 잠시만 기다려 주세요…</string>
+  <string name="hw_busy_writing_key_bindings">디스플레이 키 동작을 키보드에 기록하는 중입니다. 잠시만 기다려 주세요…</string>
   <string name="ev_crash_recovering">드라이버가 충돌했습니다 — 3초 후 자동 복구를 시도합니다…</string>
   <string name="ev_crash_recovered">드라이버가 복구되었습니다 — LED 미리보기가 다시 시작되었습니다.</string>
   <string name="ev_crash_recovery_failed">드라이버 복구에 실패했습니다 — K2.App을 다시 시작하세요.</string>
@@ -714,6 +746,11 @@
   <string name="dp_action_section">동작</string>
   <string name="dp_configure_action">동작 구성…</string>
   <string name="dp_remove_action">동작 삭제</string>
+  <string name="act_copy_action">작업 복사</string>
+  <string name="act_cut_action">작업 잘라내기</string>
+  <string name="act_paste_action">작업 붙여넣기</string>
+  <string name="paste_unsupported_title">붙여넣을 수 없음</string>
+  <string name="paste_unsupported_message">이 작업은 이 장치에서 지원되지 않습니다.</string>
   <string name="dp_change_image">이미지 변경…</string>
   <string name="dp_remove_image">이미지 삭제</string>
   <string name="dp_create_folder">폴더 페이지 만들기…</string>
@@ -920,6 +957,19 @@
   <string name="discord_key_mic_off">마이크 꺼짐</string>
   <string name="discord_key_audio_on">오디오 켜짐</string>
   <string name="discord_key_audio_off">오디오 꺼짐</string>
+  <string name="dp_dedicated_profiles">전용 프로필</string>
+  <string name="dedicated_spotify">Spotify — 재생 중</string>
+  <string name="dedicated_configure">설정…</string>
+  <string name="dedicated_no_config">이 전용 프로필에는 설정할 항목이 없습니다.</string>
+  <string name="dedicated_discord">Discord — 음성 통화</string>
+  <string name="discord_cmd_voice_page">음성 페이지 표시 (DisplayPad)</string>
+  <string name="dvp_ptt">푸시 투 토크</string>
+  <string name="dvp_webcam">웹캠</string>
+  <string name="dvp_disconnect">연결 끊기</string>
+  <string name="discord_webcam_hotkey_label">웹캠 단축키:</string>
+  <string name="discord_webcam_hotkey_tip">Discord에는 카메라용 RPC 명령이 없습니다. ［기록］을 누르고 키 조합을 입력한 다음, Discord &gt; 설정 &gt; 단축키 &gt; 카메라 전환 에서 동일한 조합을 지정하세요.</string>
+  <string name="hotkey_record">기록</string>
+  <string name="hotkey_recording">키를 누르세요… (Esc로 취소)</string>
   <string name="act_emojibrowser">이모지 브라우저</string>
   <string name="emb_grp_smileys">스마일리</string>
   <string name="emb_grp_people">사람</string>

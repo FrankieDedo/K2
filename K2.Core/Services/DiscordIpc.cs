@@ -145,6 +145,27 @@ internal sealed class DiscordIpc : IDisposable
         finally { _pending.TryRemove(nonce, out _); }
     }
 
+    /// <summary>Drops a subscription made with <see cref="Subscribe"/> — the per-channel voice
+    /// events must be released when the user moves to another channel, or Discord keeps pushing
+    /// events for the old one on top of the new ones (see <see cref="DiscordVoiceRoom"/>).</summary>
+    public bool Unsubscribe(string evt, object? args, TimeSpan timeout, out string? error)
+    {
+        error = null;
+        if (!IsOpen) { error = "Discord RPC not connected"; return false; }
+
+        string nonce = Guid.NewGuid().ToString("N");
+        var tcs = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pending[nonce] = tcs;
+        try
+        {
+            WriteFrame(OpFrame, JsonSerializer.Serialize(new { cmd = "UNSUBSCRIBE", evt, args, nonce }));
+            if (!tcs.Task.Wait(timeout)) { error = $"Discord UNSUBSCRIBE {evt} timed out"; return false; }
+            return true;
+        }
+        catch (Exception ex) { error = ex.Message; return false; }
+        finally { _pending.TryRemove(nonce, out _); }
+    }
+
     private void WriteFrame(int opcode, string json)
     {
         var payload = Encoding.UTF8.GetBytes(json);

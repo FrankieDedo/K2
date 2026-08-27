@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
@@ -77,6 +77,13 @@
        alpha bounds and downscaled to 64 px, so both together are under 10 KB.
        Resource (not Content): referenced from ButtonActionDialog.xaml by pack URI. -->
   <ItemGroup>
+    <Resource Include="Assets\DiscordIcons\mic_on.png" />
+    <Resource Include="Assets\DiscordIcons\mic_off.png" />
+    <Resource Include="Assets\DiscordIcons\audio_on.png" />
+    <Resource Include="Assets\DiscordIcons\audio_off.png" />
+    <Resource Include="Assets\DiscordIcons\ptt.png" />
+    <Resource Include="Assets\DiscordIcons\webcam.png" />
+    <Resource Include="Assets\DiscordIcons\disconnect.png" />
     <Resource Include="Assets\ActionIcons\davinci.png" />
     <Resource Include="Assets\ActionIcons\googlehome.png" />
   </ItemGroup>

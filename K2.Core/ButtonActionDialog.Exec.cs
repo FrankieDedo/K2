@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -20,6 +20,7 @@ public partial class ButtonActionDialog
     private void RefreshExecPanel()
     {
         RefreshExecIcon();
+        UpdateExecBatchOptions();
         // .ToList(): AppSettings.RecentExecPaths returns the SAME underlying List<string>
         // instance every call (mutated in place by Add/RemoveRecent) — a plain List<string>
         // doesn't implement INotifyCollectionChanged, so re-assigning ItemsSource to that
@@ -52,7 +53,25 @@ public partial class ButtonActionDialog
         }
     }
 
-    private void TxtExecPath_TextChanged(object sender, TextChangedEventArgs e) => RefreshExecIcon();
+    private void TxtExecPath_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        RefreshExecIcon();
+        UpdateExecBatchOptions();
+    }
+
+    /// <summary>
+    /// The hidden/visible-terminal choice only makes sense for .bat/.cmd, so the radio pair
+    /// appears only for those. Null-guarded: TextChanged can fire before the later-declared
+    /// elements exist if the Text is ever set from XAML.
+    /// </summary>
+    private void UpdateExecBatchOptions()
+    {
+        if (ExecBatchOptions is null) return;
+        bool isBatch = ExecActionPayload.IsBatch(TxtExecPath.Text);
+        ExecBatchOptions.Visibility = isBatch ? Visibility.Visible : Visibility.Collapsed;
+        if (isBatch && RbExecBatchConsole.IsChecked != true)
+            RbExecBatchHidden.IsChecked = true;   // hidden stays the default
+    }
 
     private void BtnExecBrowse_Click(object sender, RoutedEventArgs e)
     {
