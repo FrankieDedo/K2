@@ -64,7 +64,6 @@ Start as admin and keep in mind that it should close all Base Camp process autom
   <li><strong>Switch audio output device</strong> — send sound to a different speaker/headset with one key</li>
   <li><strong>Third party application commands</strong> — Same as Base Camp, support Adobe Suite, DaVinci Resolve, Zoom, OBS, Twitch, Youtube, Spotify</li>
 </ul>
-<p><em>Available on every device — MacroPad, Everest Max/60, DisplayPad — through the same "Configure action" dialog.</em></p>
 </details>
 
 <details open>
@@ -142,17 +141,15 @@ Start as admin and keep in mind that it should close all Base Camp process autom
   <li>More accessibility options (and functions, maybe)</li>
   <li>Driving wheel mode for DisplayPad — turning it into an interactive display for racing sims, and possibly other sims down the line (flight sims?)</li>
   <li>Tray icon quick UI</li>
-  <li>SignalRGB support</li>
   <li>Accurate LED sync between devices</li>
   <li>Desk layout feature — for users with multiple Mountain accessories, track where each device sits on your desk and drive multi-device LED effects across them (similar to Razer-style software)</li>
   <li>More DisplayPad shenanigans</li>
-  <li>Integrated STLs for 3D printing of accessories</li>
 </ul>
 
 
 <h1>Building the app</h1>
 <ul>
-  <li>If you want to build yourself the app, just download all of the source code and then run "build-check.bat", same for the installer, just launch "build-installer.bat" inside the Installer folder.</li>
+  <li>If you want to build yourself the app, just download all of the source code and then run "build-check.bat", same for the installer: if you want to build your own, apart from those in release section, just launch "build-installer.bat" inside the Installer folder.</li>
 </ul>
 
 
