@@ -383,6 +383,8 @@
   <string name="settings_update_downloading">Pobieranie…</string>
   <string name="settings_update_install_confirm">Pobrać wersję {0} i uruchomić instalator? K2 zostanie zamknięte, gdy tylko instalator się uruchomi, aby umożliwić aktualizację.</string>
   <string name="settings_update_zip_done">Zapisano w {0}</string>
+  <string name="update_notify_title">Dostępna aktualizacja K2</string>
+  <string name="update_notify_body">Wersja {0} jest dostępna. Kliknij tutaj, aby otworzyć ustawienia i ją zainstalować.</string>
   <!-- Przywracanie domyślnych -->
   <string name="settings_danger_zone">Strefa zagrożenia</string>
   <string name="restore_defaults">Przywróć domyślne</string>
@@ -993,8 +995,15 @@
   <string name="dvp_disconnect">Rozłącz</string>
   <string name="discord_webcam_hotkey_label">Skrót kamery:</string>
   <string name="discord_webcam_hotkey_tip">Discord nie ma polecenia RPC dla kamery: naciśnij Nagraj i wpisz kombinację, a następnie przypisz tę samą w Discord &gt; Ustawienia &gt; Skróty klawiszowe &gt; Przełącz kamerę.</string>
+  <string name="discord_ptt_hotkey_label">Skrót „naciśnij, aby mówić”:</string>
+  <string name="discord_ptt_hotkey_tip">Przytrzymywany dokładnie tak długo, jak długo wciśnięty jest klawisz „naciśnij, aby mówić” na stronie głosowej. Discord nie ma na to polecenia RPC: naciśnij Nagraj, wpisz kombinację, a następnie ustaw tę samą w Discord &gt; Ustawienia &gt; Skróty klawiszowe &gt; Naciśnij, aby mówić.</string>
   <string name="hotkey_record">Nagraj</string>
   <string name="hotkey_recording">Naciśnij klawisze… (Esc, aby anulować)</string>
+  <string name="discord_profile_config_title">Profil głosowy Discorda</string>
+  <string name="discord_profile_config_hint">Ustawienia strony głosowej Discorda na DisplayPadzie.</string>
+  <string name="discord_account_button">Konto Discord (Client ID / Secret)…</string>
+  <string name="discord_voicepage_return_label">Przywróć stronę głosową po</string>
+  <string name="discord_voicepage_return_hint">Jeśli w trakcie połączenia opuścisz stronę głosową na rzecz zwykłego profilu, wróci ona sama po upływie tylu sekund bez powrotu do niej — jak wygaszacz ekranu. Wyłączone = wraca tylko przy nowym połączeniu albo po naciśnięciu klawisza „strona głosowa”.</string>
   <string name="act_emojibrowser">Przeglądarka emoji</string>
   <string name="emb_grp_smileys">Uśmieszki</string>
   <string name="emb_grp_people">Ludzie</string>

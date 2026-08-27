@@ -76,7 +76,10 @@ public static class DiscordTileRenderer
         {
             using var canvas = new Bitmap(size, size);
             using (var g = NewGraphics(canvas, size))
+            {
                 DrawAvatar(g, TileCircle(size), iconPath, "");
+                DrawBackBadge(g, size);
+            }
             return Save(canvas, outputPngPath);
         }
         catch { return false; }
@@ -131,6 +134,8 @@ public static class DiscordTileRenderer
                     }
                     DrawAvatar(g, cell, faces[i], "");
                 }
+
+                DrawBackBadge(g, size);
             }
             return Save(canvas, outputPngPath);
         }
@@ -277,6 +282,78 @@ public static class DiscordTileRenderer
         using var pen = new Pen(Color.White, d * 0.16f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
         float inset = d * 0.28f;
         g.DrawLine(pen, badge.Left + inset, badge.Bottom - inset, badge.Right - inset, badge.Top + inset);
+    }
+
+    /// <summary>File name (without extension) of the return-arrow artwork, in the same
+    /// <c>Assets/DiscordIcons/</c> folder as the control icons.</summary>
+    private const string BackBadgeIcon = "return_arrow";
+
+    /// <summary>How much extra black outline to add around the badge, as a fraction of its drawn
+    /// width. The artwork already carries a ~12%-wide black border; this stamps roughly the same
+    /// again, so the halo reads about twice as thick (user request).</summary>
+    private const float BackBadgeOutlineGrow = 0.12f;
+
+    /// <summary>
+    /// Stamps the return-arrow onto the server/group tile — voice-page key 0, which is also the way
+    /// out of the page (it hands the panel back to the profile), so it wears the same "back" mark
+    /// the physical back keys do.
+    ///
+    /// <para>Geometry is taken straight from the reference the user supplied, a 1600-px square: the
+    /// arrow is <c>580/1600</c> of the tile wide and its top-right corner sits <c>700/1600</c> from
+    /// the left and <c>800/1600</c> from the top — i.e. bottom-left, poking a little past the
+    /// circle. Height follows the PNG's own aspect ratio, and the artwork already carries its black
+    /// outline so it needs no halo over a busy avatar.</para>
+    /// </summary>
+    private static void DrawBackBadge(Graphics g, int size)
+    {
+        var art = LoadIcon(BackBadgeIcon);
+        if (art is null) return;
+
+        float w = size * (580f / 1600f);
+        float h = w * art.Height / art.Width;
+        float right = size * (700f / 1600f);
+        float top = size * (800f / 1600f);
+        var rect = new RectangleF(right - w, top, w, h);
+
+        // Thicken the black border the artwork already carries: stamp a black silhouette of the
+        // arrow in a ring of small offsets behind the real draw, which grows every black edge
+        // outward by ~grow px without distorting the shape.
+        float grow = w * BackBadgeOutlineGrow;
+        if (grow >= 0.5f)
+        {
+            using var black = Silhouette(art, Color.Black);
+            const int stamps = 16;
+            for (int i = 0; i < stamps; i++)
+            {
+                double a = i * 2 * Math.PI / stamps;
+                g.DrawImage(black, new RectangleF(
+                    rect.X + (float)(Math.Cos(a) * grow),
+                    rect.Y + (float)(Math.Sin(a) * grow),
+                    rect.Width, rect.Height));
+            }
+        }
+
+        g.DrawImage(art, rect);
+    }
+
+    /// <summary>A flat one-color copy of <paramref name="src"/> that keeps its alpha — a stampable
+    /// silhouette for building an outline under the real artwork.</summary>
+    private static Bitmap Silhouette(Image src, Color color)
+    {
+        var bmp = new Bitmap(src.Width, src.Height, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(bmp);
+        using var ia = new ImageAttributes();
+        ia.SetColorMatrix(new ColorMatrix(new[]
+        {
+            new float[] { 0, 0, 0, 0, 0 },
+            new float[] { 0, 0, 0, 0, 0 },
+            new float[] { 0, 0, 0, 0, 0 },
+            new float[] { 0, 0, 0, 1, 0 },
+            new[] { color.R / 255f, color.G / 255f, color.B / 255f, 0, 1 },
+        }));
+        g.DrawImage(src, new Rectangle(0, 0, src.Width, src.Height),
+            0, 0, src.Width, src.Height, GraphicsUnit.Pixel, ia);
+        return bmp;
     }
 
     /// <summary>Up to two letters standing in for a missing picture ("Fra Dedo" → "FD").</summary>

@@ -382,6 +382,8 @@
   <string name="settings_update_downloading">ダウンロード中…</string>
   <string name="settings_update_install_confirm">バージョン {0} をダウンロードしてインストーラーを実行しますか？ アップデートのため、インストーラーが起動すると同時に K2 は終了します。</string>
   <string name="settings_update_zip_done">{0} に保存しました</string>
+  <string name="update_notify_title">K2 の更新があります</string>
+  <string name="update_notify_body">バージョン {0} が利用できます。ここをクリックして設定を開き、インストールしてください。</string>
   <!-- デフォルトに戻す -->
   <string name="settings_danger_zone">危険な操作</string>
   <string name="restore_defaults">デフォルトに戻す</string>
@@ -969,8 +971,15 @@
   <string name="dvp_disconnect">切断</string>
   <string name="discord_webcam_hotkey_label">ウェブカメラのショートカット:</string>
   <string name="discord_webcam_hotkey_tip">Discord にはカメラ用の RPC コマンドがありません。［記録］を押してキーの組み合わせを入力し、同じものを Discord &gt; 設定 &gt; キーバインド &gt; カメラの切り替え に割り当ててください。</string>
+  <string name="discord_ptt_hotkey_label">プッシュ・トゥ・トークのショートカット:</string>
+  <string name="discord_ptt_hotkey_tip">ボイスページのプッシュ・トゥ・トークキーを押している間だけ、まったく同じ長さで押し続けます。Discord にはこれに対応する RPC コマンドがありません。［記録］を押してキーの組み合わせを入力し、同じものを Discord &gt; 設定 &gt; キーバインド &gt; 押して話す に設定してください。</string>
   <string name="hotkey_record">記録</string>
   <string name="hotkey_recording">キーを押してください…（Esc でキャンセル）</string>
+  <string name="discord_profile_config_title">Discord ボイスプロファイル</string>
+  <string name="discord_profile_config_hint">DisplayPad の Discord ボイスページの設定です。</string>
+  <string name="discord_account_button">Discord アカウント (Client ID / Secret)…</string>
+  <string name="discord_voicepage_return_label">ボイスページを戻すまでの時間</string>
+  <string name="discord_voicepage_return_hint">通話中にボイスページを離れて通常のプロファイルに移った場合、ここで指定した秒数だけ戻らないままでいると、スクリーンセーバーのように自動で戻ります。オフ = 新しい通話か「ボイスページ」キーでのみ戻ります。</string>
   <string name="act_emojibrowser">絵文字ブラウザ</string>
   <string name="emb_grp_smileys">スマイリー</string>
   <string name="emb_grp_people">人</string>

@@ -84,6 +84,9 @@ internal sealed class EverestActionHost : IActionHost
 
     IReadOnlyList<ProfileTargetOption> IActionHost.ListProfileTargets() => _listAllProfileTargets();
 
+    // Everest Max is single-device: conventional key "everest:1" (see MainWindow.ListAllProfileTargets).
+    string IActionHost.SelfTargetKey => "everest:1";
+
     IReadOnlyList<HostButton> IActionHost.GetButtons() => _getButtons();
 
     void IActionHost.PressButton(int index) => _pressButton(index);

@@ -251,8 +251,15 @@
   <string name="dvp_disconnect">Disconnetti</string>
   <string name="discord_webcam_hotkey_label">Scorciatoia webcam:</string>
   <string name="discord_webcam_hotkey_tip">Discord non ha un comando RPC per la videocamera: premi Registra e digita la combinazione, poi assegna la stessa in Discord &gt; Impostazioni &gt; Scorciatoie &gt; Attiva/disattiva videocamera.</string>
+  <string name="discord_ptt_hotkey_label">Scorciatoia push-to-talk:</string>
+  <string name="discord_ptt_hotkey_tip">Tenuta premuta per tutto il tempo in cui è premuto il tasto push-to-talk della pagina vocale. Discord non ha un comando RPC per questo: premi Registra, digita la combinazione, poi imposta la stessa in Discord &gt; Impostazioni &gt; Scorciatoie &gt; Premi per parlare.</string>
   <string name="hotkey_record">Registra</string>
   <string name="hotkey_recording">Premi i tasti… (Esc per annullare)</string>
+  <string name="discord_profile_config_title">Profilo vocale Discord</string>
+  <string name="discord_profile_config_hint">Impostazioni della pagina vocale Discord del DisplayPad.</string>
+  <string name="discord_account_button">Account Discord (Client ID / Secret)…</string>
+  <string name="discord_voicepage_return_label">Riporta la pagina vocale dopo</string>
+  <string name="discord_voicepage_return_hint">Durante una chiamata, se lasci la pagina vocale per un profilo normale questa torna da sola una volta trascorsi questi secondi senza che tu ci rientri — come uno screensaver. Off = torna solo a una nuova chiamata o con un tasto "pagina vocale".</string>
   <string name="youtube_settings_title">Impostazioni YouTube</string>
   <string name="youtube_hint">Crea un client OAuth per app desktop su console.cloud.google.com con l'API YouTube Data v3 abilitata, poi incolla qui il Client ID/Secret.</string>
   <string name="youtube_setup_guide">1. Vai su console.cloud.google.com, crea/seleziona un progetto, poi abilita "YouTube Data API v3" (APIs &amp; Services -&gt; Library).
@@ -456,6 +463,8 @@
   <string name="settings_update_downloading_pct">Download in corso… {0}%</string>
   <string name="settings_update_install_confirm">Scaricare la versione {0} e avviare l'installer? K2 si chiuderà non appena l'installer parte, per permettere l'aggiornamento.</string>
   <string name="settings_update_zip_done">Salvato in {0}</string>
+  <string name="update_notify_title">Aggiornamento K2 disponibile</string>
+  <string name="update_notify_body">È disponibile la versione {0}. Clicca qui per aprire le impostazioni e installarla.</string>
   <string name="settings_danger_zone">Zona pericolosa</string>
   <string name="restore_defaults">Ripristina predefiniti</string>
   <string name="restore_defaults_profile_confirm">Ripristinare il profilo '{0}' ai valori predefiniti di K2 su questo dispositivo (tasti assegnati, illuminazione e impostazioni, dove applicabile)? L'operazione non può essere annullata.</string>

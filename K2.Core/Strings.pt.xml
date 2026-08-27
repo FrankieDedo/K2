@@ -381,6 +381,8 @@
   <string name="settings_update_downloading">A transferir…</string>
   <string name="settings_update_install_confirm">Transferir a versão {0} e executar o instalador? O K2 fecha assim que o instalador for iniciado, para poder atualizar.</string>
   <string name="settings_update_zip_done">Guardado em {0}</string>
+  <string name="update_notify_title">Atualização do K2 disponível</string>
+  <string name="update_notify_body">A versão {0} está disponível. Clica aqui para abrir as definições e instalá-la.</string>
   <!-- Restaurar predefinições -->
   <string name="settings_danger_zone">Zona de perigo</string>
   <string name="restore_defaults">Restaurar predefinições</string>
@@ -969,8 +971,15 @@
   <string name="dvp_disconnect">Desligar</string>
   <string name="discord_webcam_hotkey_label">Atalho da webcam:</string>
   <string name="discord_webcam_hotkey_tip">O Discord não tem um comando RPC para a câmara: prime Gravar e escreve a combinação, depois atribui a mesma em Discord &gt; Definições &gt; Atalhos de teclado &gt; Ativar/desativar câmara.</string>
+  <string name="discord_ptt_hotkey_label">Atalho de premir para falar:</string>
+  <string name="discord_ptt_hotkey_tip">Fica premido exatamente o tempo em que a tecla de premir para falar da página de voz estiver pressionada. O Discord não tem um comando RPC para isto: prime Gravar, escreve a combinação e depois define a mesma em Discord &gt; Definições &gt; Atalhos de teclado &gt; Premir para falar.</string>
   <string name="hotkey_record">Gravar</string>
   <string name="hotkey_recording">Prime as teclas… (Esc para cancelar)</string>
+  <string name="discord_profile_config_title">Perfil de voz do Discord</string>
+  <string name="discord_profile_config_hint">Definições da página de voz do Discord no DisplayPad.</string>
+  <string name="discord_account_button">Conta Discord (Client ID / Secret)…</string>
+  <string name="discord_voicepage_return_label">Trazer a página de voz de volta após</string>
+  <string name="discord_voicepage_return_hint">Durante uma chamada, se saíres da página de voz para um perfil normal, ela volta sozinha quando passarem estes segundos sem que regresses — como uma proteção de ecrã. Desligado = só volta numa nova chamada ou com uma tecla de "página de voz".</string>
   <string name="act_emojibrowser">Navegador de emojis</string>
   <string name="emb_grp_smileys">Smileys</string>
   <string name="emb_grp_people">Pessoas</string>

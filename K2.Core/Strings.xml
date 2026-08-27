@@ -252,8 +252,15 @@
   <string name="dvp_disconnect">Disconnect</string>
   <string name="discord_webcam_hotkey_label">Webcam shortcut:</string>
   <string name="discord_webcam_hotkey_tip">Discord has no RPC command for the camera: press Record and type the combination, then assign the same one in Discord &gt; Settings &gt; Keybinds &gt; Toggle Camera.</string>
+  <string name="discord_ptt_hotkey_label">Push-to-talk shortcut:</string>
+  <string name="discord_ptt_hotkey_tip">Held down for exactly as long as the voice page's push-to-talk key is pressed. Discord has no RPC command for this: press Record, type the combination, then set the same one in Discord &gt; Settings &gt; Keybinds &gt; Push to Talk.</string>
   <string name="hotkey_record">Record</string>
   <string name="hotkey_recording">Press the keys… (Esc to cancel)</string>
+  <string name="discord_profile_config_title">Discord voice profile</string>
+  <string name="discord_profile_config_hint">Settings for the DisplayPad Discord voice page.</string>
+  <string name="discord_account_button">Discord account (Client ID / Secret)…</string>
+  <string name="discord_voicepage_return_label">Bring the voice page back after</string>
+  <string name="discord_voicepage_return_hint">While a call is running, if you leave the voice page for a normal profile it comes back on its own once this many seconds pass without you returning to it — like a screensaver. Off = it only returns on a new call or a "voice page" key.</string>
   <string name="youtube_settings_title">YouTube Settings</string>
   <string name="youtube_hint">Create an OAuth Desktop-app client at console.cloud.google.com with the YouTube Data API v3 enabled, then paste its Client ID/Secret here.</string>
   <string name="youtube_setup_guide">1. Go to console.cloud.google.com, create/select a project, then enable "YouTube Data API v3" (APIs &amp; Services -&gt; Library).
@@ -456,6 +463,8 @@
   <string name="settings_update_downloading_pct">Downloading… {0}%</string>
   <string name="settings_update_install_confirm">Download version {0} and run the installer? K2 will close as soon as the installer starts, so it can update.</string>
   <string name="settings_update_zip_done">Saved to {0}</string>
+  <string name="update_notify_title">K2 update available</string>
+  <string name="update_notify_body">Version {0} is available. Click here to open Settings and install it.</string>
   <!-- Restore defaults -->
   <string name="settings_danger_zone">Danger zone</string>
   <string name="restore_defaults">Restore defaults</string>

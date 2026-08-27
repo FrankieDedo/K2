@@ -49,6 +49,9 @@ internal sealed class TrayIconNative : IDisposable
     // with CallbackMsg above, which IS WM_APP-based (that's the outer message id;
     // this is the notification code carried in its lParam).
     private const int NIN_SELECT       = WM_USER + 0;
+    // Balloon/toast notifications: the shell reports the user clicking the toast
+    // body (as opposed to letting it time out or dismissing it) with this code.
+    private const int NIN_BALLOONUSERCLICK = WM_USER + 5;
 
     private const int NIM_ADD        = 0x00;
     private const int NIM_MODIFY     = 0x01;
@@ -59,6 +62,12 @@ internal sealed class TrayIconNative : IDisposable
     private const int NIF_ICON    = 0x02;
     private const int NIF_TIP     = 0x04;
     private const int NIF_GUID    = 0x20;
+    private const int NIF_INFO    = 0x10;
+
+    // dwInfoFlags: NIIF_USER draws hBalloonIcon (K2's own icon) in the toast
+    // instead of one of the shell's generic info/warning glyphs.
+    private const int NIIF_USER       = 0x04;
+    private const int NIIF_LARGE_ICON = 0x20;
 
     private const int NOTIFYICON_VERSION_4 = 4;
 
@@ -139,6 +148,10 @@ internal sealed class TrayIconNative : IDisposable
 
     /// <summary>Fired on a left double click (or keyboard/single-click select) on the icon.</summary>
     public event EventHandler? DoubleClick;
+
+    /// <summary>Fired when the user clicks the body of a balloon shown by
+    /// <see cref="ShowBalloon"/> (not when it merely times out or is dismissed).</summary>
+    public event EventHandler? BalloonClick;
 
     /// <summary>Menu shown on right click. Owned by the caller, same as NotifyIcon.</summary>
     public ContextMenuStrip? ContextMenuStrip { get; set; }
@@ -232,10 +245,33 @@ internal sealed class TrayIconNative : IDisposable
         _added = false;
     }
 
+    /// <summary>Shows a shell balloon on the tray icon — on Windows 10/11 the shell
+    /// renders it as a normal toast in the Action Center. Silently does nothing if the
+    /// icon isn't registered (or the user turned K2's notifications off in Windows:
+    /// the shell simply drops the request, there is no error to report).
+    /// Title/text are truncated to the NOTIFYICONDATA field sizes — passing anything
+    /// longer would throw at marshalling time.</summary>
+    public void ShowBalloon(string title, string text)
+    {
+        if (!_added || _disposed) return;
+
+        var data = NewData(_useGuid);
+        data.uFlags |= NIF_INFO;
+        data.szInfoTitle = title.Length > 63  ? title[..63]  : title;
+        data.szInfo      = text.Length  > 255 ? text[..255]  : text;
+        data.dwInfoFlags = _icon is not null ? NIIF_USER | NIIF_LARGE_ICON : 0;
+        data.hBalloonIcon = _icon?.Handle ?? IntPtr.Zero;
+        Shell_NotifyIconW(NIM_MODIFY, ref data);
+    }
+
     private void OnCallback(int id, int x, int y)
     {
         switch (id)
         {
+            case NIN_BALLOONUSERCLICK:
+                BalloonClick?.Invoke(this, EventArgs.Empty);
+                break;
+
             case WM_LBUTTONDBLCLK:
             case NIN_SELECT:
                 DoubleClick?.Invoke(this, EventArgs.Empty);

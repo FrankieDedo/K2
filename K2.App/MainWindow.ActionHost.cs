@@ -56,6 +56,9 @@ public partial class MainWindow : IActionHost
 
     IReadOnlyList<ProfileTargetOption> IActionHost.ListProfileTargets() => ListAllProfileTargets();
 
+    // MacroPad host: self-target is the active MacroPad (see ListAllProfileTargets).
+    string IActionHost.SelfTargetKey => _activeMpDeviceId is int id ? $"macropad:{id}" : "";
+
     IReadOnlyList<HostButton> IActionHost.GetButtons()
         => _keys.Select(k => new HostButton(
                k.Index, k.KeyMatrix, false, null, k.ActionType, k.ActionValue))
@@ -103,19 +106,29 @@ public partial class MainWindow : IActionHost
         if (_activeMpDeviceId is int mpId)
         {
             string label = TabMacroPad.Header as string ?? Loc.Get("tab_macropad");
-            list.Add(new ProfileTargetOption($"macropad:{mpId}", label, _store.GetExistingProfiles(mpId)));
+            list.Add(new ProfileTargetOption($"macropad:{mpId}", label,
+                _store.GetExistingProfiles(mpId)
+                      .Select(slot => new ProfileChoice(slot, _store.GetProfileName(mpId, slot) ?? Loc.Get("profile_n", slot)))
+                      .ToList()));
         }
 
         foreach (var (id, label) in _dpDeviceLabels)
-            list.Add(new ProfileTargetOption($"displaypad:{id}", label, _dpStore.GetExistingProfiles(id)));
+            list.Add(new ProfileTargetOption($"displaypad:{id}", label,
+                _dpStore.GetExistingProfiles(id)
+                        .Select(slot => new ProfileChoice(slot, _dpStore.GetProfileName(id, slot) ?? Loc.Get("profile_n", slot)))
+                        .ToList()));
 
         string evLabel = TabEverest.Header as string ?? Loc.Get("tab_everest");
         list.Add(new ProfileTargetOption("everest:1", evLabel,
-            Enumerable.Range(1, EverestService.ProfileCount).ToList()));
+            Enumerable.Range(1, EverestService.ProfileCount)
+                      .Select(slot => new ProfileChoice(slot, _evStore.GetProfileName(slot) ?? Loc.Get("profile_n", slot)))
+                      .ToList()));
 
         string ev60Label = TabEverest60.Header as string ?? Loc.Get("tab_everest60");
         list.Add(new ProfileTargetOption("everest60:1", ev60Label,
-            Enumerable.Range(1, Ev60ProfileCount).ToList()));
+            Enumerable.Range(1, Ev60ProfileCount)
+                      .Select(slot => new ProfileChoice(slot, _ev60Store.GetProfileName(slot) ?? Loc.Get("profile_n", slot)))
+                      .ToList()));
 
         return list;
     }

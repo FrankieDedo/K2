@@ -381,6 +381,8 @@
   <string name="settings_update_downloading">다운로드 중…</string>
   <string name="settings_update_install_confirm">버전 {0}을(를) 다운로드하고 설치 프로그램을 실행하시겠습니까? 업데이트를 위해 설치 프로그램이 시작되는 즉시 K2가 종료됩니다.</string>
   <string name="settings_update_zip_done">{0}에 저장되었습니다</string>
+  <string name="update_notify_title">K2 업데이트 사용 가능</string>
+  <string name="update_notify_body">버전 {0}을(를) 사용할 수 있습니다. 여기를 클릭하여 설정을 열고 설치하세요.</string>
   <!--기본값 복원-->
   <string name="settings_danger_zone">위험 구역</string>
   <string name="restore_defaults">기본값 복원</string>
@@ -968,8 +970,15 @@
   <string name="dvp_disconnect">연결 끊기</string>
   <string name="discord_webcam_hotkey_label">웹캠 단축키:</string>
   <string name="discord_webcam_hotkey_tip">Discord에는 카메라용 RPC 명령이 없습니다. ［기록］을 누르고 키 조합을 입력한 다음, Discord &gt; 설정 &gt; 단축키 &gt; 카메라 전환 에서 동일한 조합을 지정하세요.</string>
+  <string name="discord_ptt_hotkey_label">푸시 투 토크 단축키:</string>
+  <string name="discord_ptt_hotkey_tip">음성 페이지의 푸시 투 토크 키를 누르고 있는 동안 정확히 그만큼 눌린 상태로 유지됩니다. Discord에는 이에 해당하는 RPC 명령이 없습니다. ［기록］을 누르고 키 조합을 입력한 다음, Discord &gt; 설정 &gt; 단축키 &gt; 눌러서 말하기 에서 동일한 조합을 지정하세요.</string>
   <string name="hotkey_record">기록</string>
   <string name="hotkey_recording">키를 누르세요… (Esc로 취소)</string>
+  <string name="discord_profile_config_title">Discord 음성 프로필</string>
+  <string name="discord_profile_config_hint">DisplayPad의 Discord 음성 페이지 설정입니다.</string>
+  <string name="discord_account_button">Discord 계정 (Client ID / Secret)…</string>
+  <string name="discord_voicepage_return_label">음성 페이지를 다시 불러오기까지</string>
+  <string name="discord_voicepage_return_hint">통화 중에 음성 페이지를 떠나 일반 프로필로 이동한 경우, 여기에 지정한 초만큼 돌아오지 않으면 화면 보호기처럼 저절로 다시 나타납니다. 끄면 새 통화가 오거나 "음성 페이지" 키를 눌렀을 때만 돌아옵니다.</string>
   <string name="act_emojibrowser">이모지 브라우저</string>
   <string name="emb_grp_smileys">스마일리</string>
   <string name="emb_grp_people">사람</string>

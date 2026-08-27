@@ -84,6 +84,7 @@
     <Resource Include="Assets\DiscordIcons\ptt.png" />
     <Resource Include="Assets\DiscordIcons\webcam.png" />
     <Resource Include="Assets\DiscordIcons\disconnect.png" />
+    <Resource Include="Assets\DiscordIcons\return_arrow.png" />
     <Resource Include="Assets\ActionIcons\davinci.png" />
     <Resource Include="Assets\ActionIcons\googlehome.png" />
   </ItemGroup>

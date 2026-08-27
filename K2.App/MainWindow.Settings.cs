@@ -73,14 +73,38 @@ public partial class MainWindow
             bool installed = InstallDetector.IsInstalled();
             BtnAppUpdateInstall.Visibility = installed && result.InstallerAsset is not null ? Visibility.Visible : Visibility.Collapsed;
             BtnAppUpdateZip.Visibility = !installed && result.PortableZipAsset is not null ? Visibility.Visible : Visibility.Collapsed;
+
+            SetUpdateBadge(result.LatestVersion);
+            // Only the startup check announces itself: after a manual "Check for
+            // updates" the answer is already on screen, a toast on top of it would
+            // just be noise.
+            if (silent) ShowUpdateNotification(result.LatestVersion ?? "?");
         }
         else
         {
             if (!silent) TxtAppUpdateStatus.Text = Loc.Get("settings_update_uptodate");
             PnlAppUpdateAvailable.Visibility = Visibility.Collapsed;
+            SetUpdateBadge(null);
         }
 
         BtnAppCheckUpdate.IsEnabled = true;
+    }
+
+    /// <summary>Accent dot drawn over the Settings gear while an update is pending —
+    /// the in-app half of the notification, so an update is still discoverable when
+    /// the Windows toast was missed, suppressed by Focus Assist, or turned off.
+    /// Pass null to clear it.</summary>
+    private void SetUpdateBadge(string? latestVersion)
+    {
+        if (latestVersion is null)
+        {
+            DotUpdateBadge.Visibility = Visibility.Collapsed;
+            BtnSettingsTab.ToolTip = Loc.Get("tab_settings");
+            return;
+        }
+
+        DotUpdateBadge.Visibility = Visibility.Visible;
+        BtnSettingsTab.ToolTip = Loc.Get("settings_update_available", latestVersion);
     }
 
     /// <summary>Installed copies (Inno Setup): download the installer and launch it,

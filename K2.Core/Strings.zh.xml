@@ -383,6 +383,8 @@
   <string name="settings_update_downloading">正在下载…</string>
   <string name="settings_update_install_confirm">下载版本 {0} 并运行安装程序？安装程序启动后 K2 会立即关闭，以便完成更新。</string>
   <string name="settings_update_zip_done">已保存到 {0}</string>
+  <string name="update_notify_title">K2 有可用更新</string>
+  <string name="update_notify_body">版本 {0} 已可用。点击此处打开设置并安装。</string>
   <!-- 恢复默认设置 -->
   <string name="settings_danger_zone">危险区域</string>
   <string name="restore_defaults">恢复默认设置</string>
@@ -978,8 +980,15 @@
   <string name="dvp_disconnect">断开连接</string>
   <string name="discord_webcam_hotkey_label">摄像头快捷键：</string>
   <string name="discord_webcam_hotkey_tip">Discord 没有用于摄像头的 RPC 命令：点击“录制”并输入组合键，然后在 Discord &gt; 设置 &gt; 快捷键 &gt; 切换摄像头 中指定相同的组合键。</string>
+  <string name="discord_ptt_hotkey_label">按键说话快捷键：</string>
+  <string name="discord_ptt_hotkey_tip">语音页面的按键说话按键按下多久，这个快捷键就被按住多久。Discord 没有对应的 RPC 命令：点击“录制”并输入组合键，然后在 Discord &gt; 设置 &gt; 快捷键 &gt; 按键说话 中设置相同的组合键。</string>
   <string name="hotkey_record">录制</string>
   <string name="hotkey_recording">请按下按键…（按 Esc 取消）</string>
+  <string name="discord_profile_config_title">Discord 语音配置文件</string>
+  <string name="discord_profile_config_hint">DisplayPad 上 Discord 语音页面的设置。</string>
+  <string name="discord_account_button">Discord 账户（Client ID / Secret）…</string>
+  <string name="discord_voicepage_return_label">经过以下时间后自动回到语音页面</string>
+  <string name="discord_voicepage_return_hint">通话进行中，如果你离开语音页面切换到普通配置文件，经过设定的秒数仍未回到该页面时，它会像屏幕保护程序一样自动返回。关闭 = 只有来新通话或按下“语音页面”按键时才会返回。</string>
   <string name="act_emojibrowser">表情符号浏览器</string>
   <string name="emb_grp_smileys">表情</string>
   <string name="emb_grp_people">人物</string>

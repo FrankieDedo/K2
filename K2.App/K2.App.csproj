@@ -43,6 +43,15 @@
     <PlatformTarget>x86</PlatformTarget>
 
     <AssemblyName>K2.App</AssemblyName>
+    <!-- Nome con cui l'app si presenta a Windows (VERSIONINFO FileDescription /
+         ProductName). Senza queste due righe .NET li deriva da <AssemblyName>, e
+         la shell attribuiva i toast del tray a "K2.App" invece che a "K2" — vale
+         per il toast aggiornamento (TrayIconNative.ShowBalloon), per la voce in
+         Impostazioni > Sistema > Notifiche e per il Task Manager. L'AssemblyName
+         resta K2.App: cambiarlo rinominerebbe l'eseguibile (installer, autostart,
+         percorsi salvati). -->
+    <AssemblyTitle>K2</AssemblyTitle>
+    <Product>K2</Product>
     <RootNamespace>K2.App</RootNamespace>
     <ApplicationIcon>Assets\K2_icon.ico</ApplicationIcon>
     <!-- requireAdministrator — see app.manifest: needed to control BaseCampService

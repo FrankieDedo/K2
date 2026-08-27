@@ -384,6 +384,8 @@
   <string name="settings_update_downloading">Téléchargement…</string>
   <string name="settings_update_install_confirm">Télécharger la version {0} et lancer l'installateur ? K2 se fermera dès que l'installateur démarrera, afin de pouvoir se mettre à jour.</string>
   <string name="settings_update_zip_done">Enregistré dans {0}</string>
+  <string name="update_notify_title">Mise à jour K2 disponible</string>
+  <string name="update_notify_body">La version {0} est disponible. Cliquez ici pour ouvrir les paramètres et l'installer.</string>
   <!-- Restaurer les valeurs par défaut -->
   <string name="settings_danger_zone">Zone dangereuse</string>
   <string name="restore_defaults">Restaurer les valeurs par défaut</string>
@@ -978,8 +980,15 @@
   <string name="dvp_disconnect">Se déconnecter</string>
   <string name="discord_webcam_hotkey_label">Raccourci webcam :</string>
   <string name="discord_webcam_hotkey_tip">Discord n’a pas de commande RPC pour la caméra : appuyez sur Enregistrer et tapez la combinaison, puis attribuez la même dans Discord &gt; Paramètres &gt; Raccourcis clavier &gt; Activer/désactiver la caméra.</string>
+  <string name="discord_ptt_hotkey_label">Raccourci push-to-talk :</string>
+  <string name="discord_ptt_hotkey_tip">Maintenu enfoncé exactement aussi longtemps que la touche push-to-talk de la page vocale est pressée. Discord n’a pas de commande RPC pour cela : appuyez sur Enregistrer, tapez la combinaison, puis réglez la même dans Discord &gt; Paramètres &gt; Raccourcis clavier &gt; Push-to-talk.</string>
   <string name="hotkey_record">Enregistrer</string>
   <string name="hotkey_recording">Appuyez sur les touches… (Échap pour annuler)</string>
+  <string name="discord_profile_config_title">Profil vocal Discord</string>
+  <string name="discord_profile_config_hint">Réglages de la page vocale Discord du DisplayPad.</string>
+  <string name="discord_account_button">Compte Discord (Client ID / Secret)…</string>
+  <string name="discord_voicepage_return_label">Revenir à la page vocale après</string>
+  <string name="discord_voicepage_return_hint">Pendant un appel, si vous quittez la page vocale pour un profil normal, elle revient d’elle-même une fois ce nombre de secondes écoulé sans que vous y retourniez — comme un écran de veille. Désactivé = elle ne revient qu’à un nouvel appel ou via une touche « page vocale ».</string>
   <string name="act_emojibrowser">Navigateur d'emojis</string>
   <string name="emb_grp_smileys">Smileys</string>
   <string name="emb_grp_people">Personnes</string>
