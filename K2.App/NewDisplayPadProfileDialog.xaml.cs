@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 
 namespace K2.App;
 
@@ -6,15 +6,16 @@ namespace K2.App;
 /// Shown when the user picks the "+ New profile" row in the DisplayPad profile list
 /// (<see cref="MainWindow.LstDpProfile_SelectionChanged"/>). Lets the user choose between
 /// a plain empty profile (Generic) and one of the built-in app/function-specific profile
-/// types (Dedicated — today only "Spotify", see <see cref="MainWindow.DpCreateOrSwitchSpotifyProfile"/>).
+/// types (Dedicated — see <see cref="MainWindow.DpCreateDedicatedProfile"/>).
 /// Replaces the old direct-create behavior and the now-removed "Create Spotify profile"
 /// menu entry.
 /// </summary>
 public partial class NewDisplayPadProfileDialog : Window
 {
-    /// <summary>Dedicated profile type names offered in <see cref="CbDedicatedType"/>.
-    /// Only "Spotify" exists today; add more here as new dedicated profile types appear.</summary>
-    private static readonly string[] DedicatedTypes = { "Spotify" };
+    /// <summary>Dedicated profile type names offered in <see cref="CbDedicatedType"/> — they must
+    /// match the ids of <c>MainWindow.DpDedicatedCatalog</c>, which turns the pick into a reserved
+    /// profile slot on the selected device. Add new dedicated profile types in both places.</summary>
+    private static readonly string[] DedicatedTypes = { "Spotify", "Discord" };
 
     public bool IsDedicated { get; private set; }
     public string? DedicatedType { get; private set; }

@@ -222,7 +222,10 @@ public static class DpProfileExporter
         switch (actionType)
         {
             case "exec":
-                return string.IsNullOrEmpty(v) ? null : ("Run Program", v, v, null);
+            {
+                var execPath = ExecActionPayload.PathOf(v);
+                return string.IsNullOrEmpty(execPath) ? null : ("Run Program", execPath, execPath, null);
+            }
 
             case "folder":
                 return string.IsNullOrEmpty(v) ? null : ("Open Folder", v, v, null);

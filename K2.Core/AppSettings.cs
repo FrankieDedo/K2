@@ -13,10 +13,25 @@ public enum K2LogLevel
     Verbose = 2,
 }
 
+/// <summary>How K2 behaves when SignalRGB is installed/running on the same PC.</summary>
+public enum SignalRgbMode
+{
+    /// <summary>Ignore SignalRGB entirely: K2 drives the lighting as usual (previous behaviour).</summary>
+    Off = 0,
+    /// <summary>While SignalRGB is running, K2 stops writing lighting to the Mountain devices
+    /// (effects, per-key colors, brightness, SaveFlash) and takes control back when it exits.</summary>
+    Yield = 1,
+    /// <summary>K2 stops SignalRGB (service + processes) at startup, the same way it does with
+    /// Base Camp, so it never touches the Mountain devices.</summary>
+    Stop = 2,
+}
+
 /// <summary>
 /// Centralized, app-wide settings shared by every K2 device module (Everest,
 /// MacroPad, DisplayPad, ...). Replaces the old per-device "Debug" checkboxes:
-/// a single <see cref="DebugMode"/> flag now drives debug UI/behavior everywhere,
+/// a single <see cref="DebugMode"/> flag now drives debug UI/behavior everywhere
+/// (since 2026-08-27 that flag lives in the plain-text <see cref="DebugConfig"/>
+/// file, NOT in this JSON and no longer in the Settings UI),
 /// and <see cref="LogLevel"/> controls how chatty the logging is (in particular,
 /// per-key-press logs and LED-poll diagnostic logs only fire at <see cref="K2LogLevel.Verbose"/>).
 ///
@@ -28,13 +43,13 @@ public static class AppSettings
 {
     private sealed class Data
     {
-        public bool DebugMode { get; set; }
         public K2LogLevel LogLevel { get; set; } = K2LogLevel.Off;
         public bool KillBaseCampWorker { get; set; } = true;
         public bool AutoStopBaseCamp { get; set; } = true;
         public bool CloseToTray { get; set; }
         public bool StartMinimizedToTray { get; set; }
         public bool RestartBaseCampOnClose { get; set; }
+        public SignalRgbMode SignalRgbMode { get; set; } = SignalRgbMode.Yield;
         public List<string> RecentExecPaths { get; set; } = new();
         public List<string> RecentFolderPaths { get; set; } = new();
         public string? MakaluDeviceName { get; set; }
@@ -52,35 +67,24 @@ public static class AppSettings
     private static bool _loaded;
     private static readonly object _lock = new();
 
-    /// <summary>Raised after DebugMode or LogLevel changes (and has been persisted).</summary>
+    /// <summary>Raised after any persisted setting changes (and has been saved).</summary>
     public static event Action? Changed;
 
     private static string SettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "K2", "app_settings.json");
 
-    /// <summary>Centralized debug flag: when true, debug UI/behavior is enabled on ALL devices.</summary>
-    public static bool DebugMode
-    {
-        get { EnsureLoaded(); return _data.DebugMode; }
-    }
+    /// <summary>Centralized debug flag: when true, debug UI/behavior is enabled on ALL
+    /// devices. <b>Not persisted here any more</b> (2026-08-27) — it is read from the
+    /// plain-text <c>%LOCALAPPDATA%\K2\k2_debug.cfg</c>, see <see cref="DebugConfig"/>.
+    /// This forwarder is kept because every device module already reads
+    /// <c>AppSettings.DebugMode</c>. Default off; changing it needs an app restart.</summary>
+    public static bool DebugMode => DebugConfig.Enabled;
 
     /// <summary>Log verbosity: Off, Normal, or Verbose.</summary>
     public static K2LogLevel LogLevel
     {
         get { EnsureLoaded(); return _data.LogLevel; }
-    }
-
-    public static void SetDebugMode(bool value)
-    {
-        EnsureLoaded();
-        lock (_lock)
-        {
-            if (_data.DebugMode == value) return;
-            _data.DebugMode = value;
-            Save();
-        }
-        Changed?.Invoke();
     }
 
     /// <summary>
@@ -211,6 +215,31 @@ public static class AppSettings
         {
             if (_data.RestartBaseCampOnClose == value) return;
             _data.RestartBaseCampOnClose = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// How K2 coexists with SignalRGB (see <see cref="Services.SignalRgbGuard"/>). SignalRGB's
+    /// bundled Mountain plugins drive the very same raw-HID interfaces K2's native engines use
+    /// (Everest Max = MI_03, MacroPad = MI_02, Everest 60 = MI_00, Makalu = MI_01), so with both
+    /// running the two fight over the lighting. Default <see cref="SignalRgbMode.Yield"/>: K2
+    /// stops writing lighting while SignalRGB is up, and everything else (keys, macros, display
+    /// keys, Media Dock, profiles) keeps working.
+    /// </summary>
+    public static SignalRgbMode SignalRgbMode
+    {
+        get { EnsureLoaded(); return _data.SignalRgbMode; }
+    }
+
+    public static void SetSignalRgbMode(SignalRgbMode value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.SignalRgbMode == value) return;
+            _data.SignalRgbMode = value;
             Save();
         }
         Changed?.Invoke();

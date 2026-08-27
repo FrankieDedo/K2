@@ -93,6 +93,10 @@ public partial class MainWindow
     /// <summary>Per-device: the screensaver image is currently on the panel (so the next
     /// key event must restore the profile's icons before running its action).</summary>
     private readonly HashSet<int> _dpScreensaverShowing = new();
+    /// <summary>Matrix code of the key whose press dismissed the screensaver, per device:
+    /// that press (and its matching release) only wakes the panel, it must NOT run the key's
+    /// action — see <see cref="OnDpKey"/>.</summary>
+    private readonly Dictionary<int, int> _dpScreensaverWakeKey = new();
 
     /// <summary>
     /// Cache folder for images auto-generated from an action (exec icon / folder glyph,
@@ -168,6 +172,10 @@ public partial class MainWindow
 
     private void InitDisplayPadModule()
     {
+        // Live Discord voice page (MainWindow.DisplayPad.DiscordRoom.cs) — subscribes once and
+        // opens the page straight away if K2 starts while the user is already in a call.
+        DvpEnsureHooked();
+
         // Create the 12 overlay buttons using DpKeyButtonStyle (defined in MainWindow.xaml).
         // The style contains the full ControlTemplate: key_button.png background, rounded
         // icon clip, glossy overlay, hover/selection border — a faithful replica of Base Camp.
@@ -1041,8 +1049,8 @@ public partial class MainWindow
     }
 
     /// <summary>First key event after the screensaver kicked in: drop the image and repaint
-    /// the page's own icons. The key's action still runs — see <see cref="OnDpKey"/>, which
-    /// calls this (via the timer) BEFORE dispatching the action.</summary>
+    /// the page's own icons. The key's action does NOT run — see <see cref="OnDpKey"/>, which
+    /// swallows the press (and its release) that dismissed the screensaver.</summary>
     private void DpScreensaverWake(int id)
     {
         if (!_dpScreensaverShowing.Remove(id)) return;
@@ -1340,8 +1348,19 @@ public partial class MainWindow
         _dpSuppressProfile = true;
         try
         {
-            if (LstDpProfile.ItemsSource is List<DpProfileItem> items)
-                LstDpProfile.SelectedItem = items.Find(x => x.Slot == slot && !x.IsNew) ?? items[0];
+            if (LstDpProfile.ItemsSource is not List<DpProfileItem> items) return;
+            // A dedicated profile (Spotify) is deliberately absent from this list — it lives in
+            // the "Dedicated profiles" section below. Falling back to items[0] there would show
+            // the wrong profile as current; the panel's owner is mirrored in that list instead.
+            var row = items.Find(x => x.Slot == slot && !x.IsNew);
+            if (row is null && DpSelectedDeviceId() is int devId && DpActiveDedicated(devId) is string ded)
+            {
+                LstDpProfile.SelectedItem = null;
+                DpSelectDedicated(ded);
+                return;
+            }
+            LstDpProfile.SelectedItem = row ?? items[0];
+            DpSelectDedicated(null);
         }
         finally { _dpSuppressProfile = false; }
     }
@@ -1368,6 +1387,9 @@ public partial class MainWindow
             foreach (var slot in existing)
             {
                 string name = _dpStore.GetProfileName(deviceId, slot) ?? Loc.Get("profile_n", slot);
+                // Reserved slot of a dedicated profile: it is listed in the "Dedicated profiles"
+                // section instead (see MainWindow.DisplayPad.Dedicated.cs), never twice.
+                if (DpIsDedicatedName(name)) continue;
                 items.Add(new DpProfileItem(slot, name));
             }
             // Find the next free slot — DisplayPad profiles are pure K2-side bookkeeping
@@ -1379,9 +1401,15 @@ public partial class MainWindow
 
             LstDpProfile.ItemsSource = items;
 
+            DpRefreshDedicated(deviceId);
+
             int current = _dpStore.GetCurrentProfile(deviceId);
             var match = items.Find(x => x.Slot == current && !x.IsNew);
-            LstDpProfile.SelectedItem = match ?? items[0];
+            string? dedicated = DpActiveDedicated(deviceId);
+            // While a dedicated profile owns the panel NOTHING above is current — the selection
+            // lives in the other list, so the two can never both look active.
+            LstDpProfile.SelectedItem = dedicated is not null ? null : match ?? items[0];
+            DpSelectDedicated(dedicated);
 
             DpRegisterProfileLaunchWatchers(deviceId, existing);
         }
@@ -1417,6 +1445,10 @@ public partial class MainWindow
         if (LstDpProfile.SelectedItem is not DpProfileItem pi) return;
         int profile = pi.Slot;
 
+        // Whatever the user picks here, the panel goes back to a normal profile — see
+        // DpLeaveDedicatedForProfile for why Discord's exit is only temporary.
+        DpLeaveDedicatedForProfile(id);
+
         if (pi.IsNew)
         {
             var dlg = new NewDisplayPadProfileDialog { Owner = this };
@@ -1428,9 +1460,9 @@ public partial class MainWindow
             }
             if (dlg.IsDedicated)
             {
-                // Only "Spotify" exists today; DpCreateOrSwitchSpotifyProfile is self-contained
-                // (finds/creates the slot, refreshes, selects, reloads, repaints).
-                if (dlg.DedicatedType == "Spotify") DpCreateOrSwitchSpotifyProfile();
+                // Creates (or switches to) the reserved slot on THIS device and refreshes both
+                // lists — see MainWindow.DisplayPad.Dedicated.cs.
+                if (dlg.DedicatedType is string dedicatedType) DpCreateDedicatedProfile(dedicatedType);
                 return;
             }
 
@@ -2070,7 +2102,15 @@ public partial class MainWindow
         var sourceKey = _dpKeys[sourceIndex];
         if (ReferenceEquals(sourceKey, targetKey)) return;
 
-        DpSwapKeys(id, DpCurrentProfile(), sourceKey, targetKey);
+        int profile = DpCurrentProfile();
+        // Deferred on purpose: DoDragDrop() runs its own nested message-pump loop, and this
+        // Drop handler fires from INSIDE that loop. Swapping the keys' bound properties here
+        // synchronously changes the labels' Text mid-pump, and WPF doesn't always give that a
+        // clean repaint before the pump exits — the old key's label can stay rendered under
+        // the new one until some unrelated redraw (e.g. the next mouse move) papers over it.
+        // Running the swap after the loop has fully unwound gives it a normal layout+render
+        // pass instead (user report 2026-08-26).
+        Dispatcher.BeginInvoke(() => DpSwapKeys(id, profile, sourceKey, targetKey));
     }
 
     /// <summary>Swaps action + icon between two keys of the current page, re-uploading
@@ -2243,6 +2283,12 @@ public partial class MainWindow
         miCfg.Click += DpMnuConfigureAction_Click;
         var miRa = new MenuItem { Header = Loc.Get("dp_remove_action") };
         miRa.Click += DpMnuRemoveAction_Click;
+        var miCopy = new MenuItem { Header = Loc.Get("act_copy_action") };
+        miCopy.Click += DpMnuCopyAction_Click;
+        var miCut = new MenuItem { Header = Loc.Get("act_cut_action") };
+        miCut.Click += DpMnuCutAction_Click;
+        var miPaste = new MenuItem { Header = Loc.Get("act_paste_action") };
+        miPaste.Click += DpMnuPasteAction_Click;
         var miChImg = new MenuItem { Header = Loc.Get("dp_change_image") };
         miChImg.Click += DpMnuChangeImage_Click;
         var miFolder = new MenuItem { Header = Loc.Get("dp_create_folder") };
@@ -2251,6 +2297,10 @@ public partial class MainWindow
         miBack.Click += DpMnuSetBack_Click;
         menu.Items.Add(miCfg);
         menu.Items.Add(miRa);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miCopy);
+        menu.Items.Add(miCut);
+        menu.Items.Add(miPaste);
         menu.Items.Add(new Separator());
         menu.Items.Add(miChImg);
         menu.Items.Add(new Separator());
@@ -2298,6 +2348,63 @@ public partial class MainWindow
         key.ImagePath = null;
         _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, null, null, null);
         DpClearKeyOnDevice(id, key.Index);
+    }
+
+    /// <summary>Copies this key's action (type+value only, no picture — see
+    /// <see cref="ActionClipboard"/>'s remarks) to the app-wide clipboard, for pasting onto
+    /// any other key of any device.</summary>
+    private void DpMnuCopyAction_Click(object sender, RoutedEventArgs e)
+    {
+        if (DpKeyFromMenu(sender) is not DisplayPadKey key) return;
+        ActionClipboard.Copy(key.ActionType, key.ActionValue);
+    }
+
+    /// <summary>Copy + remove — mirrors "Cut" everywhere else in Windows.</summary>
+    private void DpMnuCutAction_Click(object sender, RoutedEventArgs e)
+    {
+        if (!IsDpKeyBindingSectionActive) return;
+        if (DpKeyFromMenu(sender) is not DisplayPadKey key) return;
+        if (DpSelectedDeviceId() is not int id) return;
+        ActionClipboard.Copy(key.ActionType, key.ActionValue);
+        DpRemoveKeyAction(key, id);
+    }
+
+    /// <summary>Pastes the clipboard's action onto this key. Rejects (with an error, see
+    /// <see cref="ActionClipboard.ShowPasteUnsupportedError"/>) a DisplayPad-page action that
+    /// makes no sense here — can't actually happen for DisplayPad itself (it's the only host
+    /// with <c>SupportsPages</c>), but the SAME clipboard/paste code path is shared by every
+    /// device, so the check stays here rather than only on the non-DisplayPad targets. When
+    /// this key has no picture yet, generates the action's default icon (<see cref="ActionIconFallback"/>)
+    /// instead of leaving it blank — mirrors what a freshly-configured key gets via
+    /// <see cref="DpKeyConfigDialog"/>.</summary>
+    private void DpMnuPasteAction_Click(object sender, RoutedEventArgs e)
+    {
+        if (!IsDpKeyBindingSectionActive) return;
+        if (DpKeyFromMenu(sender) is not DisplayPadKey key) return;
+        if (DpSelectedDeviceId() is not int id) return;
+        if (!ActionClipboard.HasContent) return;
+        if (!ActionClipboard.CanPasteOn(_dpActionHost))
+        {
+            ActionClipboard.ShowPasteUnsupportedError(this);
+            return;
+        }
+
+        key.ActionType  = ActionClipboard.ActionType;
+        key.ActionValue = ActionClipboard.ActionValue;
+
+        if (!key.HasImage)
+        {
+            string dest = DpAutoIconCachePath(ActionClipboard.ActionType!, ActionClipboard.ActionValue ?? "");
+            if (ActionIconFallback.TryGenerate(ActionClipboard.ActionType, ActionClipboard.ActionValue, DpHidNative.IconSize, dest))
+            {
+                DpUploadAndPersist(id, DpCurrentProfile(), key, dest);
+                DpLog($"[ACT] key #{key.Index} <- pasted action (default icon generated)");
+                return;
+            }
+        }
+
+        _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, key.ImagePath, key.ActionType, key.ActionValue);
+        DpLog($"[ACT] key #{key.Index} <- pasted action");
     }
 
     private void DpMnuChangeImage_Click(object sender, RoutedEventArgs e)
@@ -2572,7 +2679,9 @@ public partial class MainWindow
             if (_dpAutoOffTimers.Remove(goneId, out var goneTimer)) goneTimer.Dispose();
             if (_dpScreensaverTimers.Remove(goneId, out var goneSs)) goneSs.Dispose();
             _dpScreensaverShowing.Remove(goneId);
+            _dpScreensaverWakeKey.Remove(goneId);
             _dpEmojiBrowser.Remove(goneId);
+            _dpDiscordRoom.Remove(goneId);
             _dpSavedBrightness.Remove(goneId);
         }
         var items = new List<DpDeviceItem>();
@@ -2679,6 +2788,7 @@ public partial class MainWindow
     {
         if (DpSelectedDeviceId() is not int id) return;
         DpEmojiBrowserAbandon(id);   // see DpRequestRepaint
+        DvpAbandon(id);
         int profile = DpCurrentProfile();
         int pageId = _currentDpPageId;
         int rotation = _dpRotation;
@@ -2849,8 +2959,12 @@ public partial class MainWindow
     private void DpRequestRepaint(int id)
     {
         // Any full repaint replaces whatever is on the panel, emoji browser included —
-        // drop it here rather than in each of the (many) callers.
+        // drop it here rather than in each of the (many) callers. The Discord voice page is
+        // put BACK once the repaint has run (see the continuation below): a call still owns
+        // the panel, and losing the page to an unrelated repaint would strand the user on a
+        // profile they can't see their call on.
         DpEmojiBrowserAbandon(id);
+        DvpAbandon(id);
         if (_dpRepaintBusy.GetValueOrDefault(id))
         {
             _dpRepaintPending.Add(id);
@@ -2875,6 +2989,8 @@ public partial class MainWindow
             _dpRepaintBusy[id] = false;
             if (_dpRepaintPending.Remove(id))
                 DpRequestRepaint(id);
+            else
+                DvpRestoreAfterRepaint(id);
         }), TaskScheduler.Default);
     }
 
@@ -2943,6 +3059,7 @@ public partial class MainWindow
     private void DpUploadPageForDevice(int id, int profile, int pageId, bool persistent, bool blankFirst = false)
     {
         DpEmojiBrowserAbandon(id);   // this page's icons take the panel back — see DpRequestRepaint
+        DvpAbandon(id);
         DpEnsureDefaultBackButton(id, profile, pageId);
         int rotation = _dpStore.GetRotation(id);
         var rows = _dpStore.LoadPage(id, profile, pageId);
@@ -3041,6 +3158,8 @@ public partial class MainWindow
             DpBgNavigateBack(devId);
         else if (row.ActionType == "dp_emojibrowser")
             DpEmojiBrowserOpen(devId);
+        else if (DvpIsVoicePageAction(row.ActionType, row.ActionValue))
+            DvpReopen(devId);
         else if (DpLiveTileService.IsLiveType(row.ActionType))
             DpLiveTileService.HandlePress(devId, idx, DpLogAsync);   // speed-test keys only; clock/monitor readouts ignore the press
         else
@@ -3137,9 +3256,26 @@ public partial class MainWindow
 
             DpGetAutoOffTimer(evtDevId).RegisterActivity();
             // Dismisses the screensaver (restoring this page's icons) if it is showing, and
-            // restarts its countdown. Deliberately BEFORE the action dispatch below, so the
-            // key that wakes the panel still does its job — just on top of the real icons.
+            // restarts its countdown.
+            bool wokeScreensaver = _dpScreensaverShowing.Contains(evtDevId);
             DpGetScreensaverTimer(evtDevId).RegisterActivity();
+
+            // The press that dismissed the screensaver only wakes the panel: the user was
+            // looking at an image, not at the icons, so running that key's binding would be
+            // an action they never aimed at. Its release is swallowed too, so the key-up does
+            // not leave a stale press-bounce/highlight behind.
+            if (wokeScreensaver)
+            {
+                if (pressed) _dpScreensaverWakeKey[evtDevId] = matrix;
+                return;
+            }
+            if (!pressed && _dpScreensaverWakeKey.TryGetValue(evtDevId, out int wakeMatrix)
+                && wakeMatrix == matrix)
+            {
+                _dpScreensaverWakeKey.Remove(evtDevId);
+                return;
+            }
+            if (pressed) _dpScreensaverWakeKey.Remove(evtDevId);
 
             // While the emoji browser owns this pad's panel (see
             // MainWindow.DisplayPad.EmojiBrowser.cs) it consumes every key itself: the
@@ -3151,6 +3287,16 @@ public partial class MainWindow
                 var embMap = DpSelectedDeviceId() == evtDevId ? _dpMatrixToIndex : DpDefaultMatrixToIndex;
                 if (embMap.TryGetValue(matrix, out int embIdx) && embIdx < 12)
                     DpEmojiBrowserKey(evtDevId, embIdx, pressed);
+                return;
+            }
+
+            // Same rule for the Discord voice page (MainWindow.DisplayPad.DiscordRoom.cs): while
+            // a call owns the panel, its own 12 keys are the only ones that can fire.
+            if (DpDiscordRoomActive(evtDevId))
+            {
+                var dvpMap = DpSelectedDeviceId() == evtDevId ? _dpMatrixToIndex : DpDefaultMatrixToIndex;
+                if (dvpMap.TryGetValue(matrix, out int dvpIdx) && dvpIdx < 12)
+                    DvpKey(evtDevId, dvpIdx, pressed);
                 return;
             }
 
@@ -3202,6 +3348,8 @@ public partial class MainWindow
                         DpLiveTileService.HandlePress(selId, hi, DpLogAsync);   // see DpHandleBackgroundKey
                     else if (action == "dp_emojibrowser")
                         DpEmojiBrowserOpen(selId);
+                    else if (DvpIsVoicePageAction(action, value))
+                        DvpReopen(selId);
                     else
                         _dpEngine?.Execute(action, value, hi);
                 }
@@ -3387,6 +3535,8 @@ public partial class MainWindow
     {
         _dpKeyLiveTimer?.Stop();
         _dpKeyLiveTimer = null;
+        _dvpReconnectTimer?.Stop();
+        _dvpReconnectTimer = null;
         DpGifAnimator.StopAll();
         DpFullscreenAnimator.StopAll();
         _dpEngine?.Dispose();

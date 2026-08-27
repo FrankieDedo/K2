@@ -2031,7 +2031,7 @@ public partial class MainWindow
         System.Collections.Generic.List<int> done;
         try
         {
-            done = RunHwBusy(busyMessage ?? Loc.Get("hw_busy_uploading_image"), () =>
+            done = RunHwBusy(busyMessage ?? Loc.Get("hw_busy_restoring_key_images"), () =>
             {
                 // A profile switch reapplies the lighting, which schedules a debounced
                 // SaveFlash ~500ms later — right on top of this sequence, leaving the
@@ -2120,7 +2120,7 @@ public partial class MainWindow
         System.Collections.Generic.List<(int Key, string Marker)> done;
         try
         {
-            done = RunHwBusy(Loc.Get("hw_busy_uploading_image"), () =>
+            done = RunHwBusy(Loc.Get("hw_busy_writing_key_bindings"), () =>
             {
                 _everest.FlushSaveFlash();    // see EvResetEmptyNdkSlots
                 EvSleepUntilNdkFlashCalm();   // small writes are dropped in the busy window too
@@ -2212,6 +2212,62 @@ public partial class MainWindow
         bool hasSelection = LvEvKeys.SelectedItem is not null;
         BtnEvConfig.IsEnabled = hasSelection;
         BtnEvRemove.IsEnabled = hasSelection;
+        BtnEvCopy.IsEnabled  = hasSelection;
+        BtnEvCut.IsEnabled   = hasSelection;
+        BtnEvPaste.IsEnabled = hasSelection;
+    }
+
+    /// <summary>Copies the selected row's action to the app-wide clipboard (see
+    /// <see cref="K2.Core.Services.ActionClipboard"/>) — works for both a regular key and an
+    /// NDK display-key entry (see <see cref="EverestKey.NdkIndex"/>), which this same list
+    /// mixes in (<see cref="EvAddNdkEntriesToKeyList"/>).</summary>
+    private void BtnEvCopy_Click(object sender, RoutedEventArgs e)
+    {
+        if (LvEvKeys.SelectedItem is not EverestKey key) return;
+        if (key.NdkIndex is int ndkIdx)
+            K2.Core.Services.ActionClipboard.Copy(_ndkActions[ndkIdx].Type, _ndkActions[ndkIdx].Value);
+        else
+            K2.Core.Services.ActionClipboard.Copy(key.ActionType, key.ActionValue);
+    }
+
+    private void BtnEvCut_Click(object sender, RoutedEventArgs e)
+    {
+        if (LvEvKeys.SelectedItem is not EverestKey key) return;
+        if (key.NdkIndex is int ndkIdx)
+        {
+            K2.Core.Services.ActionClipboard.Copy(_ndkActions[ndkIdx].Type, _ndkActions[ndkIdx].Value);
+            ClearNdkKey(ndkIdx);
+        }
+        else
+        {
+            K2.Core.Services.ActionClipboard.Copy(key.ActionType, key.ActionValue);
+            BtnEvRemove_Click(sender, e);
+        }
+    }
+
+    /// <summary>Pastes the clipboard's action onto the selected row — rejected (with an error)
+    /// for a DisplayPad-page action, which makes no sense on Everest Max (see
+    /// <see cref="K2.Core.Services.ActionClipboard.CanPasteOn"/>). An NDK entry gets its
+    /// default icon auto-generated when it has no picture yet (see
+    /// <see cref="NdkMnuPasteAction_Click"/>'s doc comment for the same behavior via the
+    /// display key's own context menu); a regular key never has a picture at all.</summary>
+    private void BtnEvPaste_Click(object sender, RoutedEventArgs e)
+    {
+        if (LvEvKeys.SelectedItem is not EverestKey key) return;
+        if (key.NdkIndex is int ndkIdx)
+        {
+            NdkPasteActionByIndex(ndkIdx);
+            return;
+        }
+        if (!K2.Core.Services.ActionClipboard.HasContent) return;
+        if (!K2.Core.Services.ActionClipboard.CanPasteOn(_evActionHost))
+        {
+            K2.Core.Services.ActionClipboard.ShowPasteUnsupportedError(this);
+            return;
+        }
+        key.ActionType  = K2.Core.Services.ActionClipboard.ActionType;
+        key.ActionValue = K2.Core.Services.ActionClipboard.ActionValue;
+        EvPersistOrDiscardKey(key);
     }
 
     private void BtnEvConfig_Click(object sender, RoutedEventArgs e)
@@ -2420,11 +2476,13 @@ public partial class MainWindow
             // ResolveEverestKeycapTextColor() legend unconditionally, ignoring the
             // "Translucent legends" setting and the key's live LED tint. Normally the
             // next LED-poll tick (OnEverestColorsUpdated) repaints the correct color
-            // within ~120ms, but that poll only runs while the RGB & Lighting section
+            // within ~60ms, but that poll only runs while the RGB & Lighting section
             // is active — outside it (or if this key's tick races the release write)
             // the wrong plain color is left stuck forever (user report 2026-08-17:
             // translucent legends turn white and stay white after a press).
-            ApplyKeycapAppearanceToAllKeys();
+            // Scoped to the released key only (2026-08-27): the previous whole-board
+            // repaint blanked the live LED preview on every keystroke.
+            RestoreEverestKeyAfterRelease(matrix);
     }
 
     /// <summary>Last (matrixId, moment) actually executed, for
@@ -2981,6 +3039,9 @@ public partial class MainWindow
         new(EverestService.Effect.Matrix2,   "Matrix 2"),
         new(EverestService.Effect.Off,       "Off"),
         new(EverestService.Effect.Custom,    "Custom"),
+        // Host-driven, not a firmware preset: the frames are computed by K2 and streamed
+        // down the Custom-mode channel — see MainWindow.EvSoftwareFx.cs.
+        new(EverestService.Effect.DiagonalWave, "Diagonal wave (experimental)"),
     };
 
     // ------------------------------------------------------------
@@ -2997,6 +3058,11 @@ public partial class MainWindow
 
     private static EvCaps CapsFor(EverestService.Effect e) => e switch
     {
+        // Host-driven animation: speed, brightness AND the full Single/Double/Rainbow color
+        // mode — the frames are computed on the PC, so the color mode costs nothing to
+        // support (unlike a firmware preset, which only offers what its effect table has).
+        // No direction: the wave's diagonal is fixed for now. See MainWindow.EvSoftwareFx.cs.
+        EverestService.Effect.DiagonalWave => new(2, true, true, System.Array.Empty<string>(), System.Array.Empty<int>()),
         EverestService.Effect.Static    => new(1, false, false, System.Array.Empty<string>(), System.Array.Empty<int>()),
         EverestService.Effect.Breath    => new(2, true,  true,  System.Array.Empty<string>(), System.Array.Empty<int>()),
         EverestService.Effect.Wave      => new(2, true,  true,  new[] { "Right", "Down", "Left", "Up" }, new[] { 0, 2, 4, 6 }),
@@ -3517,6 +3583,23 @@ public partial class MainWindow
             return;
         }
         var effect = pick.Eff;
+
+        // Any effect change stops a running host-driven animation first — it owns the
+        // Custom-mode zone and would keep overwriting whatever we send below.
+        StopEvSoftwareFx();
+        if (effect == EverestService.Effect.DiagonalWave)
+        {
+            // Color mode read straight off the same radios every firmware preset uses, so
+            // switching Single/Double/Rainbow (or picking a new color) restarts the animation
+            // through this very path — every one of those handlers ends in ApplyCurrentEffect.
+            StartEvSoftwareFx((int)SldEvSpeed.Value,
+                              (byte)Math.Clamp(brightnessOverride ?? (int)SldEvBrightness.Value, 0, 100),
+                              EvFxStyle.FromUi(RbEvRainbow.IsChecked == true,
+                                               RbEvColorDouble.IsChecked == true,
+                                               _evColor1, _evColor2));
+            return;
+        }
+
         if (effect == EverestService.Effect.Custom)
         {
             // Selecting Custom applies the remembered per-LED colors right away —

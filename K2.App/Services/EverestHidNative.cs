@@ -593,6 +593,41 @@ internal static class EverestHidNative
         }
 
         /// <summary>
+        /// Keycap-only fast path for HOST-DRIVEN ANIMATION (see MainWindow.EvSoftwareFx.cs):
+        /// the 7 positional page packets and nothing else — no zone switch, no Custom-mode
+        /// enable, no flash persist. Costs 7 acked packets per frame instead of the ~12 of a
+        /// full <see cref="SendKeycapColors"/> + <see cref="SendSideLedColors"/> apply.
+        /// <para>The caller MUST have run one full apply first (which leaves the device in
+        /// Custom mode on zone <see cref="EverestSideLedProtocol.ZoneKeycaps"/>) and must not
+        /// interleave writes to another zone — the firmware keeps the selected zone until
+        /// told otherwise, so re-sending the switch every frame only buys back a 7-packet
+        /// response burst we would then have to drain.</para>
+        ///
+        /// <para><b>Short ack timeout on purpose</b> (measured 2026-08-27): packets normally
+        /// echo in ~3ms, but an echo goes missing every few seconds — it correlates with the
+        /// user typing, i.e. real key reports competing on the same IN endpoint. At the
+        /// standard 1200ms that single miss cost more wall-clock than a whole second of
+        /// animation and dragged the average from ~45fps down to 3-15. A dropped animation
+        /// frame is worth nothing (the next frame overwrites it whole), so waiting long for
+        /// its echo is pointless: time out fast and carry on.</para>
+        /// </summary>
+        public bool SendKeycapColorsFast(int[] wireColors, byte brightness = 100,
+                                          int timeoutMs = FrameAckTimeoutMs)
+        {
+            bool ok = true;
+            foreach (var pkt in EverestSideLedProtocol.BuildKeycapPackets(wireColors, brightness))
+                ok &= SendCmdAcked(pkt, timeoutMs);
+            return ok;
+        }
+
+        /// <summary>Ack timeout for animation frames — see <see cref="SendKeycapColorsFast"/>.
+        /// 30ms is still 10x the ~3ms typical echo, but keeps a missed one inside the 33ms
+        /// frame budget: at the first value tried (100ms) a miss produced a ~130ms frame,
+        /// about once a second — small enough not to show in the average, big enough to be
+        /// the stutter the user could see (measured 2026-08-27).</summary>
+        private const int FrameAckTimeoutMs = 30;
+
+        /// <summary>
         /// Sends the <c>11 01 00 zone 02 02</c> zone switch and consumes its ENTIRE
         /// response burst. The command doesn't ack with a single echo: the device dumps
         /// the zone's current custom colors as one page packet per page

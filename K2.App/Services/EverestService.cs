@@ -599,6 +599,13 @@ public sealed class EverestService : IDisposable
         /// Lighting panel instead (a separate raw-HID apply path, see
         /// MainWindow.CustomLighting.cs's use of ApplyEverestCustomLighting).</summary>
         Custom    = (byte)EverestSdkNative.EffectIndex.Custom,
+        /// <summary>"Diagonal wave (experimental)" — K2-only HOST-DRIVEN animation, the frames
+        /// are computed on the PC rather than run by the firmware (see
+        /// MainWindow.EvSoftwareFx.cs). NOT a firmware index: like <see cref="Custom"/> it
+        /// never reaches <see cref="SetEffect"/>, it is streamed via
+        /// <see cref="PushCustomKeycapFrame"/>. The value is unchanged from when this was a
+        /// debug-only "SW Test" entry, so profiles that stored it keep working.</summary>
+        DiagonalWave = 201,
     }
 
     /// <summary>
@@ -670,6 +677,7 @@ public sealed class EverestService : IDisposable
                           int directionByte = -1,
                           int colorCountOverride = -1)
     {
+        if (SignalRgbGuard.BlockLighting("Everest.SetEffect")) return true;
       lock (_sdkLock)
       {
         // 2026-05-29 — HYPOTHESIS TEST: AP mode was WRONG. AP mode (= Software
@@ -850,6 +858,7 @@ public sealed class EverestService : IDisposable
     /// </summary>
     public void FlushSaveFlash()
     {
+        if (SignalRgbGuard.BlockLighting("Everest.FlushSaveFlash")) return;
         var cts = _saveFlashCts;
         if (cts is null) return;
         cts.Cancel();                    // stop the pending 500ms delay from firing later
@@ -868,6 +877,7 @@ public sealed class EverestService : IDisposable
 
     private void DebouncedSaveFlash(int effMenuIndex)
     {
+        if (SignalRgbGuard.BlockLighting("Everest.DebouncedSaveFlash")) return;
         _saveFlashCts?.Cancel();
         var cts = new CancellationTokenSource();
         _saveFlashCts = cts;
@@ -935,6 +945,7 @@ public sealed class EverestService : IDisposable
     /// <summary>Resets the effects to the firmware default.</summary>
     public bool ResetEffects()
     {
+        if (SignalRgbGuard.BlockLighting("Everest.ResetEffects")) return true;
         try
         {
             bool ok = EverestSdkNative.ResetEffects();
@@ -1109,6 +1120,7 @@ public sealed class EverestService : IDisposable
     /// </summary>
     public bool SetSyncEffect(bool sync, int brightness)
     {
+        if (SignalRgbGuard.BlockLighting("Everest.SetSyncEffect")) return true;
         lock (_sdkLock)
         try
         {
@@ -1135,6 +1147,7 @@ public sealed class EverestService : IDisposable
     /// </summary>
     public bool SaveFlash(int effMenuIndex = 6)
     {
+        if (SignalRgbGuard.BlockLighting("Everest.SaveFlash")) return true;
         try
         {
             bool ok = EverestSdkNative.SaveFlash(effMenuIndex);
@@ -1203,6 +1216,7 @@ public sealed class EverestService : IDisposable
     /// <summary>Turns the backlight on/off ("main" brightness).</summary>
     public bool SetBacklight(bool on)
     {
+        if (SignalRgbGuard.BlockLighting("Everest.SetBacklight")) return true;
         lock (_sdkLock)
         try
         {
@@ -1387,7 +1401,7 @@ public sealed class EverestService : IDisposable
         string payload;
         if (string.Equals(actionType, "exec", StringComparison.Ordinal))
         {
-            type = 0x01; payload = actionValue ?? "";
+            type = 0x01; payload = K2.Core.ExecActionPayload.PathOf(actionValue);
         }
         else if (string.Equals(actionType, "url", StringComparison.Ordinal)
                  && actionValue?.StartsWith("http", StringComparison.OrdinalIgnoreCase) == true)
@@ -1529,6 +1543,7 @@ public sealed class EverestService : IDisposable
     /// </summary>
     internal bool SetBarEffect(EverestSdkNative.BarData data)
     {
+        if (SignalRgbGuard.BlockLighting("Everest.SetBarEffect")) return true;
         lock (_sdkLock)
         try
         {
@@ -1726,6 +1741,7 @@ public sealed class EverestService : IDisposable
     /// </summary>
     internal bool SetCustomEffect(int profile, int area, EverestSdkNative.CustomEffect data, bool save = true)
     {
+        if (SignalRgbGuard.BlockLighting("Everest.SetCustomEffect")) return true;
         lock (_sdkLock)
         try
         {
@@ -1752,6 +1768,7 @@ public sealed class EverestService : IDisposable
     /// </summary>
     public bool SetSideLedColors(int[] wireColors, byte brightness = 0xFF, bool persist = true)
     {
+        if (SignalRgbGuard.BlockLighting("Everest.SetSideLedColors")) return true;
         if (_nativePad is null) return false;
         try
         {
@@ -1793,6 +1810,7 @@ public sealed class EverestService : IDisposable
                                             byte[]? ledEffectCode = null,
                                             IReadOnlyList<byte[]>? effectParamPackets = null)
     {
+        if (SignalRgbGuard.BlockLighting("Everest.ApplyEverestCustomLighting")) return true;
         if (_nativePad is null) return false;
         try
         {
@@ -1821,6 +1839,75 @@ public sealed class EverestService : IDisposable
         catch (Exception ex)
         {
             App.WriteLog("[Everest.ApplyEverestCustomLighting] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Puts the keyboard into Custom mode and paints one setup frame, in preparation for a
+    /// stream of <see cref="PushCustomKeycapFrame"/> calls (host-driven animation, see
+    /// MainWindow.EvSoftwareFx.cs). Same opening sequence as
+    /// <see cref="ApplyEverestCustomLighting"/> with <c>persist:false</c> — profile/menu
+    /// select, Custom enable, keycap zone switch + pages — and then stays on the keycap zone
+    /// so the animation loop can skip the per-frame zone switch.
+    ///
+    /// <para><b>The side ring is optional and its failure is NOT fatal</b> (2026-08-27, first
+    /// hardware run): <c>SwitchZoneToCustom(0x05)</c> timed out on every attempt — 1.2s each,
+    /// and it took the whole apply down with it, so the animation refused to start even though
+    /// the keycap half had gone through perfectly in 18ms. The ring plays no part in the
+    /// animation, so by default it is left alone entirely rather than paid for at every start.
+    /// Passing a non-null <paramref name="sideWireColors"/> paints it once, best-effort.</para>
+    /// </summary>
+    /// <param name="keycapWireColors">133-slot keycap wire array (0xRRGGBB), see
+    /// <see cref="EverestSideLedProtocol.KeycapWireCount"/>.</param>
+    /// <param name="sideWireColors">45-slot side-ring wire array, painted once — or null
+    /// (default) to leave the ring showing whatever it already had.</param>
+    public bool BeginCustomFrameStream(int[] keycapWireColors, int[]? sideWireColors = null,
+                                        byte brightness = 100)
+    {
+        if (_nativePad is null) return false;
+        if (SignalRgbGuard.BlockLighting("Everest.BeginCustomFrameStream")) return false;
+        try
+        {
+            _cachedMenuIndex = MenuIndexFor(Effect.Custom);
+            SwitchProfile(_cachedProfile, _cachedMenuIndex);
+            bool ok = _nativePad.EnableCustomLighting(brightness);
+            ok &= _nativePad.SendKeycapColors(keycapWireColors, brightness);
+            if (sideWireColors is not null && !_nativePad.SendSideLedColors(sideWireColors))
+                App.WriteLog("[Everest.BeginCustomFrameStream] side ring paint failed — " +
+                             "continuing with the keycap animation only");
+            App.WriteLog($"[Everest.BeginCustomFrameStream] bright={brightness} -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.BeginCustomFrameStream] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Pushes ONE animation frame of keycap colors — 7 acked HID packets, no zone switch and
+    /// <b>no SaveFlash</b> (writing flash at frame rate would both wear it out and leave the
+    /// keyboard unresponsive for ~500ms at a time, see <see cref="FlushSaveFlash"/>).
+    /// Requires a preceding <see cref="BeginCustomFrameStream"/>. Returns false if the frame
+    /// could not be written, which the caller should treat as "stop the animation".
+    /// </summary>
+    public bool PushCustomKeycapFrame(int[] keycapWireColors, byte brightness = 100)
+    {
+        if (_nativePad is null) return false;
+        // Hot path (30 writes/s): read the cached flag directly instead of BlockLighting,
+        // which logs a line per blocked call — same reasoning as LedColorPoller. Reported as
+        // success so the caller's failure counter doesn't trip; the loop has its own yield
+        // handling and pauses properly (see MainWindow.EvSoftwareFx.cs).
+        if (SignalRgbGuard.LightingYielded) return true;
+        try
+        {
+            return _nativePad.SendKeycapColorsFast(keycapWireColors, brightness);
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.PushCustomKeycapFrame] threw: " + ex);
             return false;
         }
     }

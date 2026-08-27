@@ -14,9 +14,10 @@
 //     OnSourceInitialized -> AutoOpenDrivers) then immediately hides it to the tray,
 //     instead of leaving it on screen.
 //
-// The tray icon is created once (constructor) so "close to tray" always has it
-// ready; it is only made Visible while the window itself is hidden, and disposed
-// in OnWindowClosed alongside the other per-process resources.
+// The tray icon is created once (constructor) and stays Visible for the whole
+// lifetime of the process — window shown, hidden, maximized or full screen alike,
+// so it never disappears out from under the user. It is disposed in OnWindowClosed
+// alongside the other per-process resources.
 //
 // It is a Services.TrayIconNative, NOT System.Windows.Forms.NotifyIcon: the latter
 // registers the icon under an identity Windows recycles across processes, which let
@@ -46,6 +47,7 @@ public partial class MainWindow
         var icon = System.Drawing.Icon.ExtractAssociatedIcon(System.Reflection.Assembly.GetExecutingAssembly().Location);
         _trayIcon = new TrayIconNative { Text = "K2" };
         if (icon is not null) _trayIcon.Icon = icon;
+        _trayIcon.Visible = true;
         _trayIcon.DoubleClick += (_, _) => RestoreFromTray();
 
         var menu = new ContextMenuStrip();
@@ -68,7 +70,6 @@ public partial class MainWindow
     /// StartMinimizedToTray below).</summary>
     private void HideToTray()
     {
-        if (_trayIcon is not null) _trayIcon.Visible = true;
         ShowInTaskbar = false;
         Hide();
     }
@@ -79,7 +80,6 @@ public partial class MainWindow
         Show();
         WindowState = WindowState.Normal;
         Activate();
-        if (_trayIcon is not null) _trayIcon.Visible = false;
     }
 
     private void ExitFromTray()

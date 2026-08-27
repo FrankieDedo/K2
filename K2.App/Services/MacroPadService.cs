@@ -393,6 +393,7 @@ public sealed class MacroPadService : IDisposable
                           int directionByte = -1,
                           int profile = 1)
     {
+        if (SignalRgbGuard.BlockLighting("MacroPad.SetEffect")) return true;
         EnsureSlotInitialized(id);
 
         MacroPadSdkNative.FWColor C((byte, byte, byte) c) => new(c.Item1, c.Item2, c.Item3);
@@ -521,6 +522,7 @@ public sealed class MacroPadService : IDisposable
     /// <summary>Enters/refreshes Custom (per-key) mode at the given brightness (0-100).</summary>
     public bool SwitchToCustomizeEffect(uint id, int brightness)
     {
+        if (SignalRgbGuard.BlockLighting("MacroPad.SwitchToCustomizeEffect")) return true;
         try
         {
             bool ok = MacroPadSdkNative.SwitchToCustomizeEffect(brightness, id);
@@ -543,6 +545,7 @@ public sealed class MacroPadService : IDisposable
     /// </summary>
     public bool SetCustomStaticColors(uint id, IReadOnlyList<(byte r, byte g, byte b)> colors)
     {
+        if (SignalRgbGuard.BlockLighting("MacroPad.SetCustomStaticColors")) return true;
         var data = new MacroPadSdkNative.CustomStatic
         {
             color = new MacroPadSdkNative.FWColor[MacroPadSdkNative.FW_NUM_CUSTOM_KEY]
@@ -574,6 +577,7 @@ public sealed class MacroPadService : IDisposable
     /// </summary>
     public bool SetCustomEffectTable(uint id, IReadOnlyList<byte> effIndexPerKey)
     {
+        if (SignalRgbGuard.BlockLighting("MacroPad.SetCustomEffectTable")) return true;
         var table = new MacroPadSdkNative.CustomTable
         {
             effValue = new byte[MacroPadSdkNative.FW_NUM_CUSTOM_KEY]
@@ -609,6 +613,7 @@ public sealed class MacroPadService : IDisposable
                                          int brightness, bool randomColor,
                                          byte speedByte, int directionByte)
     {
+        if (SignalRgbGuard.BlockLighting("MacroPad.ApplyCustomDynamicEffect")) return true;
         MacroPadSdkNative.FWColor C((byte, byte, byte) c) => new(c.Item1, c.Item2, c.Item3);
         var bright = QuantizeBrightness(brightness);
 
@@ -668,6 +673,7 @@ public sealed class MacroPadService : IDisposable
     /// <summary>Resets the slot's effects to the firmware default.</summary>
     public bool ResetEffects(uint id)
     {
+        if (SignalRgbGuard.BlockLighting("MacroPad.ResetEffects")) return true;
         try
         {
             bool ok = MacroPadSdkNative.ResetEffects(id);
@@ -715,6 +721,7 @@ public sealed class MacroPadService : IDisposable
     /// <summary>Saves the current state to flash. Profile 1..5 or 6 = ALL_PROFILE.</summary>
     public bool SaveFlash(uint id, int profile = 6)
     {
+        if (SignalRgbGuard.BlockLighting("MacroPad.SaveFlash")) return true;
         try
         {
             bool ok = MacroPadSdkNative.SaveFlash(profile, id);
@@ -731,6 +738,7 @@ public sealed class MacroPadService : IDisposable
     /// <summary>Turns the slot backlight on/off ("main" brightness).</summary>
     public bool SetBacklight(uint id, bool on)
     {
+        if (SignalRgbGuard.BlockLighting("MacroPad.SetBacklight")) return true;
         try
         {
             bool ok = MacroPadSdkNative.SetMainBrightness(on, id);

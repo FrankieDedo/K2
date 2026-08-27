@@ -240,6 +240,9 @@
   <string name="py_timeout">超时时间 (秒，0 = 无限制):</string>
   <string name="py_hint">在脚本中使用 'import k2' 调用 K2 函数 (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...)。stdout/stderr 输出到 K2 日志。</string>
   <string name="exec_path_label">Executable / file path:</string>
+  <string name="exec_batch_mode_label">批处理脚本：</string>
+  <string name="exec_batch_hidden">后台运行（无窗口）</string>
+  <string name="exec_batch_console">在可见终端中运行</string>
   <string name="folder_path_label">Folder path:</string>
   <string name="recent_paths">Recent:</string>
   <string name="remove_recent">Remove from recent</string>
@@ -303,6 +306,9 @@
        常规设置标签页
        ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_settings">设置</string>
+  <string name="settings_extra_title">其他</string>
+  <string name="settings_extra_3dprinting">3D 打印</string>
+  <string name="settings_extra_other_projects">其他项目</string>
   <string name="tab_macro">宏</string>
   <string name="settings_debug_mode">调试模式</string>
   <string name="settings_debug_mode_hint">在每台设备上启用调试工具（打开/关闭驱动程序、AP 控制、事件日志）。</string>
@@ -327,6 +333,26 @@
   <string name="settings_export_log_btn">导出日志…</string>
   <string name="settings_export_log_hint">将当前的 K2.App 日志（以及崩溃日志，如果有）复制到你选择的文件夹 — 便于在报告问题时分享。</string>
   <string name="settings_export_log_done">日志已导出到 {0}</string>
+  <!-- SignalRGB coexistence -->
+  <string name="settings_signalrgb_group">SignalRGB</string>
+  <string name="settings_signalrgb_hint">SignalRGB 自带 Mountain 设备插件，它们使用的正是 K2 驱动 LED 所用的同一批 USB 接口。两个程序同时运行时，两路灯光指令会互相交错，导致 LED 闪烁。请在此选择由谁掌管灯光——K2 的其他功能（按键、宏、显示按键、Media Dock、配置文件）无论怎么选都照常工作。</string>
+  <string name="settings_signalrgb_mode_off">忽略 SignalRGB</string>
+  <string name="settings_signalrgb_mode_off_hint">K2 始终驱动灯光。仅当你从不在 Mountain 设备上使用 SignalRGB，或想亲眼看看冲突表现时才选择此项。</string>
+  <string name="settings_signalrgb_mode_yield">把灯光交给 SignalRGB（推荐）</string>
+  <string name="settings_signalrgb_mode_yield_hint">SignalRGB 运行期间，K2 不再向设备写入灯效、单键颜色和亮度。SignalRGB 一关闭，K2 就会重新应用自己的灯光。灯光以外的功能全程照常工作。</string>
+  <string name="settings_signalrgb_mode_stop">K2 启动时关闭 SignalRGB</string>
+  <string name="settings_signalrgb_mode_stop_hint">K2 每次启动都会关闭 SignalRGB（引擎及其启动器），与它对 Base Camp 的处理方式相同。SignalRGB 的 Windows 服务不受影响——它并不驱动 LED。</string>
+  <string name="settings_signalrgb_status_installed">检测到 SignalRGB：{0}</string>
+  <string name="settings_signalrgb_status_missing">此电脑上似乎未安装 SignalRGB。</string>
+  <string name="settings_signalrgb_status_running">SignalRGB 正在运行——K2 当前未写入灯光。</string>
+  <string name="settings_signalrgb_plugins">用于 SignalRGB 的 K2 插件</string>
+  <string name="settings_signalrgb_plugins_hint">将 K2 自带的 Mountain 设备插件安装到你的 SignalRGB 用户插件文件夹（文档\WhirlwindFX\Plugins）。它们会用源自 K2 逆向工程的布局和 LED 映射覆盖随附插件。安装后请重启 SignalRGB。</string>
+  <string name="settings_signalrgb_install_plugins">安装 K2 插件</string>
+  <string name="settings_signalrgb_remove_plugins">移除 K2 插件</string>
+  <string name="settings_signalrgb_open_plugin_folder">打开插件文件夹</string>
+  <string name="settings_signalrgb_plugins_installed">已安装 {0} 个插件。重启 SignalRGB 以加载它们。</string>
+  <string name="settings_signalrgb_plugins_removed">已移除 {0} 个插件。重启 SignalRGB 以恢复随附插件。</string>
+  <string name="settings_signalrgb_plugins_none">未找到可安装的插件文件。</string>
   <!-- Base Camp 导入提示 -->
   <string name="settings_bc_import_group">Base Camp 导入</string>
   <string name="settings_bc_import_btn">从 Base Camp 导入…</string>
@@ -364,6 +390,7 @@
   <string name="restore_defaults_app">恢复所有默认设置</string>
   <string name="restore_defaults_app_hint">重置以上所有应用偏好设置，并清除每台设备（Everest Max、Everest 60、Makalu、MacroPad、DisplayPad）已保存的所有配置文件、按键绑定、灯光设置和宏。此操作无法撤销。</string>
   <string name="restore_defaults_app_confirm">此操作将重置所有应用偏好设置，并清除每台设备（Everest Max、Everest 60、Makalu、MacroPad、DisplayPad）已保存的所有配置文件、按键绑定、灯光设置和宏。此操作无法撤销。是否继续？</string>
+  <string name="settings_acknowledgements_group">致谢</string>
   <string name="restore_defaults_app_done">所有应用设置和设备配置文件均已恢复为默认设置。</string>
   <string name="settings_general">常规选项</string>
   <string name="settings_close_to_tray">关闭时最小化到系统托盘，而不是退出</string>
@@ -384,6 +411,8 @@
   <string name="dp_devicemap_none_connected">当前没有连接任何 DisplayPad — 请连接要重新映射的面板，然后重新打开此窗口。</string>
   <string name="dp_devicemap_duplicate_error">两个面板不能使用相同的板编号。请为每个面板指定不同的编号。</string>
   <string name="dp_devicemap_invalid_number">板编号必须是正整数。</string>
+  <string name="settings_language">语言</string>
+  <string name="settings_language_hint">更改应用语言。应用将重启以应用更改。</string>
   <string name="settings_font_family">字体</string>
   <string name="settings_font_family_hint">立即更改整个应用的界面字体，无需重启。</string>
   <string name="tray_show">显示 K2</string>
@@ -405,6 +434,9 @@
   <string name="hw_busy_importing_profile">正在导入配置文件，请稍候…</string>
   <string name="hw_busy_importing_profiles">正在导入配置文件，请稍候…</string>
   <string name="hw_busy_restoring_defaults">正在恢复默认设置，请稍候…</string>
+  <string name="hw_busy_restoring_key_images">正在恢复显示按键的默认图像，请稍候…</string>
+  <string name="hw_busy_clearing_image">正在清除显示按键上的图像，请稍候…</string>
+  <string name="hw_busy_writing_key_bindings">正在将显示按键的操作写入键盘，请稍候…</string>
   <string name="ev_crash_recovering">驱动程序已崩溃 — 正在尝试 3 秒后自动恢复…</string>
   <string name="ev_crash_recovered">驱动程序已恢复 — LED 预览已重新启动。</string>
   <string name="ev_crash_recovery_failed">驱动程序恢复失败 — 请重启 K2.App。</string>
@@ -722,6 +754,11 @@
   <string name="dp_action_section">动作</string>
   <string name="dp_configure_action">配置动作…</string>
   <string name="dp_remove_action">删除动作</string>
+  <string name="act_copy_action">复制动作</string>
+  <string name="act_cut_action">剪切动作</string>
+  <string name="act_paste_action">粘贴动作</string>
+  <string name="paste_unsupported_title">无法粘贴</string>
+  <string name="paste_unsupported_message">此设备不支持该动作。</string>
   <string name="dp_change_image">更改图片…</string>
   <string name="dp_remove_image">删除图片</string>
   <string name="dp_create_folder">创建文件夹页面…</string>
@@ -930,6 +967,19 @@
   <string name="discord_key_mic_off">麦克风关闭</string>
   <string name="discord_key_audio_on">音频开启</string>
   <string name="discord_key_audio_off">音频关闭</string>
+  <string name="dp_dedicated_profiles">专用配置文件</string>
+  <string name="dedicated_spotify">Spotify — 正在播放</string>
+  <string name="dedicated_configure">配置…</string>
+  <string name="dedicated_no_config">此专用配置文件没有可配置的内容。</string>
+  <string name="dedicated_discord">Discord — 语音通话</string>
+  <string name="discord_cmd_voice_page">显示语音页面（DisplayPad）</string>
+  <string name="dvp_ptt">按键说话</string>
+  <string name="dvp_webcam">摄像头</string>
+  <string name="dvp_disconnect">断开连接</string>
+  <string name="discord_webcam_hotkey_label">摄像头快捷键：</string>
+  <string name="discord_webcam_hotkey_tip">Discord 没有用于摄像头的 RPC 命令：点击“录制”并输入组合键，然后在 Discord &gt; 设置 &gt; 快捷键 &gt; 切换摄像头 中指定相同的组合键。</string>
+  <string name="hotkey_record">录制</string>
+  <string name="hotkey_recording">请按下按键…（按 Esc 取消）</string>
   <string name="act_emojibrowser">表情符号浏览器</string>
   <string name="emb_grp_smileys">表情</string>
   <string name="emb_grp_people">人物</string>

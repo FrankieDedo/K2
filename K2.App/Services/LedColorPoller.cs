@@ -120,6 +120,17 @@ internal sealed class LedColorPoller : IDisposable
             return;
         }
 
+        // SignalRGB owns the lighting right now: skip the whole tick. This poll exists
+        // ONLY to feed the on-screen key preview, which is meaningless while another
+        // program is painting the LEDs — and it is not free traffic. Each tick is a
+        // GetColorData round-trip on the SAME firmware/interface SignalRGB is streaming
+        // to (Everest Max MI_03), 16 times a second at the 60ms interval, serialized
+        // against SignalRGB's own 7-10 writes per frame. That contention is what shows up
+        // as stuttering in SignalRGB's color transitions. The timer keeps running (the
+        // tick is a cheap early-out) so the preview resumes on its own the moment
+        // SignalRGB closes, with no start/stop bookkeeping on the state transition.
+        if (SignalRgbGuard.LightingYielded) return;
+
         // LED-poll diagnostic logging: noisy (called every 120ms), so it only
         // fires when the user has selected "Verbose" in General Settings.
         bool diag = AppSettings.LogLevel == K2LogLevel.Verbose && _diagCount < 30;

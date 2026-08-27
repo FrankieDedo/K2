@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -53,6 +54,27 @@ internal static class SpeedTestService
     /// stale number.</summary>
     public static bool IsRunning => Volatile.Read(ref _running) != 0;
 
+    /// <summary>Which leg of the run is currently in flight — lets each <c>dp_speedtest</c> key
+    /// (ping/download/upload are separate keys, each showing its own metric) draw a progress
+    /// ring for ITS OWN leg only, instead of all three ticking together.</summary>
+    public enum Phase { Idle, Ping, Download, Upload }
+
+    public static Phase CurrentPhase { get; private set; } = Phase.Idle;
+
+    /// <summary>0..1 progress of each leg within the CURRENT run: 0 before it starts, 1 once it
+    /// finishes, holds at 1 for legs already done while a later leg is still running. Reset to 0
+    /// at the start of every run.</summary>
+    public static double PingProgress { get; private set; }
+    public static double DownloadProgress { get; private set; }
+    public static double UploadProgress { get; private set; }
+
+    // Progress notifications are throttled: a download/upload leg fires them once per read
+    // chunk (hundreds of times over 25 MB), and each one triggers a DisplayPad tile re-render +
+    // USB write — see DpLiveTileService. Redrawing the ring 60+ times a run would be wasted work
+    // (and USB traffic) the eye can't tell apart from redrawing it 5 times a second.
+    private static readonly TimeSpan ProgressNotifyInterval = TimeSpan.FromMilliseconds(200);
+    private static readonly Stopwatch ProgressClock = new();
+
     /// <summary>Last results, in Mbit/s (down/up) and milliseconds (ping). Null until the first
     /// successful run — the tile then reads "—" rather than a made-up zero. A run that fails
     /// (no connectivity, endpoint unreachable) leaves the previous values alone and sets
@@ -81,6 +103,9 @@ internal static class SpeedTestService
     public static void Start(Action<string>? log = null)
     {
         if (Interlocked.CompareExchange(ref _running, 1, 0) != 0) return;
+        CurrentPhase = Phase.Ping;
+        PingProgress = DownloadProgress = UploadProgress = 0;
+        ProgressClock.Restart();
         Notify();
 
         _ = Task.Run(async () =>
@@ -89,10 +114,15 @@ internal static class SpeedTestService
             {
                 LastError = null;
                 LastPingMs = await MeasurePingAsync().ConfigureAwait(false);
+                PingProgress = 1;
+                CurrentPhase = Phase.Download;
                 Notify();
                 LastDownMbps = await MeasureDownloadAsync().ConfigureAwait(false);
+                DownloadProgress = 1;
+                CurrentPhase = Phase.Upload;
                 Notify();
                 LastUpMbps = await MeasureUploadAsync().ConfigureAwait(false);
+                UploadProgress = 1;
                 LastRunAt = DateTime.Now;
                 log?.Invoke($"[SPEEDTEST] ping={LastPingMs:F0}ms down={LastDownMbps:F1}Mbps up={LastUpMbps:F1}Mbps");
             }
@@ -104,6 +134,7 @@ internal static class SpeedTestService
             finally
             {
                 Interlocked.Exchange(ref _running, 0);
+                CurrentPhase = Phase.Idle;
                 Notify();
             }
         });
@@ -112,6 +143,16 @@ internal static class SpeedTestService
     private static void Notify()
     {
         try { Changed?.Invoke(); } catch { /* a subscriber's repaint must never kill the run */ }
+    }
+
+    /// <summary>Same as <see cref="Notify"/> but rate-limited to <see cref="ProgressNotifyInterval"/>
+    /// — for the many small progress updates within a download/upload leg, not the few
+    /// phase-boundary events (those always call <see cref="Notify"/> directly).</summary>
+    private static void NotifyProgress()
+    {
+        if (ProgressClock.Elapsed < ProgressNotifyInterval) return;
+        ProgressClock.Restart();
+        Notify();
     }
 
     /// <summary>Round-trip time to the endpoint: the best of four zero-byte requests, which
@@ -127,6 +168,8 @@ internal static class SpeedTestService
             resp.EnsureSuccessStatusCode();
             sw.Stop();
             if (i > 0) best = Math.Min(best, sw.Elapsed.TotalMilliseconds);   // skip the handshake sample
+            PingProgress = (i + 1) / 4d;
+            Notify();
         }
         return best == double.MaxValue ? 0 : best;
     }
@@ -145,7 +188,11 @@ internal static class SpeedTestService
         using var stream = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false);
         int read;
         while ((read = await stream.ReadAsync(buffer).ConfigureAwait(false)) > 0)
+        {
             total += read;
+            DownloadProgress = Math.Clamp((double)total / DownloadBytes, 0, 1);
+            NotifyProgress();
+        }
         sw.Stop();
 
         return Mbps(total, sw.Elapsed);
@@ -154,7 +201,11 @@ internal static class SpeedTestService
     private static async Task<double> MeasureUploadAsync()
     {
         var payload = new byte[UploadBytes];
-        using var content = new ByteArrayContent(payload);
+        using var content = new ProgressStreamContent(payload, sent =>
+        {
+            UploadProgress = Math.Clamp((double)sent / UploadBytes, 0, 1);
+            NotifyProgress();
+        });
         var sw = Stopwatch.StartNew();
         using var resp = await Http.PostAsync("https://speed.cloudflare.com/__up", content).ConfigureAwait(false);
         resp.EnsureSuccessStatusCode();
@@ -164,4 +215,39 @@ internal static class SpeedTestService
 
     private static double Mbps(long bytes, TimeSpan elapsed) =>
         elapsed.TotalSeconds <= 0 ? 0 : bytes * 8d / elapsed.TotalSeconds / 1_000_000d;
+
+    /// <summary>A <see cref="ByteArrayContent"/> that reports cumulative bytes written as it
+    /// serializes — <see cref="HttpClient"/> gives no built-in upload-progress hook, so the only
+    /// way to see it is to own the write loop ourselves.</summary>
+    private sealed class ProgressStreamContent : HttpContent
+    {
+        private readonly byte[] _payload;
+        private readonly Action<long> _onProgress;
+
+        public ProgressStreamContent(byte[] payload, Action<long> onProgress)
+        {
+            _payload = payload;
+            _onProgress = onProgress;
+            Headers.ContentLength = payload.Length;
+        }
+
+        protected override async Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context)
+        {
+            const int chunk = 64 * 1024;
+            long sent = 0;
+            while (sent < _payload.Length)
+            {
+                int n = (int)Math.Min(chunk, _payload.Length - sent);
+                await stream.WriteAsync(_payload.AsMemory((int)sent, n)).ConfigureAwait(false);
+                sent += n;
+                _onProgress(sent);
+            }
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = _payload.Length;
+            return true;
+        }
+    }
 }

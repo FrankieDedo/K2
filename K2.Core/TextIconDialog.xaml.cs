@@ -368,12 +368,17 @@ public partial class TextIconDialog : Window
 
     private void BtnBgColor_Click(object sender, RoutedEventArgs e)
     {
+        // Black is the background default everywhere in the icon pipeline, so the picker must
+        // open ON black (#000000) rather than on the ColorDialog's own white/unset state when
+        // the icon carries no colour of its own; CustomColors seeds the custom slot with it too,
+        // so the selected swatch is visibly black as soon as the dialog opens.
         using var dlg = new System.Windows.Forms.ColorDialog
         {
             FullOpen = true,
             AnyColor = true,
             SolidColorOnly = true,
             Color = _bgColor,
+            CustomColors = new[] { System.Drawing.ColorTranslator.ToOle(_bgColor) },
         };
         if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 

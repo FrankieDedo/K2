@@ -90,6 +90,17 @@
     </Content>
   </ItemGroup>
 
+  <!-- Testo dei ringraziamenti mostrato in fondo al tab Settings: vive in
+       THANKS.md accanto a K2.sln (non dentro K2.App) cosi' resta visibile/
+       editabile insieme agli altri file "meta" del progetto; Link lo porta
+       comunque accanto a K2.App.exe a build/publish/install, letto a runtime
+       da MainWindow.Settings.cs. -->
+  <ItemGroup>
+    <Content Include="..\THANKS.md" Link="THANKS.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <!-- Immagini dispositivi (sfondo tab + overlay tasti) -->
   <ItemGroup>
     <Resource Include="Assets\K2_logo.png" />
@@ -140,6 +151,14 @@
        enumerate the folder at runtime instead of listing ~530 files by hand here. -->
   <ItemGroup>
     <Content Include="Assets\IconGallery\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!-- SignalRGB plugins K2 ships for the Mountain devices. Copied next to the exe and
+       installed on demand into Documents\WhirlwindFX\Plugins - see Services\SignalRgbGuard.cs. -->
+  <ItemGroup>
+    <Content Include="SignalRGB\Plugins\**\*.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

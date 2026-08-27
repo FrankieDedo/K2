@@ -240,6 +240,9 @@
   <string name="py_timeout">タイムアウト (秒、0 = なし):</string>
   <string name="py_hint">スクリプトで 'import k2' を使って K2 関数を呼び出せます (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...)。stdout/stderr は K2 ログに出力されます。</string>
   <string name="exec_path_label">Executable / file path:</string>
+  <string name="exec_batch_mode_label">バッチファイル:</string>
+  <string name="exec_batch_hidden">非表示で実行（ウィンドウなし）</string>
+  <string name="exec_batch_console">ターミナルを表示して実行</string>
   <string name="folder_path_label">Folder path:</string>
   <string name="recent_paths">Recent:</string>
   <string name="remove_recent">Remove from recent</string>
@@ -302,6 +305,9 @@
        一般設定タブ
        ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_settings">設定</string>
+  <string name="settings_extra_title">その他</string>
+  <string name="settings_extra_3dprinting">3D プリント</string>
+  <string name="settings_extra_other_projects">その他のプロジェクト</string>
   <string name="tab_macro">マクロ</string>
   <string name="settings_debug_mode">デバッグモード</string>
   <string name="settings_debug_mode_hint">すべてのデバイスでデバッグツール（ドライバーの開閉、APコントロール、イベントログ）を有効にします。</string>
@@ -326,6 +332,26 @@
   <string name="settings_export_log_btn">ログをエクスポート…</string>
   <string name="settings_export_log_hint">現在の K2.App のログ（存在する場合はクラッシュログも）を指定したフォルダーにコピーします — 問題を報告する際の共有に便利です。</string>
   <string name="settings_export_log_done">ログを {0} にエクスポートしました</string>
+  <!-- SignalRGB coexistence -->
+  <string name="settings_signalrgb_group">SignalRGB</string>
+  <string name="settings_signalrgb_hint">SignalRGB は独自の Mountain 用プラグインを同梱しており、K2 が LED を制御するのとまったく同じ USB インターフェイスを使用します。両方のプログラムを同時に実行すると 2 つのライティング命令が交錯し、LED がちらつきます。ここでライティングの主導権をどちらに渡すかを選んでください。K2 のそれ以外の機能（キー、マクロ、ディスプレイキー、Media Dock、プロファイル）は、どちらを選んでも動作し続けます。</string>
+  <string name="settings_signalrgb_mode_off">SignalRGB を無視する</string>
+  <string name="settings_signalrgb_mode_off_hint">何があっても K2 がライティングを制御します。Mountain 製品で SignalRGB をまったく使わない場合、または競合の様子を実際に確認したい場合のみ選択してください。</string>
+  <string name="settings_signalrgb_mode_yield">ライティングを SignalRGB に任せる（推奨）</string>
+  <string name="settings_signalrgb_mode_yield_hint">SignalRGB の実行中、K2 はエフェクト・キーごとの色・明るさをデバイスに書き込みません。SignalRGB を終了するとすぐに K2 が自身のライティングを再適用します。ライティング以外の機能はその間もすべて動作し続けます。</string>
+  <string name="settings_signalrgb_mode_stop">K2 の起動時に SignalRGB を終了する</string>
+  <string name="settings_signalrgb_mode_stop_hint">K2 は起動のたびに SignalRGB（エンジンとランチャー）を終了します。Base Camp に対する動作と同じです。SignalRGB の Windows サービスはそのままにします — LED の制御には関与しません。</string>
+  <string name="settings_signalrgb_status_installed">SignalRGB を検出しました: {0}</string>
+  <string name="settings_signalrgb_status_missing">この PC に SignalRGB はインストールされていないようです。</string>
+  <string name="settings_signalrgb_status_running">SignalRGB が実行中です — K2 は現在ライティングを書き込んでいません。</string>
+  <string name="settings_signalrgb_plugins">SignalRGB 用 K2 プラグイン</string>
+  <string name="settings_signalrgb_plugins_hint">K2 独自の Mountain デバイス用プラグインを SignalRGB のユーザープラグインフォルダー（ドキュメント\WhirlwindFX\Plugins）にインストールします。K2 自身のリバースエンジニアリングによるレイアウトと LED マップで、同梱のプラグインを置き換えます。インストール後は SignalRGB を再起動してください。</string>
+  <string name="settings_signalrgb_install_plugins">K2 プラグインをインストール</string>
+  <string name="settings_signalrgb_remove_plugins">K2 プラグインを削除</string>
+  <string name="settings_signalrgb_open_plugin_folder">プラグインフォルダーを開く</string>
+  <string name="settings_signalrgb_plugins_installed">{0} 個のプラグインをインストールしました。読み込むには SignalRGB を再起動してください。</string>
+  <string name="settings_signalrgb_plugins_removed">{0} 個のプラグインを削除しました。同梱のプラグインに戻すには SignalRGB を再起動してください。</string>
+  <string name="settings_signalrgb_plugins_none">インストールできるプラグインファイルが見つかりません。</string>
   <!-- Base Camp インポートプロンプト -->
   <string name="settings_bc_import_group">Base Camp インポート</string>
   <string name="settings_bc_import_btn">Base Camp からインポート…</string>
@@ -363,6 +389,7 @@
   <string name="restore_defaults_app">すべてをデフォルトに戻す</string>
   <string name="restore_defaults_app_hint">上記のすべてのアプリ設定をリセットし、さらにすべてのデバイス（Everest Max、Everest 60、Makalu、MacroPad、DisplayPad）の保存済みプロファイル、キー割り当て、ライティング設定、マクロをすべて消去します。この操作は元に戻せません。</string>
   <string name="restore_defaults_app_confirm">これによりアプリの全設定がリセットされ、すべてのデバイス（Everest Max、Everest 60、Makalu、MacroPad、DisplayPad）の保存済みプロファイル、キー割り当て、ライティング設定、マクロがすべて消去されます。この操作は元に戻せません。続行しますか？</string>
+  <string name="settings_acknowledgements_group">謝辞</string>
   <string name="restore_defaults_app_done">すべてのアプリ設定とデバイスプロファイルがデフォルトに戻されました。</string>
   <string name="settings_general">一般オプション</string>
   <string name="settings_close_to_tray">終了せずにトレイに閉じる</string>
@@ -383,6 +410,8 @@
   <string name="dp_devicemap_none_connected">現在接続されている DisplayPad はありません — 再割り当てしたいパッドを接続してから、このウィンドウを開き直してください。</string>
   <string name="dp_devicemap_duplicate_error">2 つのパッドが同じボード番号を使用することはできません。それぞれに異なる番号を割り当ててください。</string>
   <string name="dp_devicemap_invalid_number">ボード番号は正の整数である必要があります。</string>
+  <string name="settings_language">言語</string>
+  <string name="settings_language_hint">アプリの言語を変更します。適用するためにアプリが再起動します。</string>
   <string name="settings_font_family">フォント</string>
   <string name="settings_font_family_hint">アプリ全体の UI フォントを即座に変更します。再起動は不要です。</string>
   <string name="tray_show">K2 を表示</string>
@@ -403,6 +432,9 @@
   <string name="hw_busy_importing_profile">プロファイルをインポートしています。しばらくお待ちください…</string>
   <string name="hw_busy_importing_profiles">プロファイルをインポートしています。しばらくお待ちください…</string>
   <string name="hw_busy_restoring_defaults">デフォルト設定を復元しています。しばらくお待ちください…</string>
+  <string name="hw_busy_restoring_key_images">ディスプレイキーの既定の画像を復元しています。しばらくお待ちください…</string>
+  <string name="hw_busy_clearing_image">ディスプレイキーの画像を消去しています。しばらくお待ちください…</string>
+  <string name="hw_busy_writing_key_bindings">ディスプレイキーの操作をキーボードに書き込んでいます。しばらくお待ちください…</string>
   <string name="ev_crash_recovering">ドライバーがクラッシュしました — 3 秒後に自動回復を試みます…</string>
   <string name="ev_crash_recovered">ドライバーが回復しました — LED プレビューを再起動しました。</string>
   <string name="ev_crash_recovery_failed">ドライバーの回復に失敗しました — K2.App を再起動してください。</string>
@@ -715,6 +747,11 @@
   <string name="dp_action_section">アクション</string>
   <string name="dp_configure_action">アクションを設定…</string>
   <string name="dp_remove_action">アクションを削除</string>
+  <string name="act_copy_action">アクションをコピー</string>
+  <string name="act_cut_action">アクションを切り取り</string>
+  <string name="act_paste_action">アクションを貼り付け</string>
+  <string name="paste_unsupported_title">貼り付けできません</string>
+  <string name="paste_unsupported_message">このアクションはこのデバイスではサポートされていません。</string>
   <string name="dp_change_image">画像を変更…</string>
   <string name="dp_remove_image">画像を削除</string>
   <string name="dp_create_folder">フォルダーページを作成…</string>
@@ -921,6 +958,19 @@
   <string name="discord_key_mic_off">マイクオフ</string>
   <string name="discord_key_audio_on">音声オン</string>
   <string name="discord_key_audio_off">音声オフ</string>
+  <string name="dp_dedicated_profiles">専用プロファイル</string>
+  <string name="dedicated_spotify">Spotify — 再生中</string>
+  <string name="dedicated_configure">設定…</string>
+  <string name="dedicated_no_config">この専用プロファイルに設定する項目はありません。</string>
+  <string name="dedicated_discord">Discord — ボイス通話</string>
+  <string name="discord_cmd_voice_page">ボイスページを表示 (DisplayPad)</string>
+  <string name="dvp_ptt">プッシュ・トゥ・トーク</string>
+  <string name="dvp_webcam">ウェブカメラ</string>
+  <string name="dvp_disconnect">切断</string>
+  <string name="discord_webcam_hotkey_label">ウェブカメラのショートカット:</string>
+  <string name="discord_webcam_hotkey_tip">Discord にはカメラ用の RPC コマンドがありません。［記録］を押してキーの組み合わせを入力し、同じものを Discord &gt; 設定 &gt; キーバインド &gt; カメラの切り替え に割り当ててください。</string>
+  <string name="hotkey_record">記録</string>
+  <string name="hotkey_recording">キーを押してください…（Esc でキャンセル）</string>
   <string name="act_emojibrowser">絵文字ブラウザ</string>
   <string name="emb_grp_smileys">スマイリー</string>
   <string name="emb_grp_people">人</string>

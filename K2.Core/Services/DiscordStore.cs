@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Text.Json;
 
@@ -28,6 +28,7 @@ public static class DiscordStore
         public string RefreshTokenProtected { get; set; } = "";
         public DateTime ExpiresAtUtc { get; set; }
         public string WebhookUrlProtected { get; set; } = "";
+        public string WebcamHotkey { get; set; } = DefaultWebcamHotkey;
     }
 
     private static Data _data = new();
@@ -44,7 +45,22 @@ public static class DiscordStore
     public static DateTime ExpiresAtUtc { get { EnsureLoaded(); return _data.ExpiresAtUtc; } }
     public static string WebhookUrl { get { EnsureLoaded(); return SecretProtector.Unprotect(_data.WebhookUrlProtected); } }
 
-    /// <summary>True once the RPC OAuth flow has produced a token — the voice commands need it.
+    /// <summary>Shortcut the voice page's webcam key sends. Discord's RPC exposes no video
+    /// command at all, and — unlike mute/deafen — the camera has no default keybind either, so the
+    /// only way to drive it from a key is to replay the shortcut the user assigned in Discord's own
+    /// Keybinds settings. Recorded (not typed) in <see cref="DiscordSettingsWindow"/>, in the
+    /// notation <see cref="SendKeysTranslator"/> parses.</summary>
+    public static string WebcamHotkey
+    {
+        get { EnsureLoaded(); return _data.WebcamHotkey; }
+        set { EnsureLoaded(); lock (_lock) { _data.WebcamHotkey = string.IsNullOrWhiteSpace(value) ? "" : value.Trim(); Save(); } }
+    }
+
+    /// <summary>Ctrl+Shift+V is free in Discord's own defaults, so proposing it as the camera
+    /// shortcut can't collide with an existing binding.</summary>
+    public const string DefaultWebcamHotkey = "Ctrl+Shift+V";
+
+    /// <summary>True once the OAuth flow has produced a token — the voice commands need it.
     /// The webhook command works independently (see <see cref="HasWebhook"/>).</summary>
     public static bool IsConnected { get { EnsureLoaded(); return _data.AccessTokenProtected.Length > 0; } }
 

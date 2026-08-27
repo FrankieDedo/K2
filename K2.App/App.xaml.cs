@@ -288,6 +288,14 @@ public partial class App : Application
         if (AppSettings.AutoStopBaseCamp)
             Services.BaseCampProcessGuard.KillAllBaseCampProcesses(WriteLog);
 
+        // SignalRGB coexistence: same problem as Base Camp (its Mountain plugins write to
+        // the very same HID interfaces), but SignalRGB is something users run on purpose.
+        // Stop mode kills it like Base Camp; Yield mode (default) only arms the poll that
+        // suspends K2's lighting writes while SignalRGB is up. See SignalRgbGuard.
+        if (AppSettings.SignalRgbMode == SignalRgbMode.Stop)
+            Services.SignalRgbGuard.KillSignalRgb(WriteLog);
+        Services.SignalRgbGuard.Start(WriteLog);
+
         var window = new MainWindow();
         if (AppSettings.StartMinimizedToTray)
             window.StartMinimizedToTray();

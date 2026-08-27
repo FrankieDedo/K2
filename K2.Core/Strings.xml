@@ -21,7 +21,7 @@
   <string name="refresh">Refresh</string>
   <string name="refresh_devices">Refresh devices</string>
   <string name="debug_group">Debug</string>
-  <string name="profile">Profile</string>
+  <string name="profile">Profiles</string>
   <string name="device">Device</string>
   <string name="positioning">Positioning</string>
   <string name="backlight_auto_off_group">Backlight auto-off</string>
@@ -241,6 +241,19 @@
   <string name="discord_key_mic_off">Mic off</string>
   <string name="discord_key_audio_on">Audio on</string>
   <string name="discord_key_audio_off">Audio off</string>
+  <string name="dp_dedicated_profiles">Dedicated profiles</string>
+  <string name="dedicated_spotify">Spotify — now playing</string>
+  <string name="dedicated_configure">Configure…</string>
+  <string name="dedicated_no_config">This dedicated profile has nothing to configure.</string>
+  <string name="dedicated_discord">Discord — voice call</string>
+  <string name="discord_cmd_voice_page">Show voice page (DisplayPad)</string>
+  <string name="dvp_ptt">Push-to-talk</string>
+  <string name="dvp_webcam">Webcam</string>
+  <string name="dvp_disconnect">Disconnect</string>
+  <string name="discord_webcam_hotkey_label">Webcam shortcut:</string>
+  <string name="discord_webcam_hotkey_tip">Discord has no RPC command for the camera: press Record and type the combination, then assign the same one in Discord &gt; Settings &gt; Keybinds &gt; Toggle Camera.</string>
+  <string name="hotkey_record">Record</string>
+  <string name="hotkey_recording">Press the keys… (Esc to cancel)</string>
   <string name="youtube_settings_title">YouTube Settings</string>
   <string name="youtube_hint">Create an OAuth Desktop-app client at console.cloud.google.com with the YouTube Data API v3 enabled, then paste its Client ID/Secret here.</string>
   <string name="youtube_setup_guide">1. Go to console.cloud.google.com, create/select a project, then enable "YouTube Data API v3" (APIs &amp; Services -&gt; Library).
@@ -298,6 +311,9 @@
   <string name="py_timeout">Timeout (s, 0 = none):</string>
   <string name="py_hint">In the script use 'import k2' to call K2 functions (k2.log, k2.get_state, k2.switch_profile, k2.run_action, ...). stdout/stderr go to the K2 log.</string>
   <string name="exec_path_label">Executable / file path:</string>
+  <string name="exec_batch_mode_label">Batch script:</string>
+  <string name="exec_batch_hidden">Run hidden (no window)</string>
+  <string name="exec_batch_console">Run in a visible terminal</string>
   <string name="folder_path_label">Folder path:</string>
   <string name="recent_paths">Recent:</string>
   <string name="remove_recent">Remove from recent</string>
@@ -361,6 +377,9 @@
        GENERAL SETTINGS TAB
        ═══════════════════════════════════════════════════════════════ -->
   <string name="tab_settings">Settings</string>
+  <string name="settings_extra_title">Extra</string>
+  <string name="settings_extra_3dprinting">3D printing</string>
+  <string name="settings_extra_other_projects">Other projects</string>
   <string name="tab_macro">Macro</string>
   <string name="settings_debug_mode">Debug mode</string>
   <string name="settings_debug_mode_hint">Enables debug tools (driver open/close, AP controls, event log) on every device.</string>
@@ -386,6 +405,26 @@
   <string name="settings_export_log_btn">Export log…</string>
   <string name="settings_export_log_hint">Copies the current K2.App log (and crash log, if any) to a folder you choose — handy for sharing when reporting a problem.</string>
   <string name="settings_export_log_done">Log exported to {0}</string>
+  <!-- SignalRGB coexistence -->
+  <string name="settings_signalrgb_group">SignalRGB</string>
+  <string name="settings_signalrgb_hint">SignalRGB ships its own Mountain plugins and they talk to the very same USB interfaces K2 uses to drive the LEDs. With both programs running the two lighting streams interleave and the LEDs flicker. Pick here who owns the lighting — everything else in K2 (keys, macros, display keys, Media Dock, profiles) keeps working either way.</string>
+  <string name="settings_signalrgb_mode_off">Ignore SignalRGB</string>
+  <string name="settings_signalrgb_mode_off_hint">K2 drives the lighting no matter what. Only pick this if you never run SignalRGB on your Mountain gear, or you want to see for yourself what the conflict looks like.</string>
+  <string name="settings_signalrgb_mode_yield">Let SignalRGB drive the lighting (recommended)</string>
+  <string name="settings_signalrgb_mode_yield_hint">While SignalRGB is running, K2 stops writing effects, per-key colors and brightness to the devices. As soon as SignalRGB closes, K2 reapplies its own lighting. Everything that isn't lighting keeps working the whole time.</string>
+  <string name="settings_signalrgb_mode_stop">Close SignalRGB on K2 startup</string>
+  <string name="settings_signalrgb_mode_stop_hint">Every time K2 starts it closes SignalRGB (the engine and its launcher), the same way it does with Base Camp. The SignalRGB Windows service is left alone — it doesn't drive the LEDs.</string>
+  <string name="settings_signalrgb_status_installed">SignalRGB detected: {0}</string>
+  <string name="settings_signalrgb_status_missing">SignalRGB does not appear to be installed on this PC.</string>
+  <string name="settings_signalrgb_status_running">SignalRGB is running — K2 is not writing lighting right now.</string>
+  <string name="settings_signalrgb_plugins">K2 plugins for SignalRGB</string>
+  <string name="settings_signalrgb_plugins_hint">Installs K2's own Mountain device plugins into your SignalRGB user plugin folder (Documents\WhirlwindFX\Plugins). They override the bundled ones with layouts and LED maps taken from K2's own reverse engineering. Restart SignalRGB after installing.</string>
+  <string name="settings_signalrgb_install_plugins">Install K2 plugins</string>
+  <string name="settings_signalrgb_remove_plugins">Remove K2 plugins</string>
+  <string name="settings_signalrgb_open_plugin_folder">Open plugin folder</string>
+  <string name="settings_signalrgb_plugins_installed">{0} plugins installed. Restart SignalRGB to load them.</string>
+  <string name="settings_signalrgb_plugins_removed">{0} plugins removed. Restart SignalRGB to go back to the bundled ones.</string>
+  <string name="settings_signalrgb_plugins_none">No plugin file found to install.</string>
   <!-- Base Camp import prompt -->
   <string name="settings_bc_import_group">Base Camp import</string>
   <string name="settings_bc_import_btn">Import from Base Camp…</string>
@@ -425,6 +464,7 @@
   <string name="restore_defaults_app">Restore all defaults</string>
   <string name="restore_defaults_app_hint">Resets every app preference above AND erases every saved profile, key binding, lighting setting and macro for every device (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). This cannot be undone.</string>
   <string name="restore_defaults_app_confirm">This resets ALL app preferences and ERASES every saved profile, key binding, lighting setting and macro for every device (Everest Max, Everest 60, Makalu, MacroPad, DisplayPad). This cannot be undone. Continue?</string>
+  <string name="settings_acknowledgements_group">Thanks</string>
   <string name="restore_defaults_app_done">All app settings and device profiles have been restored to defaults.</string>
   <string name="settings_general">General options</string>
   <string name="settings_close_to_tray">Close to tray instead of exiting</string>
@@ -445,6 +485,8 @@
   <string name="dp_devicemap_none_connected">No DisplayPad is currently connected — plug in the pads you want to remap and reopen this window.</string>
   <string name="dp_devicemap_duplicate_error">Two pads can't use the same board number. Give each one a different number.</string>
   <string name="dp_devicemap_invalid_number">Board numbers must be positive whole numbers.</string>
+  <string name="settings_language">Language</string>
+  <string name="settings_language_hint">Changes the app language. The app restarts to apply it.</string>
   <string name="settings_font_family">Font</string>
   <string name="settings_font_family_hint">Changes the app-wide UI font immediately, no restart needed.</string>
   <string name="settings_accent_color">Accent color</string>
@@ -478,6 +520,9 @@
   <string name="hw_busy_importing_profile">Importing profile, please wait…</string>
   <string name="hw_busy_importing_profiles">Importing profiles, please wait…</string>
   <string name="hw_busy_restoring_defaults">Restoring defaults, please wait…</string>
+  <string name="hw_busy_restoring_key_images">Restoring the default images on the display keys, please wait…</string>
+  <string name="hw_busy_clearing_image">Clearing the image on the display key, please wait…</string>
+  <string name="hw_busy_writing_key_bindings">Writing the display key actions to the keyboard, please wait…</string>
   <string name="ev_crash_recovering">Driver crashed — attempting auto-recovery in 3 s…</string>
   <string name="ev_crash_recovered">Driver recovered — LED preview restarted.</string>
   <string name="ev_crash_recovery_failed">Driver recovery failed — please restart K2.App.</string>
@@ -810,6 +855,11 @@
   <string name="dp_action_section">Action</string>
   <string name="dp_configure_action">Configure action…</string>
   <string name="dp_remove_action">Remove action</string>
+  <string name="act_copy_action">Copy action</string>
+  <string name="act_cut_action">Cut action</string>
+  <string name="act_paste_action">Paste action</string>
+  <string name="paste_unsupported_title">Cannot paste</string>
+  <string name="paste_unsupported_message">This action isn't supported on this device.</string>
   <string name="dp_change_image">Change image…</string>
   <string name="dp_remove_image">Remove image</string>
   <string name="dp_create_folder">Create folder page…</string>

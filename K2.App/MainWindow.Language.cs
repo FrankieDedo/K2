@@ -1,37 +1,55 @@
-// MainWindow.Language.cs — language switcher (status bar button + context menu)
+// MainWindow.Language.cs — language switcher (Settings > Language combo)
 using System;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using K2.Core;
 
 namespace K2.App;
 
 public partial class MainWindow
 {
+    private static readonly (string Code, string Name)[] LanguageOptions =
+    {
+        ("en", "English"),
+        ("it", "Italiano"),
+        ("es", "Español"),
+        ("fr", "Français"),
+        ("de", "Deutsch"),
+        ("pt", "Português"),
+        ("pl", "Polski"),
+        ("ja", "日本語"),
+        ("zh", "中文"),
+        ("ko", "한국어"),
+    };
+
     // Called from the MainWindow constructor, after InitializeComponent.
     private void InitLanguageMenu()
     {
-        TxtLangLabel.Text = Loc.CurrentLang.ToUpperInvariant();
+        CmbAppLanguage.Items.Clear();
+        foreach (var (code, name) in LanguageOptions)
+            CmbAppLanguage.Items.Add(new ComboBoxItem { Content = name, Tag = code });
+
+        CmbAppLanguage.SelectedIndex = 0;
+        for (int i = 0; i < CmbAppLanguage.Items.Count; i++)
+        {
+            if ((string)((ComboBoxItem)CmbAppLanguage.Items[i]).Tag == Loc.CurrentLang)
+            {
+                CmbAppLanguage.SelectedIndex = i;
+                break;
+            }
+        }
+
         Loc.RestartRequested += _ => RestartApp();
     }
 
-    // Left-click the 🌐 button → open the context menu above it.
-    private void BtnLang_Click(object sender, RoutedEventArgs e)
+    private void CmbAppLanguage_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        var btn = (Button)sender;
-        btn.ContextMenu.PlacementTarget = btn;
-        btn.ContextMenu.Placement = PlacementMode.Top;
-        btn.ContextMenu.IsOpen = true;
-    }
-
-    // Shared handler for both language menu items — language code comes from Tag.
-    private void MnuLang_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is MenuItem mi && mi.Tag is string lang)
-            Loc.SetLanguage(lang);
+        if (CmbAppLanguage.SelectedItem is not ComboBoxItem item) return;
+        string code = (string)item.Tag;
+        if (code != Loc.CurrentLang)
+            Loc.SetLanguage(code);
     }
 
     private static void RestartApp()

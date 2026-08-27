@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using K2.Core.Services;
 
@@ -31,6 +31,17 @@ public static class ActionTypeHelper
     /// shown with a yellow warning triangle rather than the red "action not found" one.
     /// </summary>
     public const string UnresolvedMacroPrefix = "***";
+
+    /// <summary>Action types that only make sense on a host with DisplayPad-style sub-pages
+    /// (<see cref="IActionHost.SupportsPages"/>). Shared by <c>ButtonActionDialog</c>'s picker
+    /// (hides these entirely on a host with no page concept) and
+    /// <c>Services.ActionClipboard.CanPasteOn</c> (blocks pasting one
+    /// onto such a host, with an error, instead of silently accepting a dead action). "dp_back"
+    /// is included even though it never appears as a picker item (set only via the DisplayPad
+    /// key context menu's "Set as back") since it is just as DisplayPad-page-specific as
+    /// "dp_folder".</summary>
+    public static readonly string[] PageOnlyActionTypes =
+        { "dp_folder", "dp_back", "dp_emojibrowser", "dp_clock", "dp_sysmon", "dp_speedtest" };
 
     /// <summary>
     /// True for a "macro" (Play Macro) action with no playable macro assigned — either no
@@ -233,6 +244,9 @@ public static class ActionTypeHelper
         ("user_volume",       "discord_cmd_user_volume"),
         ("user_mute_toggle",  "discord_cmd_user_mute_toggle"),
         ("send_message",      "discord_cmd_send_message"),
+        // DisplayPad only: reopens the live voice page after it has been dismissed
+        // (see MainWindow.DisplayPad.DiscordRoom.cs). A no-op on every other device.
+        ("voice_page",        "discord_cmd_voice_page"),
     };
 
     /// <summary>Display text for a "discord" action: the localized label of the matching
@@ -336,7 +350,7 @@ public static class ActionTypeHelper
             "hotkeyswitch" => HotkeySwitchSummary(actionValue),
             "multi"    => MultiSummary(actionValue),
             "adobe" or "davinci" or "zoom" => val,
-            "exec"     => System.IO.Path.GetFileName(val),
+            "exec"     => System.IO.Path.GetFileName(ExecActionPayload.PathOf(val)),
             "folder"   => FileOrFolderName(val),
             "url"      => val,
             "browser"  => BrowserSummary(val),
