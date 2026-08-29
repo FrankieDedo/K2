@@ -12,6 +12,8 @@ The project of recreating Bae Camp is kinda complete, and most of the stuff shou
 
 Start as admin and keep in mind that it should close all Base Camp process automatically (you can avoid this behaviour disabling it in the settings). If it does, you can restart them manually or just reboot the pc and you're back as before.
 
+If you need more help check the installation guide: https://github.com/FrankieDedo/K2/blob/docs/installation-manual/docs/Installation.md
+
 <h1>Screenshots</summary></h1>
 <details>
 <summary><strong>Check it out</strong></summary>
