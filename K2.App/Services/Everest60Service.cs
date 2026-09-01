@@ -162,6 +162,19 @@ internal sealed class Everest60Service
         });
 
     /// <summary>
+    /// "Game Mode" key-lock — see <see cref="Everest60Protocol.SetGameMode"/> for
+    /// the wire format and the (Everest-Max-different) bit layout:
+    /// bit0=Shift(+Tab), bit1=AltTab, bit2=AltF4, bit3=Win. Raw HID on interface 2,
+    /// same channel as lighting — NOT the vendor SDK.
+    /// </summary>
+    public bool SetGameMode(int mask) =>
+        WithDevice(h => Everest60Protocol.SetGameMode(h, mask, _log), op: "SetGameMode");
+
+    /// <summary>Core / indicator LEDs on-off — see <see cref="Everest60Protocol.SetCoreLed"/>.</summary>
+    public bool SetCoreLed(bool on) =>
+        WithDevice(h => Everest60Protocol.SetCoreLed(h, on, _log), op: "SetCoreLed");
+
+    /// <summary>
     /// Full Custom-mode apply: 64 main-board keys + 44 border-ring LEDs + 17
     /// numpad accessory keys + 22 numpad-ring LEDs, all in one combined wire
     /// command — the "Custom Lighting" system ported from Everest Max

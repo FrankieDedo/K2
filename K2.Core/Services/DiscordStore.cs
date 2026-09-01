@@ -32,6 +32,7 @@ public static class DiscordStore
         public string PushToTalkHotkey { get; set; } = "";
         public bool VoicePageReturnEnabled { get; set; } = true;
         public int VoicePageReturnSeconds { get; set; } = DefaultVoicePageReturnSeconds;
+        public bool VoicePageBackArrow { get; set; } = true;
     }
 
     private static Data _data = new();
@@ -92,7 +93,16 @@ public static class DiscordStore
         set { EnsureLoaded(); lock (_lock) { _data.VoicePageReturnSeconds = Math.Clamp(value, 3, 3600); Save(); } }
     }
 
-    public const int DefaultVoicePageReturnSeconds = 5;
+    public const int DefaultVoicePageReturnSeconds = 10;
+
+    /// <summary>Whether the voice page's server/group tile wears the back-arrow badge. The key is
+    /// the way out of the page either way — it was, long before the badge existed; this only
+    /// controls the MARK, for someone who would rather see the server picture unobscured.</summary>
+    public static bool VoicePageBackArrow
+    {
+        get { EnsureLoaded(); return _data.VoicePageBackArrow; }
+        set { EnsureLoaded(); lock (_lock) { _data.VoicePageBackArrow = value; Save(); } }
+    }
 
     /// <summary>True once the OAuth flow has produced a token — the voice commands need it.
     /// The webhook command works independently (see <see cref="HasWebhook"/>).</summary>

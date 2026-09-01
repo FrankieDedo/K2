@@ -85,8 +85,8 @@ public partial class MainWindow
         _mkDpiWatcher.DpiPressed += () => Dispatcher.BeginInvoke(OnMakaluDpiPressed);
         _mkDpiWatcher.ButtonEvent += (cat, btn) => Dispatcher.BeginInvoke(() => OnMakaluButtonEvent(cat, btn));
 
-        LstMkProfile.ContextMenu = MkBuildProfileContextMenu();
-        BtnMkProfileMenu.ContextMenu = MkBuildProfileMenuNoEdit();
+        LstMkProfile.ContextMenu = WithProfileGuide(MkBuildProfileContextMenu(), "makalu");
+        BtnMkProfileMenu.ContextMenu = WithProfileGuide(MkBuildProfileMenuNoEdit(), "makalu");
         MkRefreshProfiles();
         MkReloadProfile(MkCurrentProfile());
 
@@ -169,13 +169,18 @@ public partial class MainWindow
         var currentKeys = new HashSet<string>();
         foreach (var slot in existing)
         {
-            string? exe = _mkStore.GetSetting($"profile.{slot}.launchExe");
+            string kb = $"profile.{slot}";
+            string? exe = _mkStore.GetSetting($"{kb}.launchExe");
             if (string.IsNullOrWhiteSpace(exe)) continue;
             string key = scope + slot;
             currentKeys.Add(key);
             int capturedSlot = slot;
-            ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe,
-                () => MkSwitchProfileTo(capturedSlot));
+            bool focusOnly = _mkStore.GetSetting($"{kb}.launchFocusOnly") == "1";
+            bool restoreOnClose = _mkStore.GetSetting($"{kb}.launchRestoreOnClose") == "1";
+            ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe, focusOnly, restoreOnClose,
+                capturedSlot.ToString(),
+                () => _mkStore.GetCurrentProfile().ToString(),
+                t => MkSwitchProfileTo(int.Parse(t)));
         }
         foreach (var staleKey in ProfileLaunchWatcher.Instance.KeysWithPrefix(scope).Except(currentKeys))
             ProfileLaunchWatcher.Instance.RemoveRegistration(staleKey);
@@ -226,6 +231,8 @@ public partial class MainWindow
     private ContextMenu MkBuildProfileContextMenu()
     {
         var menu = new ContextMenu();
+        var miConfigure = new MenuItem { Header = Loc.Get("configure_profile") };
+        miConfigure.Click += (_, _) => { if (LstMkProfile.SelectedItem is MkProfileItem pi) MkShowProfileGear(pi); };
         var miRename = new MenuItem { Header = Loc.Get("rename_profile") };
         miRename.Click += BtnMkRenameProfile_Click;
         var miImportXml = new MenuItem { Header = Loc.Get("dp_import_xml") };
@@ -236,6 +243,8 @@ public partial class MainWindow
         miExport.Click += BtnMkExportProfiles_Click;
         var miDelete = new MenuItem { Header = Loc.Get("delete_profile") };
         miDelete.Click += BtnMkDeleteProfile_Click;
+        menu.Items.Add(miConfigure);
+        menu.Items.Add(new Separator());
         menu.Items.Add(miRename);
         menu.Items.Add(new Separator());
         menu.Items.Add(miImportXml);
@@ -324,8 +333,11 @@ public partial class MainWindow
     private void MkShowProfileGear(MkProfileItem pi)
     {
         string currentName = _mkStore.GetProfileName(pi.Slot) ?? Loc.Get("profile_n", pi.Slot);
-        string currentExe = _mkStore.GetSetting($"profile.{pi.Slot}.launchExe") ?? "";
-        var dlg = new ProfileSettingsDialog(currentName, currentExe) { Owner = this };
+        string keyBase = $"profile.{pi.Slot}";
+        string currentExe = _mkStore.GetSetting($"{keyBase}.launchExe") ?? "";
+        bool focusOnly = _mkStore.GetSetting($"{keyBase}.launchFocusOnly") == "1";
+        bool restoreOnClose = _mkStore.GetSetting($"{keyBase}.launchRestoreOnClose") == "1";
+        var dlg = new ProfileSettingsDialog(currentName, currentExe, focusOnly, restoreOnClose) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
         if (dlg.DeleteRequested)
@@ -343,7 +355,7 @@ public partial class MainWindow
                 MessageBoxImage.Warning);
             if (res != MessageBoxResult.OK) return;
             _mkStore.ClearProfile(pi.Slot);
-            _mkStore.SetSetting($"profile.{pi.Slot}.launchExe", "");
+            _mkStore.SetSetting($"{keyBase}.launchExe", "");
             LogMakalu($"[UI ] Makalu profile {pi.Slot} deleted (gear).");
             MkRefreshProfiles();
             int fallback = _mkStore.GetExistingProfiles().DefaultIfEmpty(1).First();
@@ -353,7 +365,9 @@ public partial class MainWindow
         }
 
         _mkStore.SetProfileName(pi.Slot, dlg.ProfileName);
-        _mkStore.SetSetting($"profile.{pi.Slot}.launchExe", dlg.ExePath);
+        _mkStore.SetSetting($"{keyBase}.launchExe", dlg.ExePath);
+        _mkStore.SetSetting($"{keyBase}.launchFocusOnly", dlg.FocusOnly ? "1" : "0");
+        _mkStore.SetSetting($"{keyBase}.launchRestoreOnClose", dlg.RestoreOnClose ? "1" : "0");
         LogMakalu($"[UI ] Makalu profile {pi.Slot} settings updated (gear).");
         MkRefreshProfiles();
         MkSelectProfileSlot(pi.Slot);

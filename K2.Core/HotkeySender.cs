@@ -99,11 +99,26 @@ public static class HotkeySender
     private static bool TryResolveKey(string name, out ushort vk)
     {
         vk = 0;
+        // Punctuation goes to its OEM VK by name, NOT through VkKeyScan: shell shortcuts
+        // (Win+. emoji panel, Win+; etc.) are defined against these VKs, and on a non-US
+        // layout VkKeyScan picks a layout-dependent twin instead — e.g. VkKeyScan('.') on
+        // an Italian layout is VK_DECIMAL (numpad dot), so "Win + ." went out as
+        // Win+Numpad-dot and never opened the panel (user report 2026-08-29).
+        if (Punct.TryGetValue(name, out var punct)) { vk = punct; return true; }
         if (name.Length == 1)
         {
-            short scan = VkKeyScan(char.ToUpperInvariant(name[0]));
-            if (scan == -1) return false;
-            vk = (ushort)(scan & 0xFF);
+            char c = char.ToUpperInvariant(name[0]);
+            if (c is (>= 'A' and <= 'Z') or (>= '0' and <= '9'))
+            {
+                short scan = VkKeyScan(c);
+                if (scan == -1) return false;
+                vk = (ushort)(scan & 0xFF);
+                return true;
+            }
+            // Any other lone character: VkKeyScan as a last resort (better than failing).
+            short s2 = VkKeyScan(c);
+            if (s2 == -1) return false;
+            vk = (ushort)(s2 & 0xFF);
             return true;
         }
         if ((name[0] is 'F' or 'f') && int.TryParse(name[1..], out int fn) && fn is >= 1 and <= 24)
@@ -114,6 +129,15 @@ public static class HotkeySender
         if (Specials.TryGetValue(name, out var special)) { vk = special; return true; }
         return false;
     }
+
+    /// <summary>Punctuation name → OEM virtual-key (US-layout position). See <see cref="TryResolveKey"/>
+    /// for why these bypass <c>VkKeyScan</c>. <c>-</c> can't reach here (it's a token separator in
+    /// <see cref="TryParse"/>), so it's intentionally absent.</summary>
+    private static readonly Dictionary<string, ushort> Punct = new(StringComparer.Ordinal)
+    {
+        ["."] = 0xBE, [","] = 0xBC, [";"] = 0xBA, ["/"] = 0xBF, ["'"] = 0xDE,
+        ["["] = 0xDB, ["]"] = 0xDD, ["\\"] = 0xDC, ["="] = 0xBB, ["`"] = 0xC0,
+    };
 
     private static readonly Dictionary<string, ushort> Specials = new(StringComparer.OrdinalIgnoreCase)
     {

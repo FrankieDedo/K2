@@ -165,19 +165,24 @@ public static class EvProfileExporter
         // path already knew how to read back. Profile-scoped keys with a fallback to the
         // shared ones, mirroring EvRgbPrefix/EvSettingsPrefix's own "synced = global"
         // rule (the panel writes to the shared namespace when sync is on).
-        // "Sync across profiles" (one flag for RGB + Settings + Display Dial, persisted as
-        // rgb.sync) makes every panel read and write the SHARED namespace. When it is on,
-        // per-profile rows left over from before it was turned on are stale, so the lookup
-        // order flips — otherwise an export carries values the user cannot see anywhere.
-        bool synced = store.GetSetting("rgb.sync") == "1";
-        string? Get(string key) => Scoped(store.GetSetting, key, slot, synced);
+        // "Sync across profiles" makes a section's panel read/write the SHARED namespace.
+        // Since 2026-08-28 each section (Lighting / Settings / Display Dial) has its OWN
+        // flag (rgb.sync / settings.sync / dial.sync), so the lookup-order flip is decided
+        // per section — otherwise an export carries values the user cannot see anywhere.
+        // Legacy installs only have rgb.sync; fall back to it for the other two.
+        bool syncedRgb      = store.GetSetting("rgb.sync") == "1";
+        bool syncedSettings = (store.GetSetting("settings.sync") ?? store.GetSetting("rgb.sync")) == "1";
+        bool syncedDial     = (store.GetSetting("dial.sync")     ?? store.GetSetting("rgb.sync")) == "1";
+        string? GetRgb(string key)      => Scoped(store.GetSetting, key, slot, syncedRgb);
+        string? GetSettings(string key) => Scoped(store.GetSetting, key, slot, syncedSettings);
+        string? GetDial(string key)     => Scoped(store.GetSetting, key, slot, syncedDial);
 
         root.Add(KeyboardLightingXml.BuildLightings(
-            Get, $"rgb.p{slot}.", $"custom.p{slot}.keyLedColors", $"custom.p{slot}.keyEffects",
+            GetRgb, $"rgb.p{slot}.", $"custom.p{slot}.keyLedColors", $"custom.p{slot}.keyEffects",
             BaseCampDbImporter.EverestKeycapLedCount, includeK2Only: !bcCompatible));
 
-        int mode = int.TryParse(Get($"settings.p{slot}.game_mode"), out var gm) ? gm : 0;
-        int turnOffSec = int.TryParse(Get($"dial.p{slot}.turnOff"), out var to) ? to : 0;
+        int mode = int.TryParse(GetSettings($"settings.p{slot}.game_mode"), out var gm) ? gm : 0;
+        int turnOffSec = int.TryParse(GetDial($"dial.p{slot}.turnOff"), out var to) ? to : 0;
         // Null = the user never picked one, so the value below is only K2's locale
         // guess: exported as IsLayoutConfigured=false so the importing side keeps its
         // own guess instead (same gate BaseCampDbImporter applies to BC's DB column).
@@ -192,7 +197,7 @@ public static class EvProfileExporter
                 new XElement("DisableAltF4", Bool((mode & 0x2) != 0)),
                 new XElement("DisableWin", Bool((mode & 0x4) != 0)),
                 new XElement("DisableAltTab", Bool((mode & 0x8) != 0)),
-                new XElement("EnableCoreLED", Bool(Get($"settings.p{slot}.indicator_led") == "1")),
+                new XElement("EnableCoreLED", Bool(GetSettings($"settings.p{slot}.indicator_led") == "1")),
                 // Keycap legends. Real BC exports write these two (verified against
                 // Profili_BaseCamp/*.xml: <KeyboardLayout>US</KeyboardLayout> +
                 // <IsLayoutConfigured>true</IsLayoutConfigured>) and K2 used to drop
@@ -201,11 +206,11 @@ public static class EvProfileExporter
                 // MainWindow.Everest.cs's LoadPersistedKeyboardLayout.
                 new XElement("KeyboardLayout", EverestKeyboardLayout.ToStorageString(layout)),
                 new XElement("IsLayoutConfigured", Bool(layoutStored is not null)),
-                new XElement("IsTurnOffAfter", Bool(Get($"dial.p{slot}.turnOffEnable") == "1")),
+                new XElement("IsTurnOffAfter", Bool(GetDial($"dial.p{slot}.turnOffEnable") == "1")),
                 // Base Camp stores this as a "H:MM:SS" TimeSpan string, not a seconds
                 // count — see BaseCampDbImporter.TurnOffSecondsFromTimeSpanText.
                 new XElement("TurnOffAfter", TimeSpan.FromSeconds(turnOffSec).ToString(@"h\:mm\:ss")),
-                new XElement("ClockType", int.TryParse(Get($"dial.p{slot}.clockType"), out var ct) ? ct : 0),
+                new XElement("ClockType", int.TryParse(GetDial($"dial.p{slot}.clockType"), out var ct) ? ct : 0),
                 new XElement("modified_at", DateTime.Now.ToString("o")))));
 
         // K2-only: the WHOLE per-profile Settings + Display Dial namespace, verbatim.
@@ -217,7 +222,7 @@ public static class EvProfileExporter
         {
             root.Add(K2ProfileSettingsXml.Build(
                 store.GetSettingsWithPrefix, slot, K2ProfileSettingsXml.EverestFamilies,
-                preferShared: synced));
+                preferSharedFor: fam => fam == "dial." ? syncedDial : syncedSettings));
 
             // K2-only, device-global (not per-slot): the physical unit's keyboard body
             // colour, so restoring a K2 export onto a fresh install brings the keycap

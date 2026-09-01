@@ -455,8 +455,9 @@
              than a handful of profiles (DisplayPad has no hard cap) stay browsable.
              Same Width as every other sidebar control so the column doesn't resize. -->
         <!-- Row content for every device's profile list: name + a small gear button (right-
-             aligned via the Auto column) that opens ProfileSettingsDialog (rename/delete/
-             link-launch-executable — see MainWindow.xaml.cs's ProfileGear_PreviewMouseDown).
+             aligned via the Auto column) that opens the same context menu as right-clicking
+             the row — Configure profile / Rename / Import / Export / Delete — anchored under
+             the gear (see MainWindow.xaml.cs's ProfileGear_PreviewMouseDown).
              Hidden by default (Visibility="Hidden", NOT Collapsed) and only shown on hover
              of the row it belongs to (MultiDataTrigger below, checking both IsRealProfile —
              hidden on the "+ New profile" placeholder row — and the ancestor ListBoxItem's
@@ -478,31 +479,62 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis"/>
-                <!-- Vector gear traced from Grafiche/settings.png's alpha-channel silhouette
-                     (Moore-neighbor boundary tracing + Douglas-Peucker simplification, done
-                     once offline — see CHANGELOG 2026-07-21) instead of the PNG asset itself:
-                     crisp at any size, no bitmap scaling involved. FillRule="EvenOdd" carves
-                     the center hole (2nd subpath) out of the outer gear body (1st subpath).
-                     Fill is the same muted gray the earlier attempts used — "contextual"
-                     coloring: this spot matches the row label, not the accent color. -->
-                <!-- No hover halo: overrides the default Button style's ControlTemplate (which
-                     paints a hover Background/BorderBrush box behind the content) with a bare
-                     ContentPresenter — this is a small inline icon button, not meant to show a
-                     background box on hover. -->
+                <!-- Gear icon: the cog artwork the user supplied, reproduced as a vector
+                     Geometry (8 rounded teeth + a round hub hole) rather than a raster PNG so
+                     it stays razor-sharp at 14px and at every display scale / DPI — a bitmap
+                     shrunk this small blurred, which is why the earlier hand-traced polygon
+                     was dropped for the Segoe glyph; the vector path keeps the supplied shape
+                     without that cost. Drawn inside a Viewbox so it is centred on its own ink
+                     bounds (perfectly centred in the circular button, unlike the Segoe glyph
+                     which carried its own asymmetric side-bearing). #9A9AA2 muted gray by
+                     default (matches the row label), swapped to the accent-text color on the
+                     selected row (trigger below). -->
+                <!-- Circular hit target (bigger + easier to click than the bare 17px gear
+                     glyph was): a Border-backed ControlTemplate instead of a plain
+                     ContentPresenter, CornerRadius = half the 24px side so it renders as a
+                     full circle, sized to sit inside the row's hover/selection highlight
+                     with margin, with its own hover state (accent border) and a click bounce
+                     animation (ProfileGear_PreviewMouseDown → GearClickBounce, matching the
+                     press feedback of the sidebar action buttons). The gear glyph itself is
+                     shrunk to 13px so it clears the circle's padding. -->
                 <Button x:Name="BtnGear" Grid.Column="1"
-                        Width="22" Height="22" Padding="0" Margin="4,0,0,0"
+                        Width="24" Height="24" Padding="0" Margin="6,0,0,0"
                         HorizontalAlignment="Right" VerticalAlignment="Center"
                         Background="Transparent" BorderThickness="0"
-                        Cursor="Arrow"
+                        Cursor="Hand"
                         Visibility="Hidden"
+                        UseLayoutRounding="True" SnapsToDevicePixels="True"
+                        RenderTransformOrigin="0.5,0.5"
                         PreviewMouseLeftButtonDown="ProfileGear_PreviewMouseDown">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border x:Name="GearBd" CornerRadius="12"
+                                    Background="#26262E" BorderBrush="#3A3A44" BorderThickness="1">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="GearBd" Property="Background" Value="#33333D"/>
+                                    <Setter TargetName="GearBd" Property="BorderBrush" Value="{DynamicResource K2AccentBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Button.Template>
-                    <Path x:Name="PathGear" Width="17" Height="17" Stretch="Uniform" Fill="#9A9AA2"
-                          Data="M 11.06,4.64 L 13.17,4.64 L 13.55,6.33 L 15.00,6.98 L 16.59,6.05 L 18.05,7.50 L 17.11,9.05 L 17.67,10.45 L 19.45,10.92 L 19.45,13.03 L 17.72,13.45 L 17.11,14.86 L 18.00,16.50 L 16.59,17.91 L 15.05,17.02 L 13.64,17.53 L 13.17,19.31 L 11.06,19.31 L 10.69,17.67 L 9.28,17.02 L 7.64,17.91 L 6.19,16.45 L 7.12,14.91 L 6.52,13.45 L 4.78,13.03 L 4.78,10.88 L 6.47,10.50 L 7.12,9.05 L 6.19,7.50 L 7.64,6.05 L 9.23,6.98 L 10.59,6.42 Z M 11.81,9.33 L 12.80,9.42 L 13.88,9.98 L 14.39,10.64 L 14.77,11.72 L 14.67,12.66 L 14.11,13.73 L 13.69,14.11 L 13.08,14.44 L 12.19,14.67 L 11.02,14.39 L 10.22,13.88 L 9.66,12.98 L 9.42,12.09 L 9.61,11.11 L 10.08,10.27 L 10.92,9.61 Z"/>
+                    <Viewbox Width="14" Height="14"
+                             HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Path x:Name="PathGear" Fill="#9A9AA2" Stretch="Uniform"
+                              Data="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58
+                                    c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96
+                                    c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41h-3.84
+                                    c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33
+                                    c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58
+                                    C4.84,11.36,4.82,11.69,4.82,12s0.02,0.64,0.07,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61
+                                    l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54
+                                    c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54
+                                    c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32
+                                    c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6
+                                    s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+                    </Viewbox>
                 </Button>
             </Grid>
             <DataTemplate.Triggers>
@@ -721,20 +753,54 @@
             </Style.Triggers>
         </Style>
 
-        <!-- "Sync across profiles" checkbox: one style so the checkbox lands in
-             exactly the same spot in every section of the bottom settings panel
-             (Lighting / Display Dial / Settings, per device). It used to be
-             positioned ad hoc in each section (Center vs Top, 10 vs 25 vs 40px
-             margins, one of them inside a fixed 150px column that clipped the
-             label), so it visibly jumped around when switching sections —
-             user report 2026-08-22. Always place it as the top-right child of
-             the section's root Grid (Grid.ColumnSpan spanning every column) and
-             give it no local alignment/margin overrides. -->
-        <Style x:Key="K2SyncCheckBox" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+        <!-- K2SyncCheckBox ("Sync across profiles" checkbox positioning) moved to
+             K2.Core/Themes/K2Theme.xaml 2026-08-28 so the Everest 60 Lighting
+             UserControl can reference it too. -->
+
+        <!-- "Guide" button: bottom-right of every device panel (and, relabelled
+             "Highlights" via Content, the Home tab). Icon + label, same
+             muted-gray / hover-bg treatment as BtnMacroTab. The icon is an
+             alpha silhouette (K2.Core Assets/guide.png) tinted via OpacityMask
+             so it follows the button's Foreground, like the traced gear/nav icons.
+             Label = Content (defaults to "Guide"); the Home instance overrides
+             Content + ToolTip. Click handlers: MainWindow.Guide.cs. -->
+        <Style x:Key="K2GuideButton" TargetType="Button">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource K2TextMutedBrush}"/>
             <Setter Property="HorizontalAlignment" Value="Right"/>
-            <Setter Property="VerticalAlignment" Value="Top"/>
-            <Setter Property="Margin" Value="0,2,10,0"/>
-            <Setter Property="Height" Value="22"/>
+            <Setter Property="VerticalAlignment" Value="Bottom"/>
+            <Setter Property="Margin" Value="0,0,4,2"/>
+            <Setter Property="Panel.ZIndex" Value="60"/>
+            <Setter Property="Content" Value="{loc:Get guide_button}"/>
+            <Setter Property="ToolTip" Value="{loc:Get guide_tooltip}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="7">
+                            <StackPanel Orientation="Horizontal" Margin="{TemplateBinding Padding}">
+                                <Rectangle Width="19" Height="19" VerticalAlignment="Center"
+                                           Fill="{TemplateBinding Foreground}">
+                                    <Rectangle.OpacityMask>
+                                        <ImageBrush ImageSource="pack://application:,,,/K2.Core;component/Assets/guide.png"/>
+                                    </Rectangle.OpacityMask>
+                                </Rectangle>
+                                <TextBlock Text="{TemplateBinding Content}" Margin="7,0,0,0"
+                                           Foreground="{TemplateBinding Foreground}"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource K2HoverBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -789,55 +855,88 @@
                     <TabItem x:Name="TabMacroPad" Tag="macropad" Header="{loc:Get tab_macropad}" Visibility="Collapsed"/>
                 </TabControl>
 
-                <!-- Macro: icon + label button, left of Settings -->
+                <!-- Macro: same card look as the device tabs (K2Theme TabItem template) —
+                     K2SurfaceAltBrush tile, decorative bottom-right corner triangle,
+                     bold+italic+uppercase title pinned top-left. Height/MinWidth/Padding
+                     mirror the TabItem style so it lines up with the tab strip. -->
                 <Button x:Name="BtnMacroTab" Grid.Column="1"
-                        Height="34" Margin="8,0,0,4" Padding="10,0"
+                        Height="62" MinWidth="140" Margin="8,0,0,0" Padding="12,10"
                         VerticalAlignment="Center"
+                        Content="{loc:Get tab_macro}"
                         Background="Transparent" Foreground="{StaticResource K2TextMutedBrush}"
+                        FontWeight="Bold" FontStyle="Italic"
                         Cursor="Hand" Click="BtnMacroTab_Click"
                         ToolTip="{loc:Get tab_macro}">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="7">
-                                <StackPanel Orientation="Horizontal" Margin="{TemplateBinding Padding}">
-                                    <TextBlock Text="&#xE7C8;" FontFamily="Segoe MDL2 Assets" FontSize="16"
+                            <Border x:Name="bd" Background="{StaticResource K2SurfaceAltBrush}" CornerRadius="7"
+                                    Padding="{TemplateBinding Padding}">
+                                <Grid>
+                                    <Polygon x:Name="CornerTriangle"
+                                             Points="14,0 14,14 0,14"
+                                             Fill="#54545E"
+                                             HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                             Margin="0,0,-2,-2"/>
+                                    <TextBlock x:Name="Txt"
+                                               Text="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Content, Converter={StaticResource UpperCaseConverter}}"
                                                Foreground="{TemplateBinding Foreground}"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Text="{loc:Get tab_macro}" Margin="6,0,0,0"
-                                               Foreground="{TemplateBinding Foreground}"
-                                               VerticalAlignment="Center"/>
-                                </StackPanel>
+                                               FontWeight="{TemplateBinding FontWeight}"
+                                               FontStyle="{TemplateBinding FontStyle}"
+                                               HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                                </Grid>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter TargetName="bd" Property="Background" Value="{StaticResource K2HoverBrush}"/>
+                                </Trigger>
+                                <!-- Active (Macro section open): identical to the device
+                                     tabs' IsSelected state — accent-red tile, white title,
+                                     zoomed white corner triangle. Driven by Tag="active"
+                                     from SetMacroTabActive in MainWindow.xaml.cs. -->
+                                <Trigger Property="Tag" Value="active">
+                                    <Setter TargetName="bd" Property="Background" Value="{DynamicResource K2AccentBrush}"/>
+                                    <Setter TargetName="Txt" Property="Foreground" Value="{DynamicResource K2AccentTextBrush}"/>
+                                    <Setter TargetName="CornerTriangle" Property="Points" Value="26,0 26,26 0,26"/>
+                                    <Setter TargetName="CornerTriangle" Property="Fill" Value="White"/>
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Button.Template>
                 </Button>
 
-                <!-- Settings: gear-icon-only button, always right-aligned. Same traced vector
-                     gear as the per-profile gear (K2ProfileItemTemplate — see its doc comment
-                     for how the Path Data was produced) — Fill stays bound to the button's own
-                     Foreground (TemplateBinding), same "contextual color" approach: whatever
-                     color this button is themed with (muted gray, matching the profile gear)
+                <!-- Settings: gear-icon-only button, always right-aligned. Square card
+                     (62x62) matching the Home tab (K2Theme TabItem "home" trigger) — same
+                     K2SurfaceAltBrush tile + CornerRadius, gear centered, no corner
+                     triangle. Same traced vector gear as the per-profile gear
+                     (K2ProfileItemTemplate — see its doc comment for how the Path Data was
+                     produced) — Fill stays bound to the button's own Foreground
+                     (TemplateBinding), same "contextual color" approach: whatever color
+                     this button is themed with (muted gray, matching the profile gear)
                      drives the icon. -->
                 <Button x:Name="BtnSettingsTab" Grid.Column="2"
-                        Width="34" Height="34" Margin="8,0,4,4"
+                        Width="62" Height="62" Margin="8,0,4,0"
                         VerticalAlignment="Center"
                         Background="Transparent" Foreground="{StaticResource K2TextMutedBrush}"
                         Cursor="Hand" Click="BtnSettingsTab_Click"
                         ToolTip="{loc:Get tab_settings}">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="7">
-                                <Path Width="18" Height="18" Stretch="Uniform" Fill="{TemplateBinding Foreground}"
+                            <Border x:Name="bd" Background="{StaticResource K2SurfaceAltBrush}" CornerRadius="7">
+                                <Path x:Name="Gear" Width="24" Height="24" Stretch="Uniform" Fill="{TemplateBinding Foreground}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"
                                       Data="M 11.06,4.64 L 13.17,4.64 L 13.55,6.33 L 15.00,6.98 L 16.59,6.05 L 18.05,7.50 L 17.11,9.05 L 17.67,10.45 L 19.45,10.92 L 19.45,13.03 L 17.72,13.45 L 17.11,14.86 L 18.00,16.50 L 16.59,17.91 L 15.05,17.02 L 13.64,17.53 L 13.17,19.31 L 11.06,19.31 L 10.69,17.67 L 9.28,17.02 L 7.64,17.91 L 6.19,16.45 L 7.12,14.91 L 6.52,13.45 L 4.78,13.03 L 4.78,10.88 L 6.47,10.50 L 7.12,9.05 L 6.19,7.50 L 7.64,6.05 L 9.23,6.98 L 10.59,6.42 Z M 11.81,9.33 L 12.80,9.42 L 13.88,9.98 L 14.39,10.64 L 14.77,11.72 L 14.67,12.66 L 14.11,13.73 L 13.69,14.11 L 13.08,14.44 L 12.19,14.67 L 11.02,14.39 L 10.22,13.88 L 9.66,12.98 L 9.42,12.09 L 9.61,11.11 L 10.08,10.27 L 10.92,9.61 Z"/>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter TargetName="bd" Property="Background" Value="{StaticResource K2HoverBrush}"/>
+                                </Trigger>
+                                <!-- Active (Settings section open): same accent-red tile +
+                                     white icon as a selected device tab (square Home-style
+                                     card, so no corner triangle). Driven by Tag="active"
+                                     from SetSettingsTabActive in MainWindow.xaml.cs. -->
+                                <Trigger Property="Tag" Value="active">
+                                    <Setter TargetName="bd" Property="Background" Value="{DynamicResource K2AccentBrush}"/>
+                                    <Setter TargetName="Gear" Property="Fill" Value="{DynamicResource K2AccentTextBrush}"/>
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -851,7 +950,7 @@
                      click. DynamicResource, not Static: the accent brush is re-set live
                      by Settings > Accent color. -->
                 <Ellipse x:Name="DotUpdateBadge" Grid.Column="2" Visibility="Collapsed"
-                         Width="9" Height="9" Margin="0,-24,5,0"
+                         Width="9" Height="9" Margin="0,-24,15,0"
                          HorizontalAlignment="Right" VerticalAlignment="Center"
                          IsHitTestVisible="False"
                          Fill="{DynamicResource K2AccentBrush}"
@@ -939,6 +1038,9 @@
                  of PnlHomeEmpty/IcHomeTiles is visible at a time (nothing connected yet vs.
                  at least one tile), toggled by RefreshHomeTiles itself. -->
                 <Grid x:Name="PnlHome">
+                    <Button Style="{StaticResource K2GuideButton}"
+                            Content="{loc:Get highlights_button}" ToolTip="{loc:Get highlights_tooltip}"
+                            Click="BtnHighlights_Click"/>
                     <StackPanel x:Name="PnlHomeEmpty" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Image Source="Assets/K2_logo.png" Width="96" Height="96"
                            HorizontalAlignment="Center"
@@ -1013,6 +1115,7 @@
 
                 <!-- ==================== Everest Max ==================== -->
                 <Grid x:Name="PnlEverest" Visibility="Collapsed">
+                    <Button Style="{StaticResource K2GuideButton}" Click="BtnGuide_Click"/>
                     <Grid Margin="8">
                         <Grid.RowDefinitions>
                             <!-- Fixed (not Auto): keeps the sidebar/content start position
@@ -1301,7 +1404,7 @@
                                                         </ListView.ItemContainerStyle>
                                                         <ListView.ItemTemplate>
                                                             <DataTemplate>
-                                                                <TextBlock Text="{Binding Display}" FontFamily="Consolas" Padding="2"/>
+                                                                <TextBlock Text="{Binding Display}" Padding="2"/>
                                                             </DataTemplate>
                                                         </ListView.ItemTemplate>
                                                     </ListView>
@@ -1670,11 +1773,14 @@
 
                                                                 </StackPanel>
 
-                                                                <StackPanel Grid.Row="2" Grid.Column="4" HorizontalAlignment="Left" VerticalAlignment="Center" Width="180" Margin="5,25,0,0">
+                                                                <!-- No "Apply to device" button any more: every Display Dial
+                                                                     control applies on change (SaveAndApplyDial). Reset is
+                                                                     pushed down so it lines up with the "menu color" row in
+                                                                     the left column (user request 2026-08-28). -->
+                                                                <StackPanel Grid.Row="2" Grid.Column="4" HorizontalAlignment="Left" VerticalAlignment="Center" Width="180" Margin="5,70,0,0">
                                                                     <!-- Debug-only, see AppSettings.DebugMode / ApplyDebugMode -->
                                                                     <Button x:Name="BtnDialRead" Content="{loc:Get read_from_device}" Padding="8,2" Click="BtnDialRead_Click" Style="{StaticResource K2IconButton}" Tag="&#xE72C;" Height="25" Margin="0,0,0,10" Width="180" Visibility="Collapsed"/>
-                                                                    <Button x:Name="BtnDialReset" Content="{loc:Get reset_display_dial}" Padding="8,2" Click="BtnDialReset_Click" Style="{StaticResource K2IconButton}" Tag="&#xE777;" Height="25" Margin="0,0,0,10" Width="180"/>
-                                                                    <Button x:Name="BtnDialApply" Content="{loc:Get apply_to_device}" Padding="8,2" Click="BtnDialApply_Click" Style="{StaticResource K2IconAccentButton}" Tag="&#xE73E;" Height="25" Width="180"/>
+                                                                    <Button x:Name="BtnDialReset" Content="{loc:Get reset_display_dial}" Padding="8,2" Click="BtnDialReset_Click" Style="{StaticResource K2IconButton}" Tag="&#xE777;" Height="25" Width="180"/>
                                                                 </StackPanel>
 
                                                             </Grid>
@@ -1756,11 +1862,11 @@
                                                         </Border>
                                                         <CheckBox x:Name="CkEvKeycapTranslucentLegend" Content="{loc:Get settings_keycap_translucent_legend}"
                                                               Click="CkEvKeycapTranslucentLegend_Click" Margin="0,0,0,6"/>
-                                                        <CheckBox x:Name="CkEvKeycapEditMode" Content="{loc:Get settings_keycap_edit_individual}"
-                                                              Click="CkEvKeycapEditMode_Click"/>
-                                                        <TextBlock Text="{loc:Get settings_keycap_edit_individual_hint}" Foreground="#9A9AA2"
-                                                               TextWrapping="Wrap" Margin="0,3,10,0" FontSize="12" MaxWidth="520"
-                                                               HorizontalAlignment="Left"/>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <CheckBox x:Name="CkEvKeycapEditMode" Content="{loc:Get settings_keycap_edit_individual}"
+                                                                  Click="CkEvKeycapEditMode_Click"/>
+                                                            <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_keycap_edit_individual_hint}"/>
+                                                        </StackPanel>
                                                     </StackPanel>
                                                 </Grid>
                                             </ScrollViewer>
@@ -1812,6 +1918,10 @@
                                                     <StackPanel Grid.Column="1" Margin="0,28,0,0">
                                                         <TextBlock Text="{loc:Get settings_game_mode}" FontWeight="SemiBold" Margin="0,0,0,6"
                                                            ToolTip="{loc:Get settings_game_mode_tip}"/>
+                                                        <CheckBox x:Name="CkGameModeMaster" Content="{loc:Get settings_game_mode_master}"
+                                                          Click="CkGameModeMaster_Click" Height="25" Margin="0,0,0,2" FontWeight="SemiBold"/>
+                                                        <TextBlock Text="{loc:Get settings_game_mode_master_hint_ev}" Opacity="0.6"
+                                                           TextWrapping="Wrap" Margin="0,0,0,6" FontSize="11"/>
                                                         <WrapPanel Orientation="Horizontal">
                                                             <CheckBox x:Name="CkGameModeShiftTab" Content="{loc:Get settings_disable_shift_tab}" Click="CkGameMode_Click" Height="25" Margin="0,0,10,4"/>
                                                             <CheckBox x:Name="CkGameModeAltF4" Content="{loc:Get settings_disable_alt_f4}" Click="CkGameMode_Click" Height="25" Margin="0,0,10,4"/>
@@ -1941,6 +2051,7 @@
                  protocol exists for this device (raw-HID, firmware remap
                  never reverse-engineered — see architectural note above). -->
                 <Grid x:Name="PnlEverest60" Visibility="Collapsed">
+                    <Button Style="{StaticResource K2GuideButton}" Click="BtnGuide_Click"/>
                     <Grid Margin="8">
                         <Grid.RowDefinitions>
                             <!-- Fixed (not Auto): keeps the sidebar/content start position
@@ -2199,47 +2310,78 @@
                                                       Click="CkEv60KeycapTranslucentLegend_Click"/>
                                                 </WrapPanel>
 
-                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
                                                     <CheckBox x:Name="CkEv60KeycapEditMode" Content="{loc:Get settings_keycap_edit_individual}"
                                                       Click="CkEv60KeycapEditMode_Click" Margin="0,5,0,0"/>
+                                                    <Path Style="{StaticResource K2HintIcon}" Margin="8,5,0,0"
+                                                          ToolTip="{loc:Get settings_keycap_edit_individual_hint}"/>
                                                 </WrapPanel>
-                                                <TextBlock Text="{loc:Get settings_keycap_edit_individual_hint}" Foreground="#9A9AA2"
-                                                   TextWrapping="Wrap" Margin="0,3,0,10" FontSize="12"/>
                                             </StackPanel>
                                         </ScrollViewer>
 
                                         <ScrollViewer x:Name="PnlEv60Settings"
                                                       VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
-                                            <StackPanel>
-                                                <TextBlock Text="{loc:Get keyboard_language_layout}" FontWeight="SemiBold" Margin="0,0  ,0,10"/>
-                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,15">
-                                                    <TextBlock Text="{loc:Get ev_layout}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,6,0"/>
-                                                    <ComboBox x:Name="CbEv60KeyboardLayout" Width="200" Margin="0,0,16,0"/>
-                                                </WrapPanel>
+                                                <!-- 2026-08-28: brought to full parity with Everest Max's PnlSecSettings
+                                                     (user request "la sezione settings di Everest 60 ... uguale a everest
+                                                     max"): same two-column 440/* split, the top-right "sync across
+                                                     profiles" checkbox, and a hardware factory-reset button.
+                                                     Everest 60 ships a single body art (everest60_board.png, no
+                                                     black/silver variant), so the keyboard-body-colour radios Everest
+                                                     Max has in this section have no equivalent here and are omitted. -->
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="440"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <CheckBox Grid.ColumnSpan="2"
+                                                      x:Name="CkEv60SettingsSync" Content="{loc:Get settings_sync_profiles}"
+                                                      Style="{StaticResource K2SyncCheckBox}"
+                                                      Click="CkEv60SettingsSync_Click"/>
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="{loc:Get keyboard_language_layout}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                                            <TextBlock Text="{loc:Get ev_layout}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,6,0"/>
+                                                            <ComboBox x:Name="CbEv60KeyboardLayout" Width="200" Height="25" VerticalAlignment="Center"/>
+                                                        </WrapPanel>
 
-                                                <!-- Game Mode + Core Indicator LED — ported from Everest Max's
-                                                 Settings section (user request 2026-07-26): same fields
-                                                 (KeyboardSettings table/EverestKeyboardSettings XML DisableShift/
-                                                 DisableAltF4/DisableWin/DisableAltTab/EnableCoreLED) exist for
-                                                 Everest 60 too (Everest60Settings table), but no raw-HID/SDK
-                                                 command to apply them has been reverse-engineered yet for this
-                                                 device (checked K2/_reference and BaseCampLinux — neither has
-                                                 one for EverestMini) — persisted + imported like every other
-                                                 Ev60 setting, not yet sent to the device. -->
-                                                <TextBlock Text="{loc:Get settings_game_mode}" FontWeight="SemiBold" Margin="0,0,0,6"
-                                                   ToolTip="{loc:Get settings_game_mode_tip}"/>
-                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,15">
-                                                    <CheckBox x:Name="CkEv60GameModeShiftTab" Content="{loc:Get settings_disable_shift_tab}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,10,0"/>
-                                                    <CheckBox x:Name="CkEv60GameModeAltF4" Content="{loc:Get settings_disable_alt_f4}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,10,0"/>
-                                                    <CheckBox x:Name="CkEv60GameModeWinKey" Content="{loc:Get settings_disable_win_key}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,10,0"/>
-                                                    <CheckBox x:Name="CkEv60GameModeAltTab" Content="{loc:Get settings_disable_alt_tab}" Click="CkEv60GameMode_Click" Height="25"/>
-                                                </WrapPanel>
-                                                <TextBlock Text="{loc:Get settings_indicator_leds}" FontWeight="SemiBold" Margin="0,0,0,12"/>
-                                                <WrapPanel Orientation="Horizontal">
-                                                    <CheckBox x:Name="CkEv60CoreIndicatorLed" Height="25" Content="{loc:Get settings_enable_core_led}"
+                                                        <TextBlock Text="{loc:Get settings_indicator_leds}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                            <CheckBox x:Name="CkEv60CoreIndicatorLed" Height="25" Content="{loc:Get settings_enable_core_led}"
                                                       Click="CkEv60CoreIndicatorLed_Click"/>
-                                                </WrapPanel>
-                                            </StackPanel>
+                                                        </WrapPanel>
+
+                                                        <!-- Hardware factory reset — mirrors Everest Max's
+                                                         BtnSettingsFactoryReset (bare button, hint in ToolTip). Puts the
+                                                         keyboard's key bindings back to factory (Everest60SdkService.ResetKeys —
+                                                         the deepest reset this raw-HID board exposes, there is no LED-flash
+                                                         wipe) AND wipes K2's saved configuration for it. -->
+                                                        <Button x:Name="BtnEv60SettingsFactoryReset" Content="{loc:Get settings_factory_reset}"
+                                                            ToolTip="{loc:Get settings_factory_reset_hint}"
+                                                            Padding="8,4" HorizontalAlignment="Left" Margin="0,16,0,0"
+                                                            Click="BtnEv60SettingsFactoryReset_Click"
+                                                            Style="{StaticResource K2IconButton}" Tag="&#xE777;"/>
+                                                    </StackPanel>
+
+                                                    <!-- Right column: Game Mode. Ported from Everest Max 2026-07-26;
+                                                     same fields (Everest60Settings table DisableShift/DisableAltF4/
+                                                     DisableWin/DisableAltTab), no raw-HID/SDK command to apply them has
+                                                     been reverse-engineered for this device yet — persisted + imported
+                                                     like every other Ev60 setting, not yet sent to the device. -->
+                                                    <StackPanel Grid.Column="1" Margin="0,28,0,0">
+                                                        <TextBlock Text="{loc:Get settings_game_mode}" FontWeight="SemiBold" Margin="0,0,0,6"
+                                                           ToolTip="{loc:Get settings_game_mode_tip}"/>
+                                                        <CheckBox x:Name="CkEv60GameModeMaster" Content="{loc:Get settings_game_mode_master}"
+                                                          Click="CkEv60GameModeMaster_Click" Height="25" Margin="0,0,0,2" FontWeight="SemiBold"/>
+                                                        <TextBlock Text="{loc:Get settings_game_mode_master_hint_ev60}" Opacity="0.6"
+                                                           TextWrapping="Wrap" Margin="0,0,0,6" FontSize="11"/>
+                                                        <WrapPanel Orientation="Horizontal">
+                                                            <CheckBox x:Name="CkEv60GameModeShiftTab" Content="{loc:Get settings_disable_shift_tab}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,10,4"/>
+                                                            <CheckBox x:Name="CkEv60GameModeAltF4" Content="{loc:Get settings_disable_alt_f4}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,10,4"/>
+                                                            <CheckBox x:Name="CkEv60GameModeWinKey" Content="{loc:Get settings_disable_win_key}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,10,4"/>
+                                                            <CheckBox x:Name="CkEv60GameModeAltTab" Content="{loc:Get settings_disable_alt_tab}" Click="CkEv60GameMode_Click" Height="25" Margin="0,0,0,4"/>
+                                                        </WrapPanel>
+                                                    </StackPanel>
+                                                </Grid>
                                         </ScrollViewer>
                                     </Grid>
                                 </Border>
@@ -2324,6 +2466,7 @@
                  property that gets a literal value in XAML needs to guard
                  against firing before InitializeComponent() finishes. -->
                 <Grid x:Name="PnlMakalu" Visibility="Collapsed">
+                    <Button Style="{StaticResource K2GuideButton}" Click="BtnGuide_Click"/>
                     <Grid Margin="8">
                         <Grid.RowDefinitions>
                             <!-- Fixed (not Auto): keeps the sidebar/content start position
@@ -2551,6 +2694,7 @@
 
                 <!-- ==================== MacroPad ==================== -->
                 <Grid x:Name="PnlMacroPad" Visibility="Collapsed">
+                    <Button Style="{StaticResource K2GuideButton}" Click="BtnGuide_Click"/>
                     <Grid Margin="8">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="32"/>
@@ -2704,7 +2848,7 @@
                                                     </ListView.ItemContainerStyle>
                                                     <ListView.ItemTemplate>
                                                         <DataTemplate>
-                                                            <TextBlock Text="{Binding Display}" FontFamily="Consolas" Padding="2"/>
+                                                            <TextBlock Text="{Binding Display}" Padding="2"/>
                                                         </DataTemplate>
                                                     </ListView.ItemTemplate>
                                                 </ListView>
@@ -2765,7 +2909,13 @@
                                                         <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                                     </StackPanel>
 
-                                                    <CheckBox Grid.Column="1"  x:Name="CkMacroSync" Content="{loc:Get led_sync_profiles}" Click="CkMacroSync_Click" Width="159" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                                    <!-- Position comes entirely from K2SyncCheckBox (see Window.Resources)
+                                                     so it lands in the exact same spot as Everest Max's CkEvSync /
+                                                     CkSettingsSync / CkDialSync — no local alignment/margin here
+                                                     (user request 2026-08-28: "allinea tutto"). -->
+                                                    <CheckBox x:Name="CkMacroSync" Content="{loc:Get led_sync_profiles}"
+                                                          Style="{StaticResource K2SyncCheckBox}"
+                                                          Click="CkMacroSync_Click" Grid.ColumnSpan="2"/>
 
                                                 </Grid>
 
@@ -2925,12 +3075,12 @@
                                                       Click="CkMpKeycapTranslucentLegend_Click"/>
                                                 </WrapPanel>
 
-                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
                                                     <CheckBox x:Name="CkMpKeycapEditMode" Content="{loc:Get settings_keycap_edit_individual}"
                                                       Click="CkMpKeycapEditMode_Click" Margin="0,5,0,0"/>
+                                                    <Path Style="{StaticResource K2HintIcon}" Margin="8,5,0,0"
+                                                          ToolTip="{loc:Get settings_keycap_edit_individual_hint}"/>
                                                 </WrapPanel>
-                                                <TextBlock Text="{loc:Get settings_keycap_edit_individual_hint}" Foreground="#9A9AA2"
-                                                       TextWrapping="Wrap" Margin="0,3,0,10" FontSize="12"/>
                                             </StackPanel>
                                         </ScrollViewer>
 
@@ -3027,6 +3177,7 @@
 
                 <!-- ==================== DisplayPad ==================== -->
                 <Grid x:Name="PnlDisplayPad" Visibility="Collapsed">
+                    <Button Style="{StaticResource K2GuideButton}" Click="BtnGuide_Click"/>
                     <Grid Margin="8">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="32"/>
@@ -3082,7 +3233,9 @@
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get ev_key_binding}" GroupName="DpSections"
                                              IsChecked="True" Checked="DpSection_Changed"/>
-                                    <RadioButton x:Name="RbDpSecPages"
+                                    <!-- Visibility is driven by UpdateDpPagesTabVisibility: shown only
+                                         when the selected device has at least one folder sub-page. -->
+                                    <RadioButton x:Name="RbDpSecPages" Visibility="Collapsed"
                                              Style="{StaticResource SectionTabStyle}"
                                              Content="{loc:Get dp_pages}" GroupName="DpSections"
                                              Checked="DpSection_Changed"/>
@@ -3170,7 +3323,7 @@
                                                     </ListView.ItemContainerStyle>
                                                     <ListView.ItemTemplate>
                                                         <DataTemplate>
-                                                            <TextBlock Text="{Binding ListDisplay}" FontFamily="Consolas" Padding="2"/>
+                                                            <TextBlock Text="{Binding ListDisplay}" Padding="2"/>
                                                         </DataTemplate>
                                                     </ListView.ItemTemplate>
                                                 </ListView>
@@ -3216,23 +3369,134 @@
                                             </StackPanel>
                                         </ScrollViewer>
 
-                                        <!-- ── PAGES (folder sub-pages created for this device+profile) ── (own ScrollViewer) -->
+                                        <!-- ── PAGES: two-level tree (profile node ▸ its pages), only profiles
+                                             that actually contain a page; nodes expanded by default, collapsible.
+                                             Clicking a node navigates (see TvDpPages_SelectedItemChanged). ── -->
                                         <ScrollViewer x:Name="PnlDpSecPages" Visibility="Collapsed"
                                                   VerticalScrollBarVisibility="Auto">
                                             <StackPanel Orientation="Vertical">
                                                 <TextBlock x:Name="LblDpNoPages" Text="{loc:Get dp_no_pages}"
                                                    Foreground="#9A9AA2" TextWrapping="Wrap" Visibility="Collapsed"/>
-                                                <ItemsControl x:Name="LstDpPages">
-                                                    <ItemsControl.ItemsPanel>
-                                                        <ItemsPanelTemplate>
-                                                            <StackPanel Orientation="Vertical"/>
-                                                        </ItemsPanelTemplate>
-                                                    </ItemsControl.ItemsPanel>
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate>
+                                                <TreeView x:Name="TvDpPages" Background="Transparent" BorderThickness="0"
+                                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                          ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                                          SelectedItemChanged="TvDpPages_SelectedItemChanged">
+                                                    <TreeView.Resources>
+                                                        <!-- expander glyph (stock one is invisible on the dark panel) -->
+                                                        <Style x:Key="DpTreeToggle" TargetType="ToggleButton">
+                                                            <Setter Property="Focusable" Value="False"/>
+                                                            <Setter Property="Width" Value="16"/>
+                                                            <Setter Property="Height" Value="16"/>
+                                                            <Setter Property="Template">
+                                                                <Setter.Value>
+                                                                    <ControlTemplate TargetType="ToggleButton">
+                                                                        <Border Background="#14141A" Width="16" Height="16">
+                                                                            <Path x:Name="Arrow" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                                  Fill="#9A9AA2" Data="M 0 0 L 4 4 L 0 8 Z"/>
+                                                                        </Border>
+                                                                        <ControlTemplate.Triggers>
+                                                                            <Trigger Property="IsChecked" Value="True">
+                                                                                <Setter TargetName="Arrow" Property="Data" Value="M 0 0 L 8 0 L 4 4 Z"/>
+                                                                            </Trigger>
+                                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                                <Setter TargetName="Arrow" Property="Fill" Value="#CCCCCC"/>
+                                                                            </Trigger>
+                                                                        </ControlTemplate.Triggers>
+                                                                    </ControlTemplate>
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                        </Style>
+
+                                                        <!-- Retemplated TreeViewItem: every level starts expanded, plus the
+                                                             connecting rails/elbows the stock TreeView doesn't draw. -->
+                                                        <Style TargetType="TreeViewItem">
+                                                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                                            <Setter Property="Foreground" Value="#CCCCCC"/>
+                                                            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                                                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                                            <Setter Property="Template">
+                                                                <Setter.Value>
+                                                                    <ControlTemplate TargetType="TreeViewItem">
+                                                                        <Grid>
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="16"/>
+                                                                                <ColumnDefinition Width="Auto"/>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                            </Grid.ColumnDefinitions>
+                                                                            <Grid.RowDefinitions>
+                                                                                <RowDefinition Height="Auto"/>
+                                                                                <RowDefinition/>
+                                                                            </Grid.RowDefinitions>
+
+                                                                            <!-- vertical rail: this node down to its siblings -->
+                                                                            <Rectangle x:Name="VLine" Grid.Column="0" Grid.RowSpan="2"
+                                                                                       Width="1" HorizontalAlignment="Center"
+                                                                                       Fill="#3A3A44" SnapsToDevicePixels="True"/>
+                                                                            <!-- horizontal elbow: rail across to the header -->
+                                                                            <Rectangle x:Name="HLine" Grid.Column="0" Grid.Row="0"
+                                                                                       Height="1" Width="7" VerticalAlignment="Center"
+                                                                                       HorizontalAlignment="Right"
+                                                                                       Fill="#3A3A44" SnapsToDevicePixels="True"/>
+
+                                                                            <ToggleButton x:Name="Expander" Grid.Column="0" Grid.Row="0"
+                                                                                          Style="{StaticResource DpTreeToggle}"
+                                                                                          ClickMode="Press"
+                                                                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                                          IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}}"/>
+
+                                                                            <Border x:Name="Bd" Grid.Column="1" Grid.Row="0"
+                                                                                    Background="{TemplateBinding Background}"
+                                                                                    Padding="4,2" CornerRadius="3">
+                                                                                <ContentPresenter x:Name="PART_Header" ContentSource="Header"/>
+                                                                            </Border>
+
+                                                                            <ItemsPresenter x:Name="ItemsHost" Grid.Column="1" Grid.ColumnSpan="2"
+                                                                                            Grid.Row="1"/>
+                                                                        </Grid>
+                                                                        <ControlTemplate.Triggers>
+                                                                            <Trigger Property="IsExpanded" Value="False">
+                                                                                <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed"/>
+                                                                            </Trigger>
+                                                                            <Trigger Property="HasItems" Value="False">
+                                                                                <Setter TargetName="Expander" Property="Visibility" Value="Hidden"/>
+                                                                            </Trigger>
+                                                                            <Trigger Property="IsSelected" Value="True">
+                                                                                <Setter TargetName="Bd" Property="Background" Value="#2A2A32"/>
+                                                                            </Trigger>
+                                                                            <!-- top-level node: nothing to connect to -->
+                                                                            <DataTrigger Value="root"
+                                                                                Binding="{Binding RelativeSource={RelativeSource Self},
+                                                                                          Converter={StaticResource TreeLinePositionConverter}}">
+                                                                                <Setter TargetName="VLine" Property="Visibility" Value="Collapsed"/>
+                                                                                <Setter TargetName="HLine" Property="Visibility" Value="Collapsed"/>
+                                                                            </DataTrigger>
+                                                                            <!-- last child: rail stops at the elbow -->
+                                                                            <DataTrigger Value="last"
+                                                                                Binding="{Binding RelativeSource={RelativeSource Self},
+                                                                                          Converter={StaticResource TreeLinePositionConverter}}">
+                                                                                <Setter TargetName="VLine" Property="Grid.RowSpan" Value="1"/>
+                                                                                <Setter TargetName="VLine" Property="VerticalAlignment" Value="Top"/>
+                                                                                <Setter TargetName="VLine" Property="Height" Value="11"/>
+                                                                            </DataTrigger>
+                                                                        </ControlTemplate.Triggers>
+                                                                    </ControlTemplate>
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                        </Style>
+
+                                                        <!-- profile node: its pages are the children -->
+                                                        <HierarchicalDataTemplate DataType="{x:Type local:DpPageProfileGroup}"
+                                                                                  ItemsSource="{Binding Pages}">
+                                                            <TextBlock Text="{Binding Name}" Foreground="#9A9AA2"
+                                                                       FontWeight="SemiBold" VerticalAlignment="Center"
+                                                                       TextTrimming="CharacterEllipsis"/>
+                                                        </HierarchicalDataTemplate>
+                                                        <!-- page node (its own nested sub-pages are the children) -->
+                                                        <HierarchicalDataTemplate DataType="{x:Type local:DpPageRow}"
+                                                                                  ItemsSource="{Binding Children}">
                                                             <Border x:Name="RowBorder" Padding="6,3" CornerRadius="4"
                                                             Background="Transparent">
-                                                                <Grid>
+                                                                <Grid MinWidth="200">
                                                                     <Grid.ColumnDefinitions>
                                                                         <ColumnDefinition Width="*"/>
                                                                         <ColumnDefinition Width="Auto"/>
@@ -3244,19 +3508,19 @@
                                                                     Content="{loc:Get dp_delete_page}"
                                                                     Style="{StaticResource K2IconButton}" Tag="&#xE74D;"
                                                                     Visibility="Collapsed" Margin="8,0,0,0"
-                                                                    CommandParameter="{Binding PageId}"
+                                                                    CommandParameter="{Binding}"
                                                                     Click="BtnDpDeletePage_Click"/>
                                                                 </Grid>
                                                             </Border>
-                                                            <DataTemplate.Triggers>
+                                                            <HierarchicalDataTemplate.Triggers>
                                                                 <Trigger SourceName="RowBorder" Property="IsMouseOver" Value="True">
                                                                     <Setter TargetName="BtnRowDelete" Property="Visibility" Value="Visible"/>
                                                                     <Setter TargetName="RowBorder" Property="Background" Value="#1E1E24"/>
                                                                 </Trigger>
-                                                            </DataTemplate.Triggers>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
+                                                            </HierarchicalDataTemplate.Triggers>
+                                                        </HierarchicalDataTemplate>
+                                                    </TreeView.Resources>
+                                                </TreeView>
                                             </StackPanel>
                                         </ScrollViewer>
                                     </Grid>
@@ -3672,23 +3936,23 @@
                             </GroupBox>
 
                             <GroupBox x:Name="GbAppBcImport" Header="{loc:Get settings_bc_import_group}" Margin="0,0,0,20">
-                                <StackPanel Margin="8">
+                                <StackPanel Margin="8" Orientation="Horizontal">
                                     <Button x:Name="BtnAppImportFromBaseCamp" Content="{loc:Get settings_bc_import_btn}"
-                                    Padding="8,4" HorizontalAlignment="Left"
+                                    Padding="8,4" VerticalAlignment="Center"
                                     Click="BtnAppImportFromBaseCamp_Click"
                                     Style="{StaticResource K2IconButton}" Tag="&#xE8B5;"/>
-                                    <TextBlock Text="{loc:Get settings_bc_import_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
+                                    <Path Style="{StaticResource K2HintIcon}"
+                                       ToolTip="{loc:Get settings_bc_import_hint}"/>
                                 </StackPanel>
                             </GroupBox>
 
                             <GroupBox x:Name="GbAppBcDllFolder" Header="{loc:Get settings_bc_dll_group}" Margin="0,0,0,20">
                                 <StackPanel Margin="8">
-                                    <TextBlock Text="{loc:Get settings_bc_dll_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="0,0,0,8" FontSize="12"/>
-
-                                    <RadioButton x:Name="RbBcDllAuto" Content="{loc:Get settings_bc_dll_radio_auto}"
-                                         GroupName="BcDllMode" Margin="0,4" Checked="RbBcDllMode_Checked"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                                        <RadioButton x:Name="RbBcDllAuto" Content="{loc:Get settings_bc_dll_radio_auto}"
+                                             GroupName="BcDllMode" Checked="RbBcDllMode_Checked"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_bc_dll_hint}"/>
+                                    </StackPanel>
                                     <TextBlock x:Name="TxtBcDetected" Foreground="#9A9AA2"
                                        TextWrapping="Wrap" Margin="20,0,0,10" FontSize="12"/>
 
@@ -3709,25 +3973,41 @@
                                 <StackPanel Margin="8">
                                     <CheckBox x:Name="CkCloseToTray" Content="{loc:Get settings_close_to_tray}"
                                       Click="CkCloseToTray_Click" FontSize="14"/>
-                                    <CheckBox x:Name="CkK2Autostart" Content="{loc:Get settings_k2_autostart}"
-                                      Click="CkK2Autostart_Click" FontSize="14" Margin="0,12,0,0"/>
-                                    <TextBlock Text="{loc:Get settings_k2_autostart_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
-                                    <CheckBox x:Name="CkStartMinToTray" Content="{loc:Get settings_start_min_tray}"
-                                      Click="CkStartMinToTray_Click" FontSize="14" Margin="0,12,0,0"/>
-                                    <TextBlock Text="{loc:Get settings_start_min_tray_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                        <CheckBox x:Name="CkK2Autostart" Content="{loc:Get settings_k2_autostart}"
+                                          Click="CkK2Autostart_Click" FontSize="14"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_k2_autostart_hint}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                        <CheckBox x:Name="CkStartMinToTray" Content="{loc:Get settings_start_min_tray}"
+                                          Click="CkStartMinToTray_Click" FontSize="14"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_start_min_tray_hint}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox x:Name="GbDeviceSync" Header="{loc:Get settings_device_sync_group}" Margin="0,0,0,20">
+                                <StackPanel Margin="8">
+                                    <StackPanel Orientation="Horizontal">
+                                        <CheckBox x:Name="CkSyncAcrossDevices" Content="{loc:Get sync_across_devices}"
+                                          Click="CkSyncAcrossDevices_Click" FontSize="14"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get sync_across_devices_hint}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                        <CheckBox x:Name="CkSyncLightingAcrossDevices" Content="{loc:Get sync_lighting_across_devices}"
+                                          Click="CkSyncLightingAcrossDevices_Click" FontSize="14"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get sync_lighting_across_devices_hint}"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </GroupBox>
 
                             <GroupBox x:Name="GbDpDeviceMap" Header="{loc:Get settings_dp_devicemap_group}" Margin="0,0,0,20">
-                                <StackPanel Margin="8">
+                                <StackPanel Margin="8" Orientation="Horizontal">
                                     <Button x:Name="BtnDpDeviceMap" Content="{loc:Get settings_dp_devicemap_btn}"
-                                    Padding="8,4" HorizontalAlignment="Left"
+                                    Padding="8,4" VerticalAlignment="Center"
                                     Click="BtnDpDeviceMap_Click"
                                     Style="{StaticResource K2IconButton}" Tag="&#xE8AB;"/>
-                                    <TextBlock Text="{loc:Get settings_dp_devicemap_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
+                                    <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_dp_devicemap_hint}"/>
                                 </StackPanel>
                             </GroupBox>
 
@@ -3788,36 +4068,48 @@
                                     <RadioButton x:Name="RbLogVerbose" Content="{loc:Get log_verbose}"
                                          GroupName="AppLogLevel" Margin="0,4" Checked="RbLogLevel_Checked"/>
 
-                                    <Button x:Name="BtnAppExportLog" Content="{loc:Get settings_export_log_btn}"
-                                    Padding="8,4" HorizontalAlignment="Left" Margin="0,16,0,0"
-                                    Click="BtnAppExportLog_Click"
-                                    Style="{StaticResource K2IconButton}" Tag="&#xE898;"/>
-                                    <TextBlock Text="{loc:Get settings_export_log_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                        <CheckBox x:Name="CkPersistLogs" Content="{loc:Get settings_persist_logs}"
+                                          Click="CkPersistLogs_Click" FontSize="14"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_persist_logs_hint}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                        <Button x:Name="BtnAppExportLog" Content="{loc:Get settings_export_log_btn}"
+                                        Padding="8,4" VerticalAlignment="Center"
+                                        Click="BtnAppExportLog_Click"
+                                        Style="{StaticResource K2IconButton}" Tag="&#xE898;"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_export_log_hint}"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </GroupBox>
 
                             <GroupBox x:Name="GbAppBcInteractions" Header="{loc:Get settings_bc_interactions_group}" Margin="0,20,0,0">
                                 <StackPanel Margin="8">
-                                    <CheckBox x:Name="CkAutoStopBaseCamp" Content="{loc:Get settings_auto_stop_bc}"
-                                      Click="CkAutoStopBaseCamp_Click" FontSize="14"/>
-                                    <TextBlock Text="{loc:Get settings_auto_stop_bc_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <CheckBox x:Name="CkAutoStopBaseCamp" Content="{loc:Get settings_auto_stop_bc}"
+                                          Click="CkAutoStopBaseCamp_Click" FontSize="14"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_auto_stop_bc_hint}"/>
+                                    </StackPanel>
 
-                                    <CheckBox x:Name="CkKillBcWorker" Content="{loc:Get settings_kill_bc_worker}"
-                                      Click="CkKillBcWorker_Click" FontSize="14" Margin="0,16,0,0"/>
-                                    <TextBlock Text="{loc:Get settings_kill_bc_worker_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                        <CheckBox x:Name="CkKillBcWorker" Content="{loc:Get settings_kill_bc_worker}"
+                                          Click="CkKillBcWorker_Click" FontSize="14"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_kill_bc_worker_hint}"/>
+                                    </StackPanel>
 
-                                    <CheckBox x:Name="CkRestartBcOnClose" Content="{loc:Get settings_restart_bc_on_close}"
-                                      Click="CkRestartBcOnClose_Click" FontSize="14" Margin="0,16,0,0"/>
-                                    <TextBlock Text="{loc:Get settings_restart_bc_on_close_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                        <CheckBox x:Name="CkRestartBcOnClose" Content="{loc:Get settings_restart_bc_on_close}"
+                                          Click="CkRestartBcOnClose_Click" FontSize="14"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_restart_bc_on_close_hint}"/>
+                                    </StackPanel>
 
-                                    <CheckBox x:Name="CkBcAutostart" Content="{loc:Get settings_bc_autostart}"
-                                      Click="CkBcAutostart_Click" FontSize="14" Margin="0,16,0,0"/>
-                                    <TextBlock x:Name="TxtBcAutostartHint" Text="{loc:Get settings_bc_autostart_hint}"
-                                       Foreground="#9A9AA2" TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                        <CheckBox x:Name="CkBcAutostart" Content="{loc:Get settings_bc_autostart}"
+                                          Click="CkBcAutostart_Click" FontSize="14"/>
+                                        <Path x:Name="HintBcAutostart" Style="{StaticResource K2HintIcon}"
+                                              ToolTip="{loc:Get settings_bc_autostart_hint}"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </GroupBox>
 
@@ -3829,25 +4121,29 @@
                                     <TextBlock x:Name="TxtSignalRgbStatus" Foreground="#9A9AA2"
                                        TextWrapping="Wrap" Margin="0,0,0,12" FontSize="12"/>
 
-                                    <RadioButton x:Name="RbSignalRgbYield" Content="{loc:Get settings_signalrgb_mode_yield}"
-                                         GroupName="SignalRgbMode" FontSize="14" Checked="RbSignalRgbMode_Checked"/>
-                                    <TextBlock Text="{loc:Get settings_signalrgb_mode_yield_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton x:Name="RbSignalRgbYield" Content="{loc:Get settings_signalrgb_mode_yield}"
+                                             GroupName="SignalRgbMode" FontSize="14" Checked="RbSignalRgbMode_Checked"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_signalrgb_mode_yield_hint}"/>
+                                    </StackPanel>
 
-                                    <RadioButton x:Name="RbSignalRgbStop" Content="{loc:Get settings_signalrgb_mode_stop}"
-                                         GroupName="SignalRgbMode" FontSize="14" Margin="0,16,0,0" Checked="RbSignalRgbMode_Checked"/>
-                                    <TextBlock Text="{loc:Get settings_signalrgb_mode_stop_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                        <RadioButton x:Name="RbSignalRgbStop" Content="{loc:Get settings_signalrgb_mode_stop}"
+                                             GroupName="SignalRgbMode" FontSize="14" Checked="RbSignalRgbMode_Checked"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_signalrgb_mode_stop_hint}"/>
+                                    </StackPanel>
 
-                                    <RadioButton x:Name="RbSignalRgbOff" Content="{loc:Get settings_signalrgb_mode_off}"
-                                         GroupName="SignalRgbMode" FontSize="14" Margin="0,16,0,0" Checked="RbSignalRgbMode_Checked"/>
-                                    <TextBlock Text="{loc:Get settings_signalrgb_mode_off_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="20,4,0,0" FontSize="12"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                        <RadioButton x:Name="RbSignalRgbOff" Content="{loc:Get settings_signalrgb_mode_off}"
+                                             GroupName="SignalRgbMode" FontSize="14" Checked="RbSignalRgbMode_Checked"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_signalrgb_mode_off_hint}"/>
+                                    </StackPanel>
 
-                                    <TextBlock Text="{loc:Get settings_signalrgb_plugins}" FontWeight="SemiBold"
-                                       Margin="0,20,0,0" FontSize="14"/>
-                                    <TextBlock Text="{loc:Get settings_signalrgb_plugins_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="0,4,0,8" FontSize="12"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,20,0,8">
+                                        <TextBlock Text="{loc:Get settings_signalrgb_plugins}" FontWeight="SemiBold"
+                                           FontSize="14" VerticalAlignment="Center"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_signalrgb_plugins_hint}"/>
+                                    </StackPanel>
                                     <!-- WrapPanel, not a horizontal StackPanel: the three labels are
                                          localized and the settings column is narrow, so on a StackPanel
                                          the third button was clipped off the right edge (user report
@@ -3869,13 +4165,12 @@
 
                             <GroupBox x:Name="GbAppDanger" Header="{loc:Get settings_danger_zone}"
                               Margin="0,24,0,0" BorderBrush="{StaticResource K2DangerBrush}">
-                                <StackPanel Margin="8">
+                                <StackPanel Margin="8" Orientation="Horizontal">
                                     <Button x:Name="BtnAppRestoreDefaults" Content="{loc:Get restore_defaults_app}"
-                                    Padding="8,4" HorizontalAlignment="Left"
+                                    Padding="8,4" VerticalAlignment="Center"
                                     Click="BtnAppRestoreDefaults_Click"
                                     Style="{StaticResource K2IconButton}" Tag="&#xE777;"/>
-                                    <TextBlock Text="{loc:Get restore_defaults_app_hint}" Foreground="#9A9AA2"
-                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
+                                    <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get restore_defaults_app_hint}"/>
                                 </StackPanel>
                             </GroupBox>
 
@@ -3911,7 +4206,7 @@
                                                         <Border Height="140" Margin="0,0,0,16" CornerRadius="8"
                                                         ClipToBounds="True" Background="#14141A" BorderBrush="#2A2A33"
                                                         BorderThickness="1" Cursor="Hand" MouseLeftButtonUp="ExtraLinkCard_Click"
-                                                        ToolTip="{Binding Url}" MaxWidth="640" HorizontalAlignment="Left">
+                                                        ToolTip="{Binding Url}" MaxWidth="640" HorizontalAlignment="Stretch">
                                                             <Border.Style>
                                                                 <Style TargetType="Border">
                                                                     <Style.Triggers>

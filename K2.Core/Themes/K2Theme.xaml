@@ -7,6 +7,7 @@
                     xmlns:converters="clr-namespace:K2.Core.Converters">
 
     <converters:UpperCaseConverter x:Key="UpperCaseConverter"/>
+    <converters:TreeLinePositionConverter x:Key="TreeLinePositionConverter"/>
 
     <!-- ============================================================
          K2 — Shared dark theme (DisplayPad / MacroPad / Everest).
@@ -244,6 +245,101 @@
                             <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource K2AccentBrush}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ===== Hint icon ("?" next to a label/button, details on hover) =====
+         Lightweight replacement for the grey explanatory TextBlock that used to
+         sit under many settings rows (Base Camp's own pattern): a filled disc
+         with a "?" knocked out of it, carrying the explanation in its ToolTip.
+         Vector Path (not a font glyph / PNG) so it stays crisp and correctly
+         anti-aliased at any DPI; EvenOdd fill makes the "?" a true transparent
+         cut-out, so the one accent Fill is all the colouring it needs. Usage:
+             <Path Style="{StaticResource K2HintIcon}"
+                   ToolTip="{loc:Get some_hint_key}"/>
+         Drop it in a horizontal StackPanel right after the control it explains. -->
+    <Style x:Key="K2HintIcon" TargetType="Path">
+        <Setter Property="Data" Value="M15.07,11.25L14.17,12.17C13.45,12.89 13,13.5 13,15H11V14.5C11,13.39 11.45,12.39 12.17,11.67L13.41,10.41C13.78,10.05 14,9.55 14,9C14,7.89 13.1,7 12,7A2,2 0 0,0 10,9H8A4,4 0 0,1 12,5A4,4 0 0,1 16,9C16,9.88 15.64,10.67 15.07,11.25M13,19H11V17H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/>
+        <Setter Property="Fill" Value="{StaticResource K2TextMutedBrush}"/>
+        <Setter Property="Stretch" Value="Uniform"/>
+        <Setter Property="Width" Value="15"/>
+        <Setter Property="Height" Value="15"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Cursor" Value="Help"/>
+        <Setter Property="Margin" Value="8,0,0,0"/>
+        <Setter Property="ToolTipService.InitialShowDelay" Value="150"/>
+        <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
+        <Setter Property="ToolTipService.BetweenShowDelay" Value="0"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Fill" Value="{DynamicResource K2AccentHoverBrush}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- ===== GuideBarButton: small "open the guide" button for a dialog's
+         bottom bar (ButtonActionDialog, DiscordProfileConfigWindow, …).
+         Book+"?" icon (Assets/guide.png, alpha silhouette tinted via
+         OpacityMask so it follows Foreground) + a label taken from Content.
+         The instance sets Content + ToolTip (localized strings live in the
+         windows, not here). Same look as K2.App's per-section K2GuideButton. -->
+    <Style x:Key="GuideBarButton" TargetType="Button">
+        <Setter Property="Height" Value="26"/>
+        <Setter Property="Padding" Value="8,0"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource K2TextMutedBrush}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6">
+                        <StackPanel Orientation="Horizontal" Margin="{TemplateBinding Padding}">
+                            <Rectangle Width="15" Height="15" VerticalAlignment="Center"
+                                       Fill="{TemplateBinding Foreground}">
+                                <Rectangle.OpacityMask>
+                                    <ImageBrush ImageSource="pack://application:,,,/K2.Core;component/Assets/guide.png"/>
+                                </Rectangle.OpacityMask>
+                            </Rectangle>
+                            <TextBlock Text="{TemplateBinding Content}" Margin="6,0,0,0"
+                                       Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource K2HoverBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource K2TextBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ===== ToolTip (dark, matches the app surfaces) =====
+         Implicit: every ToolTip in every K2 window picks this up (K2HintIcon
+         above leans on it, but so do the plain ToolTip="..." on tabs/toggles).
+         Default WPF tooltip is a light OS-styled box that clashed with the dark UI. -->
+    <Style TargetType="ToolTip">
+        <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="MaxWidth" Value="340"/>
+        <Setter Property="HasDropShadow" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="{StaticResource K2SurfaceAltBrush}"
+                            BorderBrush="{StaticResource K2BorderStrongBrush}" BorderThickness="1"
+                            CornerRadius="6" Padding="10,7">
+                        <ContentPresenter TextElement.Foreground="{StaticResource K2TextBrush}">
+                            <ContentPresenter.Resources>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="TextWrapping" Value="Wrap"/>
+                                </Style>
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
+                    </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -551,6 +647,42 @@
         </Setter>
     </Style>
 
+    <!-- ===== PasswordBox =====
+         Mirrors the TextBox style above so client-secret / password fields in
+         the service settings popups match the plain text fields next to them
+         (same dark surface, 7px radius, 8,0 padding). Without this, PasswordBox
+         falls back to the OS default (white bg, wide left inset). -->
+    <Style TargetType="PasswordBox">
+        <Setter Property="Background" Value="{StaticResource K2SurfaceAltBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource K2BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="8,0"/>
+        <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
+        <Setter Property="CaretBrush" Value="{DynamicResource K2AccentBrush}"/>
+        <Setter Property="SelectionBrush" Value="{DynamicResource K2AccentBrush}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="PasswordBox">
+                    <Border x:Name="bd" CornerRadius="7"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource K2BorderStrongBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource K2AccentBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ===== CheckBox ===== -->
     <Style TargetType="CheckBox">
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
@@ -678,6 +810,21 @@
         </Setter>
     </Style>
 
+    <!-- "Sync across profiles" checkbox: one style so the checkbox lands in exactly the
+         same spot in every section of every device's bottom settings panel (Lighting /
+         Display Dial / Settings). It used to be positioned ad hoc per section (Center vs
+         Top, different margins, one clipped inside a fixed column), so it visibly jumped
+         around when switching sections — user report 2026-08-22. Always place it as the
+         top-right child of the section's root Grid (Grid.ColumnSpan spanning every column)
+         with no local alignment/margin overrides. Lives here (not MainWindow.xaml's
+         Window.Resources) so the Everest 60 Lighting UserControl can see it too. -->
+    <Style x:Key="K2SyncCheckBox" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+        <Setter Property="VerticalAlignment" Value="Top"/>
+        <Setter Property="Margin" Value="0,2,10,0"/>
+        <Setter Property="Height" Value="22"/>
+    </Style>
+
     <!-- ===== RadioButton ===== -->
     <Style TargetType="RadioButton">
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
@@ -703,6 +850,14 @@
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="outer" Property="Stroke" Value="{DynamicResource K2AccentBrush}"/>
+                        </Trigger>
+                        <!-- Without this a disabled radio looked exactly like an enabled one and
+                             only revealed itself by not reacting to clicks (user report
+                             2026-09-01, on the Spotify profile's text-mode pair). Same dimming
+                             the Button/CheckBox templates already use. -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

@@ -103,6 +103,10 @@
   <string name="appshortcut_action_label">操作:</string>
   <string name="appshortcut_custom">自定义…</string>
   <string name="obs_settings_title">OBS Studio 设置</string>
+  <string name="obs_setup_guide">1. 在 OBS Studio 中打开"工具"&gt;"WebSocket 服务器设置"。
+2. 勾选"启用 WebSocket 服务器"（默认端口 4455）。
+3. 点击"显示连接信息"查看服务器密码（或取消勾选"启用身份验证"以不使用密码）。
+4. 在此输入相同的主机／端口／密码，然后点击"测试连接"。</string>
   <string name="obs_host_label">主机:</string>
   <string name="obs_port_label">端口:</string>
   <string name="obs_password_label">密码:</string>
@@ -177,11 +181,22 @@
   <string name="spotify_hint">在 developer.spotify.com/dashboard 注册你自己的应用，重定向 URI 设为 "http://127.0.0.1:17564/callback"，然后将 Client ID/Secret 粘贴到这里。</string>
   <string name="spotify_setup_guide">1. 前往 developer.spotify.com/dashboard，点击 "Create app"。
 2. Redirect URI：http://127.0.0.1:17564/callback
-3. Which API/SDKs are you planning to use：Web API。
-4. 保存后复制 Client ID，然后点击 "View client secret" 获取 Client Secret。</string>
+3. 在 "Which API/SDKs are you planning to use" 中勾选 "Web API"。
+4. 保存后复制 Client ID，然后点击 "View client secret" 获取 Client Secret。
+
+播放/暂停、下一首/上一首、随机播放、循环和音量可用：Spotify Premium 时经由 Web API，否则经由系统媒体键。
+"喜欢" 和 "添加/移除歌单" 不可用：Spotify 对个人（Development 模式）应用禁用了音乐库和歌单相关接口，因此 K2 隐藏了这些操作。</string>
   <string name="spotify_client_id_label">Client ID:</string>
   <string name="spotify_client_secret_label">Client Secret:</string>
-  <string name="spotify_connected_as">已连接账户</string>
+  <string name="spotify_connected_as">已连接</string>
+  <string name="spotify_webapi_active">Web API 已启用（Spotify Premium）</string>
+  <string name="spotify_email_hint">将此邮箱添加到你的 Spotify 应用的 "User Management" 中</string>
+  <string name="spotify_email_reconnect">重新连接以显示 "User Management" 所需的账户邮箱</string>
+  <string name="spotify_library_403">Spotify 对 Development 模式的应用禁用了"喜欢"/"保存到歌单"（2025 年平台变更）——这不是 K2 的问题，新建应用或 User Management 都无法解决。播放控制（播放/暂停、下一首、音量）仍可用。完整的音乐库访问需要 Spotify 授予该应用 Extended Access。</string>
+  <string name="spotify_device_label">播放设备：</string>
+  <string name="spotify_device_auto">自动（活动设备）</string>
+  <string name="spotify_device_active">活动</string>
+  <string name="spotify_device_offline">离线</string>
   <string name="spotify_settings_button">Spotify 设置…</string>
   <string name="spotify_cmd_play_pause">播放/暂停</string>
   <string name="spotify_cmd_next">下一曲</string>
@@ -195,6 +210,7 @@
   <string name="spotify_cmd_volume_set">设置音量</string>
   <string name="spotify_cmd_save_playlist">将歌曲保存到播放列表</string>
   <string name="spotify_cmd_remove_playlist">从播放列表中移除歌曲</string>
+  <string name="spotify_cmd_unavailable">不可用</string>
   <string name="youtube_settings_title">YouTube 设置</string>
   <string name="youtube_hint">在 console.cloud.google.com 创建启用了 YouTube Data API v3 的桌面应用 OAuth 客户端，然后将 Client ID/Secret 粘贴到这里。</string>
   <string name="youtube_setup_guide">1. 前往 console.cloud.google.com，创建/选择一个项目，然后启用 "YouTube Data API v3"（APIs &amp; Services -&gt; Library）。
@@ -269,6 +285,7 @@
   <string name="media_vol_down">Volume down</string>
   <string name="media_mute">Mute</string>
   <string name="media_shuffle">随机播放</string>
+  <string name="media_repeat">循环</string>
   <string name="mouse_left">Left button</string>
   <string name="mouse_right">Right button</string>
   <string name="mouse_middle">Middle button</string>
@@ -280,7 +297,6 @@
   <string name="mouse_scroll_right">Scroll right</string>
   <string name="keys_modifiers_label">Modifiers:</string>
   <string name="keys_key_label">Key:</string>
-  <string name="keys_win_hint">The Windows key can be selected but is not sent by the current keystroke backend (SendKeys) — it is silently ignored.</string>
   <string name="gh_manage">管理 Google Home 设备…</string>
   <string name="gh_summary_missing">Google Home（绑定已移除）</string>
   <string name="gh_setup_title">Google Home 设备</string>
@@ -401,8 +417,13 @@
   <string name="settings_start_min_tray">启动时直接最小化到托盘</string>
   <string name="settings_start_min_tray_hint">K2 启动时驱动程序保持激活，但窗口隐藏在托盘中 — 可随时从托盘图标打开。</string>
   <!-- DisplayPad 设备映射 -->
-  <string name="settings_dp_devicemap_group">DisplayPad 设备映射</string>
-  <string name="settings_dp_devicemap_btn">配置映射…</string>
+  <string name="settings_device_sync_group">设备间同步</string>
+  <string name="sync_across_devices">在设备间同步配置文件</string>
+  <string name="sync_across_devices_hint">在一个已连接的 Mountain 设备上切换配置文件时，所有其他已连接设备都会切换到相同的配置文件槽。</string>
+  <string name="sync_lighting_across_devices">在设备间同步灯光</string>
+  <string name="sync_lighting_across_devices_hint">在一个设备上更改灯光效果或颜色时，会同步到所有其他已连接的设备（如果某设备无法重现该效果，则使用最接近的效果）。</string>
+  <string name="settings_dp_devicemap_group">设备映射</string>
+  <string name="settings_dp_devicemap_btn">DisplayPad 映射</string>
   <string name="settings_dp_devicemap_hint">如果你将 DisplayPad 移动到了另一个 USB 端口，导致其已保存的配置文件现在显示在错误的面板上（例如 "DisplayPad 2" 和 "DisplayPad 3" 互换），可使用此功能重新指定每个已连接面板对应的编号。</string>
   <string name="dp_devicemap_title">DisplayPad 设备映射</string>
   <string name="dp_devicemap_hint">下方列出了每个已连接的面板及其固件版本。点击"识别"可使某个面板的背光闪烁，以便分辨对应的行，然后设置它应使用的板编号。两行不能使用相同的板编号。</string>
@@ -436,6 +457,7 @@
   <string name="hw_busy_importing_profile">正在导入配置文件，请稍候…</string>
   <string name="hw_busy_importing_profiles">正在导入配置文件，请稍候…</string>
   <string name="hw_busy_restoring_defaults">正在恢复默认设置，请稍候…</string>
+  <string name="hw_busy_sync_across_profiles">正在将配置文件间同步应用到键盘，请稍候…</string>
   <string name="hw_busy_restoring_key_images">正在恢复显示按键的默认图像，请稍候…</string>
   <string name="hw_busy_clearing_image">正在清除显示按键上的图像，请稍候…</string>
   <string name="hw_busy_writing_key_bindings">正在将显示按键的操作写入键盘，请稍候…</string>
@@ -621,6 +643,9 @@
   <string name="settings_sync_profiles">跨配置文件同步</string>
   <string name="settings_game_mode">游戏模式</string>
   <string name="settings_game_mode_tip">游戏模式会禁用某些按键组合，以避免意外中断游戏。</string>
+  <string name="settings_game_mode_master">游戏模式已启用</string>
+  <string name="settings_game_mode_master_hint_ev">也可以在键盘上用 Fn + Pause 切换。下方复选框选择要屏蔽的按键。</string>
+  <string name="settings_game_mode_master_hint_ev60">也可以在键盘上用 Fn + Win 切换。下方复选框选择要屏蔽的按键。</string>
   <string name="settings_disable_shift_tab">禁用 Shift + Tab</string>
   <string name="settings_disable_alt_f4">禁用 Alt + F4</string>
   <string name="settings_disable_win_key">禁用 Windows 键</string>
@@ -780,6 +805,7 @@
   <string name="txt_bg_solid">纯色背景</string>
   <string name="txt_bg_image">叠加在已加载的图片上</string>
   <string name="txt_bg_color">背景:</string>
+  <string name="txt_style_only_header">文本样式</string>
   <string name="txt_color">文字:</string>
   <string name="txt_position_label">位置:</string>
   <string name="txt_icon_source_label">图标来源:</string>
@@ -833,6 +859,7 @@
   <string name="rename_device_prompt">输入此设备的名称：</string>
   <string name="profile_not_available_tip">此设备尚不支持此功能 — 未实现配置文件存储。</string>
   <!-- 重命名/删除配置文件 -->
+  <string name="configure_profile">配置配置文件</string>
   <string name="rename_profile">重命名配置文件</string>
   <string name="rename_profile_title">重命名配置文件</string>
   <string name="rename_profile_prompt">输入此配置文件的名称：</string>
@@ -989,6 +1016,8 @@
   <string name="discord_account_button">Discord 账户（Client ID / Secret）…</string>
   <string name="discord_voicepage_return_label">经过以下时间后自动回到语音页面</string>
   <string name="discord_voicepage_return_hint">通话进行中，如果你离开语音页面切换到普通配置文件，经过设定的秒数仍未回到该页面时，它会像屏幕保护程序一样自动返回。关闭 = 只有来新通话或按下“语音页面”按键时才会返回。</string>
+  <string name="show_back_arrow_label">显示返回箭头</string>
+  <string name="show_back_arrow_hint">在将键盘交回上一个配置文件的磁贴上加上返回箭头。关闭后按键照样生效，只是去掉标记，让下面的图片不被遮挡。</string>
   <string name="act_emojibrowser">表情符号浏览器</string>
   <string name="emb_grp_smileys">表情</string>
   <string name="emb_grp_people">人物</string>
@@ -1020,6 +1049,7 @@
   <string name="makalu_setting_clickspeed">点击速度：</string>
   <string name="dp_icon_section">图标</string>
   <string name="dp_gallery_icon">默认图标</string>
+  <string name="dp_spotify_cover_icon">使用 Spotify 专辑封面</string>
   <string name="dp_gallery_icon_with_text">带文字</string>
   <string name="dp_gallery_icon_without_text">不带文字</string>
   <string name="gallery_dialog_title">图标库</string>
@@ -1042,4 +1072,84 @@
   <string name="txt_icon_section">图标</string>
   <string name="txt_text_section">文字</string>
   <string name="txt_reset_icon">重置图标</string>
+
+  <!-- v1.3.2: guide buttons, PC monitor sensor list, Spotify profile -->
+  <string name="guide_button">指南</string>
+  <string name="guide_none">本节的指南尚未编写。</string>
+  <string name="guide_title">指南</string>
+  <string name="guide_tooltip">打开本节的指南</string>
+  <string name="highlights_button">亮点</string>
+  <string name="highlights_tooltip">Base Camp 没有的 K2 功能，以及如何开启</string>
+  <string name="profile_settings_focus_only">仅当此应用位于前台时</string>
+  <string name="profile_settings_focus_only_hint">仅当关联应用是前台窗口时，K2 才显示此配置；当它失去焦点时，K2 会返回上一个配置。</string>
+  <string name="profile_settings_pick_running">从正在运行的应用中选择…</string>
+  <string name="profile_settings_restore_on_close">应用关闭时返回上一个配置</string>
+  <string name="profile_settings_restore_on_close_hint">当关联应用退出时，K2 会切回之前处于活动状态的配置——仅当你仍在此配置上时。启用“仅在前台时”时将忽略此项。</string>
+  <string name="running_process_hint">选择一个当前已打开的应用程序。你也可以直接浏览它的 .exe 文件。</string>
+  <string name="running_process_title">选择正在运行的应用</string>
+  <string name="sensor_col_name">传感器</string>
+  <string name="sensor_col_type">类型</string>
+  <string name="sensor_col_value">数值</string>
+  <string name="sensor_count_fmt">{0} 个传感器</string>
+  <string name="sensor_grp_battery">电池</string>
+  <string name="sensor_grp_cooler">散热</string>
+  <string name="sensor_grp_cpu">CPU</string>
+  <string name="sensor_grp_gpu">GPU</string>
+  <string name="sensor_grp_memory">内存</string>
+  <string name="sensor_grp_motherboard">主板</string>
+  <string name="sensor_grp_network">网络</string>
+  <string name="sensor_grp_other">其他</string>
+  <string name="sensor_grp_storage">存储</string>
+  <string name="sensor_pick_button">选择传感器…</string>
+  <string name="sensor_pick_hint">选择任意硬件传感器在按键上显示。列表会实时更新；用下方的选择器决定显示其当前值、最小值、最大值还是平均值。</string>
+  <string name="sensor_pick_none">请先选择一个传感器。</string>
+  <string name="sensor_pick_search">按名称、类型或设备筛选</string>
+  <string name="sensor_pick_title">硬件传感器</string>
+  <string name="sensor_preview_fmt">当前值：{0}</string>
+  <string name="sensor_reset_stats">重置最小/最大/平均值</string>
+  <string name="sensor_show_label">显示：</string>
+  <string name="sensor_starting">正在读取硬件传感器…</string>
+  <string name="sensor_stat_avg">平均值</string>
+  <string name="sensor_stat_cur">当前值</string>
+  <string name="sensor_stat_max">最大值</string>
+  <string name="sensor_stat_min">最小值</string>
+  <string name="sensor_unavailable">没有可用的硬件传感器。</string>
+  <string name="settings_persist_logs">保留日志</string>
+  <string name="settings_persist_logs_hint">保留每次会话的日志，而不是在下次启动时清空：每次运行的日志会以日期和时间命名并移动到“logs”文件夹。有助于捕捉更新后首次启动时偶发的崩溃。</string>
+  <string name="spotify_account_button">Spotify 账户（Client ID / Secret）…</string>
+  <string name="spotify_cover_layout_label">封面布局</string>
+  <string name="spotify_cover_layout_quad">封面铺满 4 个按键</string>
+  <string name="spotify_cover_layout_single">封面占 1 个按键，文字占 3 个按键</string>
+  <string name="spotify_cover_layout_single_hint">该区块的另外三个按键分别显示歌曲、艺人和专辑，各自带有“歌曲/艺人/专辑”标签——下方的“长文本”设置作用于此。</string>
+  <string name="spotify_device_hint">播放/音量/循环按键控制哪个 Spotify Connect 设备。“自动”会将命令发送到当前处于活动状态的设备。</string>
+  <string name="spotify_field_album">专辑</string>
+  <string name="spotify_field_artist">艺人</string>
+  <string name="spotify_field_song">歌曲</string>
+  <string name="spotify_foreground_only_hint">一旦 Spotify 应用进入前台，触控板就切换到此配置；一旦它离开前台，就交还给你之前所在的配置。返回箭头仍然有效：使用后，配置会一直隐藏，直到 Spotify 再次获得焦点（或上方的计时器将其带回）。</string>
+  <string name="spotify_foreground_only_label">仅当 Spotify 在前台时显示</string>
+  <string name="spotify_position_center">居中</string>
+  <string name="spotify_position_hint">2×2 封面区块占用哪一对列。周围的 8 个播放/音量/循环按键会相应改变布局——每个位置都有各自的排列，而不仅仅是重新排布。</string>
+  <string name="spotify_position_label">封面区块位置</string>
+  <string name="spotify_position_left">左侧</string>
+  <string name="spotify_position_right">右侧</string>
+  <string name="spotify_profile_config_hint">DisplayPad 的 Spotify 配置左侧 2×2 区块如何显示正在播放的内容。</string>
+  <string name="spotify_profile_config_title">Spotify 配置</string>
+  <string name="spotify_return_hint">在封面按键的返回箭头把触控板交给另一个配置后，经过这么多秒，Spotify 配置会自动返回。保持关闭则停留在你切换到的位置。</string>
+  <string name="spotify_return_label">经过多少秒后返回此配置</string>
+  <string name="spotify_source_label">曲目数据来源</string>
+  <string name="spotify_source_local">本地（Windows“正在播放”）</string>
+  <string name="spotify_source_webapi">Spotify 账户（Web API）</string>
+  <string name="spotify_source_webapi_hint">Web API 会额外提供专辑名称和更高分辨率的封面，但需要已连接 Spotify 账户。如果没有返回任何内容，则改用本地来源。</string>
+  <string name="spotify_text_mode_hint">选择跑马灯（滚动）时，K2 自己的按键网格预览仍将该按键显示为静止的一行——滚动是仅限硬件的效果，在应用中从不产生动画。</string>
+  <string name="spotify_text_mode_label">长文本（单键布局）</string>
+  <string name="spotify_text_mode_marquee">像跑马灯一样滚动</string>
+  <string name="spotify_text_mode_static">静止——用“…”截断</string>
+  <string name="sysmon_cpu_temp">CPU 温度</string>
+  <string name="sysmon_disk_all">所有磁盘</string>
+  <string name="sysmon_disk_label">哪个磁盘：</string>
+  <string name="sysmon_disk_pick_fmt">磁盘：{0}</string>
+  <string name="sysmon_gpu_temp">GPU 温度</string>
+  <string name="sysmon_mode_temp">温度</string>
+  <string name="sysmon_mode_usage">占用率</string>
+  <string name="sysmon_pick_sensor">传感器选择</string>
 </strings>

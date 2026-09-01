@@ -188,4 +188,22 @@ internal static class Everest60SdkNative
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SaveFlash(int reserved);
+
+    // Game Mode BITMASK (which keys) + Core LED are done over raw HID, NOT here — a
+    // real USB capture (_reference/usb_dumps/ev60_flags.pcapng) showed Base Camp
+    // driving them as plain 64-byte HID Feature Reports on mi_02 (cmd 0x15 / 0x10),
+    // the same channel K2 uses for Everest 60 lighting. See
+    // Everest60Protocol.SetGameMode / SetCoreLed.
+    //
+    // The Game Mode MASTER on/off (what Fn+Win toggles) has no identified raw-HID
+    // opcode (ev60_gamemode.pcapng only showed static GET queries), so it goes
+    // through the vendor DLL, which exports it with plain bool params.
+
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool SetGameModeStatus([MarshalAs(UnmanagedType.I1)] bool enable);
+
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool GetGameModeStatus([MarshalAs(UnmanagedType.I1)] ref bool enable);
 }

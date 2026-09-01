@@ -14,6 +14,7 @@ public partial class YouTubeSettingsWindow : Window
     public YouTubeSettingsWindow()
     {
         InitializeComponent();
+        RtbYtGuide.Document = SetupGuide.BuildDocument(Loc.Get("youtube_setup_guide"), this);
         TxtYtClientId.Text = YouTubeStore.ClientId;
         PwdYtClientSecret.Password = YouTubeStore.ClientSecret;
         RefreshStatus();

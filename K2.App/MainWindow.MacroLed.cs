@@ -598,5 +598,10 @@ public partial class MainWindow
             directionByte: dirByte,
             profile:       CurrentProfile());
         Log($"[LED ] ChangeEffect -> {ok}");
+
+        // Cross-device lighting sync — see the twin call in MainWindow.Everest.cs's
+        // ApplyCurrentEffect. Custom returns early above and doesn't reach here.
+        if (MpBuildLightingSnapshot() is { } snap)
+            DeviceSyncOnLightingChanged(SyncDeviceKind.MacroPad, snap);
     }
 }

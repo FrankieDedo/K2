@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:K2.Core"
         Title="{loc:Get spotify_settings_title}"
-        Width="460" Height="500"
-        MinWidth="380" MinHeight="460"
+        Width="460" Height="580"
+        MinWidth="380" MinHeight="540"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
@@ -27,8 +27,15 @@
 
         <TextBlock Grid.Row="1" Text="{loc:Get spotify_hint}" TextWrapping="Wrap" Foreground="#9A9AA2" Margin="0,0,0,8"/>
 
+        <!-- RichTextBox, not a TextBlock: the setup guide must be selectable/copyable AND
+             carry clickable links to the developer portal (a WPF TextBlock can do neither).
+             Read-only + transparent + borderless so it still reads as plain text. The document
+             is built in code-behind (SetupGuide.BuildDocument) from the localized string. -->
         <Border Grid.Row="2" Background="#14FFFFFF" CornerRadius="4" Padding="10,8" Margin="0,0,0,10">
-            <TextBlock Text="{loc:Get spotify_setup_guide}" TextWrapping="Wrap" Foreground="#C7C7CE" FontSize="12"/>
+            <RichTextBox x:Name="RtbSpotifyGuide" IsReadOnly="True" IsDocumentEnabled="True"
+                         Background="Transparent" BorderThickness="0" Padding="0"
+                         Foreground="#C7C7CE" FontSize="12"
+                         VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Disabled"/>
         </Border>
 
         <TextBlock Grid.Row="3" Text="{loc:Get spotify_client_id_label}" Margin="0,0,0,4"/>
@@ -39,10 +46,21 @@
 
         <TextBlock x:Name="TxtSpotifyStatus" Grid.Row="7" TextWrapping="Wrap" Foreground="#9A9AA2" Margin="0,0,0,4"/>
 
-        <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="{loc:Get twitch_disconnect}" Padding="10,4" Margin="0,0,8,0" Click="BtnSpotifyDisconnect_Click"/>
-            <Button Content="{loc:Get twitch_connect}" Padding="10,4" Margin="0,0,8,0" Click="BtnSpotifyConnect_Click"/>
-            <Button Content="{loc:Get save}" Width="90" Padding="6,2" IsDefault="True" Click="BtnSpotifySave_Click"/>
-        </StackPanel>
+        <!-- Display-only: reflects whether the connected account can use the Web API
+             (Spotify Premium). Not user-editable — IsHitTestVisible/Focusable off rather
+             than IsEnabled so the label stays readable. Hidden until connected. -->
+        <CheckBox x:Name="ChkSpotifyWebApi" Grid.Row="8" VerticalAlignment="Top" Margin="0,4,0,0"
+                  IsHitTestVisible="False" Focusable="False" Visibility="Collapsed"
+                  Foreground="#C7C7CE" Content="{loc:Get spotify_webapi_active}"/>
+
+        <Grid Grid.Row="9" Margin="0,12,0,0">
+            <Button Style="{DynamicResource GuideBarButton}" HorizontalAlignment="Left" VerticalAlignment="Center"
+                    Content="{loc:Get guide_button}" ToolTip="{loc:Get guide_tooltip}" Click="BtnSpotifyGuide_Click"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="{loc:Get twitch_disconnect}" Padding="10,4" Margin="0,0,8,0" Click="BtnSpotifyDisconnect_Click"/>
+                <Button Content="{loc:Get twitch_connect}" Padding="10,4" Margin="0,0,8,0" Click="BtnSpotifyConnect_Click"/>
+                <Button Content="{loc:Get save}" Width="90" Padding="6,2" IsDefault="True" Click="BtnSpotifySave_Click"/>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

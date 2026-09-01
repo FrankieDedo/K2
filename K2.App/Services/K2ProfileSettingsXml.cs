@@ -65,20 +65,23 @@ internal static class K2ProfileSettingsXml
     /// so that is where a synced profile's real values are. Other profiles' rows are
     /// filtered out of that sweep by <see cref="LooksSlotScoped"/>.</para>
     /// </summary>
-    /// <param name="preferShared">
-    /// True when the device's "sync across profiles" flag is on, i.e. the panels are
-    /// reading and writing the shared namespace right now. Then the shared values are the
-    /// ones the user can actually see, and any per-profile rows left over from before the
-    /// flag was turned on are stale — so the shared namespace is read FIRST instead of
-    /// only as a fallback.
+    /// <param name="preferSharedFor">
+    /// Given a family prefix (<c>"settings."</c> / <c>"dial."</c>), returns true when that
+    /// section's "sync across profiles" flag is on, i.e. the panel is reading and writing
+    /// the shared namespace right now. Then the shared values are the ones the user can
+    /// actually see, and any per-profile rows left over from before the flag was turned on
+    /// are stale — so the shared namespace is read FIRST instead of only as a fallback.
+    /// Null (the default) means "no section is synced" (every family per-profile-first).
+    /// Since 2026-08-28 each section has its own flag, hence per-family rather than one bool.
     /// </param>
     public static XElement Build(
         Func<string, IReadOnlyDictionary<string, string>> getByPrefix,
-        int slot, IReadOnlyList<string> families, bool preferShared = false)
+        int slot, IReadOnlyList<string> families, Func<string, bool>? preferSharedFor = null)
     {
         var wrapper = new XElement(WrapperName);
         foreach (var family in families)
         {
+            bool preferShared = preferSharedFor?.Invoke(family) ?? false;
             IReadOnlyDictionary<string, string> Shared() => getByPrefix(family)
                 .Where(kv => !LooksSlotScoped(kv.Key)
                           && !s_deviceGlobalKeys.Contains(family + kv.Key))

@@ -103,6 +103,10 @@
   <string name="appshortcut_action_label">アクション:</string>
   <string name="appshortcut_custom">カスタム…</string>
   <string name="obs_settings_title">OBS Studio設定</string>
+  <string name="obs_setup_guide">1. OBS Studio で「ツール」&gt;「WebSocket サーバー設定」を開きます。
+2. 「WebSocket サーバーを有効にする」にチェックを入れます（既定のポートは 4455）。
+3. 「接続情報を表示」をクリックしてサーバーパスワードを確認します（または「認証を有効にする」のチェックを外すとパスワードなしになります）。
+4. ここに同じホスト / ポート / パスワードを入力し、「接続をテスト」をクリックします。</string>
   <string name="obs_host_label">ホスト:</string>
   <string name="obs_port_label">ポート:</string>
   <string name="obs_password_label">パスワード:</string>
@@ -177,11 +181,22 @@
   <string name="spotify_hint">developer.spotify.com/dashboard で独自のアプリを登録し、Redirect URI を "http://127.0.0.1:17564/callback" に設定した上で、Client ID/Secret をここに貼り付けてください。</string>
   <string name="spotify_setup_guide">1. developer.spotify.com/dashboard にアクセスし、「Create app」をクリックします。
 2. Redirect URI: http://127.0.0.1:17564/callback
-3. Which API/SDKs are you planning to use: Web API。
-4. 保存して Client ID をコピーし、Client Secret は「View client secret」をクリックして取得します。</string>
+3. 「Which API/SDKs are you planning to use」で「Web API」にチェックを入れます。
+4. 保存して Client ID をコピーし、Client Secret は「View client secret」をクリックして取得します。
+
+再生/一時停止、次へ/前へ、シャッフル、リピート、音量は動作します: Spotify Premium なら Web API 経由、そうでなければシステムのメディアキー経由です。
+「いいね」やプレイリストへの追加/削除は利用できません: Spotify は個人用（Development モード）アプリに対してライブラリとプレイリストのエンドポイントをブロックするため、K2 はこれらの操作を非表示にします。</string>
   <string name="spotify_client_id_label">Client ID:</string>
   <string name="spotify_client_secret_label">Client Secret:</string>
-  <string name="spotify_connected_as">接続済みアカウント</string>
+  <string name="spotify_connected_as">接続済み</string>
+  <string name="spotify_webapi_active">Web API 有効（Spotify Premium）</string>
+  <string name="spotify_email_hint">このアドレスを Spotify アプリの「User Management」に追加してください</string>
+  <string name="spotify_email_reconnect">「User Management」に必要なアカウントのメールを表示するには再接続してください</string>
+  <string name="spotify_library_403">Spotify は Development モードのアプリで「いいね」/「プレイリストに保存」をブロックします（2025 年のプラットフォーム変更）。K2 の問題ではなく、新しいアプリや User Management では解決しません。再生コントロール（再生/一時停止・次へ・音量）は引き続き動作します。ライブラリへの完全なアクセスには Spotify から Extended Access の付与が必要です。</string>
+  <string name="spotify_device_label">再生デバイス:</string>
+  <string name="spotify_device_auto">自動（アクティブなデバイス）</string>
+  <string name="spotify_device_active">アクティブ</string>
+  <string name="spotify_device_offline">オフライン</string>
   <string name="spotify_settings_button">Spotify 設定…</string>
   <string name="spotify_cmd_play_pause">再生/一時停止</string>
   <string name="spotify_cmd_next">次のトラック</string>
@@ -195,6 +210,7 @@
   <string name="spotify_cmd_volume_set">音量を設定</string>
   <string name="spotify_cmd_save_playlist">トラックをプレイリストに保存</string>
   <string name="spotify_cmd_remove_playlist">トラックをプレイリストから削除</string>
+  <string name="spotify_cmd_unavailable">利用不可</string>
   <string name="youtube_settings_title">YouTube設定</string>
   <string name="youtube_hint">console.cloud.google.comでYouTube Data API v3を有効にしたデスクトップアプリ用OAuthクライアントを作成し、Client ID/Secretをここに貼り付けてください。</string>
   <string name="youtube_setup_guide">1. console.cloud.google.com にアクセスし、プロジェクトを作成/選択したら「YouTube Data API v3」を有効にします（APIs &amp; Services -&gt; Library）。
@@ -269,6 +285,7 @@
   <string name="media_vol_down">Volume down</string>
   <string name="media_mute">Mute</string>
   <string name="media_shuffle">シャッフル</string>
+  <string name="media_repeat">リピート</string>
   <string name="mouse_left">Left button</string>
   <string name="mouse_right">Right button</string>
   <string name="mouse_middle">Middle button</string>
@@ -280,7 +297,6 @@
   <string name="mouse_scroll_right">Scroll right</string>
   <string name="keys_modifiers_label">Modifiers:</string>
   <string name="keys_key_label">Key:</string>
-  <string name="keys_win_hint">The Windows key can be selected but is not sent by the current keystroke backend (SendKeys) — it is silently ignored.</string>
   <string name="gh_manage">Google Home デバイスを管理…</string>
   <string name="gh_summary_missing">Google Home（割り当て解除済み）</string>
   <string name="gh_setup_title">Google Home デバイス</string>
@@ -400,8 +416,13 @@
   <string name="settings_start_min_tray">トレイに最小化した状態で起動</string>
   <string name="settings_start_min_tray_hint">K2 はドライバーを有効にした状態で起動しますが、ウィンドウはトレイに隠れています — トレイアイコンからいつでも開けます。</string>
   <!-- DisplayPad デバイスマッピング -->
-  <string name="settings_dp_devicemap_group">DisplayPad デバイスマッピング</string>
-  <string name="settings_dp_devicemap_btn">マッピングを設定…</string>
+  <string name="settings_device_sync_group">デバイス間同期</string>
+  <string name="sync_across_devices">プロファイルをデバイス間で同期</string>
+  <string name="sync_across_devices_hint">接続中の Mountain デバイスでプロファイルを切り替えると、接続中の他のすべてのデバイスも同じプロファイルスロットに切り替わります。</string>
+  <string name="sync_lighting_across_devices">ライティングをデバイス間で同期</string>
+  <string name="sync_lighting_across_devices_hint">1 台のデバイスでライティングの効果や色を変更すると、接続中の他のすべてのデバイスに反映されます（デバイスが効果を再現できない場合は最も近いものに）。</string>
+  <string name="settings_dp_devicemap_group">デバイスマッピング</string>
+  <string name="settings_dp_devicemap_btn">DisplayPad マッピング</string>
   <string name="settings_dp_devicemap_hint">DisplayPad を別の USB ポートに移動し、保存済みのプロファイルが誤ったパネルに表示されるようになった場合（例："DisplayPad 2" と "DisplayPad 3" が入れ替わっている）、これを使って各接続パッドが扱われるパネルを再割り当てできます。</string>
   <string name="dp_devicemap_title">DisplayPad デバイスマッピング</string>
   <string name="dp_devicemap_hint">接続されている各パッドがファームウェアバージョンとともに以下に一覧表示されます。「識別」をクリックしてパッドのバックライトを点滅させ、どの行かを確認してから、使用するボード番号を設定してください。2 つの行が同じボード番号を共有することはできません。</string>
@@ -434,6 +455,7 @@
   <string name="hw_busy_importing_profile">プロファイルをインポートしています。しばらくお待ちください…</string>
   <string name="hw_busy_importing_profiles">プロファイルをインポートしています。しばらくお待ちください…</string>
   <string name="hw_busy_restoring_defaults">デフォルト設定を復元しています。しばらくお待ちください…</string>
+  <string name="hw_busy_sync_across_profiles">キーボードにプロファイル間の同期を適用しています。しばらくお待ちください…</string>
   <string name="hw_busy_restoring_key_images">ディスプレイキーの既定の画像を復元しています。しばらくお待ちください…</string>
   <string name="hw_busy_clearing_image">ディスプレイキーの画像を消去しています。しばらくお待ちください…</string>
   <string name="hw_busy_writing_key_bindings">ディスプレイキーの操作をキーボードに書き込んでいます。しばらくお待ちください…</string>
@@ -617,6 +639,9 @@
   <string name="settings_sync_profiles">プロファイル間で同期</string>
   <string name="settings_game_mode">ゲームモード</string>
   <string name="settings_game_mode_tip">ゲームモードは、プレイ中の誤操作を防ぐために特定のキーの組み合わせを無効にします。</string>
+  <string name="settings_game_mode_master">ゲームモード有効</string>
+  <string name="settings_game_mode_master_hint_ev">キーボードの Fn + Pause でも切り替えできます。下のチェックボックスでブロックするキーを選びます。</string>
+  <string name="settings_game_mode_master_hint_ev60">キーボードの Fn + Win でも切り替えできます。下のチェックボックスでブロックするキーを選びます。</string>
   <string name="settings_disable_shift_tab">Shift + Tab を無効化</string>
   <string name="settings_disable_alt_f4">Alt + F4 を無効化</string>
   <string name="settings_disable_win_key">Windows キーを無効化</string>
@@ -773,6 +798,7 @@
   <string name="txt_bg_solid">単色の背景</string>
   <string name="txt_bg_image">読み込んだ画像の上に重ねる</string>
   <string name="txt_bg_color">背景:</string>
+  <string name="txt_style_only_header">テキストのスタイル</string>
   <string name="txt_color">テキスト:</string>
   <string name="txt_position_label">位置:</string>
   <string name="txt_icon_source_label">アイコンの元:</string>
@@ -826,6 +852,7 @@
   <string name="rename_device_prompt">このデバイスの名前を入力してください:</string>
   <string name="profile_not_available_tip">このデバイスではまだ利用できません — プロファイルの保存機能が未実装です。</string>
   <!-- プロファイル名の変更・削除 -->
+  <string name="configure_profile">プロファイルを構成</string>
   <string name="rename_profile">プロファイル名を変更</string>
   <string name="rename_profile_title">プロファイル名を変更</string>
   <string name="rename_profile_prompt">このプロファイルの名前を入力してください:</string>
@@ -980,6 +1007,8 @@
   <string name="discord_account_button">Discord アカウント (Client ID / Secret)…</string>
   <string name="discord_voicepage_return_label">ボイスページを戻すまでの時間</string>
   <string name="discord_voicepage_return_hint">通話中にボイスページを離れて通常のプロファイルに移った場合、ここで指定した秒数だけ戻らないままでいると、スクリーンセーバーのように自動で戻ります。オフ = 新しい通話か「ボイスページ」キーでのみ戻ります。</string>
+  <string name="show_back_arrow_label">戻る矢印を表示</string>
+  <string name="show_back_arrow_hint">パッドを前のプロファイルに戻すタイルに戻る矢印を重ねて表示します。オフにしてもキーの動作は変わらず、目印が消えて下の画像がそのまま見えるだけです。</string>
   <string name="act_emojibrowser">絵文字ブラウザ</string>
   <string name="emb_grp_smileys">スマイリー</string>
   <string name="emb_grp_people">人</string>
@@ -1011,6 +1040,7 @@
   <string name="makalu_setting_clickspeed">クリック速度:</string>
   <string name="dp_icon_section">アイコン</string>
   <string name="dp_gallery_icon">デフォルトアイコン</string>
+  <string name="dp_spotify_cover_icon">Spotify のアルバムアートを使用</string>
   <string name="dp_gallery_icon_with_text">テキストあり</string>
   <string name="dp_gallery_icon_without_text">テキストなし</string>
   <string name="gallery_dialog_title">アイコンギャラリー</string>
@@ -1033,4 +1063,84 @@
   <string name="txt_icon_section">アイコン</string>
   <string name="txt_text_section">テキスト</string>
   <string name="txt_reset_icon">アイコンをリセット</string>
+
+  <!-- v1.3.2: guide buttons, PC monitor sensor list, Spotify profile -->
+  <string name="guide_button">ガイド</string>
+  <string name="guide_none">このセクションのガイドはまだ作成されていません。</string>
+  <string name="guide_title">ガイド</string>
+  <string name="guide_tooltip">このセクションのガイドを開く</string>
+  <string name="highlights_button">ハイライト</string>
+  <string name="highlights_tooltip">Base Camp にない K2 の機能と、その有効化方法</string>
+  <string name="profile_settings_focus_only">このアプリが前面にあるときのみ</string>
+  <string name="profile_settings_focus_only_hint">K2 は、リンクしたアプリが前面のウィンドウである間だけこのプロファイルを表示し、フォーカスを失うと直前のプロファイルに戻ります。</string>
+  <string name="profile_settings_pick_running">実行中のアプリから…</string>
+  <string name="profile_settings_restore_on_close">アプリを閉じたら直前のプロファイルに戻る</string>
+  <string name="profile_settings_restore_on_close_hint">リンクしたアプリが終了すると、K2 は以前アクティブだったプロファイルに戻ります（このプロファイルのままの場合のみ）。「前面にあるときのみ」が有効な場合は無視されます。</string>
+  <string name="running_process_hint">現在開いているアプリケーションを選びます。その .exe を直接参照することもできます。</string>
+  <string name="running_process_title">実行中のアプリを選択</string>
+  <string name="sensor_col_name">センサー</string>
+  <string name="sensor_col_type">種類</string>
+  <string name="sensor_col_value">値</string>
+  <string name="sensor_count_fmt">{0} 個のセンサー</string>
+  <string name="sensor_grp_battery">バッテリー</string>
+  <string name="sensor_grp_cooler">冷却</string>
+  <string name="sensor_grp_cpu">CPU</string>
+  <string name="sensor_grp_gpu">GPU</string>
+  <string name="sensor_grp_memory">メモリ</string>
+  <string name="sensor_grp_motherboard">マザーボード</string>
+  <string name="sensor_grp_network">ネットワーク</string>
+  <string name="sensor_grp_other">その他</string>
+  <string name="sensor_grp_storage">ストレージ</string>
+  <string name="sensor_pick_button">センサーを選択…</string>
+  <string name="sensor_pick_hint">キーに表示するハードウェアセンサーを選びます。一覧はリアルタイムで更新されます。下のセレクターで現在値・最小値・最大値・平均値のどれを表示するかを選べます。</string>
+  <string name="sensor_pick_none">先にセンサーを選択してください。</string>
+  <string name="sensor_pick_search">名前・種類・デバイスで絞り込み</string>
+  <string name="sensor_pick_title">ハードウェアセンサー</string>
+  <string name="sensor_preview_fmt">現在値: {0}</string>
+  <string name="sensor_reset_stats">最小/最大/平均をリセット</string>
+  <string name="sensor_show_label">表示:</string>
+  <string name="sensor_starting">ハードウェアセンサーを読み取り中…</string>
+  <string name="sensor_stat_avg">平均</string>
+  <string name="sensor_stat_cur">現在</string>
+  <string name="sensor_stat_max">最大</string>
+  <string name="sensor_stat_min">最小</string>
+  <string name="sensor_unavailable">利用可能なハードウェアセンサーがありません。</string>
+  <string name="settings_persist_logs">ログを保持する</string>
+  <string name="settings_persist_logs_hint">次回起動時にログをリセットせず、各セッションのログを保持します。各実行のログは日時を名前に付けて「logs」フォルダーに移動されます。アップデート後の初回起動でまれに起きるクラッシュを捉えるのに役立ちます。</string>
+  <string name="spotify_account_button">Spotify アカウント（Client ID / Secret）…</string>
+  <string name="spotify_cover_layout_label">カバーの配置</string>
+  <string name="spotify_cover_layout_quad">カバーを 4 キーに表示</string>
+  <string name="spotify_cover_layout_single">カバーを 1 キー、テキストを 3 キーに表示</string>
+  <string name="spotify_cover_layout_single_hint">ブロックの残り 3 キーには曲名・アーティスト・アルバムが表示され、それぞれ「曲名/アーティスト/アルバム」のラベルが付きます。下の「長いテキスト」設定はこれに適用されます。</string>
+  <string name="spotify_device_hint">再生／音量／リピートキーが操作する Spotify Connect デバイス。「自動」は現在アクティブなデバイスにコマンドを送ります。</string>
+  <string name="spotify_field_album">アルバム</string>
+  <string name="spotify_field_artist">アーティスト</string>
+  <string name="spotify_field_song">曲名</string>
+  <string name="spotify_foreground_only_hint">Spotify アプリが前面に出た瞬間にパッドはこのプロファイルへ切り替わり、前面でなくなった瞬間に元のプロファイルへ戻します。戻る矢印は引き続き機能します。使用後は、Spotify が再びフォーカスを得るまで（または上のタイマーが戻すまで）プロファイルは表示されません。</string>
+  <string name="spotify_foreground_only_label">Spotify が前面のときのみ表示</string>
+  <string name="spotify_position_center">中央</string>
+  <string name="spotify_position_hint">2×2 のカバーブロックがどの列のペアを占めるか。周囲の 8 個の再生／音量／リピートキーもそれに合わせて配置が変わります。各位置には単なる再配置ではなく専用の並びがあります。</string>
+  <string name="spotify_position_label">カバーブロックの位置</string>
+  <string name="spotify_position_left">左</string>
+  <string name="spotify_position_right">右</string>
+  <string name="spotify_profile_config_hint">DisplayPad の Spotify プロファイルの左 2×2 ブロックが再生中の内容をどう表示するか。</string>
+  <string name="spotify_profile_config_title">Spotify プロファイル</string>
+  <string name="spotify_return_hint">カバータイルの戻る矢印でパッドを別のプロファイルに渡してから、この秒数が経過すると Spotify プロファイルが自動的に戻ります。移動先にとどまるにはオフのままにします。</string>
+  <string name="spotify_return_label">この秒数後にこのプロファイルへ戻る</string>
+  <string name="spotify_source_label">トラックデータのソース</string>
+  <string name="spotify_source_local">ローカル（Windows の「再生中」）</string>
+  <string name="spotify_source_webapi">Spotify アカウント（Web API）</string>
+  <string name="spotify_source_webapi_hint">Web API はアルバム名と高解像度のカバーを追加しますが、Spotify アカウントの接続が必要です。何も返らない場合はローカルソースが使われます。</string>
+  <string name="spotify_text_mode_hint">ティッカー（スクロール）を選んでも、K2 のキーグリッドのプレビューはタイルを静止した 1 行として表示します。スクロールはハードウェア専用の効果で、アプリ内でアニメーションすることはありません。</string>
+  <string name="spotify_text_mode_label">長いテキスト（1 キー配置）</string>
+  <string name="spotify_text_mode_marquee">ティッカーのようにスクロール</string>
+  <string name="spotify_text_mode_static">静止 —「…」で省略</string>
+  <string name="sysmon_cpu_temp">CPU 温度</string>
+  <string name="sysmon_disk_all">すべてのディスク</string>
+  <string name="sysmon_disk_label">対象のディスク:</string>
+  <string name="sysmon_disk_pick_fmt">ディスク: {0}</string>
+  <string name="sysmon_gpu_temp">GPU 温度</string>
+  <string name="sysmon_mode_temp">温度</string>
+  <string name="sysmon_mode_usage">使用率</string>
+  <string name="sysmon_pick_sensor">センサーの選択</string>
 </strings>

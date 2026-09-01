@@ -64,7 +64,7 @@
                           SelectionChanged="LvMkButtons_SelectionChanged">
                     <ListView.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding Display}" FontFamily="Consolas" Padding="2"/>
+                            <TextBlock Text="{Binding Display}" Padding="2"/>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>

@@ -81,11 +81,18 @@
                        FontSize="13" FontWeight="SemiBold"
                        Margin="0,0,0,6"/>
 
-            <CheckBox x:Name="ChkDefaultIcon" Grid.Row="1" Grid.Column="0"
-                      Content="{loc:Get dp_gallery_icon}"
-                      IsChecked="True"
-                      Checked="ChkDefaultIcon_Changed" Unchecked="ChkDefaultIcon_Changed"
-                      Margin="0,0,0,8"/>
+            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,0,8">
+                <CheckBox x:Name="ChkDefaultIcon"
+                          Content="{loc:Get dp_gallery_icon}"
+                          IsChecked="True"
+                          Checked="ChkDefaultIcon_Changed" Unchecked="ChkDefaultIcon_Changed"/>
+                <!-- "spotify" action only: overlay the live album cover; visibility is set in
+                     code-behind (UpdateIconControlsAvailability). -->
+                <CheckBox x:Name="ChkSpotifyCover"
+                          Content="{loc:Get dp_spotify_cover_icon}"
+                          Visibility="Collapsed" Margin="0,6,0,0"
+                          Checked="ChkSpotifyCover_Changed" Unchecked="ChkSpotifyCover_Changed"/>
+            </StackPanel>
 
             <!-- Preview host: populated in code-behind — "No image" placeholder, or the
                  inline CropEditor (static images AND animated GIFs; crop/zoom stays in THIS

@@ -35,11 +35,42 @@ public partial class App : Application
         return dir;
     }
 
+    /// <summary>
+    /// %LocalAppData%\K2\K2.App\logs\ — every diagnostic artifact (session log, crash
+    /// log, minidumps, archived per-session logs when <see cref="AppSettings.PersistLogs"/>
+    /// is on) lives here instead of loose in <see cref="DataDir"/>. Existing loose files
+    /// from older builds are moved in on first run.
+    /// </summary>
+    private static readonly string LogDir = EnsureLogDir();
+
+    private static string EnsureLogDir()
+    {
+        var dir = Path.Combine(DataDir, "logs");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            // One-time migration: relocate loose logs/dumps left in DataDir by older builds.
+            foreach (var pattern in new[] { "K2.App.log", "K2.App.log.*", "K2.App.crash.log", "K2.App_*.dmp", "K2.App_*.log" })
+                foreach (var src in Directory.GetFiles(DataDir, pattern))
+                {
+                    try
+                    {
+                        var dest = Path.Combine(dir, Path.GetFileName(src));
+                        if (!File.Exists(dest)) File.Move(src, dest);
+                        else File.Delete(src);
+                    }
+                    catch { /* locked / racing second instance — leave it, retried next run */ }
+                }
+        }
+        catch { /* best-effort, same as the writers below */ }
+        return dir;
+    }
+
     /// <summary>Log file.</summary>
-    public static readonly string LogPath = Path.Combine(DataDir, "K2.App.log");
+    public static readonly string LogPath = Path.Combine(LogDir, "K2.App.log");
 
     /// <summary>Separate crash log file for native/fatal crashes.</summary>
-    public static readonly string CrashLogPath = Path.Combine(DataDir, "K2.App.crash.log");
+    public static readonly string CrashLogPath = Path.Combine(LogDir, "K2.App.crash.log");
 
     // Held for the process lifetime; released automatically by the OS on exit.
     private static Mutex? _singleInstanceMutex;
@@ -223,9 +254,7 @@ public partial class App : Application
         // running instance's log. Crash log is untouched: it must survive a
         // crash-triggered restart so the previous run's failure stays diagnosable.
         if (_singleInstanceGranted)
-        {
-            try { File.Delete(LogPath); } catch { }
-        }
+            ArchiveOrResetLog();
 
         WriteLog($"=== App start {DateTime.Now:O} pid={Environment.ProcessId} " +
                  $"arch={(Environment.Is64BitProcess ? "x64" : "x86")} lang={Core.Loc.CurrentLang} ===");
@@ -988,6 +1017,61 @@ public partial class App : Application
             WriteCrashLog($"Process exit with code {Environment.ExitCode} (0x{Environment.ExitCode:X8})");
             TryWriteMiniDump();
         }
+
+        // Keep this session's log if the user asked us to (Settings > Logging >
+        // "Persist logs"). Done here on a clean exit; a crash that never reaches
+        // ProcessExit is archived instead at the next startup (see ArchiveOrResetLog).
+        if (AppSettings.PersistLogs)
+            ArchiveLogFile();
+    }
+
+    /// <summary>
+    /// Startup log housekeeping, run once by the instance that owns the single-instance
+    /// lock. With <see cref="AppSettings.PersistLogs"/> ON, a leftover <c>K2.App.log</c>
+    /// from the previous run (its clean-shutdown archive skipped — the first-launch
+    /// native crash during hardware init is the case this guards) is archived now;
+    /// otherwise the log is reset, as it always was.
+    /// </summary>
+    private static void ArchiveOrResetLog()
+    {
+        try
+        {
+            if (!File.Exists(LogPath)) return;
+            if (AppSettings.PersistLogs) ArchiveLogFile();
+            else File.Delete(LogPath);
+        }
+        catch
+        {
+            try { File.Delete(LogPath); } catch { }
+        }
+    }
+
+    /// <summary>Moves the current <c>K2.App.log</c> to a per-session
+    /// <c>logs\K2.App_&lt;yyyyMMdd_HHmmss&gt;.log</c>, stamped with the file's own
+    /// last-write time so the name marks when that session ended. Shared by the clean
+    /// shutdown path and the startup crash-leftover path. No-op if the log is missing.</summary>
+    private static void ArchiveLogFile()
+    {
+        try
+        {
+            if (!File.Exists(LogPath)) return;
+            CloseLogStream(); // release our own writer so the rename can't be blocked
+            var stamp = File.GetLastWriteTime(LogPath).ToString("yyyyMMdd_HHmmss");
+            var dest = Path.Combine(LogDir, $"K2.App_{stamp}.log");
+            for (int i = 1; File.Exists(dest) && i < 100; i++)
+                dest = Path.Combine(LogDir, $"K2.App_{stamp}_{i}.log");
+            File.Move(LogPath, dest);
+        }
+        catch { /* best-effort — worst case the log is reused next run */ }
+    }
+
+    private static void CloseLogStream()
+    {
+        lock (_logLock)
+        {
+            try { _logStream?.Flush(); _logStream?.Dispose(); } catch { }
+            _logStream = null;
+        }
     }
 
     /// <summary>Writes a separate timestamped crash log, easier to find.</summary>
@@ -1008,7 +1092,7 @@ public partial class App : Application
         try
         {
             var suffix = string.IsNullOrEmpty(tag) ? "" : $"_{tag}";
-            var dumpPath = Path.Combine(DataDir,
+            var dumpPath = Path.Combine(LogDir,
                 $"K2.App_{DateTime.Now:yyyyMMdd_HHmmss}{suffix}.dmp");
             using var fs = new FileStream(dumpPath, FileMode.Create, FileAccess.Write);
             // MiniDumpWithDataSegs | MiniDumpWithHandleData = 0x01 | 0x04

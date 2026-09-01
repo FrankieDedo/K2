@@ -44,11 +44,14 @@ public static class AppSettings
     private sealed class Data
     {
         public K2LogLevel LogLevel { get; set; } = K2LogLevel.Off;
+        public bool PersistLogs { get; set; }
         public bool KillBaseCampWorker { get; set; } = true;
         public bool AutoStopBaseCamp { get; set; } = true;
         public bool CloseToTray { get; set; }
         public bool StartMinimizedToTray { get; set; }
         public bool RestartBaseCampOnClose { get; set; }
+        public bool SyncAcrossDevices { get; set; }
+        public bool SyncLightingAcrossDevices { get; set; }
         public SignalRgbMode SignalRgbMode { get; set; } = SignalRgbMode.Yield;
         public List<string> RecentExecPaths { get; set; } = new();
         public List<string> RecentFolderPaths { get; set; } = new();
@@ -85,6 +88,28 @@ public static class AppSettings
     public static K2LogLevel LogLevel
     {
         get { EnsureLoaded(); return _data.LogLevel; }
+    }
+
+    /// <summary>When true, K2 keeps every session's log instead of wiping it on the
+    /// next start: the previous run's <c>K2.App.log</c> is renamed (with its date/time)
+    /// into the <c>logs\</c> folder on close and, as a safety net for a crash that
+    /// skipped the clean shutdown, at the following startup. Default off — logs are
+    /// otherwise reset each run. See App.ArchiveOrResetLog.</summary>
+    public static bool PersistLogs
+    {
+        get { EnsureLoaded(); return _data.PersistLogs; }
+    }
+
+    public static void SetPersistLogs(bool value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.PersistLogs == value) return;
+            _data.PersistLogs = value;
+            Save();
+        }
+        Changed?.Invoke();
     }
 
     /// <summary>
@@ -170,6 +195,47 @@ public static class AppSettings
         {
             if (_data.CloseToTray == value) return;
             _data.CloseToTray = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>When true, switching profile on any connected Mountain device switches
+    /// every other connected device to the same profile slot (host-side mirroring —
+    /// Base Camp has no firmware flag for this, see MainWindow.DeviceSync.cs).</summary>
+    public static bool SyncAcrossDevices
+    {
+        get { EnsureLoaded(); return _data.SyncAcrossDevices; }
+    }
+
+    public static void SetSyncAcrossDevices(bool value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.SyncAcrossDevices == value) return;
+            _data.SyncAcrossDevices = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>When true, changing the lighting effect/colour on any connected device
+    /// mirrors it to every other connected device (nearest-effect fallback where a
+    /// device can't reproduce the source effect). Independent of
+    /// <see cref="SyncAcrossDevices"/>.</summary>
+    public static bool SyncLightingAcrossDevices
+    {
+        get { EnsureLoaded(); return _data.SyncLightingAcrossDevices; }
+    }
+
+    public static void SetSyncLightingAcrossDevices(bool value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.SyncLightingAcrossDevices == value) return;
+            _data.SyncLightingAcrossDevices = value;
             Save();
         }
         Changed?.Invoke();

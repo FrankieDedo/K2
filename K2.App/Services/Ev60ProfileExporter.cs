@@ -110,7 +110,12 @@ public static class Ev60ProfileExporter
         }
 
         // ---- Lighting ----
-        var lighting = store.LoadLighting(slot);
+        // With Key Lighting "sync across profiles" on (2026-08-28), the real values live
+        // in the shared record, not this slot's own — export what the user actually sees.
+        bool lightingSynced = store.GetSetting("lighting.sync") == "1";
+        var lighting = lightingSynced
+            ? (store.LoadSharedLighting() ?? store.LoadLighting(slot))
+            : store.LoadLighting(slot);
         if (lighting is not null)
         {
             var effEnum = (Everest60Protocol.Effect)lighting.Effect;
@@ -152,8 +157,14 @@ public static class Ev60ProfileExporter
         }
 
         // ---- Settings (Game Mode/Core LED) ----
-        int mode = int.TryParse(store.GetSetting($"settings.p{slot}.game_mode"), out var m) ? m : 0;
-        bool led = store.GetSetting($"settings.p{slot}.indicator_led") == "1";
+        // Honour the Settings section's own "sync across profiles" flag (2026-08-28):
+        // when on, the live values are in the shared "settings." namespace.
+        bool settingsSynced = store.GetSetting("settings.sync") == "1";
+        string? GetSetting(string key) => settingsSynced
+            ? (store.GetSetting("settings." + key) ?? store.GetSetting($"settings.p{slot}.{key}"))
+            : (store.GetSetting($"settings.p{slot}.{key}") ?? store.GetSetting("settings." + key));
+        int mode = int.TryParse(GetSetting("game_mode"), out var m) ? m : 0;
+        bool led = GetSetting("indicator_led") == "1";
         // Null = the user never picked one, so the value below is only K2's locale
         // guess: exported as IsLayoutConfigured=false so the importing side keeps its
         // own guess instead (same gate BaseCampDbImporter applies to BC's DB column).
@@ -164,10 +175,12 @@ public static class Ev60ProfileExporter
             new XElement("Everest60Setting",
                 new XElement("ProfileId", 0),
                 new XElement("SysncAcrossProfile", "false"),
+                // Ev60 Game Mode bit layout (differs from Everest Max):
+                // bit0=Shift, bit1=AltTab, bit2=AltF4, bit3=Win — see Ev60GameModeBitmask.
                 new XElement("DisableShift", (mode & 0x1) != 0 ? "true" : "false"),
-                new XElement("DisableAltF4", (mode & 0x2) != 0 ? "true" : "false"),
-                new XElement("DisableWin", (mode & 0x4) != 0 ? "true" : "false"),
-                new XElement("DisableAltTab", (mode & 0x8) != 0 ? "true" : "false"),
+                new XElement("DisableAltTab", (mode & 0x2) != 0 ? "true" : "false"),
+                new XElement("DisableAltF4", (mode & 0x4) != 0 ? "true" : "false"),
+                new XElement("DisableWin", (mode & 0x8) != 0 ? "true" : "false"),
                 new XElement("EnableCoreLED", led ? "true" : "false"),
                 // See EvProfileExporter for why these two are written.
                 new XElement("KeyboardLayout", EverestKeyboardLayout.ToStorageString(layout)),
@@ -178,7 +191,8 @@ public static class Ev60ProfileExporter
         // K2ProfileSettingsXml for why a generic dump beats hand-written fields.
         if (!bcCompatible)
             root.Add(K2ProfileSettingsXml.Build(
-                store.GetSettingsWithPrefix, slot, K2ProfileSettingsXml.SettingsOnlyFamilies));
+                store.GetSettingsWithPrefix, slot, K2ProfileSettingsXml.SettingsOnlyFamilies,
+                preferSharedFor: _ => settingsSynced));
 
         var doc = new XDocument(new XDeclaration("1.0", "utf-8", null), root);
         doc.Save(filePath);

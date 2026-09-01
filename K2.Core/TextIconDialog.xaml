@@ -138,7 +138,7 @@
                        FontSize="13" FontWeight="SemiBold"
                        Margin="0,0,0,8"/>
 
-            <StackPanel Margin="0,0,0,10">
+            <StackPanel x:Name="TextInputPanel" Margin="0,0,0,10">
                 <TextBlock Text="{loc:Get txt_label}"
                            Foreground="#AAA" FontSize="11" Margin="0,0,0,4"/>
                 <TextBox x:Name="TxtInput"
@@ -186,7 +186,7 @@
                     <ComboBox x:Name="CbFontFamily" Margin="0,0,0,8"
                               SelectionChanged="Font_Changed"/>
 
-                    <Grid>
+                    <Grid x:Name="FontSizePanel">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -226,7 +226,7 @@
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
-                        <TextBlock Text="{loc:Get txt_bg_color}"
+                        <TextBlock x:Name="LblBgColor" Text="{loc:Get txt_bg_color}"
                                    VerticalAlignment="Center"
                                    Foreground="#AAA" FontSize="11" Margin="0,0,6,0"/>
                         <!-- Both swatches are repainted from the live colors in the constructor

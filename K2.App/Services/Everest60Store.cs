@@ -267,6 +267,20 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
     public void SaveLighting(int slot, Ev60LightingRecord r) =>
         SetSetting($"profile.{slot}.lighting", JsonSerializer.Serialize(r));
 
+    /// <summary>The one lighting record every profile shares while the Key Lighting
+    /// section's "sync across profiles" flag (<c>lighting.sync</c>) is on — K2-side only,
+    /// this board has no firmware sync command. Added 2026-08-28.</summary>
+    public Ev60LightingRecord? LoadSharedLighting()
+    {
+        var json = GetSetting("lighting.shared");
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try { return JsonSerializer.Deserialize<Ev60LightingRecord>(json); }
+        catch { return null; }
+    }
+
+    public void SaveSharedLighting(Ev60LightingRecord r) =>
+        SetSetting("lighting.shared", JsonSerializer.Serialize(r));
+
     // ---------- keys (K2Action — same shape as EverestStore's Keys table) ----------
 
     public IReadOnlyList<Ev60KeyRecord> LoadProfile(int profile)

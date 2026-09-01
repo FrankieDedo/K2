@@ -127,9 +127,20 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
     /// of only inheriting the rendered PNG. Not bindable: nothing in the grid shows it.</summary>
     public string? IconSpecJson { get; set; }
 
+    private bool _isLiveOverlay;
+    /// <summary>True while a live overlay service owns this key's picture — today the Spotify
+    /// dedicated profile's 2×2 cover/track block (<see cref="SpotifyCoverService"/>). Such a key
+    /// legitimately shows an image with NO action behind it, so it must not raise the
+    /// "picture but nothing happens" warning triangle (user report 2026-09-01).</summary>
+    public bool IsLiveOverlay
+    {
+        get => _isLiveOverlay;
+        set { if (_isLiveOverlay == value) return; _isLiveOverlay = value; OnChanged(); OnChanged(nameof(HasImageNoAction)); }
+    }
+
     /// <summary>True when the key has an image but no action assigned.
     /// Used to show a warning indicator in the UI.</summary>
-    public bool HasImageNoAction => HasImage && !HasAction;
+    public bool HasImageNoAction => HasImage && !HasAction && !_isLiveOverlay;
 
     private bool _isHighlighted;
     public bool IsHighlighted

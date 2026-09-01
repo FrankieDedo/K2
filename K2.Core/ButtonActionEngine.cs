@@ -29,6 +29,18 @@ public sealed class ButtonActionEngine : IDisposable
     /// the "hotkeyswitch" case in <see cref="Dispatch"/>.</summary>
     private readonly Dictionary<(int ButtonIndex, string Value), bool> _hotkeySwitchNextIsB = new();
 
+    /// <summary>Shortcuts currently held down by a momentary ("press and hold") key, keyed by
+    /// buttonIndex — populated only when a device passes <c>momentary: true</c> to
+    /// <see cref="Execute"/> and cleared by the matching <see cref="Release"/> / by
+    /// <see cref="ReleaseAllHeld"/>. Lets holding the physical key hold the mapped combination
+    /// (e.g. Alt+Tab stays open) instead of firing a one-shot tap.</summary>
+    private readonly Dictionary<int, (string Value, DateTime Since)> _heldShortcuts = new();
+
+    /// <summary>Safety net for a physical up edge that never arrives (USB glitch, device drop):
+    /// any hold older than this is force-released on the next engine call. Long enough to never
+    /// clip a deliberate hold.</summary>
+    private static readonly TimeSpan HeldShortcutMaxAge = TimeSpan.FromSeconds(20);
+
     public ButtonActionEngine(IActionHost host)
     {
         _host = host;
@@ -41,20 +53,28 @@ public sealed class ButtonActionEngine : IDisposable
     /// <summary>Starts the Python bridge (RPC server). Call once at startup.</summary>
     public void Start() => _py.Start();
 
-    public void Dispose() => _py.Dispose();
+    public void Dispose()
+    {
+        ReleaseAllHeld();
+        _py.Dispose();
+    }
 
     /// <summary>
     /// Executes the action configured on a button. MUST BE CALLED ON THE UI THREAD.
     /// <paramref name="buttonIndex"/> is the context for Python scripts
     /// (-1 if unknown, e.g. action invoked via RPC).
     /// </summary>
-    public void Execute(string? actionType, string? actionValue, int buttonIndex = -1)
+    /// <param name="momentary">True when the caller is a physical key that will send a matching
+    /// <see cref="Release"/> on its up edge (MacroPad / Everest Max / Everest 60). A "keys" action
+    /// is then pressed-and-held instead of tapped; every other action type still fires once.</param>
+    public void Execute(string? actionType, string? actionValue, int buttonIndex = -1, bool momentary = false)
     {
         if (string.IsNullOrEmpty(actionType)) return;
+        SweepStaleHeld();
         var value = actionValue ?? "";
         try
         {
-            Dispatch(actionType, value, buttonIndex);
+            Dispatch(actionType, value, buttonIndex, momentary);
         }
         catch (Exception ex)
         {
@@ -62,7 +82,61 @@ public sealed class ButtonActionEngine : IDisposable
         }
     }
 
-    private void Dispatch(string type, string value, int buttonIndex)
+    /// <summary>Up edge for a button that was executed with <c>momentary: true</c>. Lifts a held
+    /// "keys" shortcut (key first, then modifiers in reverse); a no-op for anything else.</summary>
+    public void Release(int buttonIndex)
+    {
+        if (buttonIndex < 0) return;
+        if (!_heldShortcuts.TryGetValue(buttonIndex, out var held)) return;
+        _heldShortcuts.Remove(buttonIndex);
+        HotkeySender.TryHoldUp(held.Value, out _);
+        _host.Log($"[EXEC] keys hold-up -> \"{held.Value}\"");
+    }
+
+    /// <summary>Lifts every still-held momentary shortcut — call on profile switch / device
+    /// disconnect so a combination can't stay pressed system-wide.</summary>
+    public void ReleaseAllHeld()
+    {
+        if (_heldShortcuts.Count == 0) return;
+        foreach (var kv in _heldShortcuts) HotkeySender.TryHoldUp(kv.Value.Value, out _);
+        _host.Log($"[EXEC] released {_heldShortcuts.Count} held shortcut(s)");
+        _heldShortcuts.Clear();
+    }
+
+    /// <summary>Force-releases holds whose up edge never arrived (see <see cref="HeldShortcutMaxAge"/>).</summary>
+    private void SweepStaleHeld()
+    {
+        if (_heldShortcuts.Count == 0) return;
+        var now = DateTime.UtcNow;
+        List<int>? stale = null;
+        foreach (var kv in _heldShortcuts)
+            if (now - kv.Value.Since > HeldShortcutMaxAge) (stale ??= new()).Add(kv.Key);
+        if (stale is null) return;
+        foreach (var idx in stale)
+        {
+            HotkeySender.TryHoldUp(_heldShortcuts[idx].Value, out _);
+            _host.Log($"[EXEC] stale hold force-released -> \"{_heldShortcuts[idx].Value}\"");
+            _heldShortcuts.Remove(idx);
+        }
+    }
+
+    /// <summary>Runs a "Ctrl+Shift+A" / "Win+D" shortcut once. Prefers the SendInput path
+    /// (<see cref="HotkeySender"/>) so the Windows key actually reaches the target and apps
+    /// watching the input stream with a low-level hook see it; falls back to SendKeys for a raw
+    /// sequence (already contains <c>^ % { ~</c>) or anything HotkeySender can't resolve.</summary>
+    private void RunShortcut(string value, Action<string> log)
+    {
+        if (value.IndexOfAny(SendKeysMeta) < 0 && HotkeySender.TrySend(value, out _))
+        {
+            log($"[EXEC] keys -> \"{value}\"  (SendInput)");
+            return;
+        }
+        string seq = value.IndexOfAny(SendKeysMeta) >= 0 ? value : SendKeysTranslator.Translate(value);
+        System.Windows.Forms.SendKeys.SendWait(seq);
+        log($"[EXEC] keys -> \"{value}\"  (sendkeys=\"{seq}\")");
+    }
+
+    private void Dispatch(string type, string value, int buttonIndex, bool momentary)
     {
         void Log(string m) => _host.Log(m);
         switch (type)
@@ -114,10 +188,23 @@ public sealed class ButtonActionEngine : IDisposable
             case "keys":
             {
                 if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] keys without payload"); break; }
-                string seq = value.IndexOfAny(SendKeysMeta) >= 0
-                    ? value : SendKeysTranslator.Translate(value);
-                System.Windows.Forms.SendKeys.SendWait(seq);
-                Log($"[EXEC] keys -> \"{value}\"  (sendkeys=\"{seq}\")");
+                if (momentary && buttonIndex >= 0 && value.IndexOfAny(SendKeysMeta) < 0)
+                {
+                    // A stale hold on this same button (missed up edge) — lift it first.
+                    if (_heldShortcuts.ContainsKey(buttonIndex)) Release(buttonIndex);
+                    if (HotkeySender.TryHoldDown(value, out var err))
+                    {
+                        _heldShortcuts[buttonIndex] = (value, DateTime.UtcNow);
+                        Log($"[EXEC] keys hold-down -> \"{value}\"");
+                    }
+                    else
+                    {
+                        Log($"[EXEC] keys hold-down failed ({err}) — one-shot");
+                        RunShortcut(value, Log);
+                    }
+                    break;
+                }
+                RunShortcut(value, Log);
                 break;
             }
 
@@ -148,9 +235,7 @@ public sealed class ButtonActionEngine : IDisposable
 
                 string shortcut = nextIsB ? spec.ShortcutB : spec.ShortcutA;
                 if (string.IsNullOrWhiteSpace(shortcut)) { Log("[EXEC] hotkeyswitch: empty shortcut"); break; }
-                string seq = shortcut.IndexOfAny(SendKeysMeta) >= 0
-                    ? shortcut : SendKeysTranslator.Translate(shortcut);
-                System.Windows.Forms.SendKeys.SendWait(seq);
+                RunShortcut(shortcut, Log);
                 Log($"[EXEC] hotkeyswitch -> \"{shortcut}\" ({(nextIsB ? "B" : "A")})");
                 break;
             }
@@ -161,9 +246,7 @@ public sealed class ButtonActionEngine : IDisposable
             {
                 if (string.IsNullOrWhiteSpace(value)) { Log($"[EXEC] {type} without payload"); break; }
                 if (ActionExecutor.TryRunAppShortcutSpecial(value, Log)) break;
-                string seq = value.IndexOfAny(SendKeysMeta) >= 0
-                    ? value : SendKeysTranslator.Translate(value);
-                System.Windows.Forms.SendKeys.SendWait(seq);
+                RunShortcut(value, Log);
                 Log($"[EXEC] {type} -> \"{value}\"");
                 break;
             }
@@ -257,26 +340,49 @@ public sealed class ButtonActionEngine : IDisposable
             case "spotify":
             {
                 if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] spotify without payload"); break; }
-                int tilde = value.IndexOf('~');
-                string cmd = tilde < 0 ? value : value[..tilde];
-                string arg = tilde < 0 ? "" : value[(tilde + 1)..];
+                // Wire format: command[~arg][~deviceId]  (arg = volume step / playlist id;
+                // deviceId = per-key target Spotify Connect device, "" for the active one).
+                var sp = value.Split('~');
+                string cmd = sp.Length > 0 ? sp[0] : "";
+                string arg = sp.Length > 1 ? sp[1] : "";
+                string spDevice = sp.Length > 2 ? sp[2] : "";
+
+                // Unless Web API playback is CONFIRMED to work for this account (tier read as
+                // Premium), fall back to plain system media keys (and the SMTC Spotify session
+                // for shuffle/repeat) so the key still does something — media keys are harmless
+                // for Premium too. Like / playlist commands are NOT diverted: they use the Web
+                // API but work on free accounts. Reconnecting Spotify is what flips an account
+                // from "unknown" to confirmed.
+                if (Services.SpotifyStore.IsConnected && !Services.SpotifyStore.WebApiPlaybackConfirmed
+                    && SpotifyMediaFallback(cmd, Log))
+                {
+                    Log($"[EXEC] spotify -> {cmd}: no Web API (not Premium) — used media fallback");
+                    break;
+                }
+
+                // SpotifyBridge is fire-and-forget: its outcome is logged from a thread-pool
+                // thread, so wrap Log to hop back onto the UI thread (the host's Log touches
+                // WPF controls). Dispatch() itself runs on the UI thread (see Execute).
+                var sc = System.Threading.SynchronizationContext.Current;
+                Action<string> slog = sc is null ? Log : m => sc.Post(_ => Log(m), null);
+
                 bool ok = cmd switch
                 {
-                    "play_pause"      => Services.SpotifyBridge.PlayPauseToggle(Log),
-                    "next"            => Services.SpotifyBridge.Next(Log),
-                    "previous"        => Services.SpotifyBridge.Previous(Log),
-                    "like_toggle"     => Services.SpotifyBridge.LikeToggle(Log),
-                    "shuffle_toggle"  => Services.SpotifyBridge.ShuffleToggle(Log),
-                    "repeat_cycle"    => Services.SpotifyBridge.RepeatCycle(Log),
-                    "mute_toggle"     => Services.SpotifyBridge.MuteToggle(Log),
-                    "volume_up"       => Services.SpotifyBridge.VolumeUp(arg, Log),
-                    "volume_down"     => Services.SpotifyBridge.VolumeDown(arg, Log),
-                    "volume_set"      => Services.SpotifyBridge.VolumeSet(arg, Log),
-                    "save_playlist"   => Services.SpotifyBridge.SaveToPlaylist(arg, Log),
-                    "remove_playlist" => Services.SpotifyBridge.RemoveFromPlaylist(arg, Log),
+                    "play_pause"      => Services.SpotifyBridge.PlayPauseToggle(spDevice, slog),
+                    "next"            => Services.SpotifyBridge.Next(spDevice, slog),
+                    "previous"        => Services.SpotifyBridge.Previous(spDevice, slog),
+                    "like_toggle"     => Services.SpotifyBridge.LikeToggle(slog),
+                    "shuffle_toggle"  => Services.SpotifyBridge.ShuffleToggle(spDevice, slog),
+                    "repeat_cycle"    => Services.SpotifyBridge.RepeatCycle(spDevice, slog),
+                    "mute_toggle"     => Services.SpotifyBridge.MuteToggle(spDevice, slog),
+                    "volume_up"       => Services.SpotifyBridge.VolumeUp(arg, spDevice, slog),
+                    "volume_down"     => Services.SpotifyBridge.VolumeDown(arg, spDevice, slog),
+                    "volume_set"      => Services.SpotifyBridge.VolumeSet(arg, spDevice, slog),
+                    "save_playlist"   => Services.SpotifyBridge.SaveToPlaylist(arg, slog),
+                    "remove_playlist" => Services.SpotifyBridge.RemoveFromPlaylist(arg, slog),
                     _ => LogUnhandledSpotifyCommand(cmd, Log),
                 };
-                Log($"[EXEC] spotify -> {cmd}{(arg.Length > 0 ? $" ({arg})" : "")} = {ok}");
+                Log($"[EXEC] spotify -> {cmd}{(arg.Length > 0 ? $" ({arg})" : "")} = {(ok ? "dispatched" : "skipped")}");
                 break;
             }
 
@@ -364,6 +470,29 @@ public sealed class ButtonActionEngine : IDisposable
         return false;
     }
 
+    /// <summary>Non-Premium fallback for the transport/volume "spotify" commands: system media
+    /// keys, plus the SMTC Spotify session for shuffle/repeat (no media key exists for those).
+    /// Returns false for commands with no media equivalent (volume_set) and for like/playlist,
+    /// which keep going through the Web API — those work on free Spotify accounts.</summary>
+    private static bool SpotifyMediaFallback(string cmd, Action<string> log)
+    {
+        switch (cmd)
+        {
+            case "play_pause":     ActionExecutor.SendMediaKey("playpause", log); return true;
+            case "next":           ActionExecutor.SendMediaKey("next", log); return true;
+            case "previous":       ActionExecutor.SendMediaKey("previous", log); return true;
+            case "mute_toggle":    ActionExecutor.SendMediaKey("mute", log); return true;
+            case "volume_up":      ActionExecutor.SendMediaKey("volup", log); return true;
+            case "volume_down":    ActionExecutor.SendMediaKey("voldown", log); return true;
+            case "shuffle_toggle": ActionExecutor.SendMediaKey("shuffle", log); return true;
+            case "repeat_cycle":
+                _ = Services.SpotifyMediaService.Instance.CycleRepeatAsync();
+                log("[EXEC] media -> repeat (Spotify)");
+                return true;
+            default:               return false;
+        }
+    }
+
     /// <summary>Executes a single sub-action (called by Multi Action).</summary>
     internal void ExecuteSub(string type, string value)
     {
@@ -385,12 +514,8 @@ public sealed class ButtonActionEngine : IDisposable
                 break;
             case "profile":  RunProfileSwitch(value, Log); break;
             case "keys":
-            {
-                string seq = value.IndexOfAny(SendKeysMeta) >= 0
-                    ? value : SendKeysTranslator.Translate(value);
-                System.Windows.Forms.SendKeys.SendWait(seq);
+                RunShortcut(value, Log);
                 break;
-            }
             case "text":
                 System.Windows.Forms.SendKeys.SendWait(EscapeSendKeysLiteral(value)); break;
             case "emoji": ActionExecutor.SendUnicodeText(value, Log); break;

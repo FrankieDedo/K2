@@ -180,24 +180,39 @@ public partial class MainWindow : Window
             Log("[AutoOpen] MacroPadSDK.dll not found — skipping");
         }
 
+        // Breadcrumbs around every step below: an occasional first-launch-after-a-build
+        // crash kills the process somewhere in this sequence with NO crash-log entry and
+        // NO ProcessExit (silent native death, typically SDKDLL.dll's timer thread — see
+        // App.xaml.cs's VEH machinery). The per-step markers are the only way to tell
+        // from a recovered log (Settings > Logging > "Persist logs") exactly which vendor
+        // DLL open, or which inter-step delay, it died in.
+        App.WriteLog("[AutoOpen] step: pre-Everest stagger");
         await Task.Delay(AutoOpenStaggerMs);
 
         // --- Everest ---
+        App.WriteLog("[AutoOpen] step: EvAutoOpen() enter");
         EvAutoOpen();
+        App.WriteLog("[AutoOpen] step: EvAutoOpen() done");
 
+        App.WriteLog("[AutoOpen] step: pre-Everest60 stagger");
         await Task.Delay(AutoOpenStaggerMs);
 
         // --- Everest 60 (SDK session for numpad detection + LED preview,
         // needs the real HWND set just above — see Ev60AutoOpen's doc comment) ---
+        App.WriteLog("[AutoOpen] step: Ev60AutoOpen() enter");
         Ev60AutoOpen();
+        App.WriteLog("[AutoOpen] step: Ev60AutoOpen() done");
 
+        App.WriteLog("[AutoOpen] step: pre-DisplayPad stagger");
         await Task.Delay(AutoOpenStaggerMs);
 
         // --- DisplayPad satellite ---
         // Waits for the SDK's device list to settle (see DpOpenDriverAutoAsync's doc comment)
         // so the "dp_*" tabs exist before PnlLoading is hidden below, instead of popping in a
         // couple of seconds after Home is already showing.
+        App.WriteLog("[AutoOpen] step: DpOpenDriverAutoAsync() enter");
         await DpOpenDriverAutoAsync();
+        App.WriteLog("[AutoOpen] step: DpOpenDriverAutoAsync() done");
 
         // --- All drivers attempted: hide loading overlay, land on the first visible tab.
         // TabHome is always visible and always first, so this normally lands on Home — the
@@ -208,6 +223,7 @@ public partial class MainWindow : Window
         PnlLoading.Visibility = Visibility.Collapsed;
         TcDevices.SelectedItem = TcDevices.Items.OfType<TabItem>()
             .FirstOrDefault(t => t.Visibility == Visibility.Visible);
+        App.WriteLog("[AutoOpen] step: all drivers attempted, loading overlay hidden");
     }
 
     // ---- Toolbar -----------------------------------------------------------
@@ -352,25 +368,28 @@ public partial class MainWindow : Window
     private bool _settingsTabActive;
     private bool _macroTabActive;
 
+    // The Macro/Settings nav buttons render as device-tab-style cards (see
+    // MainWindow.xaml): their ControlTemplate has a Tag="active" trigger that
+    // paints the exact IsSelected look of a device TabItem — accent-red tile,
+    // white text/icon, and (Macro only) the zoomed white corner triangle. The
+    // accent brushes there are DynamicResource, so a live accent switch
+    // (Settings > Accent color) repaints them automatically.
     private void SetSettingsTabActive(bool active)
     {
         _settingsTabActive = active;
-        BtnSettingsTab.Background = active ? (Brush)FindResource("K2AccentBrush")     : Brushes.Transparent;
-        BtnSettingsTab.Foreground = active ? (Brush)FindResource("K2AccentTextBrush") : (Brush)FindResource("K2TextMutedBrush");
+        BtnSettingsTab.Tag = active ? "active" : null;
     }
 
     private void SetMacroTabActive(bool active)
     {
         _macroTabActive = active;
-        BtnMacroTab.Background = active ? (Brush)FindResource("K2AccentBrush")     : Brushes.Transparent;
-        BtnMacroTab.Foreground = active ? (Brush)FindResource("K2AccentTextBrush") : (Brush)FindResource("K2TextMutedBrush");
+        BtnMacroTab.Tag = active ? "active" : null;
     }
 
-    /// <summary>Re-resolves the Settings/Macro nav button colors after a live accent
-    /// theme switch (Settings &gt; Accent color) — SetSettingsTabActive/SetMacroTabActive
-    /// call FindResource once per tab switch, not a live binding, so the currently-active
-    /// one would otherwise stay the old color until the next tab switch. Wired to
-    /// AccentCatalog.Applied in the constructor.</summary>
+    /// <summary>Kept for the AccentCatalog.Applied hook wired in the constructor.
+    /// The nav buttons' accent look is now a DynamicResource-backed template
+    /// trigger (see SetSettingsTabActive), so it already follows a live accent
+    /// switch — this just re-asserts the Tag state defensively.</summary>
     private void RefreshNavTabAccentColors()
     {
         SetSettingsTabActive(_settingsTabActive);
@@ -431,22 +450,58 @@ public partial class MainWindow : Window
     /// from also selecting/switching profile — routing through Click instead was fragile
     /// (relied on the row's selection handler seeing an already-Handled bubble event, which
     /// didn't reliably happen and left the popup never opening) and is no longer used.
-    /// Routes to the row's own device's XxShowProfileGear (rename/delete/link-launch-exe
-    /// popup) based on the row's item type, since this is one shared DataTemplate used by
-    /// all 5 device profile lists.</summary>
+    /// Opens the very same menu as right-clicking the row (each device's shared profile
+    /// ContextMenu — DpBuildProfileContextMenu etc.), anchored under the gear button, so
+    /// the gear and the right-click are two ways into one menu. Dedicated DisplayPad rows
+    /// have no such shared menu and keep their own <see cref="DpShowDedicatedGear"/>.</summary>
     private void ProfileGear_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
         if (sender is not FrameworkElement fe) return;
+        GearClickBounce(fe);
         switch (fe.DataContext)
         {
-            case DpProfileItem dp: DpShowProfileGear(dp); break;
+            case DpProfileItem dp: OpenProfileGearMenu(LstDpProfile, dp, fe); break;
             case DpDedicatedItem dd: DpShowDedicatedGear(dd, fe); break;
-            case EvProfileItem ev: EvShowProfileGear(ev); break;
-            case Ev60ProfileItem ev60: Ev60ShowProfileGear(ev60); break;
-            case MkProfileItem mk: MkShowProfileGear(mk); break;
-            case MpProfileItem mp: MpShowProfileGear(mp); break;
+            case EvProfileItem ev: OpenProfileGearMenu(LstEvProfile, ev, fe); break;
+            case Ev60ProfileItem ev60: OpenProfileGearMenu(LstEv60Profile, ev60, fe); break;
+            case MkProfileItem mk: OpenProfileGearMenu(LstMkProfile, mk, fe); break;
+            case MpProfileItem mp: OpenProfileGearMenu(LstMpProfile, mp, fe); break;
         }
+    }
+
+    /// <summary>Selects <paramref name="item"/> in <paramref name="list"/> (the shared
+    /// profile ContextMenu acts on SelectedItem — same reason
+    /// <see cref="ProfileItem_PreviewRightClick"/> selects the row first) then opens that
+    /// list's ContextMenu under the gear button <paramref name="anchor"/>.</summary>
+    private static void OpenProfileGearMenu(ListBox list, object item, FrameworkElement anchor)
+    {
+        if (list.ContextMenu is not ContextMenu menu) return;
+        list.SelectedItem = item;
+        menu.PlacementTarget = anchor;
+        menu.Placement = PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
+
+    /// <summary>Quick press-bounce on the profile-row gear button: scales it down to 82%
+    /// and springs back (EaseOut) over 140 ms. Done from code-behind because the button's
+    /// own PreviewMouseLeftButtonDown handler marks the event Handled (to stop the row
+    /// selecting), which also stops a XAML EventTrigger/IsPressed from ever seeing it.</summary>
+    private static void GearClickBounce(FrameworkElement gear)
+    {
+        var st = new ScaleTransform(1, 1);
+        gear.RenderTransformOrigin = new Point(0.5, 0.5);
+        gear.RenderTransform = st;
+        var anim = new System.Windows.Media.Animation.DoubleAnimation(
+            0.82, 1.0, new Duration(TimeSpan.FromMilliseconds(140)))
+        {
+            EasingFunction = new System.Windows.Media.Animation.CubicEase
+            {
+                EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut
+            }
+        };
+        st.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
+        st.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
     }
 
     /// <summary>Shows or hides a static top-level device tab (Everest Max/60, Makalu,
@@ -712,6 +767,7 @@ public partial class MainWindow : Window
         _store.Dispose();
         _usbRec.Dispose();
         CleanupDisplayPad();
+        Services.HardwareSensors.Stop();   // unloads the LHM ring0 driver, if it was ever started
         _trayIcon?.Dispose();
 
         // Put Base Camp back the way K2 found it, if the user asked for that (see

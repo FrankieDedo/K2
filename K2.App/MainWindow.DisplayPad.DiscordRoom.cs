@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -266,6 +266,7 @@ public partial class MainWindow
         DpFullscreenAnimator.Stop(devId);
         DpLiveTileService.Stop(devId);
         DiscordVoiceKeyService.Stop(devId);
+        DpSpotifyCoverKeyService.Stop(devId);
 
         int rotation = _dpStore.GetRotation(devId);
         _dpDiscordRoom[devId] = new DvpState { Rotation = rotation, V2P = EmbPhysicalForVisual(rotation) };
@@ -471,7 +472,7 @@ public partial class MainWindow
         var users = new string?[12];
 
         // ---- control half
-        tiles[st.V2P[0]] = DvpServerTile(devId);
+        tiles[st.V2P[0]] = DvpServerTile();
 
         bool deaf = DiscordBridge.Deaf ?? false;
         bool mute = deaf || (DiscordBridge.Mute ?? false);   // deafened implies not transmitting
@@ -479,7 +480,10 @@ public partial class MainWindow
             Loc.Get(mute ? "discord_key_mic_off" : "discord_key_mic_on"));
         tiles[st.V2P[2]] = DvpControlTile(deaf ? "audio_off" : "audio_on",
             Loc.Get(deaf ? "discord_key_audio_off" : "discord_key_audio_on"));
-        tiles[st.V2P[3]] = DvpControlTile("ptt", Loc.Get("dvp_ptt"));
+        // Keep the key green for as long as it is physically held: a repaint triggered by any
+        // incoming RPC event (speaking start/stop fires constantly while transmitting) would
+        // otherwise wipe the highlight mid-hold.
+        tiles[st.V2P[3]] = DvpControlTile("ptt", Loc.Get("dvp_ptt"), highlight: _dvpPttHeld);
         tiles[st.V2P[4]] = DvpControlTile("webcam", Loc.Get("dvp_webcam"));
         tiles[st.V2P[5]] = DvpControlTile("disconnect", Loc.Get("dvp_disconnect"));
 
@@ -491,7 +495,7 @@ public partial class MainWindow
             {
                 int phys = st.V2P[6 + i];
                 if (i >= all.Count) continue;
-                tiles[phys] = DvpParticipantTile(devId, 6 + i, all[i]);
+                tiles[phys] = DvpParticipantTile(all[i]);
                 users[phys] = all[i].Id;
             }
         }
@@ -505,7 +509,7 @@ public partial class MainWindow
             tiles[st.V2P[6]] = DvpNavTile(IconImageGenerator.NavShape.Left);
             tiles[st.V2P[11]] = DvpNavTile(IconImageGenerator.NavShape.Right);
 
-            tiles[st.V2P[7]] = DvpParticipantTile(devId, 7, self);
+            tiles[st.V2P[7]] = DvpParticipantTile(self);
             users[st.V2P[7]] = self.Id;
 
             for (int i = 0; i < DvpScrollSlots; i++)
@@ -513,7 +517,7 @@ public partial class MainWindow
                 int index = st.Offset + i;
                 if (index >= others.Count) break;
                 int phys = st.V2P[8 + i];
-                tiles[phys] = DvpParticipantTile(devId, 8 + i, others[index]);
+                tiles[phys] = DvpParticipantTile(others[index]);
                 users[phys] = others[index].Id;
             }
         }
@@ -533,34 +537,69 @@ public partial class MainWindow
         }, TaskScheduler.Default);
     }
 
-    /// <summary>Directory the page's per-slot tiles are re-rendered into. One file per device+slot
-    /// (not per user): the picture changes on every ring/mute flip, so a content-addressed cache
-    /// would only pile up dead files.</summary>
-    private static string DvpTileDir => Path.Combine(Path.GetTempPath(), "K2.DiscordVoicePage");
-
-    private static string DvpTilePath(int devId, int slot) =>
-        Path.Combine(DvpTileDir, $"dev{devId}_slot{slot}.png");
-
-    private static string? DvpParticipantTile(int devId, int slot, DiscordVoiceRoom.Participant p)
+    /// <summary>
+    /// One participant circle, as a <b>content-addressed</b> file under the shared auto-icon
+    /// cache — the file name is a hash of everything the picture depends on (avatar, name,
+    /// speaking ring, mute/deaf badge, "you" outline, size), exactly like every other tile on
+    /// this page (<see cref="DvpControlTile"/>/<see cref="DvpNavTile"/>) and the whole emoji
+    /// browser.
+    ///
+    /// <para>It used to render over one fixed file per device+slot. That raced the deferred
+    /// upload: <see cref="DvpPaint"/> rewrites the tile files synchronously, then queues the
+    /// <c>UploadImage</c> calls on <c>_dpUploadChain</c>. When several people leave a busy call
+    /// at once, a burst of repaints (each <c>VOICE_STATE_DELETE</c> → <c>Changed</c>, plus
+    /// <c>DiscordAvatarCache.Downloaded</c> and <c>SpeakingChanged</c>) overwrote a slot file
+    /// before the previous paint's upload had read it — so a lagging upload pushed the wrong
+    /// face onto a key (or the same face onto two keys once the paged↔unpaged shift moved which
+    /// participant maps to which slot), and the renderer's <c>Save</c> could collide with the
+    /// upload's read. Immutable per-content files remove the race and dedupe for free.</para>
+    /// </summary>
+    private static string? DvpParticipantTile(DiscordVoiceRoom.Participant p)
     {
         // Null while the avatar is still downloading: the tile renders with initials and the
         // Downloaded event repaints it with the real picture a moment later.
         string? avatar = DiscordAvatarCache.TryGet(p.AvatarUrl);
-        string dest = DvpTilePath(devId, slot);
+        bool speaking = DiscordVoiceRoom.IsSpeaking(p.Id);
+
+        string key = string.Join("|", avatar ?? "noavatar", p.Id, p.Name,
+            speaking ? "spk" : "-", p.Mute ? "m" : "-", p.Deaf ? "d" : "-", p.Self ? "self" : "-",
+            DpHidNative.IconSize);
+        string dest = DpAutoIconCachePath("dvpface", key);
+        if (File.Exists(dest)) return dest;
         return DiscordTileRenderer.TryRenderParticipant(
-            avatar, p.Name, DiscordVoiceRoom.IsSpeaking(p.Id), p.Mute, p.Deaf, p.Self,
-            DpHidNative.IconSize, dest) ? dest : null;
+            avatar, p.Name, speaking, p.Mute, p.Deaf, p.Self, DpHidNative.IconSize, dest) ? dest : null;
     }
 
-    private static string? DvpServerTile(int devId)
+    private static string? DvpWaitingTile()
     {
-        string dest = DvpTilePath(devId, 0);
+        bool arrow = DiscordStore.VoicePageBackArrow;
+        string dest = DpAutoIconCachePath("dvpwaiting", $"{DpHidNative.IconSize}|{arrow}");
+        if (File.Exists(dest)) return dest;
+        return DiscordTileRenderer.TryRenderWaiting(DpHidNative.IconSize, dest, arrow) ? dest : null;
+    }
+
+    /// <summary>Server / group tile — content-addressed for the same reason as
+    /// <see cref="DvpParticipantTile"/>.</summary>
+    private static string? DvpServerTile()
+    {
+        // Both flavours below carry (or not) the same badge — see DiscordStore.VoicePageBackArrow.
+        bool arrow = DiscordStore.VoicePageBackArrow;
 
         // A server call: its icon, straight from GET_GUILD.
         if (DiscordVoiceRoom.GuildName.Length > 0)
         {
             string? icon = DiscordAvatarCache.TryGet(DiscordVoiceRoom.GuildIconUrl);
-            return DiscordTileRenderer.TryRenderServer(icon, DpHidNative.IconSize, dest) ? dest : null;
+            if (icon is not null)
+            {
+                string d = DpAutoIconCachePath("dvpserver", $"{icon}|{DpHidNative.IconSize}|{arrow}");
+                if (File.Exists(d)) return d;
+                return DiscordTileRenderer.TryRenderServer(icon, DpHidNative.IconSize, d, arrow) ? d : null;
+            }
+
+            // Icon exists but hasn't downloaded yet: show the "loading" dots until the
+            // Downloaded event repaints. A server with no icon at all has nothing coming,
+            // so it keeps the blank key.
+            return string.IsNullOrEmpty(DiscordVoiceRoom.GuildIconUrl) ? null : DvpWaitingTile();
         }
 
         // A DM/group call has no server, and Discord reports no picture for the channel either —
@@ -571,7 +610,12 @@ public partial class MainWindow
             .Where(p => !p.Self)
             .Select(p => DiscordAvatarCache.TryGet(p.AvatarUrl))
             .ToList();
-        return DiscordTileRenderer.TryRenderGroup(faces, DpHidNative.IconSize, dest) ? dest : null;
+        if (faces.Count > 0 && faces.All(f => f is null)) return DvpWaitingTile();
+
+        string key = $"grp|{DpHidNative.IconSize}|{arrow}|{string.Join(",", faces.Select(f => f ?? "-"))}";
+        string dest = DpAutoIconCachePath("dvpgroup", key);
+        if (File.Exists(dest)) return dest;
+        return DiscordTileRenderer.TryRenderGroup(faces, DpHidNative.IconSize, dest, arrow) ? dest : null;
     }
 
     /// <summary>Control tile: the artwork shipped for this page (see

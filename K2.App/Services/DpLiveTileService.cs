@@ -89,6 +89,13 @@ internal static class DpLiveTileService
             EnsureTimerLocked();
         }
 
+        // Warm up the hardware-sensor catalogue off-thread if any "PC monitor" tile needs LHM
+        // (CPU/GPU temperature, a specific disk, or a "Choose sensor…" pick). LHM's first open
+        // loads a kernel driver and walks the whole hardware tree — too heavy to hit inline on
+        // the shared 1 Hz tile timer's first tick.
+        if (keys.Any(k => k.Type == "dp_sysmon" && (k.Value.Contains(':') || k.Value.StartsWith('/'))))
+            System.Threading.Tasks.Task.Run(HardwareSensors.Start);
+
         if (!_subscribedSpeedTest)
         {
             _subscribedSpeedTest = true;
@@ -190,6 +197,15 @@ internal static class DpLiveTileService
         {
             targets = _devices.Select(kv => (kv.Key, kv.Value)).ToList();
         }
+
+        // Fallback warm-up for any LHM-backed tile, in case Sync's fire-and-forget Start() lost
+        // the race or failed. Fire-and-forget again (never block the tile timer — LHM's open can
+        // be slow) and let Start()'s own _opening guard collapse the duplicates.
+        if (!HardwareSensors.Available &&
+            targets.Any(t => t.Ctx.Keys.Any(k => k.Type == "dp_sysmon" &&
+                                                 (k.Value.Contains(':') || k.Value.StartsWith('/')))))
+            System.Threading.Tasks.Task.Run(HardwareSensors.Start);
+
         foreach (var (id, ctx) in targets) PushDevice(id, ctx);
     }
 
@@ -221,12 +237,29 @@ internal static class DpLiveTileService
                 lock (_gate)
                 {
                     if (_lastStamp.TryGetValue((deviceId, key.Button), out string? last) && last == stamp)
+                    {
+                        // A sysmon tile whose reading hasn't budged for ~30 s: log it once so a
+                        // "numbers don't change" report says whether the value source is stuck
+                        // (LHM/SystemMonitor) rather than the upload path.
+                        if (key.Type == "dp_sysmon")
+                        {
+                            var sk = (deviceId, key.Button);
+                            _stuckTicks[sk] = _stuckTicks.GetValueOrDefault(sk) + 1;
+                            if (_stuckTicks[sk] == 30)
+                                App.WriteLog($"[LIVE] btn{key.Button} sysmon '{key.Value}' unchanged for 30 ticks at \"{stamp}\"");
+                        }
                         continue;
+                    }
                     _lastStamp[(deviceId, key.Button)] = stamp;
+                    _stuckTicks.Remove((deviceId, key.Button));
                 }
 
                 string path = TilePath(deviceId, key.Button);
-                if (!Render(key, now, path)) continue;
+                if (!Render(key, now, path))
+                {
+                    App.WriteLog($"[LIVE] btn{key.Button} {key.Type} render returned false");
+                    continue;
+                }
                 ctx.Client.UploadImage(deviceId, path, key.Button, ctx.Rotation);
             }
             catch (Exception ex)
@@ -235,6 +268,10 @@ internal static class DpLiveTileService
             }
         }
     }
+
+    /// <summary>Consecutive ticks a key's content stamp has stayed the same — for the
+    /// "unchanged for 30 ticks" diagnostic in <see cref="PushDevice"/>.</summary>
+    private static readonly Dictionary<(int Device, int Button), int> _stuckTicks = new();
 
     private static string TilePath(int deviceId, int button) =>
         Path.Combine(CacheDir, $"dev{deviceId}_btn{button}.png");
@@ -321,14 +358,22 @@ internal static class DpLiveTileService
     {
         return type switch
         {
-            "dp_sysmon" => value switch
-            {
-                "cpu" => "CPU", "ram" => "RAM", "gpu" => "GPU", "disk" => "DISK",
-                // The number itself carries the scale ("12.4M" = MB/s, "820K" = KB/s), so the
-                // caption only has to say which direction. A bare arrow was tried first and is
-                // too small to read on the tile.
-                "net_up" => "UP", _ => "DOWN",
-            },
+            // A "Choose sensor…" pick: its captured name, left for the renderer's shrink-to-fit
+            // (the user can shorten it in "Edit icon").
+            "dp_sysmon" => ActionTypeHelper.ParseSensorValue(value) is { } sensor
+                ? sensor.Label
+                : (value ?? "") switch
+                {
+                    "cpu" => "CPU", "ram" => "RAM", "gpu" => "GPU", "disk" => "DISK",
+                    "cpu:temp" => "CPU", "gpu:temp" => "GPU",
+                    // The number itself carries the scale ("12.4M" = MB/s, "820K" = KB/s), so the
+                    // caption only has to say which direction. A bare arrow was tried first and is
+                    // too small to read on the tile.
+                    "net_up" => "UP", "net_down" => "DOWN",
+                    _ => (value ?? "").StartsWith("disk:")
+                            ? DiskCaption(value!)
+                            : "CPU",
+                },
             "dp_speedtest" => value switch
             {
                 "up"   => "upload",
@@ -337,6 +382,16 @@ internal static class DpLiveTileService
             },
             _ => "",   // clock faces
         };
+    }
+
+    /// <summary>Short caption for a "disk:&lt;id&gt;|&lt;name&gt;" value — the first word of the
+    /// disk's model, which is what fits a 102 px tile ("Samsung", "WD", "Crucial").</summary>
+    private static string DiskCaption(string value)
+    {
+        int bar = value.IndexOf('|');
+        string name = bar >= 0 ? value[(bar + 1)..] : "";
+        string first = name.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+        return first.Length > 0 ? first : "DISK";
     }
 
     /// <summary>What a gauge-style live key (monitor or speed test) shows right now: the text in
@@ -354,6 +409,35 @@ internal static class DpLiveTileService
     /// <see cref="LiveTileRenderer.TryRenderGauge"/>).</summary>
     private static (string Text, double? Fraction) SysMonValue(string metric)
     {
+        // Never opens LHM here — this is reached from both the tile timer AND (via TileValue)
+        // the config dialog's preview on the UI thread. Warm-up is the callers' job:
+        // DpLiveTileService.Sync and DpKeyConfigDialog both Task.Run(HardwareSensors.Start).
+        // Until it's up the resolvers below just return null → the tile shows "—".
+
+        // A key bound to a specific hardware sensor (HWiNFO-style picker) — "<lhm-id>|<stat>|<label>".
+        if (ActionTypeHelper.ParseSensorValue(metric) is { } sensor)
+        {
+            var reading = HardwareSensors.Get(sensor.Id);
+            if (reading is null) return ("—", null);
+            var stat = HardwareSensors.ParseStat(sensor.Stat);
+            return (reading.Display(stat), reading.Fraction(stat));
+        }
+
+        // "PC monitor" preset refinements resolved through the LHM catalogue.
+        switch (metric)
+        {
+            case "cpu:temp": return SensorReadout(HardwareSensors.FindCpuTemp());
+            case "gpu:temp": return SensorReadout(HardwareSensors.FindGpuTemp());
+        }
+        if (metric.StartsWith("disk:"))
+        {
+            string arg = metric.Substring("disk:".Length);
+            int bar = arg.IndexOf('|');
+            string hwId = bar >= 0 ? arg[..bar] : arg;
+            return SensorReadout(HardwareSensors.FindDiskActivity(hwId));
+        }
+
+        // The six legacy built-ins keep flowing through SystemMonitor (no LHM dependency).
         switch (metric)
         {
             case "ram":  { int v = SystemMonitor.RamPercent();  return ($"{v}%", v / 100d); }
@@ -363,6 +447,14 @@ internal static class DpLiveTileService
             case "net_up":   return (Throughput(SystemMonitor.UploadBytesPerSec()), null);
             default:     { int v = SystemMonitor.CpuPercent();  return ($"{v}%", v / 100d); }
         }
+    }
+
+    /// <summary>Formats a resolved LHM sensor's current value for a gauge tile, or "—" when the
+    /// sensor isn't there (LHM still warming up, or the disk was unplugged).</summary>
+    private static (string Text, double? Fraction) SensorReadout(HardwareSensors.Reading? r)
+    {
+        if (r is null) return ("—", null);
+        return (r.Display(HardwareSensors.Stat.Current), r.Fraction(HardwareSensors.Stat.Current));
     }
 
     /// <summary>Bytes/s as a short human string. The unit scales down to KB/s rather than rounding

@@ -19,17 +19,49 @@ public partial class ProfileSettingsDialog : Window
     public string ProfileName => TxtName.Text;
     /// <summary>Final linked executable path, or "" for none (Save only).</summary>
     public string ExePath => TxtExePath.Text;
+    /// <summary>Show this profile only while the linked exe owns the foreground window,
+    /// restoring the previous profile when it loses focus (Save only). Forced false when
+    /// no executable is linked (the checkbox is disabled in that case).</summary>
+    public bool FocusOnly => ChkFocusOnly.IsEnabled && ChkFocusOnly.IsChecked == true;
+    /// <summary>Restore the previous profile when the linked exe exits (Save only). Forced
+    /// false when no executable is linked or <see cref="FocusOnly"/> is on — focus
+    /// tracking already restores, and the checkbox is disabled in both cases.</summary>
+    public bool RestoreOnClose => ChkRestoreOnClose.IsEnabled && ChkRestoreOnClose.IsChecked == true;
     /// <summary>True if the user clicked "Delete profile" instead of Save — the caller
     /// should ignore <see cref="Name"/>/<see cref="ExePath"/> and run its own guarded
     /// delete flow (same as the existing Rename/Delete menu items).</summary>
     public bool DeleteRequested { get; private set; }
 
-    public ProfileSettingsDialog(string currentName, string currentExePath)
+    public ProfileSettingsDialog(string currentName, string currentExePath,
+        bool focusOnly = false, bool restoreOnClose = false)
     {
         InitializeComponent();
         TxtName.Text = currentName;
         TxtExePath.Text = currentExePath;
+        ChkFocusOnly.IsChecked = focusOnly;
+        ChkRestoreOnClose.IsChecked = restoreOnClose;
+        UpdateFlagAvailability();
     }
+
+    /// <summary>The focus / restore-on-close flags only make sense once an executable is
+    /// linked, and restore-on-close is subsumed by focus tracking — so grey out what
+    /// doesn't apply. Called on load and whenever the exe path or the focus flag changes.</summary>
+    private void UpdateFlagAvailability()
+    {
+        // TxtExePath is declared before the checkboxes in XAML, so its TextChanged can
+        // fire mid-InitializeComponent while these are still null (see _PROJECT_MAP.md's
+        // XAML-load-time event hazard).
+        if (ChkFocusOnly is null || ChkRestoreOnClose is null) return;
+        bool hasExe = !string.IsNullOrWhiteSpace(TxtExePath.Text);
+        ChkFocusOnly.IsEnabled = hasExe;
+        ChkRestoreOnClose.IsEnabled = hasExe && ChkFocusOnly.IsChecked != true;
+    }
+
+    private void TxtExePath_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        => UpdateFlagAvailability();
+
+    private void ChkFocusOnly_Toggled(object sender, RoutedEventArgs e)
+        => UpdateFlagAvailability();
 
     private void BtnBrowse_Click(object sender, RoutedEventArgs e)
     {
@@ -50,6 +82,13 @@ public partial class ProfileSettingsDialog : Window
     }
 
     private void BtnClearExe_Click(object sender, RoutedEventArgs e) => TxtExePath.Text = "";
+
+    private void BtnPickRunning_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new RunningProcessDialog { Owner = this };
+        if (dlg.ShowDialog() == true && !string.IsNullOrWhiteSpace(dlg.SelectedPath))
+            TxtExePath.Text = dlg.SelectedPath;
+    }
 
     private void BtnSave_Click(object sender, RoutedEventArgs e)
     {

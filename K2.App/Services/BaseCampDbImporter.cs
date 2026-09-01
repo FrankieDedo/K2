@@ -1946,7 +1946,9 @@ public sealed class BaseCampDbImporter
     /// (confirmed against a real BaseCamp.db), NOT the shared KeyboardSettings table
     /// Everest Max/MacroPad use, but the same DisableShift/AltF4/Win/AltTab/
     /// EnableCoreLED columns (no Display Dial fields at all — Everest 60 has no
-    /// dial). Same Game Mode bit layout as <see cref="ReadKeyboardSettings"/>.</summary>
+    /// dial). Game Mode bit layout DIFFERS from <see cref="ReadKeyboardSettings"/>
+    /// (Everest Max): Everest 60 is bit0=Shift, bit1=AltTab, bit2=AltF4, bit3=Win —
+    /// see MainWindow.Everest60.cs's Ev60GameModeBitmask.</summary>
     public static (int GameModeBitmask, bool IndicatorLed, string? KeyboardLayout)? ReadEverest60Settings(
         string dbPath, int profileId)
     {
@@ -1961,10 +1963,10 @@ public sealed class BaseCampDbImporter
         using var r = cmd.ExecuteReader();
         if (!r.Read()) return null;
 
-        int mode = (!r.IsDBNull(0) && r.GetInt32(0) != 0 ? 0x1 : 0)
-                 | (!r.IsDBNull(1) && r.GetInt32(1) != 0 ? 0x2 : 0)
-                 | (!r.IsDBNull(2) && r.GetInt32(2) != 0 ? 0x4 : 0)
-                 | (!r.IsDBNull(3) && r.GetInt32(3) != 0 ? 0x8 : 0);
+        int mode = (!r.IsDBNull(0) && r.GetInt32(0) != 0 ? 0x1 : 0)   // DisableShift
+                 | (!r.IsDBNull(3) && r.GetInt32(3) != 0 ? 0x2 : 0)   // DisableAltTab
+                 | (!r.IsDBNull(1) && r.GetInt32(1) != 0 ? 0x4 : 0)   // DisableAltF4
+                 | (!r.IsDBNull(2) && r.GetInt32(2) != 0 ? 0x8 : 0);  // DisableWin
         bool led = !r.IsDBNull(4) && r.GetInt32(4) != 0;
         // Same IsLayoutConfigured gate as ReadKeyboardSettings above.
         string? layout = !r.IsDBNull(5) && !r.IsDBNull(6) && r.GetInt32(6) != 0 ? r.GetString(5) : null;

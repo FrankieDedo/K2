@@ -135,14 +135,25 @@ public partial class MainWindow
         // from Ev60RgbPanel's paint state and now also calls Ev60ReapplyBorderOverlays.
         Ev60RgbPanel.RequestReapplyOverlays += ApplyEv60KeycapAppearanceToAllKeys;
         Ev60RgbPanel.PaintModeChanged += _ => UpdateEv60BorderOverlayVisibility();
+        // wakeDelayMs: same rationale as Everest Max (see BacklightIdleTimer) —
+        // defer the wake resend so the first key after idle isn't repeated while
+        // the firmware stalls the HID endpoint applying the lighting.
         _ev60AutoOffTimer = new BacklightIdleTimer(Dispatcher,
             () => Ev60RgbPanel.SetBacklightForcedOff(true),
-            () => Ev60RgbPanel.SetBacklightForcedOff(false));
+            () => Ev60RgbPanel.SetBacklightForcedOff(false),
+            wakeDelayMs: 250);
         Ev60RgbPanel.BacklightManuallyToggled += () => _ev60AutoOffTimer?.RegisterActivity();
         // Init() raises AutoOffConfigChanged once with the loaded value — must be
         // subscribed before Init() runs so that first push isn't missed (see
         // Everest60RgbPanel.Init's doc comment on the event).
         Ev60RgbPanel.AutoOffConfigChanged += (enabled, seconds) => _ev60AutoOffTimer?.Configure(enabled, seconds);
+        Ev60RgbPanel.LightingChanged += () =>
+        {
+            if (Ev60RgbPanel.SnapshotLighting() is { } l)
+                DeviceSyncOnLightingChanged(SyncDeviceKind.Everest60, new LightingSnapshot(
+                    l.EffectName, l.Color1, l.Color2, 0, l.SpeedPct, l.BrightnessPct,
+                    l.DirIndex, l.Rainbow, l.ColorDouble));
+        };
         Ev60RgbPanel.Init(_ev60, LogEverest60, _ev60Store, Ev60CurrentProfile);
         Ev60KeyBindingPanel.Init(_ev60Store, Ev60CurrentProfile, LogEverest60, () => _ev60LayoutType);
         InitEv60SectionNav();
@@ -186,8 +197,8 @@ public partial class MainWindow
         _ev60Engine = new ButtonActionEngine(_ev60ActionHost);
         _ev60Engine.Start();
 
-        LstEv60Profile.ContextMenu = Ev60BuildProfileContextMenu();
-        BtnEv60ProfileMenu.ContextMenu = Ev60BuildProfileMenuNoEdit();
+        LstEv60Profile.ContextMenu = WithProfileGuide(Ev60BuildProfileContextMenu(), "everest60");
+        BtnEv60ProfileMenu.ContextMenu = WithProfileGuide(Ev60BuildProfileMenuNoEdit(), "everest60");
         Ev60RefreshProfiles();
         Ev60ReloadProfile(Ev60CurrentProfile());
 
@@ -217,7 +228,7 @@ public partial class MainWindow
         // constructor runs before OnSourceInitialized, so _hWnd is still
         // IntPtr.Zero here.
         _ev60PollTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-        _ev60PollTimer.Tick += (_, _) => { Ev60RefreshStatus(); Ev60ClearStaleHighlights(); };
+        _ev60PollTimer.Tick += (_, _) => { Ev60RefreshStatus(); Ev60ClearStaleHighlights(); SyncEv60GameModeStatusFromDevice(); };
         _ev60PollTimer.Start();
         Ev60RefreshStatus();
     }
@@ -299,13 +310,18 @@ public partial class MainWindow
         var currentKeys = new HashSet<string>();
         for (int slot = 1; slot <= Ev60ProfileCount; slot++)
         {
-            string? exe = _ev60Store.GetSetting($"profile.{slot}.launchExe");
+            string kb = $"profile.{slot}";
+            string? exe = _ev60Store.GetSetting($"{kb}.launchExe");
             if (string.IsNullOrWhiteSpace(exe)) continue;
             string key = scope + slot;
             currentKeys.Add(key);
             int capturedSlot = slot;
-            ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe,
-                () => Ev60SwitchProfile(capturedSlot.ToString()));
+            bool focusOnly = _ev60Store.GetSetting($"{kb}.launchFocusOnly") == "1";
+            bool restoreOnClose = _ev60Store.GetSetting($"{kb}.launchRestoreOnClose") == "1";
+            ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe, focusOnly, restoreOnClose,
+                capturedSlot.ToString(),
+                () => _ev60Store.GetCurrentProfile().ToString(),
+                t => Ev60SwitchProfile(t));
         }
         foreach (var staleKey in ProfileLaunchWatcher.Instance.KeysWithPrefix(scope).Except(currentKeys))
             ProfileLaunchWatcher.Instance.RemoveRegistration(staleKey);
@@ -413,6 +429,7 @@ public partial class MainWindow
         _ev60Store.SetCurrentProfile(slot);
         LogEverest60($"[UI ] Everest 60 profile selected: {slot}");
         Ev60ReloadProfile(slot);
+        DeviceSyncOnProfileSwitched(SyncDeviceKind.Everest60, slot);
     }
 
     /// <summary>Right-click menu for LstEv60Profile rows — see DpBuildProfileContextMenu
@@ -420,6 +437,8 @@ public partial class MainWindow
     private ContextMenu Ev60BuildProfileContextMenu()
     {
         var menu = new ContextMenu();
+        var miConfigure = new MenuItem { Header = Loc.Get("configure_profile") };
+        miConfigure.Click += (_, _) => { if (LstEv60Profile.SelectedItem is Ev60ProfileItem pi) Ev60ShowProfileGear(pi); };
         var miRename = new MenuItem { Header = Loc.Get("rename_profile") };
         miRename.Click += BtnEv60RenameProfile_Click;
         var miImportXml = new MenuItem { Header = Loc.Get("dp_import_xml") };
@@ -430,6 +449,8 @@ public partial class MainWindow
         miExport.Click += BtnEv60ExportProfiles_Click;
         var miDelete = new MenuItem { Header = Loc.Get("delete_profile") };
         miDelete.Click += BtnEv60DeleteProfile_Click;
+        menu.Items.Add(miConfigure);
+        menu.Items.Add(new Separator());
         menu.Items.Add(miRename);
         menu.Items.Add(new Separator());
         menu.Items.Add(miImportXml);
@@ -520,8 +541,11 @@ public partial class MainWindow
     private void Ev60ShowProfileGear(Ev60ProfileItem pi)
     {
         string currentName = _ev60Store.GetProfileName(pi.Slot) ?? Loc.Get("profile_n", pi.Slot);
-        string currentExe = _ev60Store.GetSetting($"profile.{pi.Slot}.launchExe") ?? "";
-        var dlg = new ProfileSettingsDialog(currentName, currentExe) { Owner = this };
+        string keyBase = $"profile.{pi.Slot}";
+        string currentExe = _ev60Store.GetSetting($"{keyBase}.launchExe") ?? "";
+        bool focusOnly = _ev60Store.GetSetting($"{keyBase}.launchFocusOnly") == "1";
+        bool restoreOnClose = _ev60Store.GetSetting($"{keyBase}.launchRestoreOnClose") == "1";
+        var dlg = new ProfileSettingsDialog(currentName, currentExe, focusOnly, restoreOnClose) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
         if (dlg.DeleteRequested)
@@ -539,7 +563,7 @@ public partial class MainWindow
                 MessageBoxImage.Warning);
             if (res != MessageBoxResult.OK) return;
             _ev60Store.ClearProfile(pi.Slot);
-            _ev60Store.SetSetting($"profile.{pi.Slot}.launchExe", "");
+            _ev60Store.SetSetting($"{keyBase}.launchExe", "");
             LogEverest60($"[UI ] Everest 60 profile {pi.Slot} deleted (gear).");
             Ev60RefreshProfiles();
             int fallback = _ev60Store.GetExistingProfiles().DefaultIfEmpty(1).First();
@@ -550,7 +574,9 @@ public partial class MainWindow
         }
 
         _ev60Store.SetProfileName(pi.Slot, dlg.ProfileName);
-        _ev60Store.SetSetting($"profile.{pi.Slot}.launchExe", dlg.ExePath);
+        _ev60Store.SetSetting($"{keyBase}.launchExe", dlg.ExePath);
+        _ev60Store.SetSetting($"{keyBase}.launchFocusOnly", dlg.FocusOnly ? "1" : "0");
+        _ev60Store.SetSetting($"{keyBase}.launchRestoreOnClose", dlg.RestoreOnClose ? "1" : "0");
         LogEverest60($"[UI ] Everest 60 profile {pi.Slot} settings updated (gear).");
         Ev60RefreshProfiles();
         Ev60SelectProfileSlot(pi.Slot);
@@ -884,8 +910,9 @@ public partial class MainWindow
             if (settingsEl is not null)
             {
                 bool B(string name) => string.Equals(settingsEl.Element(name)?.Value, "true", StringComparison.OrdinalIgnoreCase);
-                int mode = (B("DisableShift") ? 0x1 : 0) | (B("DisableAltF4") ? 0x2 : 0)
-                         | (B("DisableWin") ? 0x4 : 0) | (B("DisableAltTab") ? 0x8 : 0);
+                // Ev60 bit layout (differs from Everest Max) — see Ev60GameModeBitmask.
+                int mode = (B("DisableShift")  ? Ev60GmShift  : 0) | (B("DisableAltTab") ? Ev60GmAltTab : 0)
+                         | (B("DisableAltF4")  ? Ev60GmAltF4  : 0) | (B("DisableWin")    ? Ev60GmWin    : 0);
                 string sp2 = $"settings.p{slot}.";
                 _ev60Store.SetSetting(sp2 + "game_mode", mode.ToString());
                 _ev60Store.SetSetting(sp2 + "indicator_led", B("EnableCoreLED") ? "1" : "0");
@@ -980,9 +1007,15 @@ public partial class MainWindow
     private void Ev60AutoOpen()
     {
         bool opened = false;
+        // Sub-step breadcrumbs: see AutoOpenDrivers — a silent native death (no crash
+        // log, no ProcessExit) has been seen right around here; these pin it to the
+        // Everest360_USB.dll open vs. what follows.
+        App.WriteLog("[Ev60AutoOpen] calling _ev60Sdk.Open");
         try { opened = _ev60Sdk.Open(_hWnd, LogEverest60); } catch (Exception ex) { LogEverest60("[KeyBind] eager Open threw: " + ex); }
+        App.WriteLog($"[Ev60AutoOpen] _ev60Sdk.Open returned {opened}");
         UpdateEv60LedPreviewActive(ReferenceEquals(_activeEv60Section, Ev60RgbPanel));
         if (opened) Ev60KeyBindingPanel.Ev60ReloadKeyBindings(Ev60CurrentProfile());
+        App.WriteLog("[Ev60AutoOpen] done");
     }
 
     // ------------------------------------------------------------
@@ -1751,8 +1784,12 @@ public partial class MainWindow
         if (index >= 0 && index < keys.Count) ExecuteEv60Key(keys[index]);
     }
 
-    private void ExecuteEv60Key(Ev60Key k) =>
-        _ev60Engine?.Execute(k.ActionType, k.ActionValue, Ev60KeyBindingPanel.IndexOf(k));
+    /// <param name="momentary">Set only from the physical down edge
+    /// (<see cref="HandleEv60KeyByLed"/> sends the matching up edge to
+    /// <see cref="ButtonActionEngine.Release"/>); RPC / programmatic presses via
+    /// <see cref="Ev60PressButton"/> stay one-shot.</param>
+    private void ExecuteEv60Key(Ev60Key k, bool momentary = false) =>
+        _ev60Engine?.Execute(k.ActionType, k.ActionValue, Ev60KeyBindingPanel.IndexOf(k), momentary);
 
     /// <summary>Physical key press/release, reported by the vendor SDK's
     /// callback (Everest60SdkService.KeyEvent) — mirrors MainWindow.Everest.cs's
@@ -1843,6 +1880,8 @@ public partial class MainWindow
             if (key is not null) ExecuteEv60KeyDeduped(key);
         }
         else
+        {
+            if (key is not null) _ev60Engine?.Release(Ev60KeyBindingPanel.IndexOf(key));
             // Picks up whatever keycap-appearance write may have landed (and been
             // skipped) while this key's IsHighlighted trigger was active — same
             // "stuck gray"-class fix as MacroPad's HandleKeyEvent (MainWindow.Keys.cs).
@@ -1854,6 +1893,7 @@ public partial class MainWindow
             // Ev60HighlightKeyboardButton's plain ResolveEv60KeycapTextColor() write
             // stuck forever instead of just for the instant before this call.
             ApplyEv60KeycapAppearanceToAllKeys();
+        }
     }
 
     /// <summary>Down-edge moment (UTC) of every key currently shown highlighted, keyed by
@@ -1914,7 +1954,7 @@ public partial class MainWindow
             return;
         }
         _ev60LastExecuted = (key.LedIndex, now);
-        ExecuteEv60Key(key);
+        ExecuteEv60Key(key, momentary: true);
     }
 
     // ============================================================
@@ -2309,7 +2349,14 @@ public partial class MainWindow
         // so the keyboard reflects it even if it was switched while
         // disconnected (mirrors MainWindow.Makalu.cs's MkRefreshStatus).
         if (connected && !wasConnected)
+        {
             Ev60RgbPanel.Ev60ReloadProfile(Ev60CurrentProfile());
+            // Game Mode / Core LED are volatile too (same as Everest Max) — reload the
+            // persisted state for the current profile and re-push it on every fresh
+            // connect, not just on section nav. InitEv60SettingsPanel ends with
+            // ApplyEv60SettingsToDevice().
+            InitEv60SettingsPanel();
+        }
         LblEv60Status.Text = connected
             ? Loc.Get("ev60_status_connected", model)
             : Loc.Get("ev60_status_disconnected");
@@ -2564,13 +2611,14 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// Key namespace for the Settings section — unconditionally per-profile (unlike
-    /// Everest Max, Ev60 has no "sync across profiles" concept at all: lighting is
-    /// already unconditionally per-profile here, see the class doc comment, so
-    /// Settings follows the same philosophy rather than introducing a new toggle).
-    /// User request 2026-07-25.
+    /// Key namespace for the Settings section — shared (<c>settings.</c>) when this
+    /// section's own "sync across profiles" flag (<c>CkEv60SettingsSync</c>/
+    /// <c>settings.sync</c>) is on, else profile-scoped (<c>settings.p{N}.</c>). Mirrors
+    /// Everest Max's <c>EvSettingsPrefix</c>; K2-side only (no Ev60 firmware settings-sync
+    /// command). Added for parity with Everest Max — user request 2026-08-28.
     /// </summary>
-    private string Ev60SettingsPrefix() => $"settings.p{Ev60CurrentProfile()}.";
+    private string Ev60SettingsPrefix() =>
+        CkEv60SettingsSync.IsChecked == true ? "settings." : $"settings.p{Ev60CurrentProfile()}.";
 
     private void InitEv60SettingsPanel()
     {
@@ -2640,6 +2688,11 @@ public partial class MainWindow
             int idx = (int)_ev60KeycapStyleValue;
             CbEv60KeycapStyle.SelectedIndex = idx >= 0 && idx < KeycapStyleChoices.Length ? idx : 0;
 
+            // "Sync across profiles" flag for this section (K2-side only) — load it FIRST
+            // so Ev60SettingsPrefix() below reflects it. Ev60 never had this flag, so no
+            // legacy migration.
+            CkEv60SettingsSync.IsChecked = _ev60Store.GetSetting("settings.sync") == "1";
+
             // Game Mode / Core Indicator LED — ported from Everest Max, see the
             // XAML comment above these controls for why there's no ApplyToDevice call.
             // Still per-profile (unlike Keycap Appearance above) via Ev60SettingsPrefix, with
@@ -2647,15 +2700,17 @@ public partial class MainWindow
             string settingsPrefix = Ev60SettingsPrefix();
             string? GetSettings(string key) => _ev60Store.GetSetting(settingsPrefix + key) ?? _ev60Store.GetSetting("settings." + key);
             int mode = int.TryParse(GetSettings("game_mode"), out var m) ? m : 0;
-            CkEv60GameModeShiftTab.IsChecked = (mode & 0x1) != 0;
-            CkEv60GameModeAltF4.IsChecked    = (mode & 0x2) != 0;
-            CkEv60GameModeWinKey.IsChecked   = (mode & 0x4) != 0;
-            CkEv60GameModeAltTab.IsChecked   = (mode & 0x8) != 0;
+            CkEv60GameModeShiftTab.IsChecked = (mode & Ev60GmShift)  != 0;
+            CkEv60GameModeAltTab.IsChecked   = (mode & Ev60GmAltTab) != 0;
+            CkEv60GameModeAltF4.IsChecked    = (mode & Ev60GmAltF4)  != 0;
+            CkEv60GameModeWinKey.IsChecked   = (mode & Ev60GmWin)    != 0;
+            CkEv60GameModeMaster.IsChecked   = GetSettings("game_mode_master") == "1";
             CkEv60CoreIndicatorLed.IsChecked = GetSettings("indicator_led") == "1";
         }
         finally { _ev60SettingsSuppress = false; }
 
         ApplyEv60KeycapAppearanceToAllKeys();
+        ApplyEv60SettingsToDevice();
     }
 
     private void CbEv60KeycapStyle_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -2667,24 +2722,142 @@ public partial class MainWindow
         ApplyEv60KeycapAppearanceToAllKeys();
     }
 
-    /// <summary>Bit layout matches Everest Max's EvGameModeBitmask (MainWindow.Everest.cs):
-    /// 0x1=DisableShift, 0x2=DisableAltF4, 0x4=DisableWin, 0x8=DisableAltTab.</summary>
+    /// <summary>
+    /// Everest 60 Game Mode bit layout — DIFFERENT from Everest Max. Base Camp's
+    /// <c>Everest60Operations.SetEverest60SettingsInHW</c> builds the binary string
+    /// "Win AltF4 AltTab Shift", so: bit0=Shift(+Tab), bit1=AltTab, bit2=AltF4, bit3=Win.
+    /// </summary>
+    private const int Ev60GmShift  = 0x1;
+    private const int Ev60GmAltTab = 0x2;
+    private const int Ev60GmAltF4  = 0x4;
+    private const int Ev60GmWin    = 0x8;
+
     private int Ev60GameModeBitmask() =>
-        (CkEv60GameModeShiftTab.IsChecked == true ? 0x1 : 0) |
-        (CkEv60GameModeAltF4.IsChecked    == true ? 0x2 : 0) |
-        (CkEv60GameModeWinKey.IsChecked   == true ? 0x4 : 0) |
-        (CkEv60GameModeAltTab.IsChecked   == true ? 0x8 : 0);
+        (CkEv60GameModeShiftTab.IsChecked == true ? Ev60GmShift  : 0) |
+        (CkEv60GameModeAltTab.IsChecked   == true ? Ev60GmAltTab : 0) |
+        (CkEv60GameModeAltF4.IsChecked    == true ? Ev60GmAltF4  : 0) |
+        (CkEv60GameModeWinKey.IsChecked   == true ? Ev60GmWin    : 0);
+
+    /// <summary>
+    /// Pushes Game Mode (bitmask + master) + Core LED to the keyboard.
+    /// <list type="bullet">
+    /// <item>BITMASK (which keys) and Core LED go over the SAME raw-HID channel K2 uses
+    /// for Everest 60 lighting (<see cref="Everest60Service.SetGameMode"/> /
+    /// <c>SetCoreLed</c>, cmds 0x15 / 0x10 on interface 2) — wire format + bit layout
+    /// reverse-engineered from <c>_reference/usb_dumps/ev60_flags.pcapng</c>.</item>
+    /// <item>The MASTER engage/disengage (what Fn+Win toggles) has no identified raw-HID
+    /// opcode, so it goes through the vendor DLL
+    /// (<see cref="Everest60SdkService.SetGameModeStatus"/>).</item>
+    /// </list>
+    /// Volatile per session like the Everest Max — re-applied from
+    /// <see cref="InitEv60SettingsPanel"/> on every profile switch / reconnect.
+    /// </summary>
+    private void ApplyEv60SettingsToDevice()
+    {
+        if (!_ev60Connected) return;
+        int mode = Ev60GameModeBitmask();
+        LogEverest60($"[SET ] Ev60 SetGameMode(0x{mode:X2}) -> {_ev60.SetGameMode(mode)}");
+        LogEverest60($"[SET ] Ev60 SetCoreLed({CkEv60CoreIndicatorLed.IsChecked == true}) -> " +
+                     $"{_ev60.SetCoreLed(CkEv60CoreIndicatorLed.IsChecked == true)}");
+
+        if (!_ev60Sdk.IsOpen) _ev60Sdk.Open(_hWnd, LogEverest60);
+        if (_ev60Sdk.IsOpen)
+            LogEverest60($"[SET ] Ev60 SetGameModeStatus({CkEv60GameModeMaster.IsChecked == true}) -> " +
+                         $"{_ev60Sdk.SetGameModeStatus(CkEv60GameModeMaster.IsChecked == true)}");
+    }
 
     private void CkEv60GameMode_Click(object sender, RoutedEventArgs e)
     {
         if (_ev60SettingsSuppress) return;
         _ev60Store.SetSetting(Ev60SettingsPrefix() + "game_mode", Ev60GameModeBitmask().ToString());
+        ApplyEv60SettingsToDevice();
+    }
+
+    private void CkEv60GameModeMaster_Click(object sender, RoutedEventArgs e)
+    {
+        if (_ev60SettingsSuppress) return;
+        _ev60Store.SetSetting(Ev60SettingsPrefix() + "game_mode_master",
+            CkEv60GameModeMaster.IsChecked == true ? "1" : "0");
+        ApplyEv60SettingsToDevice();
+    }
+
+    /// <summary>Polls the keyboard's Game Mode master state (changes on Fn+Win) and
+    /// reflects it on <see cref="CkEv60GameModeMaster"/>. Called from the Ev60 tick.</summary>
+    private void SyncEv60GameModeStatusFromDevice()
+    {
+        if (_ev60SettingsSuppress || !_ev60Connected || !_ev60Sdk.IsOpen) return;
+        if (_ev60Sdk.GetGameModeStatus() is not bool onDevice) return;
+        if ((CkEv60GameModeMaster.IsChecked == true) == onDevice) return;
+        _ev60SettingsSuppress = true;
+        try
+        {
+            CkEv60GameModeMaster.IsChecked = onDevice;
+            _ev60Store.SetSetting(Ev60SettingsPrefix() + "game_mode_master", onDevice ? "1" : "0");
+            LogEverest60($"[GET ] Ev60 Game Mode master changed on device -> {onDevice}");
+        }
+        finally { _ev60SettingsSuppress = false; }
     }
 
     private void CkEv60CoreIndicatorLed_Click(object sender, RoutedEventArgs e)
     {
         if (_ev60SettingsSuppress) return;
         _ev60Store.SetSetting(Ev60SettingsPrefix() + "indicator_led", CkEv60CoreIndicatorLed.IsChecked == true ? "1" : "0");
+        ApplyEv60SettingsToDevice();
+    }
+
+    /// <summary>
+    /// The Settings section's own "sync across profiles" flag (<c>settings.sync</c>),
+    /// K2-side only. Re-saves Game Mode + Indicator LED under the namespace it just
+    /// switched to (<see cref="Ev60SettingsPrefix"/>) and, on the OFF→ON edge, replays
+    /// them into every profile slot so a later un-sync leaves them all sane. Mirrors
+    /// Everest Max's <c>CkSettingsSync_Click</c>.
+    /// </summary>
+    private void CkEv60SettingsSync_Click(object sender, RoutedEventArgs e)
+    {
+        if (_ev60SettingsSuppress) return;
+        _ev60Store.SetSetting("settings.sync", CkEv60SettingsSync.IsChecked == true ? "1" : "0");
+
+        int gm = Ev60GameModeBitmask();
+        string led = CkEv60CoreIndicatorLed.IsChecked == true ? "1" : "0";
+        string gmm = CkEv60GameModeMaster.IsChecked == true ? "1" : "0";
+        _ev60Store.SetSetting(Ev60SettingsPrefix() + "game_mode", gm.ToString());
+        _ev60Store.SetSetting(Ev60SettingsPrefix() + "game_mode_master", gmm);
+        _ev60Store.SetSetting(Ev60SettingsPrefix() + "indicator_led", led);
+
+        if (CkEv60SettingsSync.IsChecked == true)
+            foreach (var slot in _ev60Store.GetExistingProfiles())
+            {
+                _ev60Store.SetSetting($"settings.p{slot}.game_mode", gm.ToString());
+                _ev60Store.SetSetting($"settings.p{slot}.game_mode_master", gmm);
+                _ev60Store.SetSetting($"settings.p{slot}.indicator_led", led);
+            }
+    }
+
+    /// <summary>
+    /// Hardware factory reset for Everest 60 — mirrors Everest Max's
+    /// <see cref="BtnSettingsFactoryReset_Click"/>. Puts the keyboard's key bindings back
+    /// to factory (<see cref="Everest60SdkService.ResetKeys"/> — the deepest reset this
+    /// raw-HID board exposes; it has no LED-flash wipe) AND wipes K2's own saved
+    /// configuration for it, then rebuilds the panels from the empty store.
+    /// </summary>
+    private void BtnEv60SettingsFactoryReset_Click(object sender, RoutedEventArgs e)
+    {
+        var res = MessageBox.Show(
+            Loc.Get("settings_factory_reset_confirm"),
+            Loc.Get("settings_factory_reset"),
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+        if (res != MessageBoxResult.OK) return;
+
+        if (_ev60Sdk.IsOpen)
+            LogEverest60($"[SET ] Everest60SdkService.ResetKeys -> {_ev60Sdk.ResetKeys()}");
+
+        _ev60Store.ResetAllData();
+        LogEverest60("[SET ] factory reset: K2's Everest 60 store wiped.");
+
+        Ev60RgbPanel.RestoreDefaults();
+        Ev60KeyBindingPanel.RestoreDefaults();
+        Ev60RefreshProfiles();
     }
 
     private void CkEv60KeycapTranslucentLegend_Click(object sender, RoutedEventArgs e)

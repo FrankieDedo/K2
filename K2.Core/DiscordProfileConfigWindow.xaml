@@ -1,29 +1,27 @@
-<Window x:Class="K2.Core.DiscordProfileConfigWindow"
+﻿<Window x:Class="K2.Core.DiscordProfileConfigWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:K2.Core"
         Title="{loc:Get discord_profile_config_title}"
-        Width="470" Height="470"
-        MinWidth="420" MinHeight="450"
+        Width="470" Height="360"
+        MinWidth="420" MinHeight="340"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
         Style="{DynamicResource K2WindowStyle}">
     <Grid Margin="16">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>   <!-- 0  title -->
-            <RowDefinition Height="Auto"/>   <!-- 1  hint -->
-            <RowDefinition Height="Auto"/>   <!-- 2  account button -->
-            <RowDefinition Height="Auto"/>   <!-- 3  webcam label -->
-            <RowDefinition Height="Auto"/>   <!-- 4  webcam row -->
-            <RowDefinition Height="Auto"/>   <!-- 5  webcam tip -->
-            <RowDefinition Height="Auto"/>   <!-- 6  ptt label -->
-            <RowDefinition Height="Auto"/>   <!-- 7  ptt row -->
-            <RowDefinition Height="Auto"/>   <!-- 8  ptt tip -->
-            <RowDefinition Height="Auto"/>   <!-- 9  return-timer row -->
-            <RowDefinition Height="Auto"/>   <!-- 10 return-timer tip -->
-            <RowDefinition Height="*"/>      <!-- 11 filler -->
-            <RowDefinition Height="Auto"/>   <!-- 12 buttons -->
+            <RowDefinition Height="Auto"/>   <!-- 0 title -->
+            <RowDefinition Height="Auto"/>   <!-- 1 hint -->
+            <RowDefinition Height="Auto"/>   <!-- 2 account button -->
+            <RowDefinition Height="Auto"/>   <!-- 3 webcam label + hint icon -->
+            <RowDefinition Height="Auto"/>   <!-- 4 webcam row -->
+            <RowDefinition Height="Auto"/>   <!-- 5 ptt label + hint icon -->
+            <RowDefinition Height="Auto"/>   <!-- 6 ptt row -->
+            <RowDefinition Height="Auto"/>   <!-- 7 return-timer row -->
+            <RowDefinition Height="Auto"/>   <!-- 8 show-back-arrow row -->
+            <RowDefinition Height="*"/>      <!-- 9 filler -->
+            <RowDefinition Height="Auto"/>   <!-- 10 buttons -->
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" Text="{loc:Get discord_profile_config_title}" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
@@ -37,8 +35,11 @@
 
         <!-- Webcam shortcut. Read-only: filled by RECORDING the combination, never typed, so what is
              stored can't disagree with what the keyboard actually sends. -->
-        <TextBlock Grid.Row="3" Text="{loc:Get discord_webcam_hotkey_label}" Margin="0,0,0,4"/>
-        <Grid Grid.Row="4" ToolTip="{loc:Get discord_webcam_hotkey_tip}" Margin="0,0,0,4">
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="{loc:Get discord_webcam_hotkey_label}" VerticalAlignment="Center"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get discord_webcam_hotkey_tip}"/>
+        </StackPanel>
+        <Grid Grid.Row="4" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -48,12 +49,13 @@
             <Button x:Name="BtnDiscordRecordWebcam" Grid.Column="1" Content="{loc:Get hotkey_record}"
                     Padding="10,2" Margin="6,0,0,0" Click="BtnDiscordRecordWebcam_Click"/>
         </Grid>
-        <TextBlock Grid.Row="5" Text="{loc:Get discord_webcam_hotkey_tip}" TextWrapping="Wrap"
-                   Foreground="#9A9AA2" FontSize="11" Margin="0,0,0,14"/>
 
         <!-- Push-to-talk shortcut. Held down for as long as the voice-page PTT key is pressed. -->
-        <TextBlock Grid.Row="6" Text="{loc:Get discord_ptt_hotkey_label}" Margin="0,0,0,4"/>
-        <Grid Grid.Row="7" ToolTip="{loc:Get discord_ptt_hotkey_tip}" Margin="0,0,0,4">
+        <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="{loc:Get discord_ptt_hotkey_label}" VerticalAlignment="Center"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get discord_ptt_hotkey_tip}"/>
+        </StackPanel>
+        <Grid Grid.Row="6" Margin="0,0,0,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -63,22 +65,28 @@
             <Button x:Name="BtnDiscordRecordPtt" Grid.Column="1" Content="{loc:Get hotkey_record}"
                     Padding="10,2" Margin="6,0,0,0" Click="BtnDiscordRecordPtt_Click"/>
         </Grid>
-        <TextBlock Grid.Row="8" Text="{loc:Get discord_ptt_hotkey_tip}" TextWrapping="Wrap"
-                   Foreground="#9A9AA2" FontSize="11" Margin="0,0,0,16"/>
 
-        <StackPanel Grid.Row="9" Orientation="Horizontal" Margin="0,0,0,4">
+        <StackPanel Grid.Row="7" Orientation="Horizontal" Margin="0,0,0,4">
             <CheckBox x:Name="CkDiscordReturn" Content="{loc:Get discord_voicepage_return_label}"
                       VerticalAlignment="Center"/>
             <TextBox x:Name="TxtDiscordReturnSec" Width="52" Height="23" Margin="8,0,6,0"
                      VerticalContentAlignment="Center" TextAlignment="Center"
                      MaxLength="4" PreviewTextInput="DigitsOnly_PreviewTextInput"/>
             <TextBlock Text="{loc:Get unit_seconds}" VerticalAlignment="Center" Foreground="#9A9AA2"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get discord_voicepage_return_hint}"/>
         </StackPanel>
-        <TextBlock Grid.Row="10" Text="{loc:Get discord_voicepage_return_hint}" TextWrapping="Wrap"
-                   Foreground="#9A9AA2" FontSize="11"/>
 
-        <StackPanel Grid.Row="12" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="{loc:Get save}" Width="90" Padding="6,2" IsDefault="True" Click="BtnSave_Click"/>
+        <StackPanel Grid.Row="8" Orientation="Horizontal" Margin="0,8,0,0">
+            <CheckBox x:Name="CkDiscordBackArrow" Content="{loc:Get show_back_arrow_label}"
+                      VerticalAlignment="Center"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get show_back_arrow_hint}"/>
         </StackPanel>
+
+        <Grid Grid.Row="10" Margin="0,12,0,0">
+            <Button Style="{DynamicResource GuideBarButton}" HorizontalAlignment="Left" VerticalAlignment="Center"
+                    Content="{loc:Get guide_button}" ToolTip="{loc:Get guide_tooltip}" Click="BtnGuide_Click"/>
+            <Button Content="{loc:Get save}" Width="90" Padding="6,2" IsDefault="True"
+                    HorizontalAlignment="Right" Click="BtnSave_Click"/>
+        </Grid>
     </Grid>
 </Window>

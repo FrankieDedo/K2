@@ -123,6 +123,12 @@ public partial class TextIconDialog : Window
     /// source is an animated GIF, which can't be rotation-baked — see the caller's own
     /// rotation-availability check).</param>
     /// <param name="getCroppedImagePath">See <see cref="_getCroppedImagePath"/>.</param>
+    /// <param name="textStyleOnly">Strips the dialog down to the font and the text color — for a
+    /// tile whose TEXT comes from outside it and whose layout the generator owns, i.e. the
+    /// Spotify block's title/artist/album keys (user request 2026-09-01). Everything else
+    /// (the text box, background color/mode, position, caption on/off, icon set, font size,
+    /// rotation) would either do nothing or fight the live repaint, so it is hidden rather than
+    /// left there to be clicked. Requires <paramref name="defaultIconRenderer"/>.</param>
     public TextIconDialog(int size, string? baseImagePath, KeyIconSpec spec,
                           Func<KeyIconSpec, string?>? defaultIconRenderer,
                           FrameworkElement? cropViewport = null,
@@ -130,7 +136,8 @@ public partial class TextIconDialog : Window
                           Action? onResetIcon = null,
                           int initialRotation = 0,
                           bool rotationEnabled = true,
-                          Func<string?>? getCroppedImagePath = null)
+                          Func<string?>? getCroppedImagePath = null,
+                          bool textStyleOnly = false)
     {
         InitializeComponent();
 
@@ -228,7 +235,24 @@ public partial class TextIconDialog : Window
         ResultRotation = initialRotation;
         Rb0.IsEnabled = Rb90.IsEnabled = Rb180.IsEnabled = Rb270.IsEnabled = rotationEnabled;
 
+        _textStyleOnly = textStyleOnly;
+        if (textStyleOnly) ApplyTextStyleOnlyMode();
+
         RefreshPreview();
+    }
+
+    /// <summary>See the <c>textStyleOnly</c> constructor parameter.</summary>
+    private readonly bool _textStyleOnly;
+
+    /// <summary>Hides everything this mode has no say over, leaving the font picker, the text
+    /// color and the live preview of the real tile.</summary>
+    private void ApplyTextStyleOnlyMode()
+    {
+        LblHeader.Text = Loc.Get("txt_style_only_header");
+        foreach (var el in new FrameworkElement[]
+                 { TextInputPanel, DefaultIconOptionsPanel, FontSizePanel, BgModePanel,
+                   AnchorPanel, LblBgColor, BtnBgColor, LblRotate, RotatePanel })
+            el.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>Applies the colors/font/anchor carried by the spec the dialog opened on, so
@@ -253,6 +277,16 @@ public partial class TextIconDialog : Window
     private KeyIconSpec BuildSpec()
     {
         var s = _spec.Clone();
+        // Text-style-only: the tile's words are the track's, and its background belongs to the
+        // generator — only the font and the text color survive.
+        if (_textStyleOnly)
+        {
+            s.Text = null;
+            s.FontFamily = _fontFamily;
+            s.TextColor = KeyIconSpec.ToHex(_textColor);
+            return s;
+        }
+
         s.Text        = TxtInput.Text;
         s.ShowText    = _defaultIconRenderer is not null ? _showText : !string.IsNullOrWhiteSpace(TxtInput.Text);
         s.FontFamily  = _fontFamily;

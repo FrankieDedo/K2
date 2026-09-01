@@ -33,12 +33,12 @@ public static class ActionIconFallback
     /// so it can be chained after them with a plain <c>||</c>.</summary>
     public static bool TryGenerate(string? actionType, string? actionValue, int size, string outputPngPath, bool showCaption = true)
     {
-        // "Previous/Next track" and single-target "profile: Next/Previous" get the emoji
-        // browser's own bold nav-arrow triangle instead of a thin MDL2 outline glyph — same
-        // shape used for its scroll keys (see MainWindow.DisplayPad.EmojiBrowser.cs's
+        // The media transport keys and single-target "profile: Next/Previous" get the emoji
+        // browser's own bold hand-drawn shapes instead of thin MDL2 outline glyphs — same
+        // family used for its scroll keys (see MainWindow.DisplayPad.EmojiBrowser.cs's
         // EmbNavTile), more legible on a 102/72 px tile and visually consistent with it
-        // (user request 2026-08-24).
-        if ((MediaNavShape(actionType, actionValue) ?? ProfileNavShape(actionType, actionValue))
+        // (user request 2026-08-24, extended to play/stop/volume/mute on 2026-09-01).
+        if ((ControlNavShape(actionType, actionValue) ?? ProfileNavShape(actionType, actionValue))
             is IconImageGenerator.NavShape navShape)
         {
             string caption = showCaption ? Caption(actionType, actionValue) : "";
@@ -50,19 +50,80 @@ public static class ActionIconFallback
             && IconImageGenerator.TryGenerateGlyphIcon(glyph, Caption(actionType, actionValue), size, outputPngPath, showCaption);
     }
 
-    /// <summary>Nav-arrow shape for a "media" action's Previous/Next track value, or null for
-    /// every other action (including every other media key).</summary>
-    private static IconImageGenerator.NavShape? MediaNavShape(string? actionType, string? actionValue)
+    /// <summary>Solid hand-drawn shape for a transport/volume/repeat control, whether it comes
+    /// as a "media" action (system media keys) or a "spotify" one (Web API command — the
+    /// Spotify dedicated profile's seeded buttons switch between the two depending on the
+    /// profile's Source setting, see <c>MainWindow.DpSpotifySeedsFor</c>). Null for the ones
+    /// still served by an MDL2 glyph (Shuffle).</summary>
+    private static IconImageGenerator.NavShape? ControlNavShape(string? actionType, string? actionValue)
     {
-        if (!string.Equals(actionType, "media", StringComparison.OrdinalIgnoreCase)) return null;
-        string media = ActionTypeHelper.NormalizeMediaKey((actionValue ?? "").Trim()) ?? (actionValue ?? "").Trim();
-        return media switch
+        string? canonical = CanonicalControlValue(actionType, actionValue);
+        return canonical switch
         {
-            "Previous track" => IconImageGenerator.NavShape.Left,
-            "Next track"     => IconImageGenerator.NavShape.Right,
+            // Double play triangles, not the single scroll arrow the profile Next/Previous
+            // keys use — the universal transport symbol (user request 2026-09-01).
+            "Previous track" => IconImageGenerator.NavShape.PrevTrack,
+            "Next track"     => IconImageGenerator.NavShape.NextTrack,
+            // Same request: the MDL2 play/stop/speaker glyphs are hollow outlines, out of place
+            // next to the solid triangles above — redrawn filled, same family.
+            "Play/Pause"     => IconImageGenerator.NavShape.Play,
+            "Stop"           => IconImageGenerator.NavShape.Stop,
+            "Volume Up"      => IconImageGenerator.NavShape.VolumeUp,
+            "Volume Down"    => IconImageGenerator.NavShape.VolumeDown,
+            "Mute"           => IconImageGenerator.NavShape.Mute,
+            // "spotify -> repeat_cycle" only — plain "media" has no repeat key at all, so this
+            // never fires for actionType "media" (CanonicalControlValue returns null for it).
+            "Repeat"         => IconImageGenerator.NavShape.Repeat,
             _                => null,
         };
     }
+
+    /// <summary>Maps a "media" value OR a "spotify" transport/volume/repeat command to the same
+    /// canonical label, so one shape/glyph table serves both action types. Null for every other
+    /// spotify command (like/playlist/device-scoped volume_set), which keep the generic Spotify
+    /// glyph from <see cref="TypeGlyphs"/>.</summary>
+    private static string? CanonicalControlValue(string? actionType, string? actionValue)
+    {
+        if (string.Equals(actionType, "media", StringComparison.OrdinalIgnoreCase))
+            return ActionTypeHelper.NormalizeMediaKey((actionValue ?? "").Trim()) ?? (actionValue ?? "").Trim();
+
+        if (string.Equals(actionType, "spotify", StringComparison.OrdinalIgnoreCase))
+        {
+            string cmd = (actionValue ?? "").Split('~')[0].Trim();
+            return SpotifyControlAlias.TryGetValue(cmd, out var alias) ? alias : null;
+        }
+        return null;
+    }
+
+    /// <summary>"spotify" command → the "media" label with the same meaning, purely for icon
+    /// lookup (execution is unaffected — the two action types dispatch completely separately in
+    /// <c>ButtonActionEngine</c>).</summary>
+    private static readonly Dictionary<string, string> SpotifyControlAlias = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["previous"]       = "Previous track",
+        ["next"]           = "Next track",
+        ["play_pause"]     = "Play/Pause",
+        ["volume_up"]      = "Volume Up",
+        ["volume_down"]    = "Volume Down",
+        ["mute_toggle"]    = "Mute",
+        ["shuffle_toggle"] = "Shuffle",
+        ["repeat_cycle"]   = "Repeat",
+    };
+
+    /// <summary>Same 7 commands as <see cref="SpotifyControlAlias"/> (repeat_cycle included) →
+    /// the loc key the equivalent "media" value's own picker/caption uses, for
+    /// <see cref="Caption"/>.</summary>
+    private static readonly Dictionary<string, string> ControlCaptionLocKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["previous"]       = "media_prev",
+        ["next"]           = "media_next",
+        ["play_pause"]     = "media_play_pause",
+        ["volume_up"]      = "media_vol_up",
+        ["volume_down"]    = "media_vol_down",
+        ["mute_toggle"]    = "media_mute",
+        ["shuffle_toggle"] = "media_shuffle",
+        ["repeat_cycle"]   = "media_repeat",
+    };
 
     /// <summary>Nav-arrow shape for a single-target "profile" action whose target is the
     /// legacy Next/Previous keyword — a named profile or a multi-device payload keeps the
@@ -88,6 +149,57 @@ public static class ActionIconFallback
     public static bool CanGenerate(string? actionType, string? actionValue) =>
         ResolveGlyph(actionType, actionValue) is not null;
 
+    /// <summary>True for a transport/volume/repeat control — "media" or the matching "spotify"
+    /// command (<see cref="CanonicalControlValue"/>) — regardless of which shape/glyph ends up
+    /// drawing it. Callers use this to make these specific values SKIP the Base Camp gallery
+    /// entirely rather than just falling back to it last: <c>icon_mapping.xml</c> DOES have a
+    /// gallery row for every one of these "spotify" commands (Previous/Play/Next/Volume/Mute/
+    /// Repeat/Shuffle — Base Camp shipped art for all of them), so the normal
+    /// gallery-vs-K2-glyph tie-break (<c>KeyIconSpec.UseK2Icons</c>) would keep picking the
+    /// gallery's plain photo tile by default — losing the shared shape a "media" key gets, AND
+    /// its caption, since gallery art never draws one (user report 2026-09-01: "l'icona di
+    /// default e' sempre quella [...] non generano nemmeno il text").</summary>
+    public static bool IsControl(string? actionType, string? actionValue) =>
+        CanonicalControlValue(actionType, actionValue) is not null;
+
+    /// <summary>Spotify's own brand green — the "this control is engaged" color for Shuffle/
+    /// Repeat, matching the real Spotify app rather than K2's own accent theme (user request
+    /// 2026-09-01: explicit hex <c>#1DB954</c>).</summary>
+    private static readonly System.Drawing.Color SpotifyGreen = System.Drawing.ColorTranslator.FromHtml("#1DB954");
+
+    /// <summary>Live Play/Pause icon for the Spotify dedicated profile's control key — the shape
+    /// shows what pressing it WILL do (a pause glyph while playing, a play glyph while paused),
+    /// same convention Spotify's own UI uses. Caption stays the generic "Play/Pause" either way
+    /// (user request 2026-09-01).</summary>
+    public static bool TryGenerateSpotifyPlayPauseIcon(bool isPlaying, int size, string outputPngPath, bool showCaption = true) =>
+        IconImageGenerator.TryGenerateNavIcon(
+            isPlaying ? IconImageGenerator.NavShape.Pause : IconImageGenerator.NavShape.Play,
+            showCaption ? Loc.Get("media_play_pause") : "", size, outputPngPath);
+
+    /// <summary>Live Shuffle icon: the same glyph <see cref="MediaGlyphs"/> already draws for a
+    /// plain "media -> Shuffle" key, default color while off, turned <see cref="SpotifyGreen"/>
+    /// while shuffle is actually on — only the arrows change, the tile itself doesn't (user
+    /// request 2026-09-01: "trasforma solo le frecce in verde").</summary>
+    public static bool TryGenerateSpotifyShuffleIcon(bool on, int size, string outputPngPath, bool showCaption = true) =>
+        IconImageGenerator.TryGenerateGlyphIcon(MediaGlyphs["Shuffle"],
+            showCaption ? Loc.Get("media_shuffle") : "", size, outputPngPath, showCaption,
+            tint: on ? SpotifyGreen : null);
+
+    /// <summary>Live Repeat icon: default color while off; <see cref="SpotifyGreen"/> plus a "1"
+    /// badge while repeating just the current track; <see cref="SpotifyGreen"/> plus an "∞"
+    /// badge while repeating the whole context (playlist/album/queue) — three states, one shape
+    /// (user request 2026-09-01).</summary>
+    public static bool TryGenerateSpotifyRepeatIcon(SpotifyRepeatMode mode, int size, string outputPngPath, bool showCaption = true) =>
+        IconImageGenerator.TryGenerateNavIcon(IconImageGenerator.NavShape.Repeat,
+            showCaption ? Loc.Get("media_repeat") : "", size, outputPngPath,
+            tint: mode == SpotifyRepeatMode.Off ? null : SpotifyGreen,
+            badge: mode switch
+            {
+                SpotifyRepeatMode.Track   => "1",
+                SpotifyRepeatMode.Context => "∞",
+                _                         => null,
+            });
+
     /// <summary>Value-specific glyph first (an "oscmd" key is far more useful showing a
     /// padlock/power button than a generic "system command" pictogram), then the per-type
     /// one.</summary>
@@ -108,8 +220,13 @@ public static class ActionIconFallback
                 break;
 
             case "media":
-                string media = ActionTypeHelper.NormalizeMediaKey(value) ?? value;
-                if (MediaGlyphs.TryGetValue(media, out var mediaGlyph)) return mediaGlyph;
+            case "spotify":
+                // Shuffle is the only control left in MediaGlyphs (everything else in
+                // ControlNavShape) — CanonicalControlValue covers both action types, so a
+                // "spotify -> shuffle_toggle" key gets the same glyph as a "media -> Shuffle" one.
+                string? canonical = CanonicalControlValue(type, value);
+                if (canonical is not null && MediaGlyphs.TryGetValue(canonical, out var mediaGlyph))
+                    return mediaGlyph;
                 break;
 
             case "discord":
@@ -140,6 +257,15 @@ public static class ActionIconFallback
             string os = ActionTypeHelper.NormalizeOsCommand(value) ?? value;
             if (OsCmdLocKeys.TryGetValue(os, out var locKey)) return Loc.Get(locKey);
         }
+
+        // A "spotify" transport/volume/repeat command shares its shape/glyph with the
+        // equivalent "media" one (see ControlNavShape) and gets the SAME short caption too:
+        // the Spotify dedicated profile reseeds its control keys between "media" and "spotify"
+        // depending on the Source setting, and the full command summary below ("Cycle Repeat
+        // Mode") is both longer than the tile was designed for and would make the row visibly
+        // change wording on every source switch (user request 2026-09-01).
+        if (type == "spotify" && ControlCaptionLocKeys.TryGetValue(value.Split('~')[0].Trim(), out var ctlKey))
+            return Loc.Get(ctlKey);
 
         string summary = ActionTypeHelper.Summary(actionType, actionValue);
         if (!string.IsNullOrWhiteSpace(summary) && !string.Equals(summary, actionType, StringComparison.Ordinal))
@@ -178,16 +304,11 @@ public static class ActionIconFallback
         ["Hibernate"]    = "oscmd_hibernate",
     };
 
-    /// <summary>Canonical "media" values (see <see cref="ActionTypeHelper.MediaKeys"/>) —
-    /// "Previous track"/"Next track" are absent on purpose, handled by <see cref="MediaNavShape"/>
-    /// before this dictionary is ever consulted.</summary>
+    /// <summary>Canonical "media" values (see <see cref="ActionTypeHelper.MediaKeys"/>). Only
+    /// Shuffle is left here: every other media key is drawn as a solid shape by
+    /// <see cref="MediaNavShape"/>, which runs before this dictionary is ever consulted.</summary>
     private static readonly Dictionary<string, string> MediaGlyphs = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Play/Pause"]     = "",
-        ["Stop"]           = "",
-        ["Volume Up"]      = "",
-        ["Volume Down"]    = "",
-        ["Mute"]           = "",
         ["Shuffle"]        = "",
     };
 

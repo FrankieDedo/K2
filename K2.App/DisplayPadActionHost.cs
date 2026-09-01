@@ -70,6 +70,37 @@ internal sealed class DisplayPadActionHost : IActionHost
     void IActionHost.RenamePage(int pageId, string name) => _win.DpRenamePage(pageId, name);
 
     bool IActionHost.SupportsPages => true;
+
+    bool IActionHost.SupportsSensorPicker => true;
+
+    string? IActionHost.PickSensorTileValue(string? currentValue) => _win.Dispatcher.Invoke(() =>
+    {
+        var owner = System.Windows.Application.Current?.Windows
+            .OfType<System.Windows.Window>().FirstOrDefault(w => w.IsActive) ?? _win;
+        var dlg = new SensorPickerDialog(currentValue) { Owner = owner };
+        return dlg.ShowDialog() == true ? dlg.ResultValue : null;
+    });
+
+    IReadOnlyList<(string Id, string Name)> IActionHost.ListStorageDisks()
+    {
+        // Called from a background Task.Run in ButtonActionDialog, so blocking on the LHM open
+        // here is fine (never the UI thread).
+        Services.HardwareSensors.Start();
+        return Services.HardwareSensors.StorageDisks();
+    }
+
+    string? IActionHost.PreviewLiveTile(string? actionType, string? actionValue)
+    {
+        if (actionType is not ("dp_sysmon" or "dp_speedtest")) return null;
+
+        string v = actionValue ?? "";
+        bool lhm = actionType == "dp_sysmon" && (v.Contains(':') || v.StartsWith('/'));
+        if (lhm && !Services.HardwareSensors.Available)
+            System.Threading.Tasks.Task.Run(Services.HardwareSensors.Start);
+
+        var (text, _) = Services.DpLiveTileService.TileValue(actionType, v);
+        return string.IsNullOrEmpty(text) ? null : text;
+    }
 }
 
 /// <summary>

@@ -337,6 +337,8 @@ public partial class MainWindow
             default:                 RbLogNormal.IsChecked  = true; break;
         }
 
+        CkPersistLogs.IsChecked = AppSettings.PersistLogs;
+
         CkAutoStopBaseCamp.IsChecked = AppSettings.AutoStopBaseCamp;
         CkKillBcWorker.IsChecked = AppSettings.KillBaseCampWorker;
         CkRestartBcOnClose.IsChecked = AppSettings.RestartBaseCampOnClose;
@@ -349,6 +351,9 @@ public partial class MainWindow
         CkCloseToTray.IsChecked = AppSettings.CloseToTray;
         CkStartMinToTray.IsChecked = AppSettings.StartMinimizedToTray;
         CkK2Autostart.IsChecked = Services.K2AutostartService.IsEnabled();
+
+        CkSyncAcrossDevices.IsChecked = AppSettings.SyncAcrossDevices;
+        CkSyncLightingAcrossDevices.IsChecked = AppSettings.SyncLightingAcrossDevices;
 
         InitAppFontCombo();
         InitAppAccentCombo();
@@ -608,6 +613,16 @@ public partial class MainWindow
         AppSettings.SetCloseToTray(CkCloseToTray.IsChecked == true);
     }
 
+    private void CkSyncAcrossDevices_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.SetSyncAcrossDevices(CkSyncAcrossDevices.IsChecked == true);
+    }
+
+    private void CkSyncLightingAcrossDevices_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.SetSyncLightingAcrossDevices(CkSyncLightingAcrossDevices.IsChecked == true);
+    }
+
     /// <summary>Persists the "start minimized to tray" flag. Read once at process start
     /// by App.OnStartup, so it takes effect at the next app launch.</summary>
     private void CkStartMinToTray_Click(object sender, RoutedEventArgs e)
@@ -629,7 +644,7 @@ public partial class MainWindow
         {
             CkBcAutostart.IsEnabled = false;
             CkBcAutostart.IsChecked = false;
-            TxtBcAutostartHint.Text = Loc.Get("settings_bc_autostart_none");
+            HintBcAutostart.ToolTip = Loc.Get("settings_bc_autostart_none");
             return;
         }
         CkBcAutostart.IsEnabled = true;
@@ -808,6 +823,9 @@ public partial class MainWindow
         else if (sender == RbLogVerbose) AppSettings.SetLogLevel(K2LogLevel.Verbose);
         else                              AppSettings.SetLogLevel(K2LogLevel.Normal);
     }
+
+    private void CkPersistLogs_Click(object sender, RoutedEventArgs e)
+        => AppSettings.SetPersistLogs(CkPersistLogs.IsChecked == true);
 
     /// <summary>Wipes every app preference AND every saved profile/key binding/lighting/
     /// macro for every device, then restarts K2 — the "Restore all defaults" button in

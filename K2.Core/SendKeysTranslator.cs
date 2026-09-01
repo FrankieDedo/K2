@@ -83,9 +83,14 @@ public static class SendKeysTranslator
     {
         if (string.IsNullOrEmpty(key)) return "";
 
-        // F1..F24
-        if (Regex.IsMatch(key, @"^[Ff]\d{1,2}$"))
-            return "{" + key.ToUpperInvariant() + "}";
+        // F1..F16 — the ceiling System.Windows.Forms.SendKeys actually knows. "{F17}".."{F24}"
+        // make SendKeys.SendWait throw (silently swallowed, keystroke lost — see issue #17), so
+        // they are NOT emitted here: those high function keys only reach the OS through the
+        // SendInput path (HotkeySender, VK_F1..VK_F24), which ButtonActionEngine.RunShortcut
+        // already prefers. This translator is the fallback; for F17+ it has nothing valid to say.
+        var fn = Regex.Match(key, @"^[Ff](\d{1,2})$");
+        if (fn.Success)
+            return int.Parse(fn.Groups[1].Value) is >= 1 and <= 16 ? "{" + key.ToUpperInvariant() + "}" : "";
 
         // Known special keys
         if (SpecialKeys.Contains(key))

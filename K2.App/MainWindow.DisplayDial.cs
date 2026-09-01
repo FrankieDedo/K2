@@ -101,8 +101,9 @@ public partial class MainWindow
     /// method's remarks (real Base Camp carries the 12h/24h format on the clock call
     /// itself, not via SetExtendInfo). Runs for the app's lifetime; the Tick handler
     /// no-ops if the driver isn't open, same tolerance as other pollers in this
-    /// codebase. Always carries <see cref="_dialAppliedFormat24h"/>, which only
-    /// changes on "Apply to device" like every other Display Dial field.
+    /// codebase. Always carries <see cref="_dialAppliedFormat24h"/>, which is
+    /// refreshed by <see cref="SaveAndApplyDial"/> whenever a Display Dial control
+    /// changes (every field applies on change since 2026-08-28).
     /// <para>
     /// <b>Interval = 30 minutes, NOT 1 second (2026-08-22 bug fix).</b> The dock has
     /// an on-board RTC: <c>SetClockInfo</c> sets the time, the firmware ticks it on
@@ -121,8 +122,8 @@ public partial class MainWindow
     /// </summary>
     private DispatcherTimer? _dialClockTimer;
 
-    /// <summary>Clock format last pushed via "Apply to device" (or loaded at
-    /// startup) — see <see cref="_dialClockTimer"/>.</summary>
+    /// <summary>Clock format last pushed to the device (on any Display Dial change,
+    /// or loaded at startup) — see <see cref="_dialClockTimer"/>.</summary>
     private bool _dialAppliedFormat24h = true;
 
     // Bit mapping for byMMDockShowMenu — confirmed order (see file header):
@@ -215,19 +216,53 @@ public partial class MainWindow
             // 30 min, same as Base Camp's own Clock_timer — see _dialClockTimer's docs
             // for why a 1s tick broke the dock screensaver.
             _dialClockTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };
-            _dialClockTimer.Tick += (_, _) =>
-            {
-                if (_everest is { IsOpen: true })
-                    _everest.UpdateClock(format24h: _dialAppliedFormat24h);
-            };
+            _dialClockTimer.Tick += (_, _) => PushDialClock();
             _dialClockTimer.Start();
             // First sync now: with a 30-minute period the first Tick is far too late
             // to put the right time on the dock at startup (Base Camp does the same
             // one-shot push when the service starts / the Display Dial page opens).
-            if (_everest is { IsOpen: true })
-                _everest.UpdateClock(format24h: _dialAppliedFormat24h);
+            PushDialClock();
+
+            // Base Camp also re-pushes the clock on session logon/unlock; the dock's RTC
+            // can drift or lose the time across a long lock or a suspend/resume, and with
+            // a 30-minute timer it would stay wrong until the next tick. SystemEvents
+            // fires on its own thread — hop to the dispatcher in PushDialClock's callers.
+            SystemEvents.SessionSwitch += OnDialSessionSwitch;
+            SystemEvents.PowerModeChanged += OnDialPowerModeChanged;
         }
         _dialInitialized = true;
+    }
+
+    /// <summary>Pushes the current wall-clock time to the Media Dock (no-op if the driver
+    /// isn't open). Always carries <see cref="_dialAppliedFormat24h"/>.</summary>
+    private void PushDialClock()
+    {
+        if (_everest is { IsOpen: true })
+            _everest.UpdateClock(format24h: _dialAppliedFormat24h);
+    }
+
+    private void OnDialSessionSwitch(object sender, SessionSwitchEventArgs e)
+    {
+        if (e.Reason is SessionSwitchReason.SessionUnlock or SessionSwitchReason.SessionLogon
+                     or SessionSwitchReason.ConsoleConnect or SessionSwitchReason.RemoteConnect)
+            Dispatcher.BeginInvoke(new Action(PushDialClock));
+    }
+
+    private void OnDialPowerModeChanged(object sender, PowerModeChangedEventArgs e)
+    {
+        if (e.Mode == PowerModes.Resume)
+            Dispatcher.BeginInvoke(new Action(PushDialClock));
+    }
+
+    /// <summary>Detaches the SystemEvents handlers — those are rooted by a process-wide
+    /// static, so leaving them attached would leak the window. Called from MainWindow's
+    /// Closed handler alongside CleanupMediaDock.</summary>
+    private void CleanupDisplayDial()
+    {
+        _dialClockTimer?.Stop();
+        _dialClockTimer = null;
+        SystemEvents.SessionSwitch -= OnDialSessionSwitch;
+        SystemEvents.PowerModeChanged -= OnDialPowerModeChanged;
     }
 
     /// <summary>
@@ -259,7 +294,10 @@ public partial class MainWindow
 
     private void LoadDialSettings()
     {
-        CkDialSync.IsChecked = CkEvSync.IsChecked;
+        // Own flag since 2026-08-28 (K2-side only); one-time migration falls back to the
+        // old shared rgb.sync so "sync on" users keep Display Dial synced too.
+        CkDialSync.IsChecked =
+            (_evStore?.GetSetting("dial.sync") ?? _evStore?.GetSetting("rgb.sync")) == "1";
 
         byte pages = ParseByte(GetDialSetting("pages"), (byte)DialPage.All);
         CkDialClock.IsChecked    = (pages & (byte)DialPage.Clock) != 0;
@@ -320,11 +358,20 @@ public partial class MainWindow
         _evStore.SetSetting(prefix + "menuColor", FormatColor(BtnDialMenuColor));
     }
 
+    /// <summary>
+    /// The DISPLAY DIAL section's own "sync across profiles" flag (<c>dial.sync</c>),
+    /// independent of the Lighting/Settings flags since 2026-08-28 and K2-side only —
+    /// Base Camp deliberately keeps Display Dial out of its device sync flag, so this
+    /// never calls <c>SetSyncAcrossProfiles</c>. Re-saves the on-screen dial config under
+    /// the switched namespace (<see cref="EvDialPrefix"/>) and, on the rising edge,
+    /// replays it into every profile slot (mirrors <c>CkEvSync_Click</c>).
+    /// </summary>
     private void CkDialSync_Click(object sender, RoutedEventArgs e)
     {
         if (_dialLoading) return;
-        CkEvSync.IsChecked = CkDialSync.IsChecked; // same device flag as RGB & Settings' checkbox
-        CkEvSync_Click(sender, e);
+        _evStore?.SetSetting("dial.sync", CkDialSync.IsChecked == true ? "1" : "0");
+        SaveDialSettings();
+        if (CkDialSync.IsChecked == true) ReplayEverestSectionToAllProfiles(EvSyncSection.Dial);
     }
 
     // ─────────────────────── Build / parse byte ───────────────────────
@@ -454,58 +501,58 @@ public partial class MainWindow
 
     // ─────────────────────── Event handlers ───────────────────────
 
-    private void CkDial_Click(object sender, RoutedEventArgs e)
+    /// <summary>Persists the on-screen Display Dial state and immediately pushes it
+    /// to the device. Since 2026-08-28 every Display Dial control applies on change
+    /// (user request) — the old explicit "Apply to device" button is gone.
+    /// <see cref="ApplyDialToDevice"/> is a no-op when the driver isn't open, and
+    /// <see cref="SaveDialSettings"/> runs first so the choice is still persisted
+    /// when no device is connected.</summary>
+    private void SaveAndApplyDial()
     {
         if (_dialLoading) return;
         SaveDialSettings();
+        ApplyDialToDevice();
+    }
+
+    private void CkDial_Click(object sender, RoutedEventArgs e)
+    {
+        SaveAndApplyDial();
     }
 
     private void RbDialClockType_Checked(object sender, RoutedEventArgs e)
     {
-        if (_dialLoading) return;
-        SaveDialSettings();
+        SaveAndApplyDial();
     }
 
     private void RbDialClockStyle_Checked(object sender, RoutedEventArgs e)
     {
         UpdateDialClockFormatVisibility();
-        if (_dialLoading) return;
-        SaveDialSettings();
+        SaveAndApplyDial();
     }
 
     private void CbDialScreenSaverFunction_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_dialLoading) return;
-        SaveDialSettings();
+        SaveAndApplyDial();
     }
 
-    // Every Display Dial field — including screensaver/turn-off enable+timeout
-    // and clock format — only reaches the device on an explicit "Apply to
-    // device" click (BtnDialApply_Click). Edits here only update the local
-    // UI/persisted settings; see ApplyDialToDevice for the one place that
-    // actually talks to the firmware.
     private void CkDialScreenSaverEnable_Click(object sender, RoutedEventArgs e)
     {
-        if (_dialLoading) return;
-        SaveDialSettings();
+        SaveAndApplyDial();
     }
 
     private void CkDialTurnOffEnable_Click(object sender, RoutedEventArgs e)
     {
-        if (_dialLoading) return;
-        SaveDialSettings();
+        SaveAndApplyDial();
     }
 
     private void TxtDialScreenSaver_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_dialLoading) return;
-        SaveDialSettings();
+        SaveAndApplyDial();
     }
 
     private void TxtDialTurnOff_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_dialLoading) return;
-        SaveDialSettings();
+        SaveAndApplyDial();
     }
 
     private void BtnDialMenuColor_Click(object sender, RoutedEventArgs e)
@@ -522,7 +569,7 @@ public partial class MainWindow
         {
             BtnDialMenuColor.Background = new SolidColorBrush(
                 Color.FromRgb(dlg.Color.R, dlg.Color.G, dlg.Color.B));
-            SaveDialSettings();
+            SaveAndApplyDial();
         }
     }
 
@@ -554,7 +601,6 @@ public partial class MainWindow
         EvReArmColorStreamAfterFlashWrite();
     }
 
-    private void BtnDialApply_Click(object sender, RoutedEventArgs e) => ApplyDialToDevice();
     private void BtnDialRead_Click(object sender, RoutedEventArgs e) => ReadDialFromDevice();
 
     private void BtnDialReset_Click(object sender, RoutedEventArgs e)

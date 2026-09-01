@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.RegularExpressions;
@@ -33,11 +33,17 @@ public partial class DiscordProfileConfigWindow : Window
         TxtDiscordPttHotkey.Text = DiscordStore.PushToTalkHotkey;
         CkDiscordReturn.IsChecked = DiscordStore.VoicePageReturnEnabled;
         TxtDiscordReturnSec.Text = DiscordStore.VoicePageReturnSeconds.ToString(CultureInfo.InvariantCulture);
+        CkDiscordBackArrow.IsChecked = DiscordStore.VoicePageBackArrow;
     }
 
     private void BtnDiscordAccount_Click(object sender, RoutedEventArgs e)
     {
         new DiscordSettingsWindow { Owner = this }.ShowDialog();
+    }
+
+    private void BtnGuide_Click(object sender, RoutedEventArgs e)
+    {
+        new GuideWindow("dedicated:discord", Loc.Get("discord_profile_config_title")) { Owner = this }.ShowDialog();
     }
 
     // ---------------------------------------------------------------- hotkey recorder
@@ -142,6 +148,7 @@ public partial class DiscordProfileConfigWindow : Window
         DiscordStore.WebcamHotkey = TxtDiscordWebcamHotkey.Text.Trim();
         DiscordStore.PushToTalkHotkey = TxtDiscordPttHotkey.Text.Trim();
         DiscordStore.VoicePageReturnEnabled = CkDiscordReturn.IsChecked == true;
+        DiscordStore.VoicePageBackArrow = CkDiscordBackArrow.IsChecked == true;
         if (int.TryParse(TxtDiscordReturnSec.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int sec))
             DiscordStore.VoicePageReturnSeconds = sec;   // setter clamps to a sane range
         Close();
