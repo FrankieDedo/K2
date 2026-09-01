@@ -1,0 +1,51 @@
+<Window x:Class="K2.App.RunningProcessDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+        Title="{loc:Get running_process_title}"
+        Width="420" Height="440"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Style="{DynamicResource K2WindowStyle}">
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="{loc:Get running_process_hint}"
+                   Foreground="#AAA" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+        <ListBox Grid.Row="1" x:Name="LstProcesses"
+                 MouseDoubleClick="LstProcesses_MouseDoubleClick">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal" Margin="0,2">
+                        <Image Source="{Binding Icon}" Width="20" Height="20"
+                               Margin="0,0,8,0" VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding ExeName}" Foreground="#888" FontSize="10"/>
+                        </StackPanel>
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <Grid Grid.Row="2" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" Content="{loc:Get refresh}" Click="BtnRefresh_Click" Padding="12,0,12,0"/>
+            <Button Grid.Column="2" Content="{loc:Get ok}" IsDefault="True" MinWidth="72"
+                    Style="{StaticResource K2IconAccentButton}" Click="BtnOk_Click" Margin="0,0,8,0" Padding="0,0,7,0"/>
+            <Button Grid.Column="3" Content="{loc:Get cancel}" IsCancel="True" MinWidth="72" Padding="12,0,12,0"/>
+        </Grid>
+    </Grid>
+</Window>

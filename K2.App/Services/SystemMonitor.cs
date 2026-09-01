@@ -350,8 +350,8 @@ internal static class SystemMonitor
      InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IAudioEndpointVolume
     {
-        int RegisterControlChangeNotify(IntPtr notify);
-        int UnregisterControlChangeNotify(IntPtr notify);
+        int RegisterControlChangeNotify([MarshalAs(UnmanagedType.Interface)] IAudioEndpointVolumeCallback notify);
+        int UnregisterControlChangeNotify([MarshalAs(UnmanagedType.Interface)] IAudioEndpointVolumeCallback notify);
         int GetChannelCount(out uint count);
         int SetMasterVolumeLevel(float leveldB, ref Guid eventContext);
         int SetMasterVolumeLevelScalar(float level, ref Guid eventContext);
@@ -359,7 +359,103 @@ internal static class SystemMonitor
         int GetMasterVolumeLevelScalar(out float level);
     }
 
+    // Core Audio's change-notification sink. The audio service calls OnNotify on its own
+    // thread whenever the endpoint's master volume/mute changes — from ANY source (the
+    // Windows tray slider, a media key, another app, the Everest volume roller). The
+    // notification struct is ignored here: consumers just re-read VolumePercent().
+    // No [ComImport]: this interface is implemented by a managed class (VolumeCallback) and
+    // handed to Core Audio as a COM-callable wrapper. [Guid] + InterfaceIsIUnknown give the
+    // CCW the exact IUnknown+OnNotify vtable RegisterControlChangeNotify expects.
+    [Guid("657804FA-D6AD-4496-8A60-352752AF4F89"),
+     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IAudioEndpointVolumeCallback
+    {
+        [PreserveSig] int OnNotify(IntPtr pNotifyData);
+    }
+
+    private sealed class VolumeCallback : IAudioEndpointVolumeCallback
+    {
+        public int OnNotify(IntPtr pNotifyData)
+        {
+            try { VolumeChanged?.Invoke(); } catch { /* a dead subscriber must not break the sink */ }
+            return 0;   // S_OK
+        }
+    }
+
     private const int ERender = 0, EMultimedia = 1, ClsCtxAll = 23;
+
+    // ── Volume change notifications ──
+    //
+    // Raised (on a Core Audio worker thread — marshal before touching UI) whenever the
+    // default render endpoint's volume changes. Lets the Media Dock push the new value to
+    // the keyboard immediately instead of waiting for its 1 Hz poll, and lets it treat a
+    // Windows-side volume change as dock activity (see MainWindow.MediaDock.cs).
+    //
+    // Bound to whatever endpoint was default at StartVolumeNotifications() time; a later
+    // default-device switch silently stops the events until restart, which the poll still
+    // covers. Keeping the endpoint COM object referenced is what keeps the registration
+    // alive, so it is held here, not released like VolumePercentSample's throwaway one.
+    public static event Action? VolumeChanged;
+
+    private static readonly object _volNotifyGate = new();
+    private static IAudioEndpointVolume? _volNotifyEndpoint;
+    private static VolumeCallback? _volNotifyCallback;
+
+    /// <summary>Registers a Core Audio volume-change callback on the current default
+    /// render endpoint. Idempotent; best-effort (logs nothing, swallows failure — the
+    /// 1 Hz dock poll is the fallback).</summary>
+    public static void StartVolumeNotifications()
+    {
+        lock (_volNotifyGate)
+        {
+            if (_volNotifyEndpoint is not null) return;
+            try
+            {
+                var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+                if (enumerator.GetDefaultAudioEndpoint(ERender, EMultimedia, out var device) != 0 || device is null)
+                    return;
+                var iid = typeof(IAudioEndpointVolume).GUID;
+                if (device.Activate(ref iid, ClsCtxAll, IntPtr.Zero, out var volObj) != 0) return;
+                if (volObj is not IAudioEndpointVolume vol) return;
+
+                var cb = new VolumeCallback();
+                if (vol.RegisterControlChangeNotify(cb) != 0)
+                {
+                    if (Marshal.IsComObject(vol)) Marshal.ReleaseComObject(vol);
+                    return;
+                }
+                _volNotifyEndpoint = vol;
+                _volNotifyCallback = cb;
+            }
+            catch { /* best-effort */ }
+        }
+    }
+
+    /// <summary>Unregisters the callback and releases the held endpoint. Safe to call
+    /// when never started.</summary>
+    public static void StopVolumeNotifications()
+    {
+        lock (_volNotifyGate)
+        {
+            try
+            {
+                if (_volNotifyEndpoint is not null && _volNotifyCallback is not null)
+                    _volNotifyEndpoint.UnregisterControlChangeNotify(_volNotifyCallback);
+            }
+            catch { /* ignore */ }
+            finally
+            {
+                try
+                {
+                    if (_volNotifyEndpoint is not null && Marshal.IsComObject(_volNotifyEndpoint))
+                        Marshal.ReleaseComObject(_volNotifyEndpoint);
+                }
+                catch { /* ignore */ }
+                _volNotifyEndpoint = null;
+                _volNotifyCallback = null;
+            }
+        }
+    }
 
     /// <summary>Master output volume, 0..100 — the value Base Camp's PcInfo_timer sends
     /// with SetVolumeInfo while the dock shows its Volume page.</summary>

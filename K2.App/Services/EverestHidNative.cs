@@ -592,6 +592,17 @@ internal static class EverestHidNative
             return ok;
         }
 
+        /// <summary>Re-selects the keycap zone (0x02) without sending any colors — used to
+        /// leave the firmware in a clean state after a failed <see cref="SendSideLedColors"/>
+        /// so the following <see cref="PersistCustomLighting"/> commits the keycap half
+        /// instead of the half-state the failed ring zone-switch left behind.</summary>
+        public bool ReselectCustomKeycapZone()
+        {
+            bool ok = SwitchZoneToCustom(EverestSideLedProtocol.ZoneKeycaps);
+            _log($"[EvNative] ReselectCustomKeycapZone -> {ok}");
+            return ok;
+        }
+
         /// <summary>
         /// Keycap-only fast path for HOST-DRIVEN ANIMATION (see MainWindow.EvSoftwareFx.cs):
         /// the 7 positional page packets and nothing else — no zone switch, no Custom-mode

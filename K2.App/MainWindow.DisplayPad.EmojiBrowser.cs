@@ -148,6 +148,7 @@ public partial class MainWindow
         DpGifAnimator.StopAllForDevice(devId);
         DpFullscreenAnimator.Stop(devId);
         DpLiveTileService.Stop(devId);   // idem for the clock/monitor tiles
+        DpSpotifyCoverKeyService.Stop(devId);   // idem for album-cover keys
 
         int rotation = _dpStore.GetRotation(devId);
         _dpEmojiBrowser[devId] = new EmbState { Rotation = rotation, Layout = EmbLayoutFor(rotation) };

@@ -137,4 +137,27 @@ public interface IActionHost
     /// <see cref="ButtonActionDialog"/> hides the "Page" action type entirely for hosts that
     /// return false, rather than showing it non-functional/empty like "macro" does.</summary>
     bool SupportsPages { get; }
+
+    /// <summary>True on a host that can show the hardware-sensor picker for a <c>dp_sysmon</c>
+    /// tile (K2.App's DisplayPad host, backed by <c>K2.App.Services.HardwareSensors</c>). When
+    /// false the "Choose sensor…" button is hidden and only the six built-in metrics
+    /// (cpu/ram/gpu/disk/net_*) are offered.</summary>
+    bool SupportsSensorPicker => false;
+
+    /// <summary>Opens the HWiNFO-style hardware-sensor picker seeded from
+    /// <paramref name="currentValue"/> (a <c>"&lt;lhm-id&gt;|&lt;stat&gt;|&lt;label&gt;"</c>
+    /// wire value, or a legacy token / empty). Returns the chosen wire value, or null if the
+    /// user cancelled or the host has no picker.</summary>
+    string? PickSensorTileValue(string? currentValue) => null;
+
+    /// <summary>Physical storage devices, for the <c>dp_sysmon</c> "Disk" preset's
+    /// "which disk" chooser — <c>(Id, Name)</c> where <c>Id</c> is the stable key stored as
+    /// <c>disk:&lt;Id&gt;</c>. Empty on a host with no sensor backend.</summary>
+    IReadOnlyList<(string Id, string Name)> ListStorageDisks() => System.Array.Empty<(string, string)>();
+
+    /// <summary>The current on-tile reading a live key (<c>dp_sysmon</c>/…) would show for
+    /// <paramref name="actionValue"/> right now — e.g. "62°", "34%", "—" — so the action dialog
+    /// can preview it. Non-blocking; null when the host has no live-tile backend or the value
+    /// isn't a live one. Kicks off the sensor backend if it isn't running yet.</summary>
+    string? PreviewLiveTile(string? actionType, string? actionValue) => null;
 }

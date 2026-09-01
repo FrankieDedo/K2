@@ -63,6 +63,12 @@ public sealed class KeyIconSpec
     /// <summary>User rotation, 0/90/180/270 (see <c>DpKeyConfigDialog.ApplyUserRotation</c>).</summary>
     public int Rotation { get; set; }
 
+    /// <summary>DisplayPad only, on a "spotify" action: paint the currently-playing track's
+    /// album cover as this key's picture and keep it in sync with what's playing (see
+    /// <c>DpSpotifyCoverKeyService</c>). When no cover is available the key falls back to its
+    /// normal stored/generated picture.</summary>
+    public bool SpotifyCover { get; set; }
+
     // -----------------------------------------------------------------
     // Serialization — one JSON blob stored in a single DB column, so adding a field later
     // needs no schema migration.
@@ -85,7 +91,7 @@ public sealed class KeyIconSpec
     /// the auto-icon cache key so two style variants of the same action don't collide on the
     /// same cached PNG.</summary>
     public string StyleFingerprint =>
-        $"{ShowText}|{Text}|{FontFamily}|{FontSize:0.##}|{BgColor}|{TextColor}|{UseK2Icons}";
+        $"{ShowText}|{Text}|{FontFamily}|{FontSize:0.##}|{BgColor}|{TextColor}|{UseK2Icons}|{SpotifyCover}";
 
     // -----------------------------------------------------------------
     // Color helpers (shared by the GDI+ and WPF renderers)

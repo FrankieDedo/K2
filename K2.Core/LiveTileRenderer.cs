@@ -91,7 +91,9 @@ public static class LiveTileRenderer
                         break;
                 }
 
-                if (caption.Length > 0) IconImageGenerator.DrawCaption(g, size, caption);
+                // A clock's value layout isn't rearranged for a caption (clock captions are
+                // rare), so keep a plain bottom strip rather than the gauge's big two-line one.
+                if (caption.Length > 0) IconImageGenerator.DrawCaption(g, size, caption, topFrac: 0.72f);
             }
             return Save(canvas, outputPngPath);
         }
@@ -136,11 +138,16 @@ public static class LiveTileRenderer
             {
                 bool withCaption = caption.Length > 0;
 
+                // WITH a caption: the value sits in the tile's UPPER part and the caption gets
+                //   the lower ~half — a bigger, up-to-two-line label.
+                // WITHOUT: the value is centred on the whole tile and there's no caption strip.
+                float valueBottom = withCaption ? size * ValueBottomWithCaption : size;
+
                 if (fraction is double f)
                 {
-                    float ring = size * (withCaption ? 0.60f : 0.74f);
+                    float ring = size * (withCaption ? 0.46f : 0.76f);
                     float left = (size - ring) / 2f;
-                    float top = withCaption ? size * 0.06f : (size - ring) / 2f;
+                    float top = withCaption ? size * 0.04f : (size - ring) / 2f;
                     float thickness = Math.Max(3f, size * 0.075f);
 
                     var rect = new RectangleF(left + thickness / 2f, top + thickness / 2f,
@@ -158,7 +165,8 @@ public static class LiveTileRenderer
 
                     // The value goes in the ring's INNER area, not its bounding box: a 3-4
                     // character reading ("100%", "73%") drawn across the full box runs straight
-                    // through the arc on both sides.
+                    // through the arc on both sides. Framed by the ring, so the whole string is
+                    // centred as one (no digit-only trick).
                     float inner = ring * 0.62f;
                     DrawFitted(g, valueText,
                                new RectangleF(left + (ring - inner) / 2f, top + (ring - inner) / 2f, inner, inner),
@@ -166,14 +174,118 @@ public static class LiveTileRenderer
                 }
                 else
                 {
-                    DrawBigText(g, size, valueText, withCaption);
+                    // A bare number (temperature / throughput): the DIGITS are centred in this
+                    // region (both axes), a trailing °/% hanging off to the right; the digit
+                    // size is FIXED per length class so "61" and "40" render identically.
+                    DrawCenteredValue(g, valueText,
+                        new RectangleF(size * 0.06f, 0, size * 0.88f, valueBottom), size, TextColor);
                 }
 
-                if (withCaption) IconImageGenerator.DrawCaption(g, size, caption);
+                if (withCaption)
+                    IconImageGenerator.DrawCaption(g, size, caption,
+                        topFrac: CaptionTopWithText, startFontScale: CaptionFontScaleWithText);
             }
             return Save(canvas, outputPngPath);
         }
         catch { return false; }
+    }
+
+    // Live-tile layout when a generated caption is shown: value up top, a tall caption strip
+    // below it in a bigger font that can wrap to two lines.
+    private const float ValueBottomWithCaption   = 0.52f;   // value region is [0 .. 0.52·size]
+    private const float CaptionTopWithText       = 0.50f;   // caption strip is [0.50 .. 0.98·size]
+    private const float CaptionFontScaleWithText = 1.5f;
+
+    /// <summary>
+    /// Draws a short reading ("58°", "73%", "45", "12.4M") centred in <paramref name="region"/>.
+    /// <list type="bullet">
+    /// <item>Centring is on the NUMERIC CORE only — a trailing <c>°</c>/<c>%</c> is drawn
+    ///   afterwards as a small superscript to the right and is NOT counted, so the digits sit
+    ///   dead-centre (both axes) and the mark hangs off the right, still fully visible.</item>
+    /// <item>The digit size is FIXED per length class (chosen from a reference string of the
+    ///   same clamped length made of the widest digit), so "61" and "40" — every 2-digit
+    ///   reading — render at exactly the same size.</item>
+    /// <item>All positioning is from real <see cref="GraphicsPath"/> ink bounds, not GDI+
+    ///   string metrics (which pad the degree sign's right bearing and a full line's descender —
+    ///   why a metrics-centred "58°" reads as high and to the left).</item>
+    /// </list>
+    /// <paramref name="tileSize"/> is the whole tile edge, so the digit box is a fixed fraction
+    /// of the KEY regardless of how tall <paramref name="region"/> is (captioned vs not).
+    /// </summary>
+    private static void DrawCenteredValue(Graphics g, string text, RectangleF region, int tileSize, Color color)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+
+        // Split off a trailing unit mark that shouldn't influence centring.
+        string mark = "";
+        char lastCh = text[^1];
+        if ((lastCh == '°' || lastCh == '%') && text.Length > 1)
+        {
+            mark = lastCh.ToString();
+            text = text[..^1];
+        }
+
+        using var probe = IconImageGenerator.CaptionFont(10f);
+        FontFamily family = probe.FontFamily;
+        int style = (int)probe.Style;
+        using var sf = new StringFormat(StringFormat.GenericTypographic) { FormatFlags = StringFormatFlags.NoWrap };
+        using var brush = new SolidBrush(color);
+
+        // Digit box: a fixed fraction of the KEY (clamped to the region so it can't overflow a
+        // shrunk captioned region), leaving room on the right for the mark and margin all round.
+        float coreMaxW = Math.Min(tileSize * 0.50f, region.Width * 0.92f);
+        float coreMaxH = Math.Min(tileSize * 0.40f, region.Height * 0.92f);
+
+        // FIXED em from a reference of the same (clamped) length, widest digit — so every
+        // reading in a length class comes out identical; 1/2 digits share one size.
+        string sizeRef = new string('8', Math.Clamp(text.Length, 2, 4));
+        float em = FitEm(sizeRef, family, style, sf, coreMaxW, coreMaxH);
+
+        using var core = new GraphicsPath();
+        core.AddString(text, family, style, em, new PointF(0f, 0f), sf);
+        RectangleF cb = core.GetBounds();
+        if (cb.Width <= 0f || cb.Height <= 0f) return;
+
+        using (var m = new Matrix())
+        {
+            m.Translate(region.X + region.Width / 2f - (cb.X + cb.Width / 2f),
+                        region.Y + region.Height / 2f - (cb.Y + cb.Height / 2f));
+            core.Transform(m);
+        }
+        g.FillPath(brush, core);
+        cb = core.GetBounds();   // bounds after the translate
+
+        if (mark.Length == 0) return;
+
+        // The mark: ~58% of the digit em, its TOP aligned with the digits' top (a superscript),
+        // just right of them, clamped so it can't run off the tile.
+        using var mp = new GraphicsPath();
+        mp.AddString(mark, family, style, em * 0.58f, new PointF(0f, 0f), sf);
+        RectangleF mb = mp.GetBounds();
+        if (mb.Width <= 0f || mb.Height <= 0f) return;
+
+        float mx = cb.Right + tileSize * 0.012f - mb.X;
+        float maxMx = region.Right - mb.Width - mb.X;
+        if (mx > maxMx) mx = maxMx;
+        using var mm = new Matrix();
+        mm.Translate(mx, cb.Y - mb.Y);
+        mp.Transform(mm);
+        g.FillPath(brush, mp);
+    }
+
+    /// <summary>Largest AddString em size at which <paramref name="refText"/>'s path bounds fit
+    /// <paramref name="maxW"/> × <paramref name="maxH"/> — the fixed size for its length class.</summary>
+    private static float FitEm(string refText, FontFamily family, int style, StringFormat sf,
+                               float maxW, float maxH)
+    {
+        for (float em = maxH * 2.2f; em >= 6f; em -= 1f)
+        {
+            using var p = new GraphicsPath();
+            p.AddString(refText, family, style, em, new PointF(0f, 0f), sf);
+            RectangleF b = p.GetBounds();
+            if (b.Width > 0f && b.Height > 0f && b.Width <= maxW && b.Height <= maxH) return em;
+        }
+        return 6f;
     }
 
     /// <summary>Widest string each of the speed-test tile's three bands ever has to hold across
@@ -314,10 +426,14 @@ public static class LiveTileRenderer
         Color.FromArgb((int)(c.R * factor), (int)(c.G * factor), (int)(c.B * factor));
 
     /// <summary>One number/short string as big as it can be drawn in the tile's icon area —
-    /// the whole point of a single-value key is that it's readable across the desk.</summary>
+    /// the whole point of a single-value key is that it's readable across the desk. With a
+    /// caption below, the value is centred in nearly the whole tile (not just the strip above
+    /// the caption) so a short reading like "54°" sits mid-tile instead of hugging the top edge;
+    /// the caption's own strip (<see cref="IconImageGenerator.DrawCaption"/>, top-aligned at
+    /// y≈0.68) still clears it since the shrink-to-fit text is far shorter than this band.</summary>
     private static void DrawBigText(Graphics g, int size, string text, bool withCaption)
     {
-        float height = withCaption ? size * 0.62f : size;
+        float height = withCaption ? size * 0.90f : size;
         DrawFitted(g, text, new RectangleF(size * 0.04f, 0, size * 0.92f, height), size * 0.62f, TextColor);
     }
 

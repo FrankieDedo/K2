@@ -48,6 +48,21 @@ public partial class Everest60RgbPanel : UserControl
     private Func<int>? _ev60Slot;
     private int CurrentSlot => _ev60Slot?.Invoke() ?? 1;
 
+    /// <summary>"Sync across profiles" for Key Lighting (K2-side only — no firmware sync
+    /// command on this board). When on, every profile reads/writes ONE shared lighting
+    /// record (<see cref="Everest60Store.LoadSharedLighting"/>). Added 2026-08-28 for
+    /// parity with Everest Max / MacroPad.</summary>
+    private bool LightingSynced => CkEv60Sync.IsChecked == true;
+
+    private void SaveLightingRouted(int slot, Ev60LightingRecord r)
+    {
+        if (LightingSynced) _ev60Store!.SaveSharedLighting(r);
+        else _ev60Store!.SaveLighting(slot, r);
+    }
+
+    private Ev60LightingRecord? LoadLightingRouted(int slot) =>
+        LightingSynced ? _ev60Store!.LoadSharedLighting() : _ev60Store!.LoadLighting(slot);
+
     /// <summary>Which of the two mutually-exclusive lighting modes was last
     /// sent to hardware (mirrors Ev60PersistLighting's activeMode tag) — used
     /// by <see cref="SetBacklightForcedOff"/> to know what to resend on wake.</summary>
@@ -140,6 +155,8 @@ public partial class Everest60RgbPanel : UserControl
             // existing saved values keep working.
             CkEv60AutoOffEnable.IsChecked = _ev60Store.GetSetting("settings.autoOffEnable") == "1";
             TxtEv60AutoOffSeconds.Text = int.TryParse(_ev60Store.GetSetting("settings.autoOffSeconds"), out var aoS) ? aoS.ToString() : "60";
+
+            CkEv60Sync.IsChecked = _ev60Store.GetSetting("lighting.sync") == "1";
         }
         finally
         {
@@ -315,7 +332,7 @@ public partial class Everest60RgbPanel : UserControl
         foreach (var kv in _ev60CustomNumpadRingColors)
             numpadRingDict[kv.Key] = (kv.Value.R << 16) | (kv.Value.G << 8) | kv.Value.B;
 
-        _ev60Store.SaveLighting(CurrentSlot, new Ev60LightingRecord(
+        SaveLightingRouted(CurrentSlot, new Ev60LightingRecord(
             (int)eff, _ev60Color1, _ev60Color2, speedPct, _ev60DirIndex, rainbow,
             Brightness, customBrightPct, activeMode, customDict,
             ColorDouble: RbEv60ColorDouble.IsChecked == true, CustomSideColors: sideDict,
@@ -329,6 +346,19 @@ public partial class Everest60RgbPanel : UserControl
         if (!_ev60Initialized || _ev60Suppress) return;
         if (CbEv60Effect.SelectedItem is not Ev60EffectChoice pick)
             return;
+
+        // Backlight was auto-off (idle) and the user just applied a real effect:
+        // the device is lit again, so clear the forced-off state, re-check the
+        // manual toggle, and let MainWindow restart the idle countdown (user
+        // report 2026-08-30 — checkbox stayed off). Runs before the Custom
+        // delegation below so it covers that path too.
+        if (_ev60BacklightForcedOff)
+        {
+            _ev60BacklightForcedOff = false;
+            CkEv60Backlight.IsChecked = true;
+            _log("[RGB ] effect applied while idle-off -> backlight considered on again");
+            BacklightManuallyToggled?.Invoke();
+        }
 
         if (pick.Eff == Everest60Protocol.Effect.Custom)
         {
@@ -367,6 +397,10 @@ public partial class Everest60RgbPanel : UserControl
              (secondary.HasValue ? $" c2=#{_ev60Color2:X6}" : ""));
         bool ok = _ev60.SetEffect(pick.Eff, speedPct, brightPct, C(_ev60Color1), secondary, rainbow, direction);
         _log($"[RGB ] SetEffect -> {ok}");
+
+        // Cross-device lighting sync — the coordinator's own re-entrancy guard makes this
+        // safe to fire even when this apply was itself sync-driven.
+        LightingChanged?.Invoke();
     }
 
     /// <summary>Backlight-off-when-idle timer callback (see MainWindow.Everest60.cs's
@@ -475,11 +509,76 @@ public partial class Everest60RgbPanel : UserControl
         AutoOffConfigChanged?.Invoke(enabled, seconds);
     }
 
+    /// <summary>Raised after the user changes the preset effect/colour/speed on this panel
+    /// (not on a sync-driven re-apply) — MainWindow forwards it to the cross-device
+    /// lighting-sync coordinator (<see cref="MainWindow.DeviceSyncOnLightingChanged"/>).</summary>
+    internal event Action? LightingChanged;
+
+    /// <summary>Current preset lighting as device-neutral primitives, effect named in the
+    /// Everest Max / MacroPad vocabulary (Breathing→Breath, Reactive→ReactiveA). Null while
+    /// the panel is still initializing or Custom is selected (per-key paint doesn't
+    /// translate across devices).</summary>
+    internal (string EffectName, int Color1, int Color2, int SpeedPct, int BrightnessPct,
+              int DirIndex, bool Rainbow, bool ColorDouble)? SnapshotLighting()
+    {
+        if (!_ev60Initialized || CbEv60Effect.SelectedItem is not Ev60EffectChoice pick) return null;
+        if (pick.Eff == Everest60Protocol.Effect.Custom) return null;
+        string name = pick.Eff switch
+        {
+            Everest60Protocol.Effect.Breathing => "Breath",
+            Everest60Protocol.Effect.Reactive  => "ReactiveA",
+            _ => pick.Eff.ToString(),
+        };
+        return (name, _ev60Color1, _ev60Color2, (int)SldEv60Speed.Value, (int)Brightness,
+                _ev60DirIndex, RbEv60Rainbow.IsChecked == true, RbEv60ColorDouble.IsChecked == true);
+    }
+
+    /// <summary>Applies a device-neutral lighting snapshot (from another device via the
+    /// cross-device lighting-sync coordinator). Maps the canonical effect name to Everest
+    /// 60's smaller set (see <see cref="MainWindow.MapEffectName"/>) and drives the normal
+    /// apply path. No-op for effects this board can't express beyond the nearest fallback.</summary>
+    internal void ApplyLightingSnapshot(string effectName, int color1, int color2,
+        int speedPct, int brightnessPct, int dirIndex, bool rainbow, bool colorDouble)
+    {
+        if (!_ev60Initialized || _ev60Store is null) return;
+        string mapped = MainWindow.MapEffectName(effectName, forEv60: true);
+        if (!Enum.TryParse<Everest60Protocol.Effect>(mapped, out var eff))
+            eff = Everest60Protocol.Effect.Static;
+
+        Brightness = Math.Clamp(brightnessPct, 0, 100);
+        ApplyLightingRecord(new Ev60LightingRecord(
+            (int)eff, color1 & 0xFFFFFF, color2 & 0xFFFFFF,
+            Math.Clamp(speedPct, 0, 100), Math.Max(0, dirIndex), rainbow,
+            Brightness, Brightness, "preset", new Dictionary<int, int>(),
+            ColorDouble: !rainbow && colorDouble,
+            CustomSideColors: new Dictionary<int, int>(),
+            CustomNumpadRingColors: new Dictionary<int, int>()));
+    }
+
     private void CkEv60AutoOffEnable_Click(object sender, RoutedEventArgs e)
     {
         if (_ev60Suppress) return;
         _ev60Store?.SetSetting("settings.autoOffEnable", CkEv60AutoOffEnable.IsChecked == true ? "1" : "0");
         RaiseAutoOffConfigChanged();
+    }
+
+    /// <summary>Key Lighting "sync across profiles" toggled. Persists the flag, re-saves
+    /// the on-screen lighting into the namespace just switched to (shared vs this
+    /// profile's own) and, on the OFF→ON edge, seeds every profile slot with the shared
+    /// record so a later un-sync leaves each profile sane. K2-side only — no device sync
+    /// command exists for this board, so it just re-applies the current effect.</summary>
+    private void CkEv60Sync_Click(object sender, RoutedEventArgs e)
+    {
+        if (_ev60Suppress || _ev60Store is null) return;
+        _ev60Store.SetSetting("lighting.sync", LightingSynced ? "1" : "0");
+
+        Ev60PersistLighting(_ev60ActiveMode);
+
+        if (LightingSynced && _ev60Store.LoadSharedLighting() is { } shared)
+            foreach (var slot in _ev60Store.GetExistingProfiles())
+                _ev60Store.SaveLighting(slot, shared);
+
+        ApplyCurrentEv60Effect();
     }
 
     private void TxtEv60AutoOffSeconds_LostFocus(object sender, RoutedEventArgs e)
@@ -681,7 +780,7 @@ public partial class Everest60RgbPanel : UserControl
     internal void RestoreDefaults()
     {
         if (_ev60Store is null) return;
-        _ev60Store.SaveLighting(CurrentSlot, new Ev60LightingRecord(
+        SaveLightingRouted(CurrentSlot, new Ev60LightingRecord(
             (int)Everest60Protocol.Effect.Wave, 0x900000, 0x000000, 50, 0, false,
             100, 100, "preset", new Dictionary<int, int>(),
             CustomSideColors: new Dictionary<int, int>(),
@@ -693,9 +792,15 @@ public partial class Everest60RgbPanel : UserControl
     internal void Ev60ReloadProfile(int slot)
     {
         if (_ev60Store is null) return;
-        var lighting = _ev60Store.LoadLighting(slot);
-        if (lighting is null) return;
+        var lighting = LoadLightingRouted(slot);
+        if (lighting is not null) ApplyLightingRecord(lighting);
+    }
 
+    /// <summary>Pushes a lighting record straight into the panel + device, bypassing the
+    /// store read — used by <see cref="Ev60ReloadProfile"/> and by the cross-device
+    /// lighting-sync coordinator (<see cref="ApplyLightingSnapshot"/>).</summary>
+    private void ApplyLightingRecord(Ev60LightingRecord lighting)
+    {
         bool wasSuppress = _ev60Suppress;
         _ev60Suppress = true;
         try

@@ -101,8 +101,8 @@ public partial class MainWindow
     private void InitEverestModule()
     {
         LvEvKeys.ItemsSource    = _evKeys;
-        LstEvProfile.ContextMenu = EvBuildProfileContextMenu();
-        BtnEvProfileMenu.ContextMenu = EvBuildProfileMenuNoEdit();
+        LstEvProfile.ContextMenu = WithProfileGuide(EvBuildProfileContextMenu(), "everest");
+        BtnEvProfileMenu.ContextMenu = WithProfileGuide(EvBuildProfileMenuNoEdit(), "everest");
         EvRefreshProfiles();
         EvSelectProfileSlot(_evStore.GetCurrentProfile());
 
@@ -129,6 +129,7 @@ public partial class MainWindow
         Closed += (_, _) =>
         {
             CleanupMediaDock();
+            try { CleanupDisplayDial(); } catch { /* ignore */ }
             try { RestoreEvDisabledKeysOnExit(); } catch { /* ignore */ }
             try { StopEvAccessoryPoll();  } catch { /* ignore */ }
             try { _evEngine?.Dispose(); } catch { /* ignore */ }
@@ -158,7 +159,11 @@ public partial class MainWindow
         LoadEverestKeyMap();
 
         _evPollTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-        _evPollTimer.Tick += (_, _) => EvRefreshConnectionStatus();
+        _evPollTimer.Tick += (_, _) =>
+        {
+            EvRefreshConnectionStatus();
+            SyncEverestGameModeStatusFromDevice();   // reflect Fn+Pause toggles
+        };
         _evPollTimer.Start();
         EvRefreshConnectionStatus();
     }
@@ -625,7 +630,10 @@ public partial class MainWindow
     /// </summary>
     private void LoadEverestSettingsFromStore()
     {
-        CkSettingsSync.IsChecked = CkEvSync.IsChecked;
+        // Own flag since 2026-08-28; one-time migration: fall back to the old shared
+        // rgb.sync so users who had "sync on" keep the Settings section synced too.
+        CkSettingsSync.IsChecked =
+            (_evStore.GetSetting("settings.sync") ?? _evStore.GetSetting("rgb.sync")) == "1";
 
         string prefix = EvSettingsPrefix();
         int mode = int.TryParse(_evStore.GetSetting(prefix + "game_mode")
@@ -634,6 +642,11 @@ public partial class MainWindow
         CkGameModeAltF4.IsChecked    = (mode & 0x2) != 0;
         CkGameModeWinKey.IsChecked   = (mode & 0x4) != 0;
         CkGameModeAltTab.IsChecked   = (mode & 0x8) != 0;
+
+        // Master engage/disengage (also toggled with Fn+Pause on the keyboard).
+        CkGameModeMaster.IsChecked =
+            int.TryParse(_evStore.GetSetting(prefix + "game_mode_master")
+                ?? _evStore.GetSetting("settings.game_mode_master"), out var gmm) && gmm != 0;
 
         CkCoreIndicatorLed.IsChecked =
             int.TryParse(_evStore.GetSetting(prefix + "indicator_led")
@@ -698,10 +711,12 @@ public partial class MainWindow
     private void ApplyEverestSettingsToDevice()
     {
         if (!_everest.IsOpen) return;
-        LogEverest($"[SET ] SetGameMode({EvGameModeBitmask()}) -> {_everest.SetGameMode(EvGameModeBitmask())}");
+        LogEverest($"[SET ] SetGameMode(0x{EvGameModeBitmask():X2}) -> {_everest.SetGameMode(EvGameModeBitmask())}");
+        LogEverest($"[SET ] SetGameModeStatus({CkGameModeMaster.IsChecked == true}) -> " +
+                    $"{_everest.SetGameModeStatus(CkGameModeMaster.IsChecked == true)}");
         LogEverest($"[SET ] SetIndicatorLed({CkCoreIndicatorLed.IsChecked == true}) -> " +
                     $"{_everest.SetIndicatorLed(CkCoreIndicatorLed.IsChecked == true)}");
-        _everest.SetSyncAcrossProfiles(CkEvSync.IsChecked == true);
+        _everest.SetSyncAcrossProfiles(CkSettingsSync.IsChecked == true);
     }
 
     private void CkGameMode_Click(object sender, RoutedEventArgs e)
@@ -710,7 +725,35 @@ public partial class MainWindow
         int mode = EvGameModeBitmask();
         _evStore.SetSetting(EvSettingsPrefix() + "game_mode", mode.ToString());
         if (!_everest.IsOpen) { LogEverest("[WARN] Everest driver not open: state saved but not applied"); return; }
-        LogEverest($"[SET ] SetGameMode({mode}) -> {_everest.SetGameMode(mode)}");
+        LogEverest($"[SET ] SetGameMode(0x{mode:X2}) -> {_everest.SetGameMode(mode)}");
+    }
+
+    private void CkGameModeMaster_Click(object sender, RoutedEventArgs e)
+    {
+        if (_evSettingsSuppress) return;
+        bool on = CkGameModeMaster.IsChecked == true;
+        _evStore.SetSetting(EvSettingsPrefix() + "game_mode_master", on ? "1" : "0");
+        if (!_everest.IsOpen) { LogEverest("[WARN] Everest driver not open: state saved but not applied"); return; }
+        LogEverest($"[SET ] SetGameModeStatus({on}) -> {_everest.SetGameModeStatus(on)}");
+    }
+
+    /// <summary>Polls the keyboard's Game Mode master state (changes when the user
+    /// presses Fn+Pause) and reflects it on <see cref="CkGameModeMaster"/>. Called
+    /// from the Everest 1 Hz tick. No-op while the Settings panel is repopulating.</summary>
+    private void SyncEverestGameModeStatusFromDevice()
+    {
+        if (_evSettingsSuppress || !_everest.IsOpen) return;
+        if (_everest.GetGameModeStatus() is not bool onDevice) return;
+        if ((CkGameModeMaster.IsChecked == true) == onDevice) return;
+        bool prev = _evSettingsSuppress;
+        _evSettingsSuppress = true;
+        try
+        {
+            CkGameModeMaster.IsChecked = onDevice;
+            _evStore.SetSetting(EvSettingsPrefix() + "game_mode_master", onDevice ? "1" : "0");
+            LogEverest($"[GET ] Game Mode master changed on device -> {onDevice}");
+        }
+        finally { _evSettingsSuppress = prev; }
     }
 
     private void CkCoreIndicatorLed_Click(object sender, RoutedEventArgs e)
@@ -722,11 +765,29 @@ public partial class MainWindow
         LogEverest($"[SET ] SetIndicatorLed({enable}) -> {_everest.SetIndicatorLed(enable)}");
     }
 
+    /// <summary>
+    /// The SETTINGS section's own "sync across profiles" flag (<c>settings.sync</c>),
+    /// independent of the Lighting (<c>CkEvSync</c>) and Display Dial (<c>CkDialSync</c>)
+    /// flags since 2026-08-28. Re-saves Game Mode + Indicator LED under the namespace it
+    /// just switched to (<see cref="EvSettingsPrefix"/>) and, on the rising edge, replays
+    /// them into every profile slot (mirrors <see cref="CkEvSync_Click"/>).
+    /// </summary>
     private void CkSettingsSync_Click(object sender, RoutedEventArgs e)
     {
         if (_evSettingsSuppress) return;
-        CkEvSync.IsChecked = CkSettingsSync.IsChecked; // same device flag as RGB & Lighting's checkbox
-        CkEvSync_Click(sender, e);
+        _evStore.SetSetting("settings.sync", CkSettingsSync.IsChecked == true ? "1" : "0");
+        // "What's on screen becomes the new state" — re-save under the switched namespace
+        // so flipping sync doesn't reveal a stale/default value from the other one.
+        CkGameMode_Click(sender, e);
+        CkGameModeMaster_Click(sender, e);
+        CkCoreIndicatorLed_Click(sender, e);
+        if (!_everest.IsOpen)
+        {
+            LogEverest("[WARN] Everest driver not open: state saved but not applied");
+            return;
+        }
+        _everest.SetSyncAcrossProfiles(CkSettingsSync.IsChecked == true);
+        if (CkSettingsSync.IsChecked == true) ReplayEverestSectionToAllProfiles(EvSyncSection.Settings);
     }
 
     /// <summary>
@@ -2170,6 +2231,7 @@ public partial class MainWindow
 
         LogEverest($"[UI ] Everest profile selected: {slot}");
         EvActivateProfileSlot(slot);
+        DeviceSyncOnProfileSwitched(SyncDeviceKind.Everest, slot);
     }
 
     /// <summary>
@@ -2225,7 +2287,8 @@ public partial class MainWindow
     {
         if (LvEvKeys.SelectedItem is not EverestKey key) return;
         if (key.NdkIndex is int ndkIdx)
-            K2.Core.Services.ActionClipboard.Copy(_ndkActions[ndkIdx].Type, _ndkActions[ndkIdx].Value);
+            K2.Core.Services.ActionClipboard.Copy(_ndkActions[ndkIdx].Type, _ndkActions[ndkIdx].Value,
+                _ndkImagePaths[ndkIdx], _ndkIconSpecs[ndkIdx]);
         else
             K2.Core.Services.ActionClipboard.Copy(key.ActionType, key.ActionValue);
     }
@@ -2235,7 +2298,8 @@ public partial class MainWindow
         if (LvEvKeys.SelectedItem is not EverestKey key) return;
         if (key.NdkIndex is int ndkIdx)
         {
-            K2.Core.Services.ActionClipboard.Copy(_ndkActions[ndkIdx].Type, _ndkActions[ndkIdx].Value);
+            K2.Core.Services.ActionClipboard.Copy(_ndkActions[ndkIdx].Type, _ndkActions[ndkIdx].Value,
+                _ndkImagePaths[ndkIdx], _ndkIconSpecs[ndkIdx]);
             ClearNdkKey(ndkIdx);
         }
         else
@@ -2468,6 +2532,7 @@ public partial class MainWindow
         {
             key.IsHighlighted = e.Pressed;
             if (e.Pressed) ExecuteEverestKeyDeduped(key);
+            else _evEngine?.Release(_evKeys.IndexOf(key));
         }
 
         if (!e.Pressed)
@@ -2509,11 +2574,14 @@ public partial class MainWindow
             return;
         }
         _evLastExecuted = (key.KeyMatrix, now);
-        ExecuteEverestKey(key);
+        ExecuteEverestKey(key, momentary: true);
     }
 
-    private void ExecuteEverestKey(EverestKey k) =>
-        _evEngine?.Execute(k.ActionType, k.ActionValue, _evKeys.IndexOf(k));
+    /// <param name="momentary">Set only from the physical down edge (<see cref="HandleEverestKey"/>
+    /// sends the matching up edge to <see cref="ButtonActionEngine.Release"/>); RPC / programmatic
+    /// presses via <see cref="EvPressButton"/> stay one-shot.</param>
+    private void ExecuteEverestKey(EverestKey k, bool momentary = false) =>
+        _evEngine?.Execute(k.ActionType, k.ActionValue, _evKeys.IndexOf(k), momentary);
 
     /// <param name="applyRgb">Threaded through to <see cref="ReloadEverestRgbForProfileSwitch"/> —
     /// false skips pushing the RGB effect to the device (see <see cref="EvActivateProfileSlot"/>).</param>
@@ -2688,13 +2756,18 @@ public partial class MainWindow
         var currentKeys = new HashSet<string>();
         foreach (var slot in existing)
         {
-            string? exe = _evStore.GetSetting($"profile.{slot}.launchExe");
+            string kb = $"profile.{slot}";
+            string? exe = _evStore.GetSetting($"{kb}.launchExe");
             if (string.IsNullOrWhiteSpace(exe)) continue;
             string key = scope + slot;
             currentKeys.Add(key);
             int capturedSlot = slot;
-            ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe,
-                () => EvSwitchProfile(capturedSlot.ToString()));
+            bool focusOnly = _evStore.GetSetting($"{kb}.launchFocusOnly") == "1";
+            bool restoreOnClose = _evStore.GetSetting($"{kb}.launchRestoreOnClose") == "1";
+            ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe, focusOnly, restoreOnClose,
+                capturedSlot.ToString(),
+                () => _evStore.GetCurrentProfile().ToString(),
+                t => EvSwitchProfile(t));
         }
         foreach (var staleKey in ProfileLaunchWatcher.Instance.KeysWithPrefix(scope).Except(currentKeys))
             ProfileLaunchWatcher.Instance.RemoveRegistration(staleKey);
@@ -2717,6 +2790,8 @@ public partial class MainWindow
     private ContextMenu EvBuildProfileContextMenu()
     {
         var menu = new ContextMenu();
+        var miConfigure = new MenuItem { Header = Loc.Get("configure_profile") };
+        miConfigure.Click += (_, _) => { if (LstEvProfile.SelectedItem is EvProfileItem pi) EvShowProfileGear(pi); };
         var miRename = new MenuItem { Header = Loc.Get("rename_profile") };
         miRename.Click += BtnEvRenameProfile_Click;
         var miImportXml = new MenuItem { Header = Loc.Get("dp_import_xml") };
@@ -2727,6 +2802,8 @@ public partial class MainWindow
         miExport.Click += BtnEvExportProfiles_Click;
         var miDelete = new MenuItem { Header = Loc.Get("delete_profile") };
         miDelete.Click += BtnEvDeleteProfile_Click;
+        menu.Items.Add(miConfigure);
+        menu.Items.Add(new Separator());
         menu.Items.Add(miRename);
         menu.Items.Add(new Separator());
         menu.Items.Add(miImportXml);
@@ -2818,8 +2895,11 @@ public partial class MainWindow
     private void EvShowProfileGear(EvProfileItem pi)
     {
         string currentName = _evStore.GetProfileName(pi.Slot) ?? Loc.Get("profile_n", pi.Slot);
-        string currentExe = _evStore.GetSetting($"profile.{pi.Slot}.launchExe") ?? "";
-        var dlg = new ProfileSettingsDialog(currentName, currentExe) { Owner = this };
+        string keyBase = $"profile.{pi.Slot}";
+        string currentExe = _evStore.GetSetting($"{keyBase}.launchExe") ?? "";
+        bool focusOnly = _evStore.GetSetting($"{keyBase}.launchFocusOnly") == "1";
+        bool restoreOnClose = _evStore.GetSetting($"{keyBase}.launchRestoreOnClose") == "1";
+        var dlg = new ProfileSettingsDialog(currentName, currentExe, focusOnly, restoreOnClose) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
         if (dlg.DeleteRequested)
@@ -2837,7 +2917,7 @@ public partial class MainWindow
                 MessageBoxImage.Warning);
             if (res != MessageBoxResult.OK) return;
             _evStore.ClearProfile(pi.Slot);
-            _evStore.SetSetting($"profile.{pi.Slot}.launchExe", "");
+            _evStore.SetSetting($"{keyBase}.launchExe", "");
             LogEverest($"[UI ] Everest profile {pi.Slot} deleted (gear).");
             EvRefreshProfiles();
             int fallback = _evStore.GetExistingProfiles().DefaultIfEmpty(1).First();
@@ -2847,7 +2927,9 @@ public partial class MainWindow
         }
 
         _evStore.SetProfileName(pi.Slot, dlg.ProfileName);
-        _evStore.SetSetting($"profile.{pi.Slot}.launchExe", dlg.ExePath);
+        _evStore.SetSetting($"{keyBase}.launchExe", dlg.ExePath);
+        _evStore.SetSetting($"{keyBase}.launchFocusOnly", dlg.FocusOnly ? "1" : "0");
+        _evStore.SetSetting($"{keyBase}.launchRestoreOnClose", dlg.RestoreOnClose ? "1" : "0");
         LogEverest($"[UI ] Everest profile {pi.Slot} settings updated (gear).");
         EvRefreshProfiles();
         EvSelectProfileSlot(pi.Slot);
@@ -3158,7 +3240,10 @@ public partial class MainWindow
 
     private void InitEverestRgbPanel()
     {
-        _evAutoOffTimer = new BacklightIdleTimer(Dispatcher, EvAutoOffTimeout, EvAutoOffWake);
+        // wakeDelayMs: defer the wake effect-resend off the keypress pump turn so
+        // the first key after idle doesn't get repeated (~8×) while the firmware
+        // stalls the HID endpoint writing the effect/flash — see BacklightIdleTimer.
+        _evAutoOffTimer = new BacklightIdleTimer(Dispatcher, EvAutoOffTimeout, EvAutoOffWake, wakeDelayMs: 250);
 
         _evRgbSuppress = true;
         try
@@ -3203,22 +3288,22 @@ public partial class MainWindow
     /// <summary>
     /// Key namespace for the Settings section (Game Mode/Indicator LED/Keycap
     /// Appearance) — same shared/profile-scoped split as <see cref="EvRgbPrefix"/>,
-    /// reusing the SAME flag (<c>CkEvSync</c>/<c>rgb.sync</c>, mirrored by
-    /// <c>CkSettingsSync</c>): this isn't a separate concept, it's the real
-    /// Base Camp "sync across profiles" device flag (<c>SetSyncAcrossProfiles</c>,
-    /// see <see cref="ApplyEverestSettingsToDevice"/>), which is device-wide by
-    /// definition — one toggle governs RGB, Settings and Display Dial together.
-    /// <c>settings.keyboard_color</c> is intentionally excluded (kept always
-    /// global): it's a cosmetic "what color is my physical unit" fact, not a
-    /// per-profile preference. User request 2026-07-25.
+    /// but governed by its OWN flag (<c>CkSettingsSync</c>/<c>settings.sync</c>),
+    /// independent of the Lighting and Display Dial sync flags (user request
+    /// 2026-08-28: "il flag sync across profiles ... deve essere riferito alla
+    /// sezione in cui si trova"). <c>settings.keyboard_color</c> is intentionally
+    /// excluded (kept always global): it's a cosmetic "what color is my physical
+    /// unit" fact, not a per-profile preference. User request 2026-07-25.
     /// </summary>
     private string EvSettingsPrefix() =>
-        CkEvSync.IsChecked == true ? "settings." : $"settings.p{EvCurrentProfile()}.";
+        CkSettingsSync.IsChecked == true ? "settings." : $"settings.p{EvCurrentProfile()}.";
 
-    /// <summary>Key namespace for the Display Dial section — see <see cref="EvSettingsPrefix"/>,
-    /// same shared flag. User request 2026-07-25.</summary>
+    /// <summary>Key namespace for the Display Dial section — same shared/profile-scoped
+    /// split as <see cref="EvSettingsPrefix"/>, governed by its own
+    /// <c>CkDialSync</c>/<c>dial.sync</c> flag (K2-side only — Base Camp keeps Display
+    /// Dial sync out of its device flag). User request 2026-07-25 / 2026-08-28.</summary>
     private string EvDialPrefix() =>
-        CkEvSync.IsChecked == true ? "dial." : $"dial.p{EvCurrentProfile()}.";
+        CkDialSync.IsChecked == true ? "dial." : $"dial.p{EvCurrentProfile()}.";
 
     /// <summary>Key namespace for the Custom Lighting paint state — same shared/
     /// profile-scoped split as <see cref="EvRgbPrefix"/>, of which Custom is just
@@ -3342,14 +3427,14 @@ public partial class MainWindow
     private void EvAutoOffTimeout()
     {
         LogEverest("[RGB ] auto-off: resend effect at brightness=0");
-        ApplyCurrentEffect(brightnessOverride: 0);
+        ApplyCurrentEffect(brightnessOverride: 0, transient: true);
         CkEvBacklight.IsChecked = false;
     }
 
     private void EvAutoOffWake()
     {
         LogEverest("[RGB ] auto-off wake: resend current effect");
-        ApplyCurrentEffect();
+        ApplyCurrentEffect(transient: true);
         CkEvBacklight.IsChecked = true;
     }
 
@@ -3521,29 +3606,95 @@ public partial class MainWindow
         ApplyCurrentEffect();
     }
 
+    /// <summary>
+    /// The LIGHTING section's "sync across profiles" flag (<c>rgb.sync</c>) — independent
+    /// of the Settings (<c>CkSettingsSync</c>) and Display Dial (<c>CkDialSync</c>) flags
+    /// since 2026-08-28. Flipping it re-saves the on-screen effect under the namespace it
+    /// just switched to (<see cref="EvRgbPrefix"/>) and, on the rising edge, replays that
+    /// effect into every profile slot on the device — mirroring Base Camp
+    /// (everest_flags.pcapng: SwitchProfile loop + effect/side-LED writes, since
+    /// <c>SetSyncAcrossProfiles</c> alone emits nothing on the wire).
+    /// </summary>
     private void CkEvSync_Click(object sender, RoutedEventArgs e)
     {
-        // Same device flag mirrored by all 3 sections' checkboxes (RGB/Settings/Dial) —
-        // see EvSettingsPrefix/EvDialPrefix's doc comment.
-        CkSettingsSync.IsChecked = CkEvSync.IsChecked;
-        CkDialSync.IsChecked     = CkEvSync.IsChecked;
+        bool on = CkEvSync.IsChecked == true;
         SaveEverestRgbToStore();
-        // Re-save the currently-displayed Settings/Dial values under the namespace the
-        // flag just switched to (shared or this profile's own) — same "what's on screen
-        // becomes the new state" behavior as the RGB save above, so flipping sync doesn't
-        // silently reveal a stale/default value from the other namespace.
-        if (!_evSettingsSuppress)
-        {
-            CkGameMode_Click(sender, e);
-            CkCoreIndicatorLed_Click(sender, e);
-        }
-        if (!_dialLoading) SaveDialSettings();
         if (!_everest.IsOpen)
         {
             LogEverest("[WARN] Everest driver not open: state saved but not applied");
             return;
         }
-        _everest.SetSyncAcrossProfiles(CkEvSync.IsChecked == true);
+        _everest.SetSyncAcrossProfiles(on); // best-effort — SDKDLL flag, no wire effect observed
+        if (on) ReplayEverestSectionToAllProfiles(EvSyncSection.Lighting);
+    }
+
+    private enum EvSyncSection { Lighting, Settings, Dial }
+
+    /// <summary>
+    /// Copies the currently-displayed config of <paramref name="section"/> into EVERY
+    /// existing profile slot's namespace in the store, then (if the driver is open) walks
+    /// each slot on the device re-applying that config — the host-side "sync across
+    /// profiles" Base Camp performs (see <see cref="CkEvSync_Click"/>). The store copy
+    /// keeps every slot sensible for when sync is later turned back off; the device walk
+    /// makes the change visible on all profiles immediately. Runs only on the OFF→ON edge.
+    /// </summary>
+    private void ReplayEverestSectionToAllProfiles(EvSyncSection section)
+    {
+        var slots = _evStore.GetExistingProfiles();
+        if (slots.Count == 0) return;
+        int current = EvCurrentProfile();
+
+        // ── Store copy: shared namespace → each slot's own namespace ──
+        string family = section switch
+        {
+            EvSyncSection.Lighting => "rgb.",
+            EvSyncSection.Settings => "settings.",
+            _                      => "dial.",
+        };
+        foreach (var kv in _evStore.GetSettingsWithPrefix(family))
+        {
+            // Skip rows that already carry a slot segment (p3.foo) and keys that are
+            // device-global by design, not per-profile section values: the sync flag
+            // itself, the backlight auto-off timer, and the keyboard body colour.
+            if (kv.Key.Length > 1 && kv.Key[0] == 'p' && char.IsDigit(kv.Key[1]) && kv.Key.Contains('.')) continue;
+            if (kv.Key is "sync" or "autoOffEnable" or "autoOffSeconds" or "keyboard_color") continue;
+            foreach (var s in slots)
+                _evStore.SetSetting($"{family}p{s}.{kv.Key}", kv.Value);
+        }
+
+        // ── Device walk: apply the section on every slot, restore the active one ──
+        // The keyboard is unresponsive for the whole SwitchProfile+apply sequence
+        // (several seconds with 5 slots), so this runs behind the blocking "please wait"
+        // overlay on a background thread. The per-slot apply itself reads WPF controls
+        // (CbEvEffect, sliders, …) so it has to hop back to the UI thread — but SwitchProfile
+        // and the SetEffect it triggers still block the pool thread, leaving the UI free
+        // to paint the overlay. User request 2026-08-28.
+        if (!_everest.IsOpen) return;
+        bool prevBusy = _deviceSyncBusy;
+        _deviceSyncBusy = true; // don't let the per-slot re-apply fan out to other devices
+        try
+        {
+            RunHwBusy(Loc.Get("hw_busy_sync_across_profiles"), () =>
+            {
+                _everest.FlushSaveFlash();
+                foreach (var s in slots)
+                {
+                    _everest.SwitchProfile(s);
+                    Dispatcher.Invoke(() =>
+                    {
+                        switch (section)
+                        {
+                            case EvSyncSection.Lighting: ApplyCurrentEffect(); break;
+                            case EvSyncSection.Settings: ApplyEverestSettingsToDevice(); break;
+                            case EvSyncSection.Dial:     ApplyDialToDevice(); break;
+                        }
+                    });
+                }
+                _everest.SwitchProfile(current);
+            });
+        }
+        finally { _deviceSyncBusy = prevBusy; }
+        LogEverest($"[SYNC] replayed {section} to slots [{string.Join(",", slots)}], restored {current}");
     }
 
     private void CkEvBacklight_Click(object sender, RoutedEventArgs e)
@@ -3566,7 +3717,13 @@ public partial class MainWindow
     /// [RGB] log lines are diagnostic and go to the event panel so the user
     /// sees what happens without opening K2.App.log.
     /// </summary>
-    private void ApplyCurrentEffect(int? brightnessOverride = null)
+    /// <param name="transient">Auto-off idle timer paths only: the apply is a
+    /// brightness bump (idle → 0, wake → restore), NOT a user edit — so it must
+    /// not schedule a SaveFlash (no point persisting idle state, and the flash
+    /// write is exactly what leaves the firmware unresponsive long enough for the
+    /// woke-up keypress to auto-repeat, "AAAAAAAA" — user report 2026-08-30, only
+    /// reproduced with Static). Also skips the manual-toggle re-sync below.</param>
+    private void ApplyCurrentEffect(int? brightnessOverride = null, bool transient = false)
     {
         // Exit WITHOUT logging if the UI has not finished loading: during
         // InitializeComponent() the Slider raises ValueChanged setting Value=100
@@ -3583,6 +3740,17 @@ public partial class MainWindow
             return;
         }
         var effect = pick.Eff;
+
+        // Backlight was auto-off (idle) and the user just applied a real effect
+        // through a panel control: the device is lit again, so clear the idle
+        // timer's forced-off state and re-check the manual toggle to match
+        // reality (user report 2026-08-30 — checkbox stayed off). Skipped for the
+        // timeout path's own brightness=0 resend (brightnessOverride != null).
+        if (!transient && brightnessOverride is null && _evAutoOffTimer?.NotifyWokenExternally() == true)
+        {
+            CkEvBacklight.IsChecked = true;
+            LogEverest("[RGB ] effect applied while idle-off -> backlight considered on again");
+        }
 
         // Any effect change stops a running host-driven animation first — it owns the
         // Custom-mode zone and would keep overwriting whatever we send below.
@@ -3646,8 +3814,15 @@ public partial class MainWindow
             randomColor:        rainbow,
             speedByte:          speedByte,
             directionByte:      dirByte,
-            colorCountOverride: colorCount);
+            colorCountOverride: colorCount,
+            persist:            !transient);
         LogEverest($"[RGB ] ChangeEffect -> {ok}");
+
+        // Cross-device lighting sync — coordinator's re-entrancy guard makes this safe
+        // even when the apply was itself sync-driven. Custom / DiagonalWave return early
+        // above and don't reach here (per-key paint doesn't translate across devices).
+        if (EvBuildLightingSnapshot() is { } snap)
+            DeviceSyncOnLightingChanged(SyncDeviceKind.Everest, snap);
     }
 
     private static void ApplyColorButton(Button btn, int rgb)

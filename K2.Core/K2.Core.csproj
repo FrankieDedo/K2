@@ -70,6 +70,40 @@
     <EmbeddedResource Include="Assets\emoji_catalog.tsv" />
   </ItemGroup>
 
+  <!-- In-app guides shown by GuideWindow (see GuideContent.cs): device sections
+       AND the action-picker (categories / sub-categories / actions). One
+       markdown-ish file per language, blocks split by "@@@ key" markers;
+       English is the fallback for a missing language file or key.
+       WithCulture=false: without it MSBuild reads the ".en"/".it" infix as a
+       culture and compiles each file into a satellite assembly
+       (en/K2.Core.resources.dll …) instead of the main manifest, so
+       GetManifestResourceNames() can't see them and every guide falls back to
+       the "not written yet" text. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Guides\guide.en.md">
+      <WithCulture>false</WithCulture>
+      <LogicalName>K2.Core.Guides.guide.en.md</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Guides\guide.it.md">
+      <WithCulture>false</WithCulture>
+      <LogicalName>K2.Core.Guides.guide.it.md</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <!-- "Guide" button icon (open book + question mark). Alpha silhouette,
+       tinted at runtime via OpacityMask so it follows the themed icon color.
+       Used by K2.App's per-section buttons and by ButtonActionDialog. -->
+  <ItemGroup>
+    <Resource Include="Assets\guide.png" />
+  </ItemGroup>
+
+  <!-- Cropped UI screenshots shown inside the guides via "![caption](file.png)"
+       (GuideWindow.MakeImage). Glob so new crops just need dropping in the
+       folder — see Assets\Guides\README.md for the naming convention. -->
+  <ItemGroup>
+    <Resource Include="Assets\Guides\*.png" />
+  </ItemGroup>
+
   <!-- Action-picker brand icons that can't be a single-color vector path: the two
        multi-color logos the user supplied (DaVinci Resolve's app icon, Google Home's
        four-color house). Everything else in the picker is a single-path vector in

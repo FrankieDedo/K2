@@ -70,6 +70,15 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.29" />
   </ItemGroup>
 
+  <!-- Catalogo sensori hardware per le live tile "PC monitor" del DisplayPad
+       (Services/HardwareSensors.cs). Stessa libreria che usa Base Camp
+       (vedi il commento in Services/SystemMonitor.cs). MPL-2.0, ridistribuibile
+       — attribuzione in DISTRIBUTION.md. Carica un driver ring0 per le
+       temperature CPU/GPU: K2.App gira gia' come amministratore (app.manifest). -->
+  <ItemGroup>
+    <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
+  </ItemGroup>
+
   <!-- MacroPadSDK.dll NON e' ridistribuibile: e' un componente interno
        dell'app Base Camp, senza licenza di ridistribuzione. Quindi NON viene
        impacchettato con K2.

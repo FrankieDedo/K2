@@ -105,6 +105,10 @@
   <string name="appshortcut_action_label">Acción:</string>
   <string name="appshortcut_custom">Personalizado…</string>
   <string name="obs_settings_title">Configuración de OBS Studio</string>
+  <string name="obs_setup_guide">1. En OBS Studio abre Herramientas &gt; Ajustes del servidor WebSocket.
+2. Marca "Habilitar servidor WebSocket" (puerto predeterminado 4455).
+3. Haz clic en "Mostrar información de conexión" para ver la contraseña del servidor (o desmarca "Habilitar autenticación" para no usar ninguna).
+4. Introduce aquí el mismo Host / Puerto / Contraseña y haz clic en "Probar conexión".</string>
   <string name="obs_host_label">Host:</string>
   <string name="obs_port_label">Puerto:</string>
   <string name="obs_password_label">Contraseña:</string>
@@ -179,11 +183,22 @@
   <string name="spotify_hint">Registra tu propia app en developer.spotify.com/dashboard con el Redirect URI "http://127.0.0.1:17564/callback" y luego pega aquí su Client ID/Secret.</string>
   <string name="spotify_setup_guide">1. Ve a developer.spotify.com/dashboard y haz clic en "Create app".
 2. Redirect URI: http://127.0.0.1:17564/callback
-3. Which API/SDKs are you planning to use: Web API.
-4. Guarda, luego copia el Client ID y haz clic en "View client secret" para obtener el Client Secret.</string>
+3. En "Which API/SDKs are you planning to use" marca "Web API".
+4. Guarda, luego copia el Client ID y haz clic en "View client secret" para obtener el Client Secret.
+
+Reproducir/Pausa, Siguiente/Anterior, Aleatorio, Repetir y Volumen funcionan: con Spotify Premium mediante la Web API, si no mediante las teclas multimedia del sistema.
+Me gusta y Anadir/Quitar de la lista NO estan disponibles: Spotify bloquea los endpoints de biblioteca y listas para apps personales (modo Development), asi que K2 oculta esas acciones.</string>
   <string name="spotify_client_id_label">Client ID:</string>
   <string name="spotify_client_secret_label">Client Secret:</string>
-  <string name="spotify_connected_as">Conectado como</string>
+  <string name="spotify_connected_as">Conectado</string>
+  <string name="spotify_webapi_active">Web API activa (Spotify Premium)</string>
+  <string name="spotify_email_hint">Anade esta direccion en "User Management" de tu app de Spotify</string>
+  <string name="spotify_email_reconnect">Reconecta para ver el email de la cuenta necesario para "User Management"</string>
+  <string name="spotify_library_403">Spotify bloquea Me gusta / Guardar en lista para apps en modo Development (cambio de plataforma de 2025) — no es un problema de K2, y una app nueva / User Management no ayuda. El control de reproduccion (play/pausa, siguiente, volumen) sigue funcionando. El acceso completo a la biblioteca requiere que Spotify conceda Extended Access a la app.</string>
+  <string name="spotify_device_label">Dispositivo de reproducción:</string>
+  <string name="spotify_device_auto">Automático (dispositivo activo)</string>
+  <string name="spotify_device_active">activo</string>
+  <string name="spotify_device_offline">no disponible</string>
   <string name="spotify_settings_button">Configuración de Spotify…</string>
   <string name="spotify_cmd_play_pause">Reproducir/Pausar</string>
   <string name="spotify_cmd_next">Pista siguiente</string>
@@ -197,6 +212,7 @@
   <string name="spotify_cmd_volume_set">Establecer volumen</string>
   <string name="spotify_cmd_save_playlist">Guardar pista en lista de reproducción</string>
   <string name="spotify_cmd_remove_playlist">Quitar pista de la lista de reproducción</string>
+  <string name="spotify_cmd_unavailable">no disponible</string>
   <string name="youtube_settings_title">Configuración de YouTube</string>
   <string name="youtube_hint">Crea un cliente OAuth de aplicación de escritorio en console.cloud.google.com con la API YouTube Data v3 habilitada, luego pega aquí el Client ID/Secret.</string>
   <string name="youtube_setup_guide">1. Ve a console.cloud.google.com, crea/selecciona un proyecto y luego habilita "YouTube Data API v3" (APIs &amp; Services -&gt; Library).
@@ -271,6 +287,7 @@
   <string name="media_vol_down">Volume down</string>
   <string name="media_mute">Mute</string>
   <string name="media_shuffle">Aleatorio</string>
+  <string name="media_repeat">Repetir</string>
   <string name="mouse_left">Left button</string>
   <string name="mouse_right">Right button</string>
   <string name="mouse_middle">Middle button</string>
@@ -282,7 +299,6 @@
   <string name="mouse_scroll_right">Scroll right</string>
   <string name="keys_modifiers_label">Modifiers:</string>
   <string name="keys_key_label">Key:</string>
-  <string name="keys_win_hint">The Windows key can be selected but is not sent by the current keystroke backend (SendKeys) — it is silently ignored.</string>
   <string name="gh_manage">Gestionar dispositivos Google Home…</string>
   <string name="gh_summary_missing">Google Home (asociación eliminada)</string>
   <string name="gh_setup_title">Dispositivos Google Home</string>
@@ -403,8 +419,13 @@
   <string name="settings_start_min_tray">Iniciar directamente minimizado en la bandeja</string>
   <string name="settings_start_min_tray_hint">K2 se inicia con sus drivers activos pero con la ventana oculta en la bandeja — ábrela en cualquier momento desde el icono de la bandeja.</string>
   <!-- Asignación de dispositivos DisplayPad -->
-  <string name="settings_dp_devicemap_group">Asignación de dispositivos DisplayPad</string>
-  <string name="settings_dp_devicemap_btn">Configurar asignación…</string>
+  <string name="settings_device_sync_group">Sincronización entre dispositivos</string>
+  <string name="sync_across_devices">Sincronizar perfil entre dispositivos</string>
+  <string name="sync_across_devices_hint">Cambiar de perfil en un dispositivo Mountain conectado cambia todos los demás dispositivos conectados a la misma ranura de perfil.</string>
+  <string name="sync_lighting_across_devices">Sincronizar iluminación entre dispositivos</string>
+  <string name="sync_lighting_across_devices_hint">Cambiar el efecto o el color de iluminación en un dispositivo lo refleja en todos los demás dispositivos conectados (coincidencia más cercana si un dispositivo no puede reproducir el efecto).</string>
+  <string name="settings_dp_devicemap_group">Asignación de dispositivos</string>
+  <string name="settings_dp_devicemap_btn">Asignación de DisplayPad</string>
   <string name="settings_dp_devicemap_hint">Si moviste un DisplayPad a otro puerto USB y sus perfiles guardados ahora aparecen en el panel equivocado (p. ej. "DisplayPad 2" y "DisplayPad 3" intercambiados), usa esto para reasignar qué panel representa cada pad conectado.</string>
   <string name="dp_devicemap_title">Asignación de dispositivos DisplayPad</string>
   <string name="dp_devicemap_hint">Cada pad conectado se muestra abajo con su versión de firmware. Haz clic en "Identificar" para que parpadee la retroiluminación de un pad y así reconocer su fila, luego establece el número de placa que debe usar. Dos filas no pueden compartir el mismo número de placa.</string>
@@ -438,6 +459,7 @@
   <string name="hw_busy_importing_profile">Importando perfil, espera…</string>
   <string name="hw_busy_importing_profiles">Importando perfiles, espera…</string>
   <string name="hw_busy_restoring_defaults">Restableciendo valores predeterminados, espera…</string>
+  <string name="hw_busy_sync_across_profiles">Aplicando la sincronización entre perfiles en el teclado, espera…</string>
   <string name="hw_busy_restoring_key_images">Restaurando las imágenes predeterminadas de las teclas de pantalla, espera…</string>
   <string name="hw_busy_clearing_image">Borrando la imagen de la tecla de pantalla, espera…</string>
   <string name="hw_busy_writing_key_bindings">Escribiendo las acciones de las teclas de pantalla en el teclado, espera…</string>
@@ -633,6 +655,9 @@
   <string name="settings_sync_profiles">Sincronizar entre perfiles</string>
   <string name="settings_game_mode">Modo juego</string>
   <string name="settings_game_mode_tip">El modo juego deshabilita ciertas combinaciones de teclas para evitar interrumpir accidentalmente una partida.</string>
+  <string name="settings_game_mode_master">Modo de juego activado</string>
+  <string name="settings_game_mode_master_hint_ev">También se puede activar en el teclado con Fn + Pausa. Las casillas de abajo eligen qué teclas bloquea.</string>
+  <string name="settings_game_mode_master_hint_ev60">También se puede activar en el teclado con Fn + Win. Las casillas de abajo eligen qué teclas bloquea.</string>
   <string name="settings_disable_shift_tab">Deshabilitar Shift + Tab</string>
   <string name="settings_disable_alt_f4">Deshabilitar Alt + F4</string>
   <string name="settings_disable_win_key">Deshabilitar tecla Windows</string>
@@ -794,6 +819,7 @@
   <string name="txt_bg_solid">Fondo de color sólido</string>
   <string name="txt_bg_image">Encima de la imagen cargada</string>
   <string name="txt_bg_color">Fondo:</string>
+  <string name="txt_style_only_header">Estilo de texto</string>
   <string name="txt_color">Texto:</string>
   <string name="txt_position_label">Posición:</string>
   <string name="txt_icon_source_label">Origen del icono:</string>
@@ -847,6 +873,7 @@
   <string name="rename_device_prompt">Introduce un nombre para este dispositivo:</string>
   <string name="profile_not_available_tip">Aún no disponible para este dispositivo — no hay almacenamiento de perfiles implementado.</string>
   <!-- Renombrar / eliminar perfil -->
+  <string name="configure_profile">Configurar perfil</string>
   <string name="rename_profile">Renombrar perfil</string>
   <string name="rename_profile_title">Renombrar perfil</string>
   <string name="rename_profile_prompt">Introduce un nombre para este perfil:</string>
@@ -1005,6 +1032,8 @@
   <string name="discord_account_button">Cuenta de Discord (Client ID / Secret)…</string>
   <string name="discord_voicepage_return_label">Recuperar la página de voz tras</string>
   <string name="discord_voicepage_return_hint">Durante una llamada, si dejas la página de voz por un perfil normal, esta vuelve sola cuando pasan estos segundos sin que regreses a ella, como un salvapantallas. Desactivado = solo vuelve con una llamada nueva o con una tecla de «página de voz».</string>
+  <string name="show_back_arrow_label">Mostrar la flecha de vuelta</string>
+  <string name="show_back_arrow_hint">Estampa la flecha de retorno en la casilla que devuelve el pad al perfil anterior. La tecla funciona igualmente: al desactivarlo solo desaparece la marca y la imagen queda despejada.</string>
   <string name="act_emojibrowser">Explorador de emojis</string>
   <string name="emb_grp_smileys">Emoticonos</string>
   <string name="emb_grp_people">Personas</string>
@@ -1036,6 +1065,7 @@
   <string name="makalu_setting_clickspeed">Velocidad de clic:</string>
   <string name="dp_icon_section">Icono</string>
   <string name="dp_gallery_icon">Icono predeterminado</string>
+  <string name="dp_spotify_cover_icon">Usar la portada de Spotify</string>
   <string name="dp_gallery_icon_with_text">Con texto</string>
   <string name="dp_gallery_icon_without_text">Sin texto</string>
   <string name="gallery_dialog_title">Galería de iconos</string>
@@ -1058,4 +1088,84 @@
   <string name="txt_icon_section">Icono</string>
   <string name="txt_text_section">Texto</string>
   <string name="txt_reset_icon">Restablecer icono</string>
+
+  <!-- v1.3.2: guide buttons, PC monitor sensor list, Spotify profile -->
+  <string name="guide_button">Guía</string>
+  <string name="guide_none">La guía de esta sección aún no se ha escrito.</string>
+  <string name="guide_title">Guía</string>
+  <string name="guide_tooltip">Abrir la guía de esta sección</string>
+  <string name="highlights_button">Destacados</string>
+  <string name="highlights_tooltip">Funciones de K2 que Base Camp no tiene, y cómo activarlas</string>
+  <string name="profile_settings_focus_only">Solo cuando esta app está en primer plano</string>
+  <string name="profile_settings_focus_only_hint">K2 muestra este perfil solo mientras la app vinculada es la ventana en primer plano, y vuelve al perfil anterior cuando pierde el foco.</string>
+  <string name="profile_settings_pick_running">Desde una app en ejecución…</string>
+  <string name="profile_settings_restore_on_close">Volver al perfil anterior al cerrar la app</string>
+  <string name="profile_settings_restore_on_close_hint">Cuando la app vinculada se cierra, K2 vuelve al perfil que estaba activo antes, solo si sigues en este perfil. Se ignora cuando está activado "solo en primer plano".</string>
+  <string name="running_process_hint">Elige una aplicación que esté abierta ahora. También puedes buscar su .exe directamente.</string>
+  <string name="running_process_title">Elegir una app en ejecución</string>
+  <string name="sensor_col_name">Sensor</string>
+  <string name="sensor_col_type">Tipo</string>
+  <string name="sensor_col_value">Valor</string>
+  <string name="sensor_count_fmt">{0} sensores</string>
+  <string name="sensor_grp_battery">Batería</string>
+  <string name="sensor_grp_cooler">Refrigeración</string>
+  <string name="sensor_grp_cpu">CPU</string>
+  <string name="sensor_grp_gpu">GPU</string>
+  <string name="sensor_grp_memory">Memoria</string>
+  <string name="sensor_grp_motherboard">Placa base</string>
+  <string name="sensor_grp_network">Red</string>
+  <string name="sensor_grp_other">Otros</string>
+  <string name="sensor_grp_storage">Almacenamiento</string>
+  <string name="sensor_pick_button">Elegir sensor…</string>
+  <string name="sensor_pick_hint">Elige cualquier sensor de hardware para mostrar en la tecla. La lista se actualiza en tiempo real; usa el selector de abajo para mostrar su valor actual, mínimo, máximo o medio.</string>
+  <string name="sensor_pick_none">Selecciona primero un sensor.</string>
+  <string name="sensor_pick_search">Filtrar por nombre, tipo o dispositivo</string>
+  <string name="sensor_pick_title">Sensor de hardware</string>
+  <string name="sensor_preview_fmt">Valor actual: {0}</string>
+  <string name="sensor_reset_stats">Restablecer mín/máx/media</string>
+  <string name="sensor_show_label">Mostrar:</string>
+  <string name="sensor_starting">Leyendo sensores de hardware…</string>
+  <string name="sensor_stat_avg">Media</string>
+  <string name="sensor_stat_cur">Actual</string>
+  <string name="sensor_stat_max">Máximo</string>
+  <string name="sensor_stat_min">Mínimo</string>
+  <string name="sensor_unavailable">No hay sensores de hardware disponibles.</string>
+  <string name="settings_persist_logs">Conservar los registros</string>
+  <string name="settings_persist_logs_hint">Mantiene el registro de cada sesión en lugar de reiniciarlo en el siguiente arranque: el registro de cada ejecución se mueve a la carpeta "logs" con la fecha y la hora en el nombre. Útil para capturar un fallo ocasional en el primer arranque tras una actualización.</string>
+  <string name="spotify_account_button">Cuenta de Spotify (Client ID / Secret)…</string>
+  <string name="spotify_cover_layout_label">Disposición de la carátula</string>
+  <string name="spotify_cover_layout_quad">Carátula en 4 teclas</string>
+  <string name="spotify_cover_layout_single">Carátula en 1 tecla y texto en 3 teclas</string>
+  <string name="spotify_cover_layout_single_hint">Las otras tres teclas del bloque muestran el título, el artista y el álbum, cada una con la etiqueta Canción/Artista/Álbum: es a esto a lo que se aplica el ajuste Texto largo de abajo.</string>
+  <string name="spotify_device_hint">Qué dispositivo de Spotify Connect controlan las teclas de reproducción/volumen/repetición. Automático envía el comando al dispositivo activo en ese momento.</string>
+  <string name="spotify_field_album">Álbum</string>
+  <string name="spotify_field_artist">Artista</string>
+  <string name="spotify_field_song">Canción</string>
+  <string name="spotify_foreground_only_hint">El pad cambia a este perfil en cuanto la app de Spotify pasa a primer plano, y lo devuelve al perfil en el que estabas en cuanto lo pierde. La flecha atrás sigue funcionando: tras usarla, el perfil permanece oculto hasta que Spotify vuelve a tener el foco (o hasta que el temporizador de arriba lo trae de vuelta).</string>
+  <string name="spotify_foreground_only_label">Mostrar solo cuando Spotify está en primer plano</string>
+  <string name="spotify_position_center">Centro</string>
+  <string name="spotify_position_hint">Qué par de columnas ocupa el bloque de carátula 2×2. Las 8 teclas de reproducción/volumen/repetición que lo rodean cambian de disposición para adaptarse: cada posición tiene su propia disposición, no un simple reflujo.</string>
+  <string name="spotify_position_label">Posición del bloque de carátula</string>
+  <string name="spotify_position_left">Izquierda</string>
+  <string name="spotify_position_right">Derecha</string>
+  <string name="spotify_profile_config_hint">Cómo el bloque 2×2 izquierdo del perfil de Spotify del DisplayPad muestra lo que se está reproduciendo.</string>
+  <string name="spotify_profile_config_title">Perfil de Spotify</string>
+  <string name="spotify_return_hint">El perfil de Spotify vuelve por sí solo tantos segundos después de que la flecha atrás de la carátula haya pasado el pad a otro perfil. Déjalo desactivado para quedarte donde fuiste.</string>
+  <string name="spotify_return_label">Volver a este perfil tras</string>
+  <string name="spotify_source_label">Fuente de datos de la pista</string>
+  <string name="spotify_source_local">Local (reproducción actual de Windows)</string>
+  <string name="spotify_source_webapi">Cuenta de Spotify (Web API)</string>
+  <string name="spotify_source_webapi_hint">La Web API añade el nombre del álbum y una carátula de mayor resolución, pero necesita la cuenta de Spotify conectada. Si no devuelve nada, se usa la fuente local.</string>
+  <string name="spotify_text_mode_hint">Cuando se selecciona Marquesina (ticker), la vista previa de la cuadrícula de teclas de K2 sigue mostrando la tecla como una línea fija: el desplazamiento es un efecto solo de hardware y nunca se anima en la app.</string>
+  <string name="spotify_text_mode_label">Texto largo (disposición de 1 tecla)</string>
+  <string name="spotify_text_mode_marquee">Desplazarlo como una marquesina</string>
+  <string name="spotify_text_mode_static">Fijo: recortar con "…"</string>
+  <string name="sysmon_cpu_temp">Temperatura de la CPU</string>
+  <string name="sysmon_disk_all">Todos los discos</string>
+  <string name="sysmon_disk_label">Qué disco:</string>
+  <string name="sysmon_disk_pick_fmt">Disco: {0}</string>
+  <string name="sysmon_gpu_temp">Temperatura de la GPU</string>
+  <string name="sysmon_mode_temp">Temperatura</string>
+  <string name="sysmon_mode_usage">Uso</string>
+  <string name="sysmon_pick_sensor">Selección de sensor</string>
 </strings>

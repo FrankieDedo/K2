@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -69,7 +69,7 @@ public static class DiscordTileRenderer
     /// <summary>The server tile (key 1): the server's picture, and nothing else — no name under
     /// it and no initials standing in for a missing one (user request). Returns false when there
     /// is no picture to draw, which leaves the key blank rather than showing a placeholder.</summary>
-    public static bool TryRenderServer(string? iconPath, int size, string outputPngPath)
+    public static bool TryRenderServer(string? iconPath, int size, string outputPngPath, bool backBadge = true)
     {
         if (iconPath is null || !File.Exists(iconPath)) return false;
         try
@@ -78,7 +78,7 @@ public static class DiscordTileRenderer
             using (var g = NewGraphics(canvas, size))
             {
                 DrawAvatar(g, TileCircle(size), iconPath, "");
-                DrawBackBadge(g, size);
+                if (backBadge) DrawBackBadge(g, size);
             }
             return Save(canvas, outputPngPath);
         }
@@ -93,7 +93,8 @@ public static class DiscordTileRenderer
     /// the call is just the two of you. Like the server tile, it carries no text.
     /// </summary>
     /// <param name="avatarPaths">Members' avatars, already downloaded; nulls are skipped.</param>
-    public static bool TryRenderGroup(IReadOnlyList<string?> avatarPaths, int size, string outputPngPath)
+    public static bool TryRenderGroup(IReadOnlyList<string?> avatarPaths, int size, string outputPngPath,
+        bool backBadge = true)
     {
         var faces = avatarPaths.Where(p => p is not null && File.Exists(p)).Take(4).ToList();
         if (faces.Count == 0) return false;
@@ -135,7 +136,42 @@ public static class DiscordTileRenderer
                     DrawAvatar(g, cell, faces[i], "");
                 }
 
-                DrawBackBadge(g, size);
+                if (backBadge) DrawBackBadge(g, size);
+            }
+            return Save(canvas, outputPngPath);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Placeholder for the server/group tile (key 0) in the gap between a call starting and its
+    /// picture landing: the guild icon — or, for a DM/group call, every member avatar — downloads
+    /// asynchronously (<see cref="Services.DiscordAvatarCache"/>), and until one is on disk there
+    /// is nothing to build the tile from. Rather than leaving key 0 dark for that second or two,
+    /// it shows three dots on the same gray disc a missing avatar uses — a "loading" cue, the same
+    /// idea as the speed-test tiles' progress marker. Carries the back badge like the real tile it
+    /// stands in for, since key 0 is also the way out of the page.
+    /// </summary>
+    public static bool TryRenderWaiting(int size, string outputPngPath, bool backBadge = true)
+    {
+        try
+        {
+            using var canvas = new Bitmap(size, size);
+            using (var g = NewGraphics(canvas, size))
+            {
+                var circle = TileCircle(size);
+                using (var disc = new SolidBrush(Color.FromArgb(60, 63, 70)))
+                    g.FillEllipse(disc, circle);
+
+                float dot = size * 0.085f;
+                float gap = dot * 1.9f;
+                float cy = circle.Top + circle.Height / 2f - dot / 2f;
+                float cx = circle.Left + circle.Width / 2f - dot / 2f;
+                using var brush = new SolidBrush(Color.FromArgb(210, 214, 220));
+                for (int i = -1; i <= 1; i++)
+                    g.FillEllipse(brush, cx + i * gap, cy, dot, dot);
+
+                if (backBadge) DrawBackBadge(g, size);
             }
             return Save(canvas, outputPngPath);
         }
@@ -304,6 +340,25 @@ public static class DiscordTileRenderer
     /// circle. Height follows the PNG's own aspect ratio, and the artwork already carries its black
     /// outline so it needs no halo over a busy avatar.</para>
     /// </summary>
+    /// <summary>Stamps that same badge onto ANY square tile — the Spotify dedicated profile's
+    /// cover tile leaves its takeover the same way the voice page's server tile does, so it wears
+    /// the same mark (user request 2026-09-01). The artwork and its placement live here because
+    /// this is where they were authored; nothing about them is Discord-specific.</summary>
+    public static void StampBackBadge(Bitmap tile)
+    {
+        try
+        {
+            // NOT NewGraphics: that one clears the canvas first, which would wipe the picture
+            // this badge is meant to sit on top of.
+            using var g = Graphics.FromImage(tile);
+            g.SmoothingMode = SmoothingMode.HighQuality;
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            DrawBackBadge(g, tile.Width);
+        }
+        catch { /* badge is decoration — never fail the tile over it */ }
+    }
+
     private static void DrawBackBadge(Graphics g, int size)
     {
         var art = LoadIcon(BackBadgeIcon);

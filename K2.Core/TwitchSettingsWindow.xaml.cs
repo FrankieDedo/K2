@@ -14,6 +14,7 @@ public partial class TwitchSettingsWindow : Window
     public TwitchSettingsWindow()
     {
         InitializeComponent();
+        RtbTwitchGuide.Document = SetupGuide.BuildDocument(Loc.Get("twitch_setup_guide"), this);
         TxtTwitchClientId.Text = TwitchStore.ClientId;
         PwdTwitchClientSecret.Password = TwitchStore.ClientSecret;
         RefreshStatus();

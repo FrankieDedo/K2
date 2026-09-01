@@ -61,9 +61,10 @@ public partial class ButtonActionDialog
     private static readonly ComboOption[] TwitchOptions =
         ActionTypeHelper.TwitchCommands.Select(m => new ComboOption(m.Value, m.LocKey)).ToArray();
 
-    /// <summary>Built from <see cref="ActionTypeHelper.SpotifyCommands"/> — mirrors <see cref="MediaOptions"/>.</summary>
+    /// <summary>Built from <see cref="ActionTypeHelper.SpotifyCommandsPickable"/> (i.e. minus the
+    /// library/playlist commands Spotify blocks for Development-mode apps) — mirrors <see cref="MediaOptions"/>.</summary>
     private static readonly ComboOption[] SpotifyOptions =
-        ActionTypeHelper.SpotifyCommands.Select(m => new ComboOption(m.Value, m.LocKey)).ToArray();
+        ActionTypeHelper.SpotifyCommandsPickable.Select(m => new ComboOption(m.Value, m.LocKey)).ToArray();
 
     /// <summary>Built from <see cref="ActionTypeHelper.DiscordCommands"/> — mirrors <see cref="MediaOptions"/>.</summary>
     private static readonly ComboOption[] DiscordOptions =
@@ -188,6 +189,7 @@ public partial class ButtonActionDialog
         LblComboPanel.Text = Loc.Get(LabelKeyFor(tag));
         PopulateCombo(tag, null);
         UpdateComboArgVisibility();
+        if (tag == "spotify") _ = LoadSpotifyDevicesAsync(null);
     }
 
     private void LoadComboSpec(string tag, string currentValue)
@@ -196,12 +198,37 @@ public partial class ButtonActionDialog
         _comboPanelTag = tag;
         LblComboPanel.Text = Loc.Get(LabelKeyFor(tag));
 
-        if (tag is "obs" or "twitch" or "spotify" or "discord")
+        if (tag == "spotify")
+        {
+            var (cmd, arg, device) = SplitSpotifyValue(currentValue);
+            PopulateCombo(tag, cmd);
+            TxtComboArg.Text = arg;
+            UpdateComboArgVisibility(arg);
+            _ = LoadSpotifyDevicesAsync(device);
+        }
+        else if (tag is "obs" or "twitch" or "discord")
         {
             var (cmd, arg) = SplitComboValue(currentValue);
             PopulateCombo(tag, cmd);
             TxtComboArg.Text = arg;
             UpdateComboArgVisibility(arg);
+        }
+        else if (tag == "dp_sysmon")
+        {
+            if (ActionTypeHelper.ParseSensorValue(currentValue) is not null)
+            {
+                // A specific sensor: the "Sensor selection" card is selected and the wire kept.
+                _sysmonSensorWire = currentValue;
+                PopulateCombo(tag, currentValue);
+            }
+            else
+            {
+                // A preset, possibly with a refinement suffix ("cpu:temp", "disk:<id>|<name>").
+                int colon = currentValue.IndexOf(':');
+                PopulateCombo(tag, colon > 0 ? currentValue[..colon] : currentValue);
+                _pendingSysMonArg = colon > 0 ? currentValue[(colon + 1)..] : "";
+            }
+            RefreshSysMonPanel();
         }
         else
         {
@@ -215,8 +242,29 @@ public partial class ButtonActionDialog
         BtnObsSettings.Visibility = tag == "obs" ? Visibility.Visible : Visibility.Collapsed;
         BtnTwitchSettings.Visibility = tag == "twitch" ? Visibility.Visible : Visibility.Collapsed;
         BtnSpotifySettings.Visibility = tag == "spotify" ? Visibility.Visible : Visibility.Collapsed;
+        PnlSpotifyDevice.Visibility = tag == "spotify" ? Visibility.Visible : Visibility.Collapsed;
         BtnDiscordSettings.Visibility = tag == "discord" ? Visibility.Visible : Visibility.Collapsed;
         BtnAudioDeviceRefresh.Visibility = tag == "audiodevice" ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>"Choose sensor…" button in the "PC monitor" panel (shown while the "Sensor
+    /// selection" card is active) — same effect as clicking the card itself.</summary>
+    private void BtnSensorPicker_Click(object sender, RoutedEventArgs e) => OpenSensorPickerCard();
+
+    /// <summary>Opens the host's HWiNFO-style hardware-sensor picker (K2.App only), seeded from
+    /// the sensor currently chosen for this "PC monitor" key. On a pick, the wire string becomes
+    /// the <c>dp_sysmon</c> value and the "Sensor selection" card is (re)selected; on cancel,
+    /// nothing changes. Invoked from the sub-action card grid (see <c>SubActionCard_Click</c>)
+    /// and from <see cref="BtnSensorPicker_Click"/>.</summary>
+    private void OpenSensorPickerCard()
+    {
+        string? picked = _host?.PickSensorTileValue(_sysmonSensorWire);
+        if (string.IsNullOrEmpty(picked)) return;
+        _sysmonSensorWire = picked;
+        PopulateCombo("dp_sysmon", picked);
+        UpdateSubActionCrumb();
+        RefreshSysMonPanel();
+        RefreshLivePreview();
     }
 
     private static (string Command, string Arg) SplitComboValue(string value)
@@ -225,10 +273,21 @@ public partial class ButtonActionDialog
         return i < 0 ? (value, "") : (value[..i], value[(i + 1)..]);
     }
 
+    /// <summary>Spotify's wire value is <c>command[~arg][~deviceId]</c> — the extra 3rd field
+    /// (per-key target Spotify Connect device) that the generic <see cref="SplitComboValue"/>
+    /// can't express.</summary>
+    private static (string Command, string Arg, string Device) SplitSpotifyValue(string value)
+    {
+        var p = value.Split('~');
+        return (p.Length > 0 ? p[0] : "", p.Length > 1 ? p[1] : "", p.Length > 2 ? p[2] : "");
+    }
+
+
     private void CbComboValue_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         UpdateComboArgVisibility();
         UpdateSubActionCrumb();
+        if (_comboPanelTag == "dp_sysmon") { RefreshSysMonPanel(); RefreshLivePreview(); }
     }
 
     /// <summary>Shows the right argument control for the selected command — the live-list
@@ -308,6 +367,63 @@ public partial class ButtonActionDialog
     {
         var wnd = new SpotifySettingsWindow { Owner = this };
         wnd.ShowDialog();
+        // Credentials / connection may have changed while it was open — refresh the device list.
+        _ = LoadSpotifyDevicesAsync(SelectedSpotifyDeviceId());
+    }
+
+    private string SelectedSpotifyDeviceId()
+        => CbSpotifyDevice.SelectedItem is ComboBoxItem ci ? (string?)ci.Tag ?? "" : "";
+
+    private void BtnSpotifyDeviceRefresh_Click(object sender, RoutedEventArgs e)
+        => _ = LoadSpotifyDevicesAsync(SelectedSpotifyDeviceId());
+
+    /// <summary>Bumped on every <see cref="LoadSpotifyDevicesAsync"/> call so a slower earlier
+    /// load can't repopulate the combo after a newer one already did — two concurrent loads
+    /// (e.g. EnsureComboPanel + LoadComboSpec on dialog open, or a Refresh click mid-fetch) each
+    /// Clear()ed then appended their own results, doubling every device row.</summary>
+    private int _spotifyDeviceLoadToken;
+
+    /// <summary>Fills the per-key Spotify device picker from <c>GET /me/player/devices</c>.
+    /// Item 0 is "Automatic (active device)" (empty id — the historical behaviour); the rest
+    /// are the account's Spotify Connect devices. A <paramref name="preselectId"/> that is no
+    /// longer online is kept as a greyed extra row so the key's setting isn't silently lost.</summary>
+    private async System.Threading.Tasks.Task LoadSpotifyDevicesAsync(string? preselectId)
+    {
+        int token = ++_spotifyDeviceLoadToken;
+
+        System.Collections.Generic.List<(string Id, string Name, string Type, bool IsActive)> devices;
+        try { devices = await SpotifyBridge.GetDevicesAsync(); }
+        catch { return; }
+
+        // A newer load started while this one was fetching — let it own the combo.
+        if (token != _spotifyDeviceLoadToken) return;
+
+        // Rebuild atomically (all synchronous, after the await) so interleaved calls can never
+        // append onto each other's list.
+        CbSpotifyDevice.Items.Clear();
+        CbSpotifyDevice.Items.Add(new ComboBoxItem { Content = Loc.Get("spotify_device_auto"), Tag = "" });
+
+        int selectIndex = 0;
+        foreach (var (id, name, type, isActive) in devices)
+        {
+            if (string.IsNullOrEmpty(id)) continue;
+            string label = name;
+            if (!string.IsNullOrEmpty(type)) label += $"  ·  {type}";
+            if (isActive) label += $"  ({Loc.Get("spotify_device_active")})";
+            CbSpotifyDevice.Items.Add(new ComboBoxItem { Content = label, Tag = id });
+            if (id == preselectId) selectIndex = CbSpotifyDevice.Items.Count - 1;
+        }
+
+        if (!string.IsNullOrEmpty(preselectId) && selectIndex == 0)
+        {
+            CbSpotifyDevice.Items.Add(new ComboBoxItem
+            {
+                Content = $"{preselectId}  ({Loc.Get("spotify_device_offline")})",
+                Tag = preselectId,
+            });
+            selectIndex = CbSpotifyDevice.Items.Count - 1;
+        }
+        CbSpotifyDevice.SelectedIndex = selectIndex;
     }
 
     private void BtnDiscordSettings_Click(object sender, RoutedEventArgs e)
@@ -365,6 +481,37 @@ public partial class ButtonActionDialog
         {
             foreach (var opt in OptionsFor(tag))
                 CbComboValue.Items.Add(new ComboBoxItem { Content = Loc.Get(opt.LocKey), Tag = opt.Value });
+
+            // A key already bound to a Spotify command K2 no longer OFFERS (library / playlist —
+            // blocked by Spotify for Development-mode apps) keeps its binding: re-add just that
+            // one entry, flagged, so opening + saving the dialog doesn't silently rewrite it to
+            // whatever sits at index 0. Same idea as the "offline device" row.
+            if (tag == "spotify" && !string.IsNullOrEmpty(selectValue)
+                && ActionTypeHelper.SpotifyCommandsUnavailable.Contains(selectValue!))
+            {
+                var legacy = System.Array.Find(ActionTypeHelper.SpotifyCommands, c => c.Value == selectValue);
+                string label = string.IsNullOrEmpty(legacy.LocKey) ? selectValue! : Loc.Get(legacy.LocKey);
+                CbComboValue.Items.Add(new ComboBoxItem
+                {
+                    Content = $"{label}  ({Loc.Get("spotify_cmd_unavailable")})",
+                    Tag = selectValue,
+                });
+            }
+
+            // "PC monitor": a 7th sub-action card next to CPU/RAM/GPU/… — "Sensor selection".
+            // Clicking it opens the HWiNFO-style picker (see SubActionCard_Click); the picked
+            // sensor's wire string is kept in _sysmonSensorWire, and this card's Tag stays the
+            // sentinel so it can always re-open the picker.
+            if (tag == "dp_sysmon" && _host?.SupportsSensorPicker == true)
+            {
+                if (!string.IsNullOrEmpty(selectValue) && ActionTypeHelper.ParseSensorValue(selectValue) is not null)
+                    _sysmonSensorWire = selectValue;
+                CbComboValue.Items.Add(new ComboBoxItem
+                {
+                    Content = SensorPickCardLabel(),
+                    Tag = SensorPickTag,
+                });
+            }
         }
 
         // An unresolved imported macro reference ("***Name", see ActionTypeHelper.
@@ -376,6 +523,11 @@ public partial class ButtonActionDialog
 
         var match = CbComboValue.Items.OfType<ComboBoxItem>()
             .FirstOrDefault(i => string.Equals((string?)i.Tag, selectValue, System.StringComparison.OrdinalIgnoreCase));
+
+        // A "PC monitor" value that's a full sensor wire selects the "Sensor selection" card.
+        if (match is null && tag == "dp_sysmon" && ActionTypeHelper.ParseSensorValue(selectValue) is not null)
+            match = CbComboValue.Items.OfType<ComboBoxItem>()
+                .FirstOrDefault(i => (string?)i.Tag == SensorPickTag);
 
         // Id-based match failed — for "audiodevice" specifically, that's the expected
         // shape of "device was unplugged and reconnected" (Windows can hand it a new
@@ -419,12 +571,22 @@ public partial class ButtonActionDialog
     private string SaveComboSpec()
     {
         string cmd = CbComboValue.SelectedItem is ComboBoxItem ci ? (string?)ci.Tag ?? "" : "";
+
+        string arg = "";
         if (_comboPanelTag is not null && CommandNeedsArg(_comboPanelTag, cmd))
         {
             bool listArg = _comboPanelTag == "obs" && ObsListArgCommands.Contains(cmd);
-            var arg = (listArg ? CbComboArgList.Text : TxtComboArg.Text)?.Trim() ?? "";
-            return arg.Length > 0 ? $"{cmd}~{arg}" : cmd;
+            arg = (listArg ? CbComboArgList.Text : TxtComboArg.Text)?.Trim() ?? "";
         }
-        return cmd;
+
+        // Spotify carries a 3rd field: the per-key target Spotify Connect device
+        // (command[~arg][~deviceId]; a device with no arg is "command~~deviceId").
+        if (_comboPanelTag == "spotify")
+        {
+            string device = SelectedSpotifyDeviceId();
+            if (device.Length > 0) return $"{cmd}~{arg}~{device}";
+        }
+
+        return arg.Length > 0 ? $"{cmd}~{arg}" : cmd;
     }
 }

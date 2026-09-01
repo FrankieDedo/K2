@@ -10,6 +10,9 @@
         ResizeMode="CanResize"
         Style="{DynamicResource K2WindowStyle}">
     <Window.Resources>
+        <!-- "Guide" button style (GuideBarButton) now lives in K2.Core Themes/K2Theme.xaml
+             so DiscordProfileConfigWindow and other dialogs can reuse it. -->
+
         <!-- Recent-paths list rows (exec/folder panels): dark background matching the rest
              of the dialog — the stock ListBox/ListBoxItem chrome otherwise forces a
              white/system background regardless of Background set on the instance (same fix
@@ -467,12 +470,63 @@
                 <Button    x:Name="BtnAudioDeviceRefresh" Grid.Row="3" Margin="0,8,0,0"
                            Content="{loc:Get audiodevice_refresh_button}" HorizontalAlignment="Left"
                            Visibility="Collapsed" Click="BtnAudioDeviceRefresh_Click"/>
+
+                <!-- "spotify" only: which Spotify Connect device the playback commands target
+                     (?device_id=). Empty = active device. Populated from GET /me/player/devices.
+                     Saved as the 3rd '~' field of the action value. -->
+                <StackPanel x:Name="PnlSpotifyDevice" Grid.Row="4" Margin="0,8,0,0"
+                            VerticalAlignment="Top" Visibility="Collapsed">
+                    <TextBlock Text="{loc:Get spotify_device_label}" Margin="0,0,0,4"/>
+                    <DockPanel LastChildFill="True">
+                        <Button x:Name="BtnSpotifyDeviceRefresh" DockPanel.Dock="Right"
+                                Content="{loc:Get refresh}" Padding="8,2" Margin="6,0,0,0"
+                                Click="BtnSpotifyDeviceRefresh_Click"/>
+                        <ComboBox x:Name="CbSpotifyDevice" Height="25" VerticalContentAlignment="Center"/>
+                    </DockPanel>
+                </StackPanel>
+            </Grid>
+
+            <!-- "PC monitor" (dp_sysmon): CPU/GPU usage-vs-temperature; for Disk, which physical
+                 disk; for "Sensor selection", a button to re-pick the sensor (the sub-action
+                 card also opens the picker on click — both entry points are kept). -->
+            <Grid x:Name="SysMonPanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <StackPanel x:Name="PnlSysMonMode" Grid.Row="0" Orientation="Horizontal"
+                            Visibility="Collapsed">
+                    <RadioButton x:Name="RbSysUsage" GroupName="sysmonmode" Margin="0,0,14,0"
+                                 Content="{loc:Get sysmon_mode_usage}" IsChecked="True"
+                                 Checked="SysMonMode_Checked"/>
+                    <RadioButton x:Name="RbSysTemp" GroupName="sysmonmode"
+                                 Content="{loc:Get sysmon_mode_temp}" Checked="SysMonMode_Checked"/>
+                </StackPanel>
+                <StackPanel x:Name="PnlSysMonDisk" Grid.Row="1" Margin="0,4,0,0"
+                            Visibility="Collapsed">
+                    <TextBlock Text="{loc:Get sysmon_disk_label}" Margin="0,0,0,3"
+                               Foreground="{DynamicResource K2TextBrush}"/>
+                    <ComboBox x:Name="CbSysMonDisk" DisplayMemberPath="Name"
+                              SelectionChanged="CbSysMonDisk_SelectionChanged"/>
+                </StackPanel>
+                <StackPanel x:Name="PnlSysMonSensor" Grid.Row="2" Orientation="Horizontal"
+                            Margin="0,4,0,0" Visibility="Collapsed">
+                    <Button x:Name="BtnSensorPicker" Content="{loc:Get sensor_pick_button}"
+                            HorizontalAlignment="Left" Click="BtnSensorPicker_Click"/>
+                    <TextBlock x:Name="LblSensorName" VerticalAlignment="Center" Margin="10,0,0,0"
+                               Foreground="{DynamicResource K2TextBrush}"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                <TextBlock x:Name="LblSysMonPreview" Grid.Row="3" Margin="0,10,0,0"
+                           VerticalAlignment="Top" FontSize="13"
+                           Foreground="{DynamicResource K2TextMutedBrush}"/>
             </Grid>
 
             <!-- Keys panel -->
             <Grid x:Name="KeysPanel" Visibility="Collapsed">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -490,10 +544,6 @@
 
                 <TextBlock Grid.Row="2" Text="{loc:Get keys_key_label}" Margin="0,0,0,4"/>
                 <ComboBox  x:Name="CbKeyValue" Grid.Row="3" IsEditable="True"/>
-
-                <TextBlock Grid.Row="4" Margin="0,8,0,0"
-                           TextWrapping="Wrap" Foreground="#9A9AA2"
-                           Text="{loc:Get keys_win_hint}"/>
             </Grid>
 
             <!-- Hotkey Switch panel: two shortcuts, alternated on successive presses -->
@@ -700,6 +750,9 @@
         </Grid>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button x:Name="BtnGuide" Style="{DynamicResource GuideBarButton}"
+                    Content="{loc:Get guide_button}" ToolTip="{loc:Get guide_tooltip}"
+                    VerticalAlignment="Center" Margin="0,0,16,0" Click="BtnGuide_Click"/>
             <Button Content="{loc:Get cancel}" Width="90" Padding="6,2"  Click="BtnCancel_Click"/>
             <Button Content="{loc:Get save}"   Width="90" Padding="6,2" Margin="8,0,0,0"
                     IsDefault="True"  Click="BtnSave_Click"/>

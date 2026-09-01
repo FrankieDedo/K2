@@ -172,10 +172,15 @@ public partial class ButtonActionDialog
         IcPickerSubActions.Visibility = Visibility.Collapsed;
     }
 
+    /// <summary>Category whose action grid is currently shown — used by the Guide
+    /// button to open the right "picker:cat:*" page while at level 2.</summary>
+    private string _pickerCategoryKey = "system";
+
     private void ShowActionPicker(string categoryKey)
     {
         var category = PickerCategories.FirstOrDefault(c => c.Key == categoryKey);
         if (category.Tags is null) return;
+        _pickerCategoryKey = categoryKey;
 
         var availableTags = CbType.Items.OfType<ComboBoxItem>().Select(i => (string?)i.Tag).ToHashSet();
         IcPickerActions.ItemsSource = category.Tags
@@ -239,6 +244,17 @@ public partial class ButtonActionDialog
     private void SubActionCard_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string value }) return;
+
+        // "PC monitor" > "Sensor selection": open the hardware-sensor picker instead of just
+        // selecting a card. It re-selects the card itself on a successful pick, or leaves the
+        // current selection untouched on cancel.
+        if (value == SensorPickTag)
+        {
+            CloseOverlay();
+            OpenSensorPickerCard();
+            return;
+        }
+
         var match = CbComboValue.Items.OfType<ComboBoxItem>()
             .FirstOrDefault(i => string.Equals((string?)i.Tag, value, System.StringComparison.Ordinal));
         if (match is not null) CbComboValue.SelectedItem = match;
@@ -254,6 +270,57 @@ public partial class ButtonActionDialog
     }
 
     private void BtnPickerClose_Click(object sender, RoutedEventArgs e) => CloseOverlay();
+
+    /// <summary>"Guide" button (bottom bar, always visible): opens GuideWindow at
+    /// the page matching the current picker level — categories overview (L1), one
+    /// category's actions (L2), or one action's sub-actions (L3). When the picker
+    /// is closed (an action is being configured) it explains that action, plus
+    /// its sub-action options for the "combo" types.</summary>
+    private void BtnGuide_Click(object sender, RoutedEventArgs e)
+    {
+        string[] keys;
+        string heading;
+
+        if (PickerPanel.Visibility == Visibility.Visible &&
+            IcPickerCategories.Visibility == Visibility.Visible)
+        {
+            keys = new[] { "picker:categories" };
+            heading = Loc.Get("picker_pick_category");
+        }
+        else if (PickerPanel.Visibility == Visibility.Visible &&
+                 IcPickerActions.Visibility == Visibility.Visible)
+        {
+            keys = new[] { "picker:cat:" + _pickerCategoryKey };
+            heading = Loc.Get("cat_" + _pickerCategoryKey);
+        }
+        else
+        {
+            string tag = CurrentTag();
+            if (tag == "none")
+            {
+                keys = new[] { "picker:categories" };
+                heading = Loc.Get("picker_pick_category");
+            }
+            else if (PickerPanel.Visibility == Visibility.Visible &&
+                     IcPickerSubActions.Visibility == Visibility.Visible)
+            {
+                // Level 3: the sub-action grid (combo types only).
+                keys = new[] { "picker:sub:" + tag };
+                heading = Loc.Get(LocKeyForTag(tag));
+            }
+            else
+            {
+                // Config panel for a chosen action — for combo types add the
+                // sub-action reference after the action overview.
+                keys = ComboTags.Contains(tag)
+                    ? new[] { "picker:act:" + tag, "picker:sub:" + tag }
+                    : new[] { "picker:act:" + tag };
+                heading = Loc.Get(LocKeyForTag(tag));
+            }
+        }
+
+        new GuideWindow(keys, heading) { Owner = this }.ShowDialog();
+    }
 
     /// <summary>Refreshes the breadcrumb's category + action crumbs (and the sub-action
     /// crumb's visibility) — called whenever CbType's selection changes, including

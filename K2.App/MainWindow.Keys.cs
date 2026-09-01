@@ -126,8 +126,8 @@ public partial class MainWindow
         RebuildKeyGrid();
 
         LvMpKeys.ItemsSource = _mpMappedKeys;
-        LstMpProfile.ContextMenu = MpBuildProfileContextMenu();
-        BtnMpProfileMenu.ContextMenu = MpBuildProfileMenuNoEdit();
+        LstMpProfile.ContextMenu = WithProfileGuide(MpBuildProfileContextMenu(), "macropad");
+        BtnMpProfileMenu.ContextMenu = WithProfileGuide(MpBuildProfileMenuNoEdit(), "macropad");
 
         // LstMpProfile is populated by MpRefreshProfiles on device change
 
@@ -155,6 +155,8 @@ public partial class MainWindow
     private ContextMenu MpBuildProfileContextMenu()
     {
         var menu = new ContextMenu();
+        var miConfigure = new MenuItem { Header = Loc.Get("configure_profile") };
+        miConfigure.Click += (_, _) => { if (LstMpProfile.SelectedItem is MpProfileItem pi) MpShowProfileGear(pi); };
         var miRename = new MenuItem { Header = Loc.Get("rename_profile") };
         miRename.Click += BtnMpRenameProfile_Click;
         var miImportXml = new MenuItem { Header = Loc.Get("dp_import_xml") };
@@ -165,6 +167,8 @@ public partial class MainWindow
         miExport.Click += BtnMpExportProfiles_Click;
         var miDelete = new MenuItem { Header = Loc.Get("delete_profile") };
         miDelete.Click += BtnMpDeleteProfile_Click;
+        menu.Items.Add(miConfigure);
+        menu.Items.Add(new Separator());
         menu.Items.Add(miRename);
         menu.Items.Add(new Separator());
         menu.Items.Add(miImportXml);
@@ -252,8 +256,11 @@ public partial class MainWindow
     {
         if (CurrentDeviceId() is not int id) return;
         string currentName = _store.GetProfileName(id, pi.Slot) ?? Loc.Get("profile_n", pi.Slot);
-        string currentExe = _store.GetSetting($"profile.{id}.{pi.Slot}.launchExe") ?? "";
-        var dlg = new ProfileSettingsDialog(currentName, currentExe) { Owner = this };
+        string keyBase = $"profile.{id}.{pi.Slot}";
+        string currentExe = _store.GetSetting($"{keyBase}.launchExe") ?? "";
+        bool focusOnly = _store.GetSetting($"{keyBase}.launchFocusOnly") == "1";
+        bool restoreOnClose = _store.GetSetting($"{keyBase}.launchRestoreOnClose") == "1";
+        var dlg = new ProfileSettingsDialog(currentName, currentExe, focusOnly, restoreOnClose) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
         if (dlg.DeleteRequested)
@@ -277,7 +284,9 @@ public partial class MainWindow
         else
         {
             _store.SetProfileName(id, pi.Slot, dlg.ProfileName);
-            _store.SetSetting($"profile.{id}.{pi.Slot}.launchExe", dlg.ExePath);
+            _store.SetSetting($"{keyBase}.launchExe", dlg.ExePath);
+            _store.SetSetting($"{keyBase}.launchFocusOnly", dlg.FocusOnly ? "1" : "0");
+            _store.SetSetting($"{keyBase}.launchRestoreOnClose", dlg.RestoreOnClose ? "1" : "0");
             Log($"[UI ] MacroPad profile {pi.Slot} settings updated (gear).");
         }
         MpRefreshProfiles(id);
@@ -692,6 +701,7 @@ public partial class MainWindow
         _store.SetCurrentProfile(id, profile);
         Log($"[UI] MacroPad profile in edit: {profile}");
         ReloadCurrentProfile();
+        DeviceSyncOnProfileSwitched(SyncDeviceKind.MacroPad, profile);
     }
 
     /// <summary>Populates the MacroPad profile combo with existing profiles + "New profile…".</summary>
@@ -743,13 +753,18 @@ public partial class MainWindow
         var currentKeys = new HashSet<string>();
         foreach (var slot in existing)
         {
-            string? exe = _store.GetSetting($"profile.{deviceId}.{slot}.launchExe");
+            string kb = $"profile.{deviceId}.{slot}";
+            string? exe = _store.GetSetting($"{kb}.launchExe");
             if (string.IsNullOrWhiteSpace(exe)) continue;
             string key = scope + slot;
             currentKeys.Add(key);
             int capturedSlot = slot;
-            ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe,
-                () => MpSwitchProfile(deviceId, capturedSlot.ToString()));
+            bool focusOnly = _store.GetSetting($"{kb}.launchFocusOnly") == "1";
+            bool restoreOnClose = _store.GetSetting($"{kb}.launchRestoreOnClose") == "1";
+            ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe, focusOnly, restoreOnClose,
+                capturedSlot.ToString(),
+                () => _store.GetCurrentProfile(deviceId).ToString(),
+                t => MpSwitchProfile(deviceId, t));
         }
         foreach (var staleKey in ProfileLaunchWatcher.Instance.KeysWithPrefix(scope).Except(currentKeys))
             ProfileLaunchWatcher.Instance.RemoveRegistration(staleKey);
@@ -856,19 +871,25 @@ public partial class MainWindow
         {
             _keys[hi].IsHighlighted = e.Pressed;
             if (e.Pressed)
-                TryExecuteAction(_keys[hi]);
+                TryExecuteAction(_keys[hi], momentary: true);
             else
+            {
+                _engine?.Release(_keys[hi].Index);
                 // Picks up whatever keycap-appearance write may have landed (and been
                 // skipped) while this key's IsHighlighted trigger was active — see
                 // ApplyMacroKeycapAppearanceToAllKeys's doc comment for the "stuck gray
                 // after a tap" bug this closes.
                 ApplyMacroKeycapAppearanceToKey(hi);
+            }
         }
     }
 
-    /// <summary>Executes the key's action by delegating to the shared engine (K2.Core).</summary>
-    private void TryExecuteAction(MacroPadKey key)
-        => _engine?.Execute(key.ActionType, key.ActionValue, key.Index);
+    /// <summary>Executes the key's action by delegating to the shared engine (K2.Core).
+    /// <paramref name="momentary"/> is set only from the physical down edge (which has a matching
+    /// up edge calling <see cref="ButtonActionEngine.Release"/>), so a "keys" mapping is held for
+    /// as long as the physical key is; RPC / programmatic presses stay one-shot.</summary>
+    private void TryExecuteAction(MacroPadKey key, bool momentary = false)
+        => _engine?.Execute(key.ActionType, key.ActionValue, key.Index, momentary);
 
     // ============================================================
     // Import XML (Base Camp-compatible or K2-only, same schema)

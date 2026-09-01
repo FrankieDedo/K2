@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -19,7 +19,8 @@ namespace K2.App;
 /// takes the pad over on its own trigger and hands it back to the normal profile afterwards,
 /// the way a screensaver does. Two exist today:
 /// <list type="bullet">
-/// <item><b>Spotify</b> — a reserved slot whose left 2×2 block is painted live by
+/// <item><b>Spotify</b> — a reserved slot whose 2×2 cover block (left by default, configurable
+/// to center/right) is painted live by
 /// <c>SpotifyCoverService</c>;</item>
 /// <item><b>Discord</b> — the live voice page, which takes the panel over while the user is in a
 /// voice call (see <c>MainWindow.DisplayPad.DiscordRoom.cs</c>). Its slot holds no keys at all:
@@ -216,9 +217,10 @@ public partial class MainWindow
         if (DpSelectedDeviceId() is not int id) return;
 
         var menu = new ContextMenu { PlacementTarget = target, Placement = PlacementMode.Bottom };
-        var configure = new MenuItem { Header = Loc.Get("dedicated_configure") };
+        var configure = new MenuItem { Header = Loc.Get("configure_profile") };
         configure.Click += (_, _) => DpShowDedicatedConfig(item.Id);
         menu.Items.Add(configure);
+        menu.Items.Add(new Separator());
 
         var delete = new MenuItem { Header = Loc.Get("delete_profile") };
         delete.Click += (_, _) => DpDeleteDedicated(id, item);
@@ -229,8 +231,8 @@ public partial class MainWindow
 
     /// <summary>The dedicated profile's own configuration. Discord opens a small popup with the
     /// voice-page knobs (webcam shortcut, screensaver-style return timer) and a button through to
-    /// the account window; Spotify has nothing to configure — it reads whatever the desktop player
-    /// is doing.</summary>
+    /// the account window; Spotify opens its own popup (data source, cover layout, text mode —
+    /// see <see cref="SpotifyProfileConfigWindow"/>).</summary>
     private void DpShowDedicatedConfig(string id)
     {
         switch (id)
@@ -238,11 +240,48 @@ public partial class MainWindow
             case "Discord":
                 new DiscordProfileConfigWindow { Owner = this }.ShowDialog();
                 break;
+            case "Spotify":
+                DpShowSpotifyProfileConfig();
+                break;
             default:
                 MessageBox.Show(Loc.Get("dedicated_no_config"), Loc.Get("dedicated_configure"),
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 break;
         }
+    }
+
+    /// <summary>Opens the Spotify dedicated profile's configuration for the selected pad and,
+    /// on save, persists it and re-arms the cover overlay + repaints so the change shows at
+    /// once.</summary>
+    private void DpShowSpotifyProfileConfig()
+    {
+        if (DpSelectedDeviceId() is not int id) return;
+
+        var oldCfg = DpReadSpotifyCoverConfig(id);
+        var dlg = new SpotifyProfileConfigWindow(oldCfg) { Owner = this };
+        dlg.ShowDialog();
+        if (!dlg.Saved) return;
+
+        DpWriteSpotifyCoverConfig(id, dlg.Result);
+        DpLog($"[UI] Spotify profile config saved (device {id}): {dlg.Result.SourceToken}/{dlg.Result.LayoutToken}/{dlg.Result.TextModeToken}/{dlg.Result.PositionToken}");
+
+        // Reseed the 8 control keys whenever Source, Position or the target Device changed —
+        // user request 2026-09-01 ("quando seleziono web api o local account, aggiorna le azioni
+        // dei pulsanti", extended to Position/Device since both also change what gets written
+        // into the same physical keys — see DpReseedSpotifyControlButtons, whose `repositioned`
+        // flag additionally blanks the new block keys' stale action/image on a Position change).
+        bool sourceChanged = dlg.Result.Source != oldCfg.Source;
+        bool positionChanged = dlg.Result.Position != oldCfg.Position;
+        bool deviceChanged = dlg.Result.Device != oldCfg.Device;
+        int slot = DpSpotifySlot(id);
+        if ((sourceChanged || positionChanged || deviceChanged) && slot != 0)
+            DpReseedSpotifyControlButtons(id, slot, dlg.Result.Source, dlg.Result.Position, positionChanged, dlg.Result.Device);
+
+        DpSyncSpotifyCoverService(id);
+        // Picks up (or drops) the focus-only watcher registration for the new flag, and re-reads
+        // the block/control keys just reseeded above.
+        DpRefreshProfiles(id);
+        DpRequestRepaint(id);
     }
 
     private void DpDeleteDedicated(int deviceId, DpDedicatedItem item)

@@ -554,22 +554,24 @@ public partial class MainWindow
         return Path.Combine(cacheRoot, Convert.ToHexString(hash).ToLowerInvariant() + $"_{kind}_paste.png");
     }
 
-    /// <summary>Copies this display key's action to the app-wide clipboard (see
-    /// <see cref="K2.Core.Services.ActionClipboard"/>) — the picture is never copied, only the
-    /// action; a target key with no picture of its own gets a fresh default icon at paste
-    /// time instead (see <see cref="NdkMnuPasteAction_Click"/>).</summary>
+    /// <summary>Copies this display key's action — plus its picture (see
+    /// <see cref="K2.Core.Services.ActionClipboard"/>) — to the app-wide clipboard; a target
+    /// key with no picture of its own adopts a copy of it at paste time, or falls back to a
+    /// fresh default icon (see <see cref="NdkMnuPasteAction_Click"/>).</summary>
     private void NdkMnuCopyAction_Click(object sender, RoutedEventArgs e)
     {
         int index = NdkIndexFromMenu(sender);
         if (index < 0) return;
-        K2.Core.Services.ActionClipboard.Copy(_ndkActions[index].Type, _ndkActions[index].Value);
+        K2.Core.Services.ActionClipboard.Copy(_ndkActions[index].Type, _ndkActions[index].Value,
+            _ndkImagePaths[index], _ndkIconSpecs[index]);
     }
 
     private void NdkMnuCutAction_Click(object sender, RoutedEventArgs e)
     {
         int index = NdkIndexFromMenu(sender);
         if (index < 0) return;
-        K2.Core.Services.ActionClipboard.Copy(_ndkActions[index].Type, _ndkActions[index].Value);
+        K2.Core.Services.ActionClipboard.Copy(_ndkActions[index].Type, _ndkActions[index].Value,
+            _ndkImagePaths[index], _ndkIconSpecs[index]);
         ClearNdkKey(index);
     }
 
@@ -603,8 +605,28 @@ public partial class MainWindow
         bool hasImage = !string.IsNullOrEmpty(_ndkImagePaths[index]) && File.Exists(_ndkImagePaths[index]);
         if (!hasImage)
         {
-            string dest = NdkAutoIconCachePath(K2.Core.Services.ActionClipboard.ActionType!, K2.Core.Services.ActionClipboard.ActionValue ?? "");
-            if (K2.Core.Services.ActionIconFallback.TryGenerate(
+            // Prefer a private copy of the source key's own picture (custom image, or a
+            // default icon ActionIconFallback can't regenerate — e.g. dp_emojibrowser);
+            // fall back to generating the action's default icon. New filename per paste,
+            // original extension preserved.
+            string? adopted = null;
+            if (K2.Core.Services.ActionClipboard.HasImage)
+            {
+                try
+                {
+                    string cacheRoot = Path.Combine(K2Paths.For("K2.App"), "auto_icons");
+                    Directory.CreateDirectory(cacheRoot);
+                    string ext = Path.GetExtension(K2.Core.Services.ActionClipboard.ImagePath!);
+                    if (string.IsNullOrEmpty(ext)) ext = ".png";
+                    adopted = Path.Combine(cacheRoot, $"ndk_paste_{Guid.NewGuid():N}{ext}");
+                    File.Copy(K2.Core.Services.ActionClipboard.ImagePath!, adopted);
+                    _ndkIconSpecs[index] = K2.Core.Services.ActionClipboard.IconSpecJson;
+                }
+                catch (Exception ex) { LogEverest($"[NDK] paste picture copy failed: {ex.Message}"); adopted = null; }
+            }
+
+            string dest = adopted ?? NdkAutoIconCachePath(K2.Core.Services.ActionClipboard.ActionType!, K2.Core.Services.ActionClipboard.ActionValue ?? "");
+            if (adopted is not null || K2.Core.Services.ActionIconFallback.TryGenerate(
                     K2.Core.Services.ActionClipboard.ActionType, K2.Core.Services.ActionClipboard.ActionValue, NdkIconSize, dest))
             {
                 if (_everest.IsOpen)
@@ -612,9 +634,9 @@ public partial class MainWindow
                 else
                 {
                     // Offline: no upload possible (NdkApplyImage bails without one), but still
-                    // adopt the generated picture locally so the thumbnail/state aren't left
-                    // out of sync with the action — a reconnect resyncs it like any other
-                    // pending change (see EvUploadNdkImages).
+                    // adopt the picture locally so the thumbnail/state aren't left out of sync
+                    // with the action — a reconnect resyncs it like any other pending change
+                    // (see EvUploadNdkImages).
                     _ndkImagePaths[index] = dest;
                     NdkSetThumbnail(index, dest);
                 }

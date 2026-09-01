@@ -479,6 +479,50 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
         return result;
     }
 
+    /// <summary>Every DisplayPad sub-page on this device, across ALL profiles (each row
+    /// carries the profile that owns it, needed to delete it from the right slot) — used by
+    /// the "Pages" sidebar section, which lists them all rather than just the current
+    /// profile's. Same name fallback as <see cref="ListPages"/>.</summary>
+    public List<(int PageId, string Name, int Profile)> ListAllPages(int deviceId)
+    {
+        var raw = new List<(int Profile, int PageId)>();
+        using (var cmd = _conn.CreateCommand())
+        {
+            cmd.CommandText = @"SELECT DISTINCT Profile, ActionValue FROM Buttons
+                                WHERE DeviceId=$d AND ActionType='dp_folder'";
+            cmd.Parameters.AddWithValue("$d", deviceId);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+                if (!r.IsDBNull(1) && int.TryParse(r.GetString(1), out int pageId))
+                    raw.Add((r.GetInt32(0), pageId));
+        }
+
+        var result = new List<(int, string, int)>();
+        foreach (var (profile, pageId) in raw)
+            result.Add((pageId, GetFolderName(pageId) ?? $"Page {pageId}", profile));
+        result.Sort((a, b) => string.Compare(a.Item2, b.Item2, StringComparison.CurrentCultureIgnoreCase));
+        return result;
+    }
+
+    /// <summary>Every parent→child page link on this device: one row per "dp_folder" button —
+    /// the page the button lives on is <c>ParentPageId</c> (0 = that profile's root), the page
+    /// it opens is <c>ChildPageId</c>. Lets the "Pages" tree mirror the real folder nesting
+    /// instead of showing every page flat. Not de-duplicated: a page reachable from two
+    /// parents legitimately appears under both.</summary>
+    public List<(int Profile, int ParentPageId, int ChildPageId)> ListPageLinks(int deviceId)
+    {
+        var links = new List<(int, int, int)>();
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = @"SELECT Profile, PageId, ActionValue FROM Buttons
+                            WHERE DeviceId=$d AND ActionType='dp_folder'";
+        cmd.Parameters.AddWithValue("$d", deviceId);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            if (!r.IsDBNull(2) && int.TryParse(r.GetString(2), out int child))
+                links.Add((r.GetInt32(0), r.IsDBNull(1) ? 0 : r.GetInt32(1), child));
+        return links;
+    }
+
     // ---------- fullscreen image (whole 2×6 panel, per device+profile+page) ----------
 
     /// <summary>Fullscreen image assigned to a page, if any. Null if none or the file no

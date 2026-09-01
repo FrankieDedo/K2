@@ -844,6 +844,25 @@ internal static class EverestSdkNative
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SetGameMode(int mode);
 
+    /// <summary>Reads back the current Game Mode key-lock bitmask (see <see cref="SetGameMode"/>).</summary>
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool GetGameMode(ref int mode);
+
+    /// <summary>
+    /// Master on/off for Game Mode, separate from the <see cref="SetGameMode"/> bitmask.
+    /// Base Camp's UI never calls this (only its service exposes it), but on real hardware
+    /// the bitmask alone had no effect — the firmware appears to gate it behind this flag.
+    /// </summary>
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool SetGameModeStatus([MarshalAs(UnmanagedType.I1)] bool enable);
+
+    /// <summary>Reads the Game Mode master on/off flag (see <see cref="SetGameModeStatus"/>).</summary>
+    [DllImport(Dll, CallingConvention = Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool GetGameModeStatus(ref bool enable);
+
     /// <summary>Enables/disables the keyboard's Core indicator LEDs.</summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]

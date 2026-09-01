@@ -340,6 +340,40 @@ internal sealed class Everest60SdkService : IDisposable
         catch { return false; }
     }
 
+    /// <summary>Engages/disengages Game Mode (the master — equivalent to Fn+Win on the
+    /// keyboard). Vendor-DLL path: no raw-HID opcode for this was found in captures.
+    /// The BITMASK (which keys) goes through <see cref="Everest60Protocol.SetGameMode"/>
+    /// over raw HID instead.</summary>
+    public bool SetGameModeStatus(bool enable)
+    {
+        try
+        {
+            bool ok = Everest60SdkNative.SetGameModeStatus(enable);
+            App.WriteLog($"[Ev60SDK.SetGameModeStatus] enable={enable} -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Ev60SDK.SetGameModeStatus] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>Reads the Game Mode master state (reflects Fn+Win toggles). Null on failure.</summary>
+    public bool? GetGameModeStatus()
+    {
+        try
+        {
+            bool enabled = false;
+            return Everest60SdkNative.GetGameModeStatus(ref enabled) ? enabled : (bool?)null;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Ev60SDK.GetGameModeStatus] threw: " + ex);
+            return null;
+        }
+    }
+
     private void OnKeyCallback(ushort wMatrix, bool bPressed, uint id)
     {
         try { KeyEvent?.Invoke(this, (wMatrix, bPressed, id)); }

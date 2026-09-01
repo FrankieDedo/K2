@@ -208,7 +208,7 @@ public static class IconImageGenerator
                 ClipToRoundedTile(g, size);
 
                 var (backLeft, backTop, backSize) = IconBox(size, centered: !showCaption);
-                DrawNavShape(g, new RectangleF(backLeft, backTop, backSize, backSize), NavShape.Back);
+                DrawNavShape(g, new RectangleF(backLeft, backTop, backSize, backSize), NavShape.Back, AccentColor);
                 if (showCaption) DrawCaption(g, size, caption);
             }
 
@@ -253,6 +253,170 @@ public static class IconImageGenerator
         catch
         {
             return false;
+        }
+    }
+
+    // ── Spotify dedicated profile — single-cover text tiles ───────────────
+    //
+    // Used only by K2.App.Services.SpotifyCoverService when its layout is "1 tile cover +
+    // title/artist/album". Same black rounded tile as the rest of the grid, with a
+    // deliberately HIGH font floor (the user asked for the text NOT to shrink to an
+    // unreadable size). Static mode wraps onto up to 3 lines and puts an ellipsis at the
+    // end of the 3rd if it still doesn't fit; marquee mode (RenderMarqueeFrame) scrolls a
+    // single line, and just centers it when it already fits.
+
+    /// <summary>Font floor for the track text tiles — ~17% of the tile, i.e. ≈17 px on a
+    /// 102 px key. Far above <see cref="MinLabelFontSize"/>: legibility beats fitting.</summary>
+    private static float TrackTextFloor(int size) => MathF.Max(11f, size * 0.17f);
+
+    /// <summary>Inner width a track text line may use before it counts as overflowing.</summary>
+    private static float TrackTextInnerWidth(int size) => size * 0.88f;
+
+    /// <summary>Max wrapped lines a static track text tile shows before it trims with "…".</summary>
+    private const int TrackTextMaxLines = 3;
+
+    /// <summary>Height reserved at the top of a track text tile for its field label ("Song"/
+    /// "Artist"/"Album", see <paramref name="fieldLabel"/> on the two methods below) — the main
+    /// text is centered in whatever is left, not in the full tile, so the two never overlap.</summary>
+    private static float TrackFieldLabelHeight(int size) => size * 0.24f;
+
+    /// <summary>Draws the small field-name caption at the top of a track text tile — dimmer and
+    /// still below the floor size of the track text itself, so it reads as a label, not a second
+    /// line of content. Sized up twice on user request 2026-09-01 (11.5% → 14.5% → 20%/size). Only
+    /// meaningful in Marquee mode — Static never passes a <paramref name="fieldLabel"/> at all
+    /// (callers in <c>SpotifyCoverService</c> pass null there), matching the user's ask that the
+    /// caption only shows up alongside scrolling text.</summary>
+    private static void DrawTrackFieldLabel(Graphics g, int size, string fieldLabel)
+    {
+        using var font = CaptionFont(size * 0.20f);
+        using var brush = new SolidBrush(Color.FromArgb(150, 255, 255, 255));
+        using var fmt = new StringFormat(StringFormat.GenericTypographic)
+            { Alignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap };
+        g.DrawString(fieldLabel, font, brush, new RectangleF(0, size * 0.045f, size, font.GetHeight(g) + 2f), fmt);
+    }
+
+    /// <summary>Draws <paramref name="text"/> centered on a black rounded tile, wrapped onto up
+    /// to <see cref="TrackTextMaxLines"/> lines: the font is shrunk from ~22% of the tile down
+    /// to <see cref="TrackTextFloor"/> to make it fit in that many lines, and if even the floor
+    /// needs more the 3rd line ends with an ellipsis. <paramref name="overflow"/> is set when
+    /// that ellipsis path was taken (i.e. the marquee would have more to show).
+    /// <paramref name="fieldLabel"/> — non-empty draws a small caption ("Song"/"Artist"/"Album")
+    /// above the text so a short value on its own tile still says which field it is (user
+    /// request 2026-09-01); null/empty draws nothing extra, same as before this parameter
+    /// existed.</summary>
+    public static bool TryGenerateTrackTextTile(string text, int size, string outputPngPath, out bool overflow, string? fieldLabel = null)
+    {
+        overflow = false;
+        text ??= "";
+        try
+        {
+            float innerW = TrackTextInnerWidth(size);
+            float floor = TrackTextFloor(size);
+            float labelH = string.IsNullOrEmpty(fieldLabel) ? 0f : TrackFieldLabelHeight(size);
+
+            using var canvas = new Bitmap(size, size);
+            using (var g = Graphics.FromImage(canvas))
+            {
+                g.SmoothingMode = SmoothingMode.HighQuality;
+                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                g.Clear(FolderBackgroundColor);
+                ClipToRoundedTile(g, size);
+
+                if (labelH > 0f) DrawTrackFieldLabel(g, size, fieldLabel!);
+
+                using var brush = new SolidBrush(IconStyleScope.OverrideText ?? Color.White);
+                using var wrapMeas = new StringFormat(StringFormat.GenericTypographic);
+                var layoutArea = new SizeF(innerW, size * 8f);
+
+                // Largest font (down to the floor) at which the text wraps into ≤ 3 lines.
+                float chosen = floor;
+                bool fits = false;
+                for (float fs = MathF.Max(floor, size * 0.22f); fs >= floor; fs -= 1f)
+                {
+                    using var probe = CaptionFont(fs);
+                    g.MeasureString(text, probe, layoutArea, wrapMeas, out _, out int lines);
+                    if (lines <= TrackTextMaxLines) { chosen = fs; fits = true; break; }
+                }
+                overflow = !fits;
+
+                using var font = CaptionFont(chosen);
+                float blockH = TrackTextMaxLines * font.GetHeight(g) + 2f;
+                // Centered in the area BELOW the field label, not the whole tile.
+                float areaY = labelH, areaH = size - labelH;
+                var rect = new RectangleF((size - innerW) / 2f, areaY + (areaH - blockH) / 2f, innerW, blockH);
+                using var fmt = new StringFormat
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center,
+                    Trimming = StringTrimming.EllipsisCharacter,
+                };
+                g.DrawString(text, font, brush, rect, fmt);
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
+            canvas.Save(outputPngPath, ImageFormat.Png);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>One frame of a single scrolling track text line, on the same black rounded
+    /// tile. When the text already fits it is just centered (<paramref name="cyclePx"/> = 0 —
+    /// "nothing to scroll"); otherwise it is drawn every <paramref name="cyclePx"/> px starting
+    /// at <c>-offsetPx</c>, so advancing <paramref name="offsetPx"/> modulo <paramref name="cyclePx"/>
+    /// gives a seamless wrap. <paramref name="fieldLabel"/> — see
+    /// <see cref="TryGenerateTrackTextTile"/>'s parameter of the same name; the scrolling line is
+    /// vertically centered below it instead of in the whole tile. Returns a 24bpp bitmap the
+    /// caller converts to BGR / rotates; null on failure.</summary>
+    public static Bitmap? RenderMarqueeFrame(string text, int size, int offsetPx, int gapPx, out int cyclePx, string? fieldLabel = null)
+    {
+        cyclePx = 0;
+        text ??= "";
+        try
+        {
+            float floor = TrackTextFloor(size);
+            float innerW = TrackTextInnerWidth(size);
+            float labelH = string.IsNullOrEmpty(fieldLabel) ? 0f : TrackFieldLabelHeight(size);
+            var canvas = new Bitmap(size, size, PixelFormat.Format24bppRgb);
+            using (var g = Graphics.FromImage(canvas))
+            {
+                g.SmoothingMode = SmoothingMode.HighQuality;
+                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                g.Clear(FolderBackgroundColor);
+                ClipToRoundedTile(g, size);
+
+                if (labelH > 0f) DrawTrackFieldLabel(g, size, fieldLabel!);
+
+                using var font = CaptionFont(floor);
+                using var brush = new SolidBrush(IconStyleScope.OverrideText ?? Color.White);
+                using var fmt = new StringFormat(StringFormat.GenericTypographic) { FormatFlags = StringFormatFlags.NoWrap };
+
+                float textW = g.MeasureString(text, font, int.MaxValue, fmt).Width;
+                // Centered in the area BELOW the field label, not the whole tile.
+                float y = labelH + (size - labelH - font.GetHeight(g)) / 2f;
+
+                if (textW <= innerW)
+                {
+                    // Fits — center it, no scrolling.
+                    using var centre = new StringFormat(StringFormat.GenericTypographic)
+                        { FormatFlags = StringFormatFlags.NoWrap, Alignment = StringAlignment.Center };
+                    g.DrawString(text, font, brush, new RectangleF(0, y, size, font.GetHeight(g) + 2f), centre);
+                    return canvas;
+                }
+
+                cyclePx = Math.Max(1, (int)MathF.Ceiling(textW) + Math.Max(0, gapPx));
+                float x = -(offsetPx % cyclePx);
+                for (; x < size; x += cyclePx)
+                    g.DrawString(text, font, brush, x, y, fmt);
+            }
+            return canvas;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -516,12 +680,12 @@ public static class IconImageGenerator
     /// <see cref="TryGenerateGlyphIcon"/>, i.e. by every <see cref="Services.ActionIconFallback"/>
     /// default tile. Shapes K2 draws itself (folder, back, the emoji browser's scroll keys)
     /// go through <see cref="DrawNavShape"/>/<see cref="DrawFlatFolder"/> instead.</summary>
-    private static void DrawGlyph(Graphics g, int size, string glyph, bool centered = false)
+    private static void DrawGlyph(Graphics g, int size, string glyph, bool centered = false, Color? tint = null)
     {
         var (boxLeft, boxTop, boxSize) = IconBox(size, centered);
         var rect = new RectangleF(boxLeft, boxTop, boxSize, boxSize);
         using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-        using var brush = new SolidBrush(AccentColor);
+        using var brush = new SolidBrush(tint ?? AccentColor);
 
         // Segoe MDL2 Assets is a hairline outline font: drawn as-is at 102 px the strokes are
         // about two pixels wide and all but vanish on the panel. Taking the glyph as a PATH
@@ -533,7 +697,22 @@ public static class IconImageGenerator
             using var family = new FontFamily("Segoe MDL2 Assets");
             using var path = new GraphicsPath();
             path.AddString(glyph, family, (int)FontStyle.Regular, boxSize * 0.72f, rect, format);
-            using var pen = new Pen(AccentColor, boxSize * GlyphStrokeRatio)
+
+            // StringFormat.Center places the glyph by its font advance width, but several
+            // Segoe MDL2 icons (Volume Down above all) carry lopsided side-bearings and land
+            // visibly off-centre on the tile. Re-centre on the actual ink bounds so every
+            // default glyph sits dead-centre in the icon box.
+            RectangleF ink = path.GetBounds();
+            if (ink.Width > 0 && ink.Height > 0)
+            {
+                using var recenter = new Matrix();
+                recenter.Translate(
+                    rect.X + (rect.Width - ink.Width) / 2f - ink.X,
+                    rect.Y + (rect.Height - ink.Height) / 2f - ink.Y);
+                path.Transform(recenter);
+            }
+
+            using var pen = new Pen(tint ?? AccentColor, boxSize * GlyphStrokeRatio)
             {
                 LineJoin = LineJoin.Round,
                 StartCap = LineCap.Round,
@@ -563,7 +742,11 @@ public static class IconImageGenerator
     /// below it. Used by <see cref="Services.ActionIconFallback"/> for the "no art anywhere else"
     /// default tile of an action key. Pass an empty caption for a glyph-only tile.
     /// </summary>
-    public static bool TryGenerateGlyphIcon(string glyph, string caption, int size, string outputPngPath, bool showCaption = true)
+    /// <param name="tint">Overrides just the glyph's color (default: the accent color) — used
+    /// for the Spotify dedicated profile's Shuffle key, which turns the arrows Spotify's own
+    /// green while shuffle is actually on, background untouched (user request 2026-09-01).</param>
+    public static bool TryGenerateGlyphIcon(string glyph, string caption, int size, string outputPngPath,
+        bool showCaption = true, Color? tint = null)
     {
         try
         {
@@ -577,7 +760,7 @@ public static class IconImageGenerator
                 ClipToRoundedTile(g, size);
 
                 bool drawCaption = showCaption && !string.IsNullOrEmpty(caption);
-                DrawGlyph(g, size, glyph, centered: !drawCaption);
+                DrawGlyph(g, size, glyph, centered: !drawCaption, tint: tint);
                 if (drawCaption) DrawCaption(g, size, caption);
             }
 
@@ -591,7 +774,9 @@ public static class IconImageGenerator
         }
     }
 
-    /// <summary>Flat navigation shapes drawn by <see cref="TryGenerateNavIcon"/>.</summary>
+    /// <summary>Flat hand-drawn shapes rendered by <see cref="TryGenerateNavIcon"/>: the panel's
+    /// navigation arrows plus the media transport/volume set, all solid-filled so they stay
+    /// legible on a 102/72 px key where the Segoe MDL2 outlines all but vanish.</summary>
     public enum NavShape
     {
         /// <summary>Solid left arrow (head + shaft) — "go back one level".</summary>
@@ -601,6 +786,30 @@ public static class IconImageGenerator
         /// <summary>Scroll triangles. Which pair is used depends on how the panel is
         /// mounted: up/down on an unrotated 2×6 pad, left/right on a 90°/270° one.</summary>
         Up, Down, Left, Right,
+        /// <summary>Two right-pointing play triangles side by side — the universal
+        /// "next track" symbol (user request 2026-09-01). Kept apart from
+        /// <see cref="Right"/>, which stays the single scroll/"next profile" arrow.</summary>
+        NextTrack,
+        /// <summary>Mirror of <see cref="NextTrack"/> — "previous track".</summary>
+        PrevTrack,
+        /// <summary>Single filled play triangle — the MDL2 "Play" glyph is a hollow outline,
+        /// which looked out of place next to the solid transport shapes (user request
+        /// 2026-09-01). Distinct from <see cref="Right"/> so restyling the scroll arrows never
+        /// drags the media keys along.</summary>
+        Play,
+        /// <summary>Filled rounded square — "stop".</summary>
+        Stop,
+        /// <summary>Filled speaker + 3 / 1 sound waves, and speaker + a thick X for the mute
+        /// key — the same up/down/mute vocabulary the MDL2 glyphs used, drawn solid.</summary>
+        VolumeUp, VolumeDown, Mute,
+        /// <summary>Two circular arrows — "repeat". Drawn here rather than taken from MDL2 for
+        /// the same reason as the transport shapes: it sits next to them on the Spotify profile
+        /// and a thin outline would not match (user request 2026-09-01).</summary>
+        Repeat,
+        /// <summary>Two vertical bars — "pause", the other half of <see cref="Play"/>. The
+        /// Spotify dedicated profile's Play/Pause key swaps between the two live, to match
+        /// whether playback is actually running (user request 2026-09-01).</summary>
+        Pause,
     }
 
     /// <summary>
@@ -612,7 +821,14 @@ public static class IconImageGenerator
     /// Pass an empty caption for a shape-only tile — it then gets a bigger, vertically
     /// centered shape instead of the caption layout's top-aligned <see cref="IconBox"/>.
     /// </summary>
-    public static bool TryGenerateNavIcon(NavShape shape, string caption, int size, string outputPngPath)
+    /// <param name="tint">Overrides the shape's paint color (default: the accent color) — the
+    /// Spotify dedicated profile's Repeat key uses Spotify's own green while active (user
+    /// request 2026-09-01).</param>
+    /// <param name="badge">Stamps a small circled symbol in the shape's bottom-right corner —
+    /// <see cref="NavShape.Repeat"/> only: "1" for "repeat this track", "∞" for "repeat the
+    /// whole context" (both otherwise draw identically). Null/empty draws nothing.</param>
+    public static bool TryGenerateNavIcon(NavShape shape, string caption, int size, string outputPngPath,
+        Color? tint = null, string? badge = null)
     {
         try
         {
@@ -638,7 +854,9 @@ public static class IconImageGenerator
                     DrawCaption(g, size, caption);
                 }
 
-                DrawNavShape(g, box, shape);
+                Color shapeColor = tint ?? AccentColor;
+                DrawNavShape(g, box, shape, shapeColor);
+                if (!string.IsNullOrEmpty(badge)) DrawCornerBadge(g, box, badge, shapeColor);
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
@@ -651,17 +869,57 @@ public static class IconImageGenerator
         }
     }
 
-    /// <summary>Paints one <see cref="NavShape"/> filled in the accent color inside
+    /// <summary>Small filled circle + symbol in <paramref name="box"/>'s bottom-right corner —
+    /// see <see cref="TryGenerateNavIcon"/>'s <c>badge</c> parameter. Drawn in the tile's own
+    /// background color with a <paramref name="shapeColor"/> outline, so it reads as a cutout
+    /// rather than a solid blob sitting on top of the shape. Sized up on user request 2026-09-01
+    /// ("fallo piu' grande l'uno") — big enough that "∞" reads clearly too.</summary>
+    private static void DrawCornerBadge(Graphics g, RectangleF box, string symbol, Color shapeColor)
+    {
+        float b = Math.Min(box.Width, box.Height);
+        float d = b * 0.42f;
+        var circle = new RectangleF(box.X + box.Width - d * 0.85f, box.Y + box.Height - d * 0.85f, d, d);
+        using var back = new SolidBrush(FolderBackgroundColor);
+        using var outline = new Pen(shapeColor, d * 0.09f);
+        g.FillEllipse(back, circle);
+        g.DrawEllipse(outline, circle);
+
+        // Sized up to nearly touch the circle's own inner edge (inside the outline stroke) —
+        // user request 2026-09-01 ("fino quasi a toccare i bordi della bolla").
+        using var font = CaptionFont(d * 0.86f);
+        using var textBrush = new SolidBrush(shapeColor);
+        using var fmt = new StringFormat(StringFormat.GenericTypographic)
+            { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+
+        if (symbol == "∞")
+        {
+            // "∞" is wide and short — squashed vertically (same request: "distorcilo
+            // leggermente in verticale, per guadagnare spazio") buys it room to grow within
+            // the same circle instead of shrinking to fit the glyph's own natural width.
+            var state = g.Save();
+            g.TranslateTransform(circle.X + circle.Width / 2f, circle.Y + circle.Height / 2f);
+            g.ScaleTransform(1.18f, 0.72f);
+            g.TranslateTransform(-(circle.X + circle.Width / 2f), -(circle.Y + circle.Height / 2f));
+            g.DrawString(symbol, font, textBrush, circle, fmt);
+            g.Restore(state);
+        }
+        else
+        {
+            g.DrawString(symbol, font, textBrush, circle, fmt);
+        }
+    }
+
+    /// <summary>Paints one <see cref="NavShape"/> filled in <paramref name="color"/> inside
     /// <paramref name="box"/>. Corners are softened by stroking the same path with a
     /// round-joined pen of the same color on top of the fill — cheaper and more even than
     /// building per-corner arcs, and the stroke's half-width is why the polygons below stop
     /// short of the box edges.</summary>
-    private static void DrawNavShape(Graphics g, RectangleF box, NavShape shape)
+    private static void DrawNavShape(Graphics g, RectangleF box, NavShape shape, Color color)
     {
         float b = Math.Min(box.Width, box.Height);
         float x = box.X, y = box.Y;
-        using var brush = new SolidBrush(AccentColor);
-        using var pen = new Pen(AccentColor, b * 0.13f)
+        using var brush = new SolidBrush(color);
+        using var pen = new Pen(color, b * 0.13f)
         {
             LineJoin = LineJoin.Round,
             StartCap = LineCap.Round,
@@ -696,6 +954,58 @@ public static class IconImageGenerator
             return;
         }
 
+        if (shape is NavShape.NextTrack or NavShape.PrevTrack)
+        {
+            // Two play triangles side by side, mirrored for "previous" — same span
+            // (0.12–0.88) either way so both tiles look optically centered.
+            bool next = shape == NavShape.NextTrack;
+            DrawPlayTriangle(g, brush, pen, x, y, b, next ? 0.12f : 0.48f, next, span: 0.36f, inset: 0.18f);
+            DrawPlayTriangle(g, brush, pen, x, y, b, next ? 0.52f : 0.88f, next, span: 0.36f, inset: 0.18f);
+            return;
+        }
+
+        if (shape == NavShape.Play)
+        {
+            // One triangle of the same family, scaled up to fill the tile on its own.
+            DrawPlayTriangle(g, brush, pen, x, y, b, 0.20f, pointsRight: true, span: 0.58f, inset: 0.14f);
+            return;
+        }
+
+        if (shape == NavShape.Stop)
+        {
+            using var square = new GraphicsPath();
+            square.AddRectangle(new RectangleF(x + b * 0.24f, y + b * 0.24f, b * 0.52f, b * 0.52f));
+            g.FillPath(brush, square);
+            g.DrawPath(pen, square);   // round join = softened corners, like the triangles
+            return;
+        }
+
+        if (shape is NavShape.VolumeUp or NavShape.VolumeDown or NavShape.Mute)
+        {
+            DrawSpeaker(g, brush, pen, x, y, b, shape);
+            return;
+        }
+
+        if (shape == NavShape.Repeat)
+        {
+            DrawRepeat(g, brush, color, x, y, b);
+            return;
+        }
+
+        if (shape == NavShape.Pause)
+        {
+            // Gap widened on user request 2026-09-01 ("un po' di spazio in piu' fra le due barre").
+            float barW = b * 0.18f, barH = b * 0.58f, gap = b * 0.26f;
+            float top = y + (b - barH) / 2f;
+            using var bar1 = new GraphicsPath();
+            bar1.AddRectangle(new RectangleF(x + b * 0.50f - gap / 2f - barW, top, barW, barH));
+            using var bar2 = new GraphicsPath();
+            bar2.AddRectangle(new RectangleF(x + b * 0.50f + gap / 2f, top, barW, barH));
+            g.FillPath(brush, bar1); g.DrawPath(pen, bar1);
+            g.FillPath(brush, bar2); g.DrawPath(pen, bar2);
+            return;
+        }
+
         PointF[] triangle = shape switch
         {
             NavShape.Up   => new[] { new PointF(x + b * 0.50f, y + b * 0.22f), new PointF(x + b * 0.84f, y + b * 0.72f), new PointF(x + b * 0.16f, y + b * 0.72f) },
@@ -708,6 +1018,107 @@ public static class IconImageGenerator
         path.AddPolygon(triangle);
         g.FillPath(brush, path);
         g.DrawPath(pen, path);
+    }
+
+    /// <summary>One filled play triangle: its vertical base sits at <paramref name="baseX"/>
+    /// (a fraction of <paramref name="b"/>), its apex <paramref name="span"/> further right when
+    /// <paramref name="pointsRight"/> and further left otherwise, and it runs from
+    /// <paramref name="inset"/> to 1-<paramref name="inset"/> vertically. Used both for the single
+    /// <see cref="NavShape.Play"/> tile and for the two halves of the
+    /// <see cref="NavShape.NextTrack"/>/<see cref="NavShape.PrevTrack"/> pair.</summary>
+    private static void DrawPlayTriangle(Graphics g, Brush brush, Pen pen,
+        float x, float y, float b, float baseX, bool pointsRight, float span, float inset)
+    {
+        float apexX = baseX + (pointsRight ? span : -span);
+        using var path = new GraphicsPath();
+        path.AddPolygon(new[]
+        {
+            new PointF(x + b * baseX, y + b * inset),
+            new PointF(x + b * baseX, y + b * (1f - inset)),
+            new PointF(x + b * apexX, y + b * 0.50f),
+        });
+        g.FillPath(brush, path);
+        g.DrawPath(pen, path);
+    }
+
+    /// <summary>The "repeat" loop: two arcs of one circle, each ending in a solid arrowhead
+    /// aimed along its own tangent, so the pair reads as a cycle rather than as a broken ring.
+    /// The gaps between them are where the heads go.</summary>
+    private static void DrawRepeat(Graphics g, Brush brush, Color color, float x, float y, float b)
+    {
+        const float r = 0.30f;              // circle radius, fraction of the box
+        const float topStart = 200f, sweep = 140f;
+        float cx = x + b * 0.50f, cy = y + b * 0.50f, rad = b * r;
+
+        using var stroke = new Pen(color, b * 0.115f) { StartCap = LineCap.Flat, EndCap = LineCap.Flat };
+        var box = new RectangleF(cx - rad, cy - rad, rad * 2f, rad * 2f);
+        g.DrawArc(stroke, box, topStart, sweep);          // upper arc, ends pointing down-right
+        g.DrawArc(stroke, box, topStart + 180f, sweep);   // lower arc, ends pointing up-left
+
+        Head(topStart + sweep);
+        Head(topStart + 180f + sweep);
+
+        // Solid triangle at the arc's end, pointing the way the arc was travelling.
+        void Head(float endDeg)
+        {
+            double a = endDeg * Math.PI / 180.0;
+            float px = cx + rad * (float)Math.Cos(a);
+            float py = cy + rad * (float)Math.Sin(a);
+            // Tangent of a clockwise sweep, and the normal across it.
+            float tx = -(float)Math.Sin(a), ty = (float)Math.Cos(a);
+            float nx = -ty, ny = tx;
+            float len = b * 0.20f, half = b * 0.135f;
+
+            using var head = new GraphicsPath();
+            head.AddPolygon(new[]
+            {
+                new PointF(px + tx * len, py + ty * len),
+                new PointF(px + nx * half, py + ny * half),
+                new PointF(px - nx * half, py - ny * half),
+            });
+            g.FillPath(brush, head);
+        }
+    }
+
+    /// <summary>Filled speaker (neck + cone as ONE polygon, so the outline pen never leaves a
+    /// seam between the two) plus the per-shape marker to its right: three arcs for
+    /// <see cref="NavShape.VolumeUp"/>, one for <see cref="NavShape.VolumeDown"/>, a thick X for
+    /// <see cref="NavShape.Mute"/>. Each variant is nudged horizontally so the WHOLE glyph, not
+    /// just the speaker, ends up centered in <paramref name="b"/>.</summary>
+    private static void DrawSpeaker(Graphics g, Brush brush, Pen pen,
+        float x, float y, float b, NavShape shape)
+    {
+        // Volume down's single arc stops well short of the tile edge, so its speaker starts
+        // further right; the other two span the full 0.08-0.86 and only need a hair.
+        float dx = shape switch { NavShape.VolumeDown => 0.11f, NavShape.Mute => 0.0f, _ => 0.03f };
+        float X(float f) => x + b * (f + dx);
+
+        using var speaker = new GraphicsPath();
+        speaker.AddPolygon(new[]
+        {
+            new PointF(X(0.06f), y + b * 0.38f),
+            new PointF(X(0.24f), y + b * 0.38f),
+            new PointF(X(0.46f), y + b * 0.14f),
+            new PointF(X(0.46f), y + b * 0.86f),
+            new PointF(X(0.24f), y + b * 0.62f),
+            new PointF(X(0.06f), y + b * 0.62f),
+        });
+        g.FillPath(brush, speaker);
+        g.DrawPath(pen, speaker);
+
+        if (shape == NavShape.Mute)
+        {
+            using var cross = new Pen(AccentColor, b * 0.12f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            g.DrawLine(cross, X(0.64f), y + b * 0.36f, X(0.90f), y + b * 0.64f);
+            g.DrawLine(cross, X(0.90f), y + b * 0.36f, X(0.64f), y + b * 0.64f);
+            return;
+        }
+
+        // Waves: concentric arcs around the cone's mouth, opening to the right.
+        using var wave = new Pen(AccentColor, b * 0.085f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        float[] radii = shape == NavShape.VolumeUp ? new[] { 0.16f, 0.28f, 0.40f } : new[] { 0.20f };
+        foreach (float r in radii)
+            g.DrawArc(wave, X(0.46f - r), y + b * (0.50f - r), b * r * 2f, b * r * 2f, -52f, 104f);
     }
 
     /// <summary>
@@ -752,18 +1163,25 @@ public static class IconImageGenerator
     }
 
     /// <summary>Folder name caption, centered below the icon area — shared layout
-    /// between <see cref="TryGenerateFolderIcon"/> and <see cref="TryGenerateDiskFolderIcon"/>.</summary>
-    internal static void DrawCaption(Graphics g, int size, string name)
+    /// between <see cref="TryGenerateFolderIcon"/> and <see cref="TryGenerateDiskFolderIcon"/>.
+    /// <paramref name="topFrac"/> is where the caption strip begins as a fraction of the tile
+    /// height (default 0.68); live tiles pass a smaller value (a taller strip) plus a
+    /// <paramref name="startFontScale"/> &gt; 1 so a captioned reading gets a bigger, up-to-two-line
+    /// label. <paramref name="bottomFrac"/> is where the strip ends (default 0.98).</summary>
+    internal static void DrawCaption(Graphics g, int size, string name, float topFrac = 0.68f,
+                                     float startFontScale = 1f, float bottomFrac = 0.98f)
     {
         // Both the size and the color can be overridden per key from "Edit icon" — the size
         // acts as a STARTING size, since DrawWrappedShrunkText still shrinks from there when
-        // the text doesn't fit the caption strip ("segue le attuali regole").
-        float labelSize = (float)(IconStyleScope.OverrideFontSize ?? Math.Max(9f, size * 0.13f) + 4f);
+        // the text doesn't fit the caption strip ("segue le attuali regole"). A per-key custom
+        // size is respected as-is (not scaled).
+        float labelSize = (float)(IconStyleScope.OverrideFontSize
+            ?? (Math.Max(9f, size * 0.13f) + 4f) * startFontScale);
         using var labelBrush = new SolidBrush(IconStyleScope.OverrideText ?? Color.White);
         // The user's own wording wins over whatever the generator derived (folder name,
         // device name, action summary) — see IconStyleScope.OverrideCaption.
         name = IconStyleScope.OverrideCaption ?? name;
-        var rect = new RectangleF(size * 0.06f, size * 0.68f, size * 0.88f, size * 0.28f);
+        var rect = new RectangleF(size * 0.06f, size * topFrac, size * 0.88f, size * (bottomFrac - topFrac));
         DrawWrappedShrunkText(g, name, rect, labelSize, labelBrush, StringAlignment.Near);
     }
 

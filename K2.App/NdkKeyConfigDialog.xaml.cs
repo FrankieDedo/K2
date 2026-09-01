@@ -418,6 +418,14 @@ public partial class NdkKeyConfigDialog : Window
                     ok = EmojiGlyphRenderer.TryGenerateEmojiIcon(ActionValue!, IconSize, dest);
                     break;
                 default:
+                    // A transport/volume/repeat control — see DpKeyConfigDialog's identical
+                    // branch for why this bypasses the gallery tie-break entirely (user report
+                    // 2026-09-01).
+                    if (ActionIconFallback.IsControl(ActionType, ActionValue))
+                    {
+                        ok = ActionIconFallback.TryGenerate(ActionType!, ActionValue, IconSize, dest, showCaption);
+                        break;
+                    }
                     // Base Camp's ported gallery art vs. K2's hand-drawn glyph — spec.UseK2Icons
                     // (the "Edit icon" radio pair) picks which one wins the tie; whichever side
                     // has no art for this action/value falls back to the other automatically.

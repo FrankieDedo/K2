@@ -135,5 +135,15 @@
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
+
+        <!-- "Sync across profiles" for Key Lighting — added 2026-08-28 for parity with
+             Everest Max / MacroPad (user request "il flag ... nella sezione lighting ...
+             allinea tutto"). K2-side only: Everest 60 lighting has no firmware sync
+             command, so this just routes the stored lighting record to a shared slot
+             (see Everest60Store.LoadSharedLighting / MainWindow.Everest60.cs). Position
+             comes entirely from K2SyncCheckBox (K2Theme.xaml). -->
+        <CheckBox x:Name="CkEv60Sync" Content="{loc:Get led_sync_profiles}"
+                  Style="{StaticResource K2SyncCheckBox}"
+                  Click="CkEv60Sync_Click"/>
     </Grid>
 </UserControl>

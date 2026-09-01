@@ -62,8 +62,9 @@ public partial class MainWindow
     private readonly ObservableCollection<DisplayPadKey> _dpMappedKeys = new();
     private readonly ObservableCollection<DpDeviceRow> _dpDevices = new();
     private readonly ObservableCollection<int> _dpDeviceIds = new();
-    /// <summary>Backing list for the "Pages" sidebar section — see <see cref="RefreshDpPagesList"/>.</summary>
-    private readonly ObservableCollection<DpPageRow> _dpPages = new();
+    /// <summary>Backing tree for the "Pages" sidebar section: one node per profile that has
+    /// at least one page, each holding its own page rows — see <see cref="RefreshDpPagesList"/>.</summary>
+    private readonly ObservableCollection<DpPageProfileGroup> _dpPageGroups = new();
     /// <summary>Maps SDK ID → progressive label ("DisplayPad 1", "DisplayPad 2"…).</summary>
     private readonly Dictionary<int, string> _dpDeviceLabels = new();
     private readonly Dictionary<int, int> _dpMatrixToIndex = new();
@@ -207,6 +208,7 @@ public partial class MainWindow
                 ContextMenu = BuildDpKeyContextMenu(),
             };
             btn.Click += DpKeyButton_Click;
+            btn.ContextMenuOpening += DpKeyButton_ContextMenuOpening;
             btn.AllowDrop = true;
             btn.PreviewMouseLeftButtonDown += DpKeyButton_PreviewMouseLeftButtonDown;
             btn.PreviewMouseMove += DpKeyButton_PreviewMouseMove;
@@ -219,6 +221,16 @@ public partial class MainWindow
         DpRebuildKeyGrid();
         DpApplyDefaultKeyMap();
         DpInitLiveKeyPreviewTimer();
+
+        // The Spotify dedicated profile's 2×2 block has no stored icons — mirror its live
+        // cover/track tiles into the app's own grid whenever the service repaints them.
+        SpotifyCoverService.PreviewChanged += devId =>
+            Dispatcher.BeginInvoke(() => DpBindSpotifyBlockPreview(devId));
+
+        // Play/Pause, Shuffle and Repeat control keys: swap their icon to match reality
+        // whenever the resolved playback state actually changes (user request 2026-09-01).
+        SpotifyCoverService.PlaybackStateChanged += (devId, state) =>
+            Dispatcher.BeginInvoke(() => DpOnSpotifyPlaybackStateChanged(devId, state));
 
         LvDpKeys.ItemsSource = _dpMappedKeys;
         foreach (var k in _dpKeys)
@@ -240,10 +252,10 @@ public partial class MainWindow
 
         LvDpDevices.ItemsSource = _dpDevices;
         // DP device tabs are added to TcDevices by DpRefreshDevices; LstDpProfile by DpRefreshProfiles
-        LstDpProfile.ContextMenu = DpBuildProfileContextMenu();
-        BtnDpProfileMenu.ContextMenu = DpBuildProfileMenuNoEdit();
+        LstDpProfile.ContextMenu = WithProfileGuide(DpBuildProfileContextMenu(), "displaypad");
+        BtnDpProfileMenu.ContextMenu = WithProfileGuide(DpBuildProfileMenuNoEdit(), "displaypad");
 
-        LstDpPages.ItemsSource = _dpPages;
+        TvDpPages.ItemsSource = _dpPageGroups;
 
         _dpSuppressRotation = true;
         CbDpRotation.ItemsSource = new[]
@@ -564,8 +576,35 @@ public partial class MainWindow
         if (res != MessageBoxResult.OK) return;
         DpDeleteProfileSlot(id, slot);
         DpLog($"[UI] Profile {slot} deleted.");
+        DpAfterProfileDeleted(id, slot);
+    }
+
+    /// <summary>Shared tail for both profile-delete entry points (the Delete button and
+    /// the gear popup). <see cref="DpRefreshProfiles"/> alone cannot recover when the
+    /// DELETED slot was the active one: it rebuilds the list under
+    /// <c>_dpSuppressProfile</c>, so <see cref="LstDpProfile_SelectionChanged"/> never
+    /// fires and nothing reloads the key grid or repaints the panel — leaving the newly
+    /// selected profile's actions unloaded. Land on the first surviving slot and run the
+    /// normal profile-switch tail (mirrors <see cref="DpCreateOrSwitchSpotifyProfile"/> /
+    /// <see cref="DpSwitchProfile"/>). If some OTHER profile was deleted the current one
+    /// is still valid, so only the list needs rebuilding.</summary>
+    private void DpAfterProfileDeleted(int id, int deletedSlot)
+    {
+        bool wasCurrent = _dpStore.GetCurrentProfile(id) == deletedSlot;
+        if (wasCurrent)
+        {
+            int landing = _dpStore.GetExistingProfiles(id).FirstOrDefault();
+            if (landing == 0) landing = 1;
+            _dpStore.SetCurrentProfile(id, landing);
+        }
         DpRefreshProfiles(id);
-        // LstDpProfile_SelectionChanged will reload the key grid automatically
+        if (wasCurrent)
+        {
+            DpSelectProfileSlot(_dpStore.GetCurrentProfile(id));
+            ResetDpNavigation();
+            DpRequestRepaint(id);
+            DpSyncSpotifyCoverService(id);
+        }
     }
 
     /// <summary>Clears one profile slot's buttons+name — no "last profile" guard
@@ -585,8 +624,11 @@ public partial class MainWindow
     {
         if (DpSelectedDeviceId() is not int id) return;
         string currentName = _dpStore.GetProfileName(id, pi.Slot) ?? Loc.Get("profile_n", pi.Slot);
-        string currentExe = _dpStore.GetSetting($"profile.{id}.{pi.Slot}.launchExe") ?? "";
-        var dlg = new ProfileSettingsDialog(currentName, currentExe) { Owner = this };
+        string keyBase = $"profile.{id}.{pi.Slot}";
+        string currentExe = _dpStore.GetSetting($"{keyBase}.launchExe") ?? "";
+        bool focusOnly = _dpStore.GetSetting($"{keyBase}.launchFocusOnly") == "1";
+        bool restoreOnClose = _dpStore.GetSetting($"{keyBase}.launchRestoreOnClose") == "1";
+        var dlg = new ProfileSettingsDialog(currentName, currentExe, focusOnly, restoreOnClose) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
         if (dlg.DeleteRequested)
@@ -606,13 +648,15 @@ public partial class MainWindow
             if (res != MessageBoxResult.OK) return;
             DpDeleteProfileSlot(id, pi.Slot);
             DpLog($"[UI] Profile {pi.Slot} deleted (gear).");
+            DpAfterProfileDeleted(id, pi.Slot);
+            return;
         }
-        else
-        {
-            _dpStore.SetProfileName(id, pi.Slot, dlg.ProfileName);
-            _dpStore.SetSetting($"profile.{id}.{pi.Slot}.launchExe", dlg.ExePath);
-            DpLog($"[UI] Profile {pi.Slot} settings updated (gear).");
-        }
+
+        _dpStore.SetProfileName(id, pi.Slot, dlg.ProfileName);
+        _dpStore.SetSetting($"{keyBase}.launchExe", dlg.ExePath);
+        _dpStore.SetSetting($"{keyBase}.launchFocusOnly", dlg.FocusOnly ? "1" : "0");
+        _dpStore.SetSetting($"{keyBase}.launchRestoreOnClose", dlg.RestoreOnClose ? "1" : "0");
+        DpLog($"[UI] Profile {pi.Slot} settings updated (gear).");
         DpRefreshProfiles(id);
         DpSelectProfileSlot(_dpStore.GetCurrentProfile(id));
     }
@@ -1038,6 +1082,7 @@ public partial class MainWindow
         DpGifAnimator.StopAllForDevice(id);
         // Same reason: a live clock/monitor tile would tick right over the screensaver image.
         DpLiveTileService.Stop(id);
+        DpSpotifyCoverKeyService.Stop(id);
 
         int rotation = _dpStore.GetRotation(id);
         var (path, userRotation) = image.Value;
@@ -1274,6 +1319,10 @@ public partial class MainWindow
     /// slot-independent way to recognize it.</summary>
     private const string SpotifyProfileName = "Spotify";
 
+    /// <summary>Process the "only while it is in the foreground" flag watches. Matched by NAME
+    /// (see ProfileLaunchWatcher), so the Store build and the desktop one both count.</summary>
+    private const string SpotifyExeName = "Spotify.exe";
+
     /// <summary>Starts/stops the live Spotify cover-art overlay (see SpotifyCoverService) for
     /// this device based on whether its CURRENT profile is the reserved "Spotify" profile
     /// (identified by name, since profile identity itself is just an integer slot). Called
@@ -1284,18 +1333,219 @@ public partial class MainWindow
         int profile = _dpStore.GetCurrentProfile(id);
         bool isSpotify = _dpStore.GetProfileName(id, profile) == SpotifyProfileName;
         if (isSpotify)
-            SpotifyCoverService.Start(_dpClient, DpLogAsync, id, _dpStore.GetRotation(id));
+        {
+            // However we got back here — the arrow's own timer, a manual switch, a "profile"
+            // action — there is nothing left to come back TO.
+            DpSpotifyCancelReturnTimer(id);
+            SpotifyCoverService.Start(_dpClient, DpLogAsync, id, _dpStore.GetRotation(id),
+                DpReadSpotifyCoverConfig(id), DpReadSpotifyTileSpecs(id, profile));
+        }
         else
             SpotifyCoverService.Stop(id);
     }
 
+    // ================================================================
+    // Cover tile "back" arrow + the comeback timer behind it
+    // ================================================================
+
+    /// <summary>Profile each pad was on before it switched to its Spotify profile — where the
+    /// cover tile's back arrow returns to.</summary>
+    private readonly Dictionary<int, int> _dpSpotifyPrevProfile = new();
+
+    /// <summary>Per-device one-shot "come back to Spotify" timers, the counterpart of the voice
+    /// page's <c>_dvpReturnTimers</c> (see MainWindow.DisplayPad.DiscordRoom.cs) — armed by
+    /// <see cref="DpSpotifyLeave"/> when the pad's config asks for it, cancelled the moment the
+    /// profile is showing again.</summary>
+    private readonly Dictionary<int, DispatcherTimer> _dpSpotifyReturnTimers = new();
+
+    /// <summary>The pad's reserved Spotify slot, or 0 when it has no Spotify profile.</summary>
+    private int DpSpotifySlot(int id) => _dpStore.GetExistingProfiles(id)
+        .FirstOrDefault(slot => _dpStore.GetProfileName(id, slot) == SpotifyProfileName);
+
+    /// <summary>The cover tile was pressed: hand the panel back to the profile that was showing
+    /// before (or the first ordinary one, e.g. after a restart), and arm the comeback if this pad
+    /// is configured for it.</summary>
+    private void DpSpotifyLeave(int id)
+    {
+        var ordinary = _dpStore.GetExistingProfiles(id)
+            .Where(slot => !DpIsDedicatedName(_dpStore.GetProfileName(id, slot)))
+            .ToList();
+        if (ordinary.Count == 0) { DpLog($"[SPT] device {id}: nothing to go back to"); return; }
+
+        int target = _dpSpotifyPrevProfile.TryGetValue(id, out int prev) && ordinary.Contains(prev)
+                     ? prev : ordinary[0];
+
+        DpSpotifySwitchTo(id, target);
+        DpLog($"[SPT] device {id}: back arrow -> profile {target}");
+        DpSpotifyArmReturnTimer(id);
+    }
+
+    /// <summary>Switches <paramref name="id"/> straight to <paramref name="slot"/> — used
+    /// everywhere a Spotify-related path needs to switch a profile that <see cref="DpSwitchProfile"/>
+    /// CANNOT target: it resolves its own "current profile" from <c>LstDpProfile.SelectedItem</c>
+    /// AND its Next/Previous/named-target resolution only searches the ORDINARY profile list —
+    /// dedicated profiles (the Spotify slot itself) are excluded from both (see
+    /// <see cref="DpSelectDedicated"/>/<see cref="DpRefreshProfiles"/>). Two concrete failures
+    /// this caused before this helper existed (user report 2026-09-01):
+    /// <list type="bullet">
+    /// <item>the cover tile's back arrow: leaving the dedicated profile made `cur` fall back to
+    /// the first ordinary profile, and when the target coincided with it (a single-other-profile
+    /// pad — the common case) `slot == cur` read as "already there" and did nothing;</item>
+    /// <item>switching TO the Spotify slot at all (the return timer, and
+    /// <see cref="ProfileLaunchWatcher"/>'s "only while Spotify is in front" focus-only
+    /// registration): the target slot is never IN the ordinary list to begin with, so it always
+    /// resolved to "not found" and silently no-opped.</item>
+    /// </list>
+    /// Mirrors <see cref="DpSwitchProfile"/>'s own tail (no native SwitchProfile — see its
+    /// remarks) with an already-resolved target instead of re-deriving "current" from UI state
+    /// that doesn't reflect a dedicated profile.</summary>
+    private void DpSpotifySwitchTo(int id, int slot)
+    {
+        bool isActive = id == DpSelectedDeviceId();
+        _dpStore.SetCurrentProfile(id, slot);
+        if (isActive)
+        {
+            DpSelectProfileSlot(slot);
+            ResetDpNavigation();
+        }
+        else
+        {
+            _dpBgPageId[id] = 0;
+            if (_dpBgPageHistory.TryGetValue(id, out var hist)) hist.Clear();
+        }
+        DpRequestRepaint(id);
+        DpSyncSpotifyCoverService(id);
+        DeviceSyncOnProfileSwitched(SyncDeviceKind.DisplayPad, slot);
+    }
+
+    /// <summary>Starts the countdown that brings the Spotify profile back on its own. No-op when
+    /// the pad's config has it off, or when there is no Spotify profile to come back to.</summary>
+    private void DpSpotifyArmReturnTimer(int id)
+    {
+        DpSpotifyCancelReturnTimer(id);
+        var cfg = DpReadSpotifyCoverConfig(id);
+        if (!cfg.ReturnEnabled || DpSpotifySlot(id) == 0)
+        {
+            DpLog($"[SPT] device {id}: return timer not armed (enabled={cfg.ReturnEnabled}, slot={DpSpotifySlot(id)})");
+            return;
+        }
+
+        int seconds = SpotifyCoverConfig.ClampReturnSeconds(cfg.ReturnSeconds);
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
+        timer.Tick += (_, _) =>
+        {
+            DpSpotifyCancelReturnTimer(id);
+            int slot = DpSpotifySlot(id);
+            // The pad may have been unplugged, the profile deleted, or the user may already be
+            // back on it (in which case DpSyncSpotifyCoverService cancelled us anyway).
+            if (slot == 0 || !_dpDeviceIds.Contains(id)) return;
+            if (_dpStore.GetCurrentProfile(id) == slot) return;
+            DpLog($"[SPT] device {id}: return timer elapsed — back to the Spotify profile");
+            DpSpotifySwitchTo(id, slot);
+        };
+        _dpSpotifyReturnTimers[id] = timer;
+        timer.Start();
+        DpLog($"[SPT] device {id}: return timer armed ({seconds}s)");
+    }
+
+    private void DpSpotifyCancelReturnTimer(int id)
+    {
+        if (_dpSpotifyReturnTimers.Remove(id, out var timer)) timer.Stop();
+    }
+
+    /// <summary>The stored <see cref="KeyIconSpec"/> of each block key, indexed by physical key
+    /// number — how the font/text color picked in a text tile's "Edit icon" popup reaches
+    /// <see cref="SpotifyCoverService"/>. Those keys hold no action, so this column is the only
+    /// thing they persist.</summary>
+    private KeyIconSpec?[] DpReadSpotifyTileSpecs(int id, int profile)
+    {
+        var blockKeys = SpotifyCoverService.BlockKeysFor(DpReadSpotifyCoverConfig(id).Position);
+        var specs = new KeyIconSpec?[12];
+        foreach (var rec in _dpStore.LoadPage(id, profile, 0))
+            if (rec.ButtonIndex >= 0 && rec.ButtonIndex < specs.Length
+                && Array.IndexOf(blockKeys, rec.ButtonIndex) >= 0)
+                specs[rec.ButtonIndex] = KeyIconSpec.FromJson(rec.IconSpec);
+        return specs;
+    }
+
+    /// <summary>The Spotify dedicated profile's configuration for this pad (source, cover
+    /// layout, text mode) — set from that profile's gear ▸ Configure
+    /// (<see cref="DpShowDedicatedConfig"/>), stored as three plain <c>spotify.{id}.*</c>
+    /// settings, defaulting to the original behaviour (local SMTC source, 4-tile cover).</summary>
+    internal SpotifyCoverConfig DpReadSpotifyCoverConfig(int id) => new(
+        SpotifyCoverConfig.ParseSource(_dpStore.GetSetting($"spotify.{id}.source")),
+        SpotifyCoverConfig.ParseLayout(_dpStore.GetSetting($"spotify.{id}.coverLayout")),
+        SpotifyCoverConfig.ParseTextMode(_dpStore.GetSetting($"spotify.{id}.textMode")),
+        SpotifyCoverConfig.ParseReturnEnabled(_dpStore.GetSetting($"spotify.{id}.returnOn")),
+        SpotifyCoverConfig.ParseReturnSeconds(_dpStore.GetSetting($"spotify.{id}.returnSec")),
+        SpotifyCoverConfig.ParseBackArrow(_dpStore.GetSetting($"spotify.{id}.backArrow")),
+        SpotifyCoverConfig.ParseForegroundOnly(_dpStore.GetSetting($"spotify.{id}.fgOnly")),
+        SpotifyCoverConfig.ParsePosition(_dpStore.GetSetting($"spotify.{id}.position")),
+        SpotifyCoverConfig.ParseDevice(_dpStore.GetSetting($"spotify.{id}.device")));
+
+    internal void DpWriteSpotifyCoverConfig(int id, SpotifyCoverConfig cfg)
+    {
+        _dpStore.SetSetting($"spotify.{id}.source", cfg.SourceToken);
+        _dpStore.SetSetting($"spotify.{id}.coverLayout", cfg.LayoutToken);
+        _dpStore.SetSetting($"spotify.{id}.textMode", cfg.TextModeToken);
+        _dpStore.SetSetting($"spotify.{id}.returnOn", cfg.ReturnEnabledToken);
+        _dpStore.SetSetting($"spotify.{id}.returnSec",
+            SpotifyCoverConfig.ClampReturnSeconds(cfg.ReturnSeconds).ToString());
+        _dpStore.SetSetting($"spotify.{id}.backArrow", cfg.BackArrowToken);
+        _dpStore.SetSetting($"spotify.{id}.fgOnly", cfg.ForegroundOnlyToken);
+        _dpStore.SetSetting($"spotify.{id}.position", cfg.PositionToken);
+        _dpStore.SetSetting($"spotify.{id}.device", cfg.Device);
+    }
+
+    /// <summary>Feeds the app's own DisplayPad grid a still preview of the Spotify dedicated
+    /// profile's live 2×2 block (keys 0/1/6/7). Those keys carry no stored icon, so without
+    /// this the grid shows them blank while the hardware shows cover art / track text. No-op
+    /// unless <paramref name="id"/> is the foreground pad on its Spotify profile; refreshed
+    /// from <see cref="SpotifyCoverService.PreviewChanged"/> and each repaint path.</summary>
+    private void DpBindSpotifyBlockPreview(int id)
+    {
+        if (DpSelectedDeviceId() != id) return;
+
+        bool onSpotify = _dpStore.GetProfileName(id, _dpStore.GetCurrentProfile(id)) == SpotifyProfileName;
+        if (!onSpotify)
+        {
+            // Leaving the profile: drop the "a service owns this picture" marker, or the keys
+            // would keep suppressing their warning triangle on the profile that follows.
+            foreach (var k in _dpKeys) k.IsLiveOverlay = false;
+            return;
+        }
+
+        // Reset first: a Position change moves the block to a different 4 keys, and the OLD
+        // ones must drop the marker (and their now-stale preview file) rather than keep showing
+        // a frozen picture with a suppressed warning triangle forever.
+        foreach (var k in _dpKeys) k.IsLiveOverlay = false;
+
+        SpotifyCoverService.RenderUiPreview(id);
+        var blockKeys = SpotifyCoverService.BlockKeysFor(DpReadSpotifyCoverConfig(id).Position);
+        foreach (int b in blockKeys)
+        {
+            if (b >= _dpKeys.Length) continue;
+            // These 4 keys carry a picture and NO action by design — the block is painted live,
+            // not bound to anything — so they must not show the "image without action" warning.
+            _dpKeys[b].IsLiveOverlay = true;
+            string path = SpotifyCoverService.UiPreviewPath(id, b);
+            if (!File.Exists(path)) continue;
+            if (_dpKeys[b].ImagePath != path) _dpKeys[b].ImagePath = path;
+            _dpKeys[b].TouchPreview();   // path is stable tile-to-tile — force the re-read
+        }
+    }
+
     /// <summary>
     /// Creates the reserved "Spotify" DisplayPad profile for the active device (if it
-    /// doesn't already exist) and switches to it. Layout: keys 0,1,6,7 (the left 2×2 block)
-    /// are left with no ActionType/ImagePath — they're driven live by SpotifyCoverService,
-    /// not a persisted per-key icon — while 2,3,4,5,8,9,10,11 get the 8 existing media
-    /// actions (Prev/Play-Pause/Next/Shuffle/VolDown/VolUp/Mute/Stop) with an auto-generated
-    /// caption tile, same pattern as DpMnuSetBack_Click's auto-icon.
+    /// doesn't already exist) and switches to it. The 4 keys of the 2×2 cover block (position-
+    /// dependent, see <see cref="SpotifyCoverService.BlockKeysFor"/>) are left with no
+    /// ActionType/ImagePath — they're driven live by SpotifyCoverService, not a persisted per-key
+    /// icon — while the other 8 get control actions (Prev/Play-Pause/Next/Shuffle/VolDown/VolUp/
+    /// Mute/Repeat), each with the SAME auto-generated glyph tile a single key of that action gets
+    /// (nav arrows for prev/next, solid shapes for the rest). Which ACTION TYPE those 7+1 keys use
+    /// — "media" (system keys, no account) or "spotify" (Web API commands) — follows the profile's
+    /// Source setting, and WHICH PHYSICAL KEYS get which control follows its Position setting; see
+    /// <see cref="DpSpotifySeedsFor"/>.
     /// </summary>
     private void DpCreateOrSwitchSpotifyProfile()
     {
@@ -1309,29 +1559,23 @@ public partial class MainWindow
             _dpStore.ClearProfile(id, slot);
             _dpStore.SetProfileName(id, slot, SpotifyProfileName);
 
-            (int Btn, string Value, string LocKey)[] seeds =
-            {
-                (2,  "Previous track", "media_prev"),
-                (3,  "Play/Pause",     "media_play_pause"),
-                (4,  "Next track",     "media_next"),
-                (5,  "Shuffle",        "media_shuffle"),
-                (8,  "Volume Down",    "media_vol_down"),
-                (9,  "Volume Up",      "media_vol_up"),
-                (10, "Mute",           "media_mute"),
-                (11, "Stop",           "media_stop"),
-            };
-            foreach (var (btn, value, locKey) in seeds)
-            {
-                string dest = DpAutoIconCachePath("spotify_media", value);
-                string? img = IconImageGenerator.TryGenerateCaptionIcon(Loc.Get(locKey), DpHidNative.IconSize, dest)
-                    ? dest : null;
-                _dpStore.SaveButton(id, slot, btn, img, "media", value);
-            }
-            // Materializes key 0 too (cover tile, no action) so the profile "exists" even
-            // if icon generation above failed for every seed.
-            _dpStore.SaveButton(id, slot, 0, null, null, null);
+            var cfg = DpReadSpotifyCoverConfig(id);
+            foreach (var (btn, type, value) in DpSpotifySeedsFor(cfg.Source, cfg.Position, cfg.Device))
+                DpSeedSpotifyKey(id, slot, btn, type, value);
+            // Materializes the cover tile too (no action) so the profile "exists" even if icon
+            // generation above failed for every seed.
+            _dpStore.SaveButton(id, slot, SpotifyCoverService.BlockKeysFor(cfg.Position)[0], null, null, null);
             DpLog($"[UI] Spotify profile created: slot {slot} (device {id})");
         }
+        else
+        {
+            DpMigrateSpotifyIcons(id, slot);
+        }
+
+        // Where the back arrow on the cover tile will return to (see DpSpotifyLeave). Recorded
+        // only when coming FROM something else, so bouncing in and out keeps the same origin.
+        int leaving = _dpStore.GetCurrentProfile(id);
+        if (leaving != slot) _dpSpotifyPrevProfile[id] = leaving;
 
         DpRefreshProfiles(id);
         _dpStore.SetCurrentProfile(id, slot);
@@ -1340,6 +1584,181 @@ public partial class MainWindow
         DpRequestRepaint(id);
         DpSyncSpotifyCoverService(id);
         DpLog($"[UI] Switched to Spotify profile (device {id})");
+    }
+
+    /// <summary>The transport/volume/repeat controls the Spotify dedicated profile seeds. Repeat
+    /// has no plain-media equivalent at all (see <see cref="ControlValues"/>), so it is always
+    /// the "spotify" Web API command regardless of the profile's Source.</summary>
+    private enum SpotifyControl { Previous, PlayPause, Next, Shuffle, VolumeDown, VolumeUp, Mute, Repeat }
+
+    /// <summary>Each control's value in "media" form (system media keys) and "spotify" form (Web
+    /// API command) — Repeat has no media entry, handled as a special case below.</summary>
+    private static readonly Dictionary<SpotifyControl, (string Media, string Spotify)> ControlValues = new()
+    {
+        [SpotifyControl.Previous]    = ("Previous track", "previous"),
+        [SpotifyControl.PlayPause]   = ("Play/Pause",      "play_pause"),
+        [SpotifyControl.Next]        = ("Next track",      "next"),
+        [SpotifyControl.Shuffle]     = ("Shuffle",         "shuffle_toggle"),
+        [SpotifyControl.VolumeDown]  = ("Volume Down",     "volume_down"),
+        [SpotifyControl.VolumeUp]    = ("Volume Up",       "volume_up"),
+        [SpotifyControl.Mute]        = ("Mute",            "mute_toggle"),
+    };
+
+    /// <summary>Which physical key gets which control, per <see cref="SpotifyCoverPosition"/> —
+    /// each hand-laid-out (user request 2026-09-01, reference screenshots), not a mechanical
+    /// reflow of another position's order:
+    /// <list type="bullet">
+    /// <item><b>Left</b> (block at keys 0,1,6,7): row 0 (2,3,4,5) = Mute/VolDown/VolUp/Repeat,
+    /// row 1 (8,9,10,11) = Previous/PlayPause/Next/Shuffle.</item>
+    /// <item><b>Center</b> (block at keys 2,3,8,9): left pair (0,1,6,7) = VolDown/VolUp/Previous/
+    /// Next, right pair (4,5,10,11) = Shuffle/PlayPause/Repeat/Mute.</item>
+    /// <item><b>Right</b> (block at keys 4,5,10,11): the Left layout's control VALUES, each
+    /// shifted two keys left (columns 2-5 → 0-3): row 0 (0,1,2,3) = Mute/VolDown/VolUp/Repeat,
+    /// row 1 (6,7,8,9) = Previous/PlayPause/Next/Shuffle.</item>
+    /// </list></summary>
+    private static readonly Dictionary<SpotifyCoverPosition, (int Btn, SpotifyControl Control)[]> ControlLayout = new()
+    {
+        [SpotifyCoverPosition.Left] = new (int, SpotifyControl)[]
+        {
+            (2, SpotifyControl.Mute),       (3, SpotifyControl.VolumeDown), (4, SpotifyControl.VolumeUp),  (5, SpotifyControl.Repeat),
+            (8, SpotifyControl.Previous),   (9, SpotifyControl.PlayPause),  (10, SpotifyControl.Next),     (11, SpotifyControl.Shuffle),
+        },
+        [SpotifyCoverPosition.Center] = new (int, SpotifyControl)[]
+        {
+            (0, SpotifyControl.VolumeDown), (1, SpotifyControl.VolumeUp),   (6, SpotifyControl.Previous),  (7, SpotifyControl.Next),
+            (4, SpotifyControl.Shuffle),    (5, SpotifyControl.PlayPause),  (10, SpotifyControl.Repeat),   (11, SpotifyControl.Mute),
+        },
+        [SpotifyCoverPosition.Right] = new (int, SpotifyControl)[]
+        {
+            (0, SpotifyControl.Mute),       (1, SpotifyControl.VolumeDown), (2, SpotifyControl.VolumeUp),  (3, SpotifyControl.Repeat),
+            (6, SpotifyControl.Previous),   (7, SpotifyControl.PlayPause),  (8, SpotifyControl.Next),      (9, SpotifyControl.Shuffle),
+        },
+    };
+
+    /// <summary>The 8 seeded keys (btn, action type, value) for a given Source + Position — the
+    /// physical layout from <see cref="ControlLayout"/>, each control resolved to the action type
+    /// that Source calls for (user request 2026-09-01: "quando seleziono web api o local account,
+    /// aggiorna le azioni dei pulsanti"). <paramref name="device"/> (a Spotify Connect device id,
+    /// "" = whichever is active) is appended to every "spotify" value's wire format
+    /// (<c>command[~arg][~deviceId]</c>, see <c>ButtonActionEngine</c>) — meaningless for "media"
+    /// values, which carry no device concept at all, so it's a no-op while Source is Local.</summary>
+    private static IEnumerable<(int Btn, string Type, string Value)> DpSpotifySeedsFor(
+        SpotifyCoverSource source, SpotifyCoverPosition position, string device = "")
+    {
+        bool webApi = source == SpotifyCoverSource.WebApi;
+        // "cmd~~device" — the empty middle field is the (unused) arg slot every spotify command
+        // in the wire format reserves before the device id.
+        string Spotify(string cmd) => string.IsNullOrEmpty(device) ? cmd : $"{cmd}~~{device}";
+
+        foreach (var (btn, control) in ControlLayout[position])
+        {
+            if (control == SpotifyControl.Repeat) { yield return (btn, "spotify", Spotify("repeat_cycle")); continue; }
+            var (media, spotify) = ControlValues[control];
+            yield return webApi ? (btn, "spotify", Spotify(spotify)) : (btn, "media", media);
+        }
+    }
+
+    /// <summary>Writes one seeded key with the SAME auto-icon a single key of that action type
+    /// gets in the key-config dialog (the per-action glyph tile) and, crucially, marks it as a
+    /// <b>default icon</b> (<see cref="KeyIconSpec.DefaultIcon"/>): without a stored spec the
+    /// dialog assumes a hand-placed picture and both leaves the checkbox off and refuses to
+    /// refresh the tile when the action changes (user request 2026-09-01).</summary>
+    private void DpSeedSpotifyKey(int deviceId, int slot, int btn, string actionType, string value)
+    {
+        string dest = DpAutoIconCachePath(actionType, value);
+        string? img = ActionIconFallback.TryGenerate(actionType, value, DpHidNative.IconSize, dest)
+            ? dest : null;
+        _dpStore.SaveButton(deviceId, slot, btn, img, actionType, value);
+        _dpStore.SaveIconSpec(deviceId, slot, 0, btn, new KeyIconSpec { DefaultIcon = true }.ToJson());
+    }
+
+    /// <summary>One-shot upgrade for Spotify profiles created before the keys carried an icon
+    /// spec: re-seeds every key that STILL holds its stock action for the profile's CURRENT
+    /// Source/Position and has no stored spec of its own (i.e. the user never opened it in the
+    /// key dialog), so it picks up the default icon flag and the current artwork. Anything the
+    /// user re-assigned or restyled is left alone.</summary>
+    private void DpMigrateSpotifyIcons(int deviceId, int slot)
+    {
+        var byIndex = _dpStore.LoadPage(deviceId, slot, 0)
+            .ToDictionary(b => b.ButtonIndex);
+        var cfg = DpReadSpotifyCoverConfig(deviceId);
+        foreach (var (btn, type, value) in DpSpotifySeedsFor(cfg.Source, cfg.Position, cfg.Device))
+        {
+            if (!byIndex.TryGetValue(btn, out var rec)) continue;
+            if (!string.IsNullOrWhiteSpace(rec.IconSpec)) continue;
+            if (!string.Equals(rec.ActionType, type, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(rec.ActionValue, value, StringComparison.OrdinalIgnoreCase)) continue;
+            DpSeedSpotifyKey(deviceId, slot, btn, type, value);
+        }
+    }
+
+    /// <summary>Overwrites the 8 control keys with the seed set for <paramref name="source"/>/
+    /// <paramref name="position"/>, unconditionally — called when either setting changes (user
+    /// request 2026-09-01). Unlike <see cref="DpMigrateSpotifyIcons"/> this DOES replace a key
+    /// the user customized: there is no "still stock" concept across a source/position switch,
+    /// since the layout can put a totally different control on a given physical key.
+    /// <paramref name="repositioned"/> (true only when POSITION changed) additionally blanks the
+    /// NEW block keys' action/image: a position change can turn a former CONTROL key into a
+    /// block key, and that key's stale seeded action must not linger on a tile the overlay is
+    /// about to paint over. Their icon-spec column (text-tile font/color) is left alone — it is
+    /// simply unused until a key at that index becomes a text tile again.</summary>
+    private void DpReseedSpotifyControlButtons(int deviceId, int slot,
+        SpotifyCoverSource source, SpotifyCoverPosition position, bool repositioned, string device = "")
+    {
+        if (repositioned)
+            foreach (int btn in SpotifyCoverService.BlockKeysFor(position))
+                _dpStore.SaveButton(deviceId, slot, btn, null, null, null);
+
+        foreach (var (btn, type, value) in DpSpotifySeedsFor(source, position, device))
+            DpSeedSpotifyKey(deviceId, slot, btn, type, value);
+        DpLog($"[SPT] device {deviceId}: control buttons reseeded (source {source}, position {position})");
+    }
+
+    /// <summary>Play/Pause, Shuffle and Repeat swap icon to match reality — foreground pad only,
+    /// same scope <see cref="DpBindSpotifyBlockPreview"/> already uses for the cover block (user
+    /// request 2026-09-01).</summary>
+    private void DpOnSpotifyPlaybackStateChanged(int deviceId, SpotifyCoverService.PlaybackState state)
+    {
+        if (DpSelectedDeviceId() != deviceId) return;
+        if (_dpStore.GetProfileName(deviceId, _dpStore.GetCurrentProfile(deviceId)) != SpotifyProfileName) return;
+
+        int slot = DpSpotifySlot(deviceId);
+        if (slot == 0) return;
+        var cfg = DpReadSpotifyCoverConfig(deviceId);
+
+        DpUpdateSpotifyControlIcon(deviceId, slot, cfg, SpotifyControl.PlayPause, state);
+        DpUpdateSpotifyControlIcon(deviceId, slot, cfg, SpotifyControl.Shuffle, state);
+        DpUpdateSpotifyControlIcon(deviceId, slot, cfg, SpotifyControl.Repeat, state);
+    }
+
+    /// <summary>Re-renders and re-uploads ONE control key for the new <paramref name="state"/> —
+    /// only if it still holds exactly the stock action <see cref="DpSpotifySeedsFor"/> would seed
+    /// there today: a key the user reassigned or gave a custom picture is left alone, the same
+    /// "still stock" guard <see cref="DpMigrateSpotifyIcons"/> uses.</summary>
+    private void DpUpdateSpotifyControlIcon(int deviceId, int slot, SpotifyCoverConfig cfg,
+        SpotifyControl control, SpotifyCoverService.PlaybackState state)
+    {
+        int btn = ControlLayout[cfg.Position].First(t => t.Control == control).Btn;
+        if (btn >= _dpKeys.Length) return;
+
+        var stock = DpSpotifySeedsFor(cfg.Source, cfg.Position, cfg.Device).FirstOrDefault(s => s.Btn == btn);
+        if (stock.Type is null) return;
+        var rec = _dpStore.LoadPage(deviceId, slot, 0).FirstOrDefault(b => b.ButtonIndex == btn);
+        if (rec is null) return;
+        if (!string.Equals(rec.ActionType, stock.Type, StringComparison.OrdinalIgnoreCase)) return;
+        if (!string.Equals(rec.ActionValue, stock.Value, StringComparison.OrdinalIgnoreCase)) return;
+
+        string dest = DpAutoIconCachePath("spotifylive",
+            $"{control}|{state.IsPlaying}|{state.ShuffleOn}|{state.RepeatMode}");
+        bool ok = control switch
+        {
+            SpotifyControl.PlayPause => ActionIconFallback.TryGenerateSpotifyPlayPauseIcon(state.IsPlaying, DpHidNative.IconSize, dest),
+            SpotifyControl.Shuffle   => ActionIconFallback.TryGenerateSpotifyShuffleIcon(state.ShuffleOn, DpHidNative.IconSize, dest),
+            SpotifyControl.Repeat    => ActionIconFallback.TryGenerateSpotifyRepeatIcon(state.RepeatMode, DpHidNative.IconSize, dest),
+            _ => false,
+        };
+        if (!ok || _dpKeys[btn].ImagePath == dest) return;   // same render already showing
+        DpUploadAndPersist(deviceId, slot, _dpKeys[btn], dest);
     }
 
     /// <summary>Selects a slot in the profile combo (suppressing the event).</summary>
@@ -1426,13 +1845,37 @@ public partial class MainWindow
         var currentKeys = new HashSet<string>();
         foreach (var slot in existing)
         {
-            string? exe = _dpStore.GetSetting($"profile.{deviceId}.{slot}.launchExe");
+            string kb = $"profile.{deviceId}.{slot}";
+            string? exe = _dpStore.GetSetting($"{kb}.launchExe");
+            bool focusOnly = _dpStore.GetSetting($"{kb}.launchFocusOnly") == "1";
+            bool restoreOnClose = _dpStore.GetSetting($"{kb}.launchRestoreOnClose") == "1";
+
+            // The Spotify dedicated profile has no gear to link an exe from — it is not in the
+            // profile list at all — so its own "only while Spotify is in front" flag synthesizes
+            // the very same focus-only registration an ordinary profile would get.
+            bool isSpotifySlot = _dpStore.GetProfileName(deviceId, slot) == SpotifyProfileName;
+            if (isSpotifySlot && DpReadSpotifyCoverConfig(deviceId).ForegroundOnly)
+            {
+                exe = SpotifyExeName;
+                focusOnly = true;
+                restoreOnClose = false;
+            }
+
             if (string.IsNullOrWhiteSpace(exe)) continue;
             string key = scope + slot;
             currentKeys.Add(key);
             int capturedSlot = slot;
-            ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe,
-                () => DpSwitchProfile(deviceId, capturedSlot.ToString()));
+            // A dedicated slot (only the Spotify one reaches here) can't go through
+            // DpSwitchProfile at all — see DpSpotifySwitchTo's remarks: it isn't in the ordinary
+            // profile list DpSwitchProfile searches, so "switch TO Spotify" always silently
+            // no-opped (user report 2026-09-01: "show when Spotify is in front" never engaged).
+            Action<string> switchTo = isSpotifySlot
+                ? t => { if (int.TryParse(t, out int ts)) DpSpotifySwitchTo(deviceId, ts); }
+                : t => DpSwitchProfile(deviceId, t);
+            ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe, focusOnly, restoreOnClose,
+                capturedSlot.ToString(),
+                () => _dpStore.GetCurrentProfile(deviceId).ToString(),
+                switchTo);
         }
         foreach (var staleKey in ProfileLaunchWatcher.Instance.KeysWithPrefix(scope).Except(currentKeys))
             ProfileLaunchWatcher.Instance.RemoveRegistration(staleKey);
@@ -1488,6 +1931,7 @@ public partial class MainWindow
         DpLog($"SwitchProfile({id}, {profile})");
         DpRequestRepaint(id);
         DpSyncSpotifyCoverService(id);
+        DeviceSyncOnProfileSwitched(SyncDeviceKind.DisplayPad, profile);
     }
 
     private void CbDpRotation_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1537,6 +1981,7 @@ public partial class MainWindow
         // Idem for the clock/monitor tiles: the profile is being wiped, so nothing should keep
         // painting on it (a later repaint re-registers whatever survives).
         DpLiveTileService.Stop(id);
+        DpSpotifyCoverKeyService.Stop(id);
         DpFullscreenAnimator.Stop(id);
         _dpClient.ResetPictures(id);
         _dpStore.ClearProfile(id, profile);
@@ -2004,9 +2449,52 @@ public partial class MainWindow
     /// next to LvDpKeys (<see cref="BtnDpConfigure_Click"/>).</summary>
     private void DpOpenKeyConfigDialog(DisplayPadKey key, int id)
     {
+        // Everything below can end in a synchronous upload to the pad; the Spotify marquee must
+        // not be competing for the device while that happens (see SpotifyCoverService.Suspend).
+        using var _ = SpotifyCoverService.Suspend();
+
+        bool wasSpotifyCover = KeyIconSpec.FromJson(key.IconSpecJson) is { SpotifyCover: true };
+        string? oldActionType  = key.ActionType;
+        string? oldActionValue = key.ActionValue;
+
+        // A Spotify block key shows a live tile and has no action: its "Edit icon" opens the
+        // restricted text-style popup (font + text color) instead of reporting "none", and its
+        // picture is never persisted — the service repaints it (user request 2026-09-01).
+        bool liveOverlay = SpotifyCoverService.Owns(id, key.Index);
+        var spotifyCfg = DpReadSpotifyCoverConfig(id);
+        // Only the 3 TEXT tiles of the 1+3 layout have a text style to edit — in the 4-tile
+        // layout every block key is a slice of the album art.
+        bool textTile = liveOverlay
+                        && spotifyCfg.Layout == SpotifyCoverLayout.Single
+                        && SpotifyCoverService.FieldIndexOf(_dpStore.GetRotation(id), spotifyCfg.Position, key.Index) >= 0;
+
         var dlg = new DpKeyConfigDialog(key.Index, key.ImagePath, key.ActionType, key.ActionValue,
             key.IconSpecJson) { Owner = this };
+        // Cover tile (and every tile of the 4-tile layout): album art, nothing to style.
+        dlg.EditIconDisabled = liveOverlay && !textTile;
+        if (textTile)
+            dlg.TextStyleOnlyRenderer = spec =>
+            {
+                string dest = DpAutoIconCachePath("spotifytxt", $"{id}|{key.Index}|{spec.StyleFingerprint}");
+                return SpotifyCoverService.RenderTextTilePreview(id, key.Index, spec, dest) ? dest : null;
+            };
         if (dlg.ShowDialog() != true) return;
+
+        if (liveOverlay)
+        {
+            // The overlay owns this key's PICTURE, so nothing is persisted for it (whatever the
+            // dialog rendered would only be painted over on the next tick) — but an action the
+            // user assigned here is still a real binding and is kept.
+            key.ActionType   = dlg.ActionType;
+            key.ActionValue  = dlg.ActionValue;
+            key.IconSpecJson = dlg.IconSpecJson;
+            _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, null, key.ActionType, key.ActionValue);
+            _dpStore.SaveIconSpec(id, DpCurrentProfile(), _currentDpPageId, key.Index, key.IconSpecJson);
+            DpSyncSpotifyCoverService(id);
+            DpBindSpotifyBlockPreview(id);
+            DpLog($"[ACT] key #{key.Index} Spotify block: action <- {key.ActionType ?? "none"}, text style saved");
+            return;
+        }
 
         // Update action
         key.ActionType  = dlg.ActionType;
@@ -2040,6 +2528,24 @@ public partial class MainWindow
         // Icon settings live in their own column (see DisplayPadStore.SaveIconSpec) and are
         // written last, after whichever branch above created/updated the row.
         _dpStore.SaveIconSpec(id, DpCurrentProfile(), _currentDpPageId, key.Index, key.IconSpecJson);
+
+        // The album-cover overlay (DpSpotifyCoverKeyService) only picks a key up on a page
+        // repaint — force one when this edit turned the option on or off so it takes effect now.
+        bool isSpotifyCover = KeyIconSpec.FromJson(key.IconSpecJson) is { SpotifyCover: true };
+
+        // Same for a live tile (clock / PC monitor / speed test): DpLiveTileService keeps an
+        // in-memory copy of each live key that only refreshes on a repaint's Sync(). Without
+        // this, changing e.g. the sensor on a "PC monitor" key uploads the new tile once (via
+        // DpUploadAndPersist above) and then the 1 Hz timer paints the STALE key back over it.
+        bool liveInvolved = DpLiveTileService.IsLiveType(key.ActionType)
+                            || DpLiveTileService.IsLiveType(oldActionType);
+        bool actionChanged = key.ActionType != oldActionType || key.ActionValue != oldActionValue;
+
+        if (isSpotifyCover || wasSpotifyCover || (liveInvolved && actionChanged))
+            DpRequestRepaint(id);
+
+        // This edit may have added or removed a "dp_folder" (page) action — refresh the tab.
+        UpdateDpPagesTabVisibility();
     }
 
     /// <summary>Rebuilds the Key Binding section's mapped-keys list (LvDpKeys) —
@@ -2227,6 +2733,8 @@ public partial class MainWindow
     private ContextMenu DpBuildProfileContextMenu()
     {
         var menu = new ContextMenu();
+        var miConfigure = new MenuItem { Header = Loc.Get("configure_profile") };
+        miConfigure.Click += (_, _) => { if (LstDpProfile.SelectedItem is DpProfileItem pi) DpShowProfileGear(pi); };
         var miRename = new MenuItem { Header = Loc.Get("rename_profile") };
         miRename.Click += BtnDpRenameProfile_Click;
         var miImportXml = new MenuItem { Header = Loc.Get("dp_import_xml") };
@@ -2237,6 +2745,8 @@ public partial class MainWindow
         miExport.Click += BtnDpExportProfiles_Click;
         var miDelete = new MenuItem { Header = Loc.Get("delete_profile") };
         miDelete.Click += BtnDpDeleteProfile_Click;
+        menu.Items.Add(miConfigure);
+        menu.Items.Add(new Separator());
         menu.Items.Add(miRename);
         menu.Items.Add(new Separator());
         menu.Items.Add(miImportXml);
@@ -2309,6 +2819,15 @@ public partial class MainWindow
         return menu;
     }
 
+    /// <summary>The key right-click menu (configure / folder / back / copy-paste / change
+    /// image) is only meaningful in the "Key Binding" section — every one of its handlers
+    /// already early-returns otherwise. Suppress the menu entirely outside that section so it
+    /// doesn't pop up a list of no-ops.</summary>
+    private void DpKeyButton_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (!IsDpKeyBindingSectionActive) e.Handled = true;
+    }
+
     private static DisplayPadKey? DpKeyFromMenu(object sender) =>
         sender is MenuItem mi && mi.Parent is ContextMenu cm
             && cm.PlacementTarget is FrameworkElement fe
@@ -2348,15 +2867,15 @@ public partial class MainWindow
         key.ImagePath = null;
         _dpStore.SaveButton(id, DpCurrentProfile(), _currentDpPageId, key.Index, null, null, null);
         DpClearKeyOnDevice(id, key.Index);
+        UpdateDpPagesTabVisibility();   // the key may have been a "dp_folder" (page) navigator
     }
 
-    /// <summary>Copies this key's action (type+value only, no picture — see
-    /// <see cref="ActionClipboard"/>'s remarks) to the app-wide clipboard, for pasting onto
-    /// any other key of any device.</summary>
+    /// <summary>Copies this key's action — plus its picture (see <see cref="ActionClipboard"/>'s
+    /// remarks) — to the app-wide clipboard, for pasting onto any other key of any device.</summary>
     private void DpMnuCopyAction_Click(object sender, RoutedEventArgs e)
     {
         if (DpKeyFromMenu(sender) is not DisplayPadKey key) return;
-        ActionClipboard.Copy(key.ActionType, key.ActionValue);
+        ActionClipboard.Copy(key.ActionType, key.ActionValue, key.ImagePath, key.IconSpecJson);
     }
 
     /// <summary>Copy + remove — mirrors "Cut" everywhere else in Windows.</summary>
@@ -2365,7 +2884,7 @@ public partial class MainWindow
         if (!IsDpKeyBindingSectionActive) return;
         if (DpKeyFromMenu(sender) is not DisplayPadKey key) return;
         if (DpSelectedDeviceId() is not int id) return;
-        ActionClipboard.Copy(key.ActionType, key.ActionValue);
+        ActionClipboard.Copy(key.ActionType, key.ActionValue, key.ImagePath, key.IconSpecJson);
         DpRemoveKeyAction(key, id);
     }
 
@@ -2374,9 +2893,9 @@ public partial class MainWindow
     /// makes no sense here — can't actually happen for DisplayPad itself (it's the only host
     /// with <c>SupportsPages</c>), but the SAME clipboard/paste code path is shared by every
     /// device, so the check stays here rather than only on the non-DisplayPad targets. When
-    /// this key has no picture yet, generates the action's default icon (<see cref="ActionIconFallback"/>)
-    /// instead of leaving it blank — mirrors what a freshly-configured key gets via
-    /// <see cref="DpKeyConfigDialog"/>.</summary>
+    /// this key has no picture yet, it adopts a copy of the clipboard's source picture (see
+    /// <see cref="ActionClipboard.HasImage"/>), falling back to the action's generated default
+    /// icon (<see cref="ActionIconFallback"/>) — never left blank.</summary>
     private void DpMnuPasteAction_Click(object sender, RoutedEventArgs e)
     {
         if (!IsDpKeyBindingSectionActive) return;
@@ -2394,10 +2913,33 @@ public partial class MainWindow
 
         if (!key.HasImage)
         {
-            string dest = DpAutoIconCachePath(ActionClipboard.ActionType!, ActionClipboard.ActionValue ?? "");
-            if (ActionIconFallback.TryGenerate(ActionClipboard.ActionType, ActionClipboard.ActionValue, DpHidNative.IconSize, dest))
+            // Prefer a private copy of the source key's own picture — the only way custom
+            // images, and value-derived / page-only icons (exec, emoji, googlehome,
+            // dp_emojibrowser, live tiles) that ActionIconFallback can't regenerate, keep
+            // their look on paste. New filename per paste so two targets can't collide on
+            // one cache entry; original extension preserved so GIF detection still works.
+            if (ActionClipboard.HasImage)
             {
-                DpUploadAndPersist(id, DpCurrentProfile(), key, dest);
+                try
+                {
+                    Directory.CreateDirectory(DpAutoIconDir);
+                    string ext = Path.GetExtension(ActionClipboard.ImagePath!);
+                    if (string.IsNullOrEmpty(ext)) ext = ".png";
+                    string dest = Path.Combine(DpAutoIconDir, $"paste_{Guid.NewGuid():N}{ext}");
+                    File.Copy(ActionClipboard.ImagePath!, dest);
+                    key.IconSpecJson = ActionClipboard.IconSpecJson;
+                    DpUploadAndPersist(id, DpCurrentProfile(), key, dest);
+                    _dpStore.SaveIconSpec(id, DpCurrentProfile(), _currentDpPageId, key.Index, key.IconSpecJson);
+                    DpLog($"[ACT] key #{key.Index} <- pasted action (source picture copied)");
+                    return;
+                }
+                catch (Exception ex) { DpLog($"[ACT] key #{key.Index} paste picture copy failed: {ex.Message}"); }
+            }
+
+            string dflt = DpAutoIconCachePath(ActionClipboard.ActionType!, ActionClipboard.ActionValue ?? "");
+            if (ActionIconFallback.TryGenerate(ActionClipboard.ActionType, ActionClipboard.ActionValue, DpHidNative.IconSize, dflt))
+            {
+                DpUploadAndPersist(id, DpCurrentProfile(), key, dflt);
                 DpLog($"[ACT] key #{key.Index} <- pasted action (default icon generated)");
                 return;
             }
@@ -2466,6 +3008,7 @@ public partial class MainWindow
             _dpStore.SaveButton(id, profile, _currentDpPageId, key.Index, key.ImagePath, key.ActionType, key.ActionValue);
 
         DpLog($"[ACT] key #{key.Index} <- dp_folder \"{name}\" (page {pageId})");
+        UpdateDpPagesTabVisibility();
     }
 
     /// <summary>Facade for <see cref="DisplayPadActionHost"/>'s <c>IActionHost.ListPages</c> —
@@ -2491,27 +3034,151 @@ public partial class MainWindow
     // Pages section (list + delete existing folder sub-pages)
     // ================================================================
 
-    /// <summary>Repopulates <see cref="_dpPages"/> from the store for the currently selected
-    /// device+profile — called whenever the "Pages" section becomes active (see
-    /// <see cref="ShowDpSection"/>), so it always reflects pages created/renamed elsewhere
-    /// (context menu, or the "Page" action type in <c>ButtonActionDialog</c>).</summary>
+    /// <summary>Rebuilds <see cref="_dpPageGroups"/> from the store for the currently selected
+    /// device — a tree that mirrors the real folder nesting: profile nodes (only profiles that
+    /// actually have a page), each holding its root pages, each of those holding whatever
+    /// sub-pages its "dp_folder" keys open, recursively. Called whenever the "Pages" section
+    /// becomes active (see <see cref="ShowDpSection"/>), so it always reflects pages created/
+    /// renamed elsewhere. A profile node's manual collapse state is preserved across a rebuild
+    /// within the same session.</summary>
     private void RefreshDpPagesList()
     {
-        _dpPages.Clear();
-        if (DpSelectedDeviceId() is int id)
-            foreach (var (pageId, name) in _dpStore.ListPages(id, DpCurrentProfile()))
-                _dpPages.Add(new DpPageRow(pageId, name));
+        var wasCollapsed = _dpPageGroups.Where(g => !g.IsExpanded).Select(g => g.Profile).ToHashSet();
 
-        LblDpNoPages.Visibility = _dpPages.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _dpPageGroups.Clear();
+        if (DpSelectedDeviceId() is int id)
+        {
+            string PageName(int pid) => _dpStore.GetFolderName(pid) ?? $"Page {pid}";
+
+            foreach (var byProfile in _dpStore.ListPageLinks(id)
+                                             .GroupBy(l => l.Profile)
+                                             .OrderBy(g => g.Key))
+            {
+                int profile = byProfile.Key;
+
+                // parent pageId -> its distinct child pageIds (0 = profile root)
+                var childrenOf = new Dictionary<int, List<int>>();
+                var everyChild = new HashSet<int>();
+                foreach (var (_, parent, child) in byProfile)
+                {
+                    if (!childrenOf.TryGetValue(parent, out var kids))
+                        childrenOf[parent] = kids = new List<int>();
+                    if (!kids.Contains(child)) kids.Add(child);
+                    everyChild.Add(child);
+                }
+                if (everyChild.Count == 0) continue;
+
+                var group = new DpPageProfileGroup
+                {
+                    Profile = profile,
+                    Name = _dpStore.GetProfileName(id, profile) ?? Loc.Get("profile_n", profile),
+                    IsExpanded = !wasCollapsed.Contains(profile),
+                };
+
+                // Depth-first build from the profile root; `ancestry` guards against a folder
+                // cycle (page A opens B, B opens A) — the cyclic node is shown as a leaf.
+                void AddChildren(int parentPageId, ObservableCollection<DpPageRow> target, HashSet<int> ancestry)
+                {
+                    if (!childrenOf.TryGetValue(parentPageId, out var kids)) return;
+                    foreach (int childId in kids.OrderBy(PageName, StringComparer.CurrentCultureIgnoreCase))
+                    {
+                        var row = new DpPageRow { PageId = childId, Name = PageName(childId), Profile = profile };
+                        target.Add(row);
+                        if (ancestry.Add(childId))
+                        {
+                            AddChildren(childId, row.Children, ancestry);
+                            ancestry.Remove(childId);
+                        }
+                    }
+                }
+                AddChildren(0, group.Pages, new HashSet<int> { 0 });
+
+                // Pages that exist but aren't reachable from the root (dangling parent) —
+                // still list them, flat, directly under the profile so they aren't lost.
+                var placed = new HashSet<int>();
+                void Collect(ObservableCollection<DpPageRow> rows)
+                {
+                    foreach (var r in rows) { placed.Add(r.PageId); Collect(r.Children); }
+                }
+                Collect(group.Pages);
+                foreach (int orphan in everyChild.Where(c => !placed.Contains(c))
+                                                 .OrderBy(PageName, StringComparer.CurrentCultureIgnoreCase))
+                    group.Pages.Add(new DpPageRow { PageId = orphan, Name = PageName(orphan), Profile = profile });
+
+                _dpPageGroups.Add(group);
+            }
+        }
+
+        LblDpNoPages.Visibility = _dpPageGroups.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateDpPagesTabVisibility();
+    }
+
+    /// <summary>Click on a "Pages" tree node: a profile node switches to that profile (same
+    /// full reload as picking it in the profile list); a page node switches to its owning
+    /// profile and then navigates into that page.</summary>
+    private void TvDpPages_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (DpSelectedDeviceId() is null) return;
+
+        int profile = e.NewValue switch
+        {
+            DpPageProfileGroup g => g.Profile,
+            DpPageRow row        => row.Profile,
+            _                    => -1,
+        };
+        if (profile < 0) return;
+
+        // Switch profile if it isn't already the selected one — setting SelectedItem here
+        // (not suppressed) runs LstDpProfile_SelectionChanged, which resets navigation to
+        // the root page and repaints.
+        bool switched = false;
+        if (!(LstDpProfile.SelectedItem is DpProfileItem cur && cur.Slot == profile))
+        {
+            if (LstDpProfile.ItemsSource is List<DpProfileItem> items
+                && items.Find(x => x.Slot == profile && !x.IsNew) is DpProfileItem row)
+            {
+                LstDpProfile.SelectedItem = row;
+                switched = true;
+            }
+        }
+
+        if (e.NewValue is DpPageRow leaf)
+        {
+            if (!switched) ResetDpNavigation();   // start from the profile root
+            if (_currentDpPageId != leaf.PageId)
+                DpNavigateToPage(leaf.PageId, _dpStore.GetFolderName(leaf.PageId));
+        }
+        else if (!switched && _currentDpPageId != 0)
+        {
+            // Profile node, already on that profile but currently inside a sub-page — pop out.
+            ResetDpNavigation();
+            DpReloadCurrentProfile(persistent: false);
+        }
+    }
+
+    /// <summary>Shows the "Pages" sidebar tab only when the current device actually has at
+    /// least one folder sub-page (across any profile) — an empty Pages section is just noise
+    /// otherwise. Re-evaluated on every profile/page reload (<see cref="DpReloadCurrentProfile"/>)
+    /// and after a page is created, deleted, or a "dp_folder" key is edited. If the tab is
+    /// hidden while it happens to be the active section, falls back to "Key Binding".</summary>
+    private void UpdateDpPagesTabVisibility()
+    {
+        bool hasPages = DpSelectedDeviceId() is int id && _dpStore.ListAllPages(id).Count > 0;
+
+        RbDpSecPages.Visibility = hasPages ? Visibility.Visible : Visibility.Collapsed;
+
+        if (!hasPages && RbDpSecPages.IsChecked == true)
+            RbDpSecKeyBinding.IsChecked = true;   // fires DpSection_Changed -> ShowDpSection
     }
 
     /// <summary>Deletes a folder page after a confirmation prompt — the row's "Delete" button
-    /// (see <c>MainWindow.xaml</c>'s <c>LstDpPages</c> template) only shows up on hover.</summary>
+    /// (see <c>MainWindow.xaml</c>'s <c>TvDpPages</c> page-leaf template) only shows up on hover.</summary>
     private void BtnDpDeletePage_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button btn || btn.CommandParameter is not int pageId) return;
+        if (sender is not Button btn || btn.CommandParameter is not DpPageRow row) return;
         if (DpSelectedDeviceId() is not int id) return;
 
+        int pageId = row.PageId;
         string name = _dpStore.GetFolderName(pageId) ?? $"Page {pageId}";
         var res = MessageBox.Show(
             Loc.Get("dp_delete_page_confirm", name),
@@ -2520,8 +3187,9 @@ public partial class MainWindow
             MessageBoxImage.Warning);
         if (res != MessageBoxResult.OK) return;
 
-        int profile = DpCurrentProfile();
-        DpDeletePage(id, profile, pageId);
+        // Delete from the profile that owns the page, not necessarily the one on screen —
+        // the list spans every profile.
+        DpDeletePage(id, row.Profile, pageId);
         RefreshDpPagesList();
         DpLog($"[ACT] page {pageId} \"{name}\" deleted");
     }
@@ -2798,6 +3466,7 @@ public partial class MainWindow
         DpLog($"[DB] loaded {rows.Count} records for device={id} profile={profile} page={pageId}");
         DiscordVoiceKeyService.Sync(_dpClient, DpLogAsync, id, rotation, rows);   // see DpUploadPageForDevice
         DpLiveTileService.Sync(_dpClient, DpLogAsync, id, rotation, rows);        // clock/monitor/speed-test keys
+        DpSpotifyCoverKeyService.Sync(_dpClient, DpLogAsync, id, rotation, rows); // "spotify" keys with the album-cover icon option
 
         // Stop every animated-GIF loop on this device NOW (synchronously) — a page/profile
         // switch repurposes key indices, and a stale animation task would keep overwriting
@@ -2827,7 +3496,7 @@ public partial class MainWindow
         DpConfigureScreensaver(id, hasFullscreenImage && screensaver.Enabled, screensaver.Seconds);
         _dpFullscreenByDevice[id] = fullscreenActive;
         // A fullscreen image owns all 12 slots — nothing for the live tiles to paint on.
-        if (fullscreenActive) DpLiveTileService.Stop(id);
+        if (fullscreenActive) { DpLiveTileService.Stop(id); DpSpotifyCoverKeyService.Stop(id); }
         if (!fullscreenActive) DpFullscreenAnimator.Stop(id);
 
         var toUpload = new List<(int btnIndex, string imagePath)>();
@@ -2850,6 +3519,7 @@ public partial class MainWindow
                 // the two alternate on the panel. The app's own grid above keeps showing it.
                 if (DiscordVoiceKeyService.Owns(id, r.ButtonIndex)) continue;
                 if (DpLiveTileService.Owns(id, r.ButtonIndex)) continue;          // idem, live tiles
+                if (DpSpotifyCoverKeyService.Owns(id, r.ButtonIndex)) continue;   // idem, album-cover keys
                 if (DpGifAnimator.IsAnimatedGif(r.ImagePath))
                     toAnimate.Add((r.ButtonIndex, r.ImagePath));
                 else
@@ -2866,7 +3536,9 @@ public partial class MainWindow
         // already owns all 12 slots).
         var toBlank = fullscreenActive
             ? Array.Empty<int>()
-            : Enumerable.Range(0, _dpKeys.Length).Where(i => !keysWithImage.Contains(i)).ToArray();
+            : Enumerable.Range(0, _dpKeys.Length)
+                        .Where(i => !keysWithImage.Contains(i) && !SpotifyCoverService.Owns(id, i))
+                        .ToArray();
 
         // The app's own grid above is already updated (instant). The hardware write is the
         // slow part — run it on a background thread, chained per device. A newer reload
@@ -2922,9 +3594,17 @@ public partial class MainWindow
                 // Last: the Discord live tiles paint OVER the profile's own icon for those keys.
                 if (!ct.IsCancellationRequested) DiscordVoiceKeyService.Repaint(id);
                 if (!ct.IsCancellationRequested) DpLiveTileService.Repaint(id);
+                if (!ct.IsCancellationRequested) DpSpotifyCoverKeyService.Repaint(id);
+                if (!ct.IsCancellationRequested) SpotifyCoverService.Repaint(id);   // dedicated-profile 2×2 block
             }, TaskScheduler.Default);
             _dpUploadChain[id] = next;
         }
+
+        DpBindSpotifyBlockPreview(id);
+
+        // Keep the "Pages" sidebar tab in sync with whether this device has any pages at all
+        // (covers device tab switches, profile switches, page navigation, imports, key clears).
+        UpdateDpPagesTabVisibility();
     }
 
     /// <summary>Per-device chain of pending background icon uploads (see <see cref="DpReloadCurrentProfile"/>).</summary>
@@ -3068,6 +3748,7 @@ public partial class MainWindow
         // page actually on the panel.
         DiscordVoiceKeyService.Sync(_dpClient, DpLogAsync, id, rotation, rows);
         DpLiveTileService.Sync(_dpClient, DpLogAsync, id, rotation, rows);   // see DpReloadCurrentProfile
+        DpSpotifyCoverKeyService.Sync(_dpClient, DpLogAsync, id, rotation, rows);   // idem
         var fullscreen = _dpStore.GetFullscreenImage(id, profile, pageId);
         // Screensaver mode: painted later by DpScreensaverTimeout, not now — see
         // DpReloadCurrentProfile (the foreground counterpart) for the full reasoning.
@@ -3077,7 +3758,7 @@ public partial class MainWindow
         DpConfigureScreensaver(id, hasFullscreenImage && screensaver.Enabled, screensaver.Seconds);
         _dpFullscreenByDevice[id] = fullscreenActive;
         // A fullscreen image owns all 12 slots — nothing for the live tiles to paint on.
-        if (fullscreenActive) DpLiveTileService.Stop(id);
+        if (fullscreenActive) { DpLiveTileService.Stop(id); DpSpotifyCoverKeyService.Stop(id); }
         if (!fullscreenActive) DpFullscreenAnimator.Stop(id);
 
         var keysWithImage = new HashSet<int>(
@@ -3087,7 +3768,9 @@ public partial class MainWindow
         // comment on toBlank there.
         var toBlank = fullscreenActive
             ? Array.Empty<int>()
-            : Enumerable.Range(0, 12).Where(i => !keysWithImage.Contains(i)).ToArray();
+            : Enumerable.Range(0, 12)
+                        .Where(i => !keysWithImage.Contains(i) && !SpotifyCoverService.Owns(id, i))
+                        .ToArray();
 
         var previous = _dpUploadChain.TryGetValue(id, out var p) ? p : Task.CompletedTask;
         var next = previous.ContinueWith(_ =>
@@ -3114,6 +3797,7 @@ public partial class MainWindow
                 if (string.IsNullOrEmpty(r.ImagePath) || !File.Exists(r.ImagePath)) continue;
                 if (DiscordVoiceKeyService.Owns(id, r.ButtonIndex)) continue;   // see DpReloadCurrentProfile
                 if (DpLiveTileService.Owns(id, r.ButtonIndex)) continue;        // idem
+                if (DpSpotifyCoverKeyService.Owns(id, r.ButtonIndex)) continue; // idem
                 if (DpGifAnimator.IsAnimatedGif(r.ImagePath))
                     DpGifAnimator.StartOrUpdate(_dpClient, DpLogAsync, id, r.ButtonIndex, r.ImagePath, rotation);
                 else
@@ -3124,8 +3808,12 @@ public partial class MainWindow
             }
             DiscordVoiceKeyService.Repaint(id);   // see DpReloadCurrentProfile
             DpLiveTileService.Repaint(id);        // idem
+            DpSpotifyCoverKeyService.Repaint(id); // idem
+            SpotifyCoverService.Repaint(id);      // dedicated-profile 2×2 block
         }, TaskScheduler.Default);
         _dpUploadChain[id] = next;
+
+        DpBindSpotifyBlockPreview(id);
     }
 
     /// <summary>
@@ -3300,6 +3988,19 @@ public partial class MainWindow
                 return;
             }
 
+            // The Spotify profile's cover tile wears the same "back" badge as the voice page's
+            // server tile and does the same thing. Unlike the two takeovers above this consumes
+            // exactly ONE key: the rest of the profile is a normal profile and keeps its bindings.
+            if (SpotifyCoverService.BackKeyOf(evtDevId) is int spBackKey)
+            {
+                var spMap = DpSelectedDeviceId() == evtDevId ? _dpMatrixToIndex : DpDefaultMatrixToIndex;
+                if (spMap.TryGetValue(matrix, out int spIdx) && spIdx == spBackKey)
+                {
+                    if (pressed) DpSpotifyLeave(evtDevId);
+                    return;
+                }
+            }
+
             // The foreground tab (_activeDpDeviceId) uses the UI-bound state (_dpKeys,
             // _dpMatrixToIndex, _currentDpPageId, remap mode, press-bounce visual). Any OTHER
             // connected DisplayPad (multi-device setups) must still execute ITS OWN bindings —
@@ -3382,8 +4083,13 @@ public partial class MainWindow
         // re-uploading the latter on every press/release is what made the live glyph snap back
         // to the profile's icon on each click. Resolved per call, so the key-UP repaint already
         // carries the state the key-DOWN action just produced.
+        // The Spotify dedicated-profile block (keys 0/1/6/7) is a live overlay with no real
+        // action — let SpotifyCoverService keep painting it instead of bouncing a stale tile.
+        if (SpotifyCoverService.Owns(id, btnIndex)) return;
+
         imgPath = DiscordVoiceKeyService.CurrentIconPath(id, btnIndex)
-                  ?? DpLiveTileService.CurrentIconPath(id, btnIndex) ?? imgPath;
+                  ?? DpLiveTileService.CurrentIconPath(id, btnIndex)
+                  ?? DpSpotifyCoverKeyService.CurrentIconPath(id, btnIndex) ?? imgPath;
 
         if (string.IsNullOrEmpty(imgPath) || !File.Exists(imgPath)) return;
         if (DpGifAnimator.IsAnimatedGif(imgPath)) return;
@@ -3564,8 +4270,35 @@ public sealed class DpProfileItem(int slot, string label)
     public override string ToString() => Label;
 }
 
-// ---- "Pages" section row ----
-public sealed record DpPageRow(int PageId, string Name);
+// ---- "Pages" section: one folder sub-page node (may itself contain nested sub-pages) ----
+// Profile: which profile slot owns this page — the tree spans every profile, so deletion
+// (BtnDpDeletePage_Click) and click-navigation (TvDpPages_SelectedItemChanged) both target
+// the right one. Children: pages opened by a "dp_folder" key that lives on THIS page.
+// Reference type on purpose: the same page can appear under two parents and must stay two
+// distinct tree nodes (no record value-equality collapsing them).
+public sealed class DpPageRow
+{
+    public int PageId { get; init; }
+    public string Name { get; init; } = "";
+    public int Profile { get; init; }
+    public ObservableCollection<DpPageRow> Children { get; } = new();
+    // Every level starts expanded (TreeViewItem.IsExpanded binds here two-way); still
+    // collapsible by hand. Reset to true on each RefreshDpPagesList since page rows are
+    // rebuilt from scratch.
+    public bool IsExpanded { get; set; } = true;
+}
+
+// ---- "Pages" section: tree root (one profile that has at least one page) ----
+public sealed class DpPageProfileGroup
+{
+    public int Profile { get; init; }
+    public string Name { get; init; } = "";
+    public ObservableCollection<DpPageRow> Pages { get; } = new();
+    // Nodes render expanded by default; the TreeViewItem binds IsExpanded here two-way so a
+    // manual collapse sticks until the tree is rebuilt for another device (RefreshDpPagesList
+    // re-applies same-session collapse state by profile slot).
+    public bool IsExpanded { get; set; } = true;
+}
 
 // ---- Device table rows ----
 public sealed class DpDeviceRow

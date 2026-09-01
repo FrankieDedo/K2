@@ -665,6 +665,11 @@ public sealed class EverestService : IDisposable
     /// <param name="speed">Animation speed.</param>
     /// <param name="brightness">Brightness 0..100 (mapped to firmware steps 0/25/50/75/100).</param>
     /// <param name="randomColor">true to ignore the colors and use random colors instead.</param>
+    /// <param name="persist">false = do NOT schedule the debounced SaveFlash after
+    /// the effect. For transient applies (backlight auto-off idle/wake brightness
+    /// bumps): the idle state isn't worth persisting, and skipping the flash write
+    /// keeps the firmware responsive — a SaveFlash landing right as a key wakes the
+    /// board makes that first keypress auto-repeat (user report 2026-08-30).</param>
     public bool SetEffect(Effect effect,
                           (byte r, byte g, byte b) primary,
                           (byte r, byte g, byte b)? secondary = null,
@@ -675,7 +680,8 @@ public sealed class EverestService : IDisposable
                           bool randomColor = false,
                           int speedByte = -1,
                           int directionByte = -1,
-                          int colorCountOverride = -1)
+                          int colorCountOverride = -1,
+                          bool persist = true)
     {
         if (SignalRgbGuard.BlockLighting("Everest.SetEffect")) return true;
       lock (_sdkLock)
@@ -784,7 +790,7 @@ public sealed class EverestService : IDisposable
                 // Small delay to give the DLL's internal HID queue time
                 // to process the command before SaveFlash arrives.
                 Thread.Sleep(50);
-                DebouncedSaveFlash(menuIndex);
+                if (persist) DebouncedSaveFlash(menuIndex);
                 return okB;
             }
             catch (Exception exB)
@@ -823,7 +829,7 @@ public sealed class EverestService : IDisposable
             App.WriteLog("[Everest.SetEffect] DUMP EffData(62B): " + DumpEffData(data));
 
             Thread.Sleep(50);
-            DebouncedSaveFlash(menuIndex);
+            if (persist) DebouncedSaveFlash(menuIndex);
 
             return ok;
         }
@@ -966,6 +972,12 @@ public sealed class EverestService : IDisposable
     /// </summary>
     public bool SetSyncAcrossProfiles(bool enable)
     {
+        // One firmware, two transports: a debounced SaveFlash in flight (fired 500ms
+        // after every lighting change — and the Settings panel is applied right next to
+        // an RGB apply on open/profile-switch) leaves the keyboard mute and this call
+        // silently returns False. Serialize like every other native write.
+        FlushSaveFlash();
+        lock (_sdkLock)
         try
         {
             bool ok = EverestSdkNative.SetSyncAcrossProfiles(enable);
@@ -994,13 +1006,19 @@ public sealed class EverestService : IDisposable
         }
     }
 
-    /// <summary>Sets the "Game Mode" key-lock bitmask (see EverestSdkNative.SetGameMode).</summary>
+    /// <summary>Sets the "Game Mode" key-lock BITMASK — which keys get blocked while
+    /// Game Mode is engaged. The engage/disengage master is <see cref="SetGameModeStatus"/>
+    /// (also toggled on the keyboard with Fn+Pause).</summary>
     public bool SetGameMode(int mode)
     {
+        // See SetSyncAcrossProfiles: must wait out any debounced SaveFlash and run under
+        // _sdkLock, otherwise the call lands while the firmware is mute and returns False.
+        FlushSaveFlash();
+        lock (_sdkLock)
         try
         {
             bool ok = EverestSdkNative.SetGameMode(mode);
-            App.WriteLog($"[Everest.SetGameMode] mode={mode} -> {ok}");
+            App.WriteLog($"[Everest.SetGameMode] mode=0x{mode:X2} -> {ok}");
             return ok;
         }
         catch (Exception ex)
@@ -1010,9 +1028,51 @@ public sealed class EverestService : IDisposable
         }
     }
 
+    /// <summary>Engages/disengages Game Mode (the master on/off — separate SDKDLL export
+    /// from the bitmask; Base Camp's UI never calls it but the firmware gates the bitmask
+    /// behind it). Equivalent to pressing Fn+Pause on the keyboard.</summary>
+    public bool SetGameModeStatus(bool enable)
+    {
+        FlushSaveFlash();
+        lock (_sdkLock)
+        try
+        {
+            bool ok = EverestSdkNative.SetGameModeStatus(enable);
+            App.WriteLog($"[Everest.SetGameModeStatus] enable={enable} -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.SetGameModeStatus] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>Reads the Game Mode master on/off state — reflects Fn+Pause toggles made
+    /// on the keyboard. Returns null if the read could not be performed.</summary>
+    public bool? GetGameModeStatus()
+    {
+        if (!IsOpen) return null;
+        if (!System.Threading.Monitor.TryEnter(_sdkLock)) return null;
+        try
+        {
+            bool enabled = false;
+            return EverestSdkNative.GetGameModeStatus(ref enabled) ? enabled : (bool?)null;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.GetGameModeStatus] threw: " + ex);
+            return null;
+        }
+        finally { System.Threading.Monitor.Exit(_sdkLock); }
+    }
+
     /// <summary>Enables/disables the keyboard's Core indicator LEDs.</summary>
     public bool SetIndicatorLed(bool enable)
     {
+        // See SetSyncAcrossProfiles: serialize against any in-flight SaveFlash.
+        FlushSaveFlash();
+        lock (_sdkLock)
         try
         {
             bool ok = EverestSdkNative.SetIndicatorLed(enable);
@@ -1772,13 +1832,16 @@ public sealed class EverestService : IDisposable
         if (_nativePad is null) return false;
         try
         {
-            // Base Camp names the target lighting slot before the Custom burst too:
-            // 14 00 00 00 <profile> 06 precedes the whole 11 01/14 2C/14 2D/14 A0
-            // sequence in ev_profile_load.pcapng (2026-08-22). Without it the burst and
-            // its "13 55 00 00 06" persist address a slot the firmware was never told to
-            // select — they only agreed by luck, because 6 IS Custom's menu index.
+            // NOTE: a "14 00 00 00 <profile> 06" SwitchProfile preheat used to run here
+            // (added 2026-08-22 by analogy with SetEffect). On real hardware it BROKE the
+            // custom apply: the keyboard switched to *displaying* stored menu slot 6 (a
+            // factory wave, red) and then ignored the live customize-buffer writes below —
+            // Custom/DiagonalWave both showed "single red wave" (user report 2026-09-01).
+            // The pre-2026-08-22 sequence works: no profile preheat, EnableCustomLighting
+            // flips the firmware into interactive-customize mode, the "13 55 00 00 06"
+            // persist carries slot 6 explicitly. Keep _cachedMenuIndex in sync for
+            // DebouncedSaveFlash without emitting the switch.
             _cachedMenuIndex = MenuIndexFor(Effect.Custom);
-            SwitchProfile(_cachedProfile, _cachedMenuIndex);
             bool ok = _nativePad.EnableCustomLighting(brightness);
             ok &= _nativePad.SendSideLedColors(wireColors, brightness);
             if (persist) ok &= _nativePad.PersistCustomLighting();
@@ -1814,23 +1877,55 @@ public sealed class EverestService : IDisposable
         if (_nativePad is null) return false;
         try
         {
-            // Base Camp names the target lighting slot before the Custom burst too:
-            // 14 00 00 00 <profile> 06 precedes the whole 11 01/14 2C/14 2D/14 A0
-            // sequence in ev_profile_load.pcapng (2026-08-22). Without it the burst and
-            // its "13 55 00 00 06" persist address a slot the firmware was never told to
-            // select — they only agreed by luck, because 6 IS Custom's menu index.
+            // NOTE: a "14 00 00 00 <profile> 06" SwitchProfile preheat used to run here
+            // (added 2026-08-22 by analogy with SetEffect). On real hardware it BROKE the
+            // custom apply: the keyboard switched to *displaying* stored menu slot 6 (a
+            // factory wave, red) and then ignored the live customize-buffer writes below —
+            // Custom/DiagonalWave both showed "single red wave" (user report 2026-09-01).
+            // The pre-2026-08-22 sequence works: no profile preheat, EnableCustomLighting
+            // flips the firmware into interactive-customize mode, the "13 55 00 00 06"
+            // persist carries slot 6 explicitly. Keep _cachedMenuIndex in sync for
+            // DebouncedSaveFlash without emitting the switch.
             _cachedMenuIndex = MenuIndexFor(Effect.Custom);
-            SwitchProfile(_cachedProfile, _cachedMenuIndex);
             bool ok = _nativePad.EnableCustomLighting(brightness);
             ok &= _nativePad.SendKeycapColors(keycapWireColors, brightness);
-            ok &= _nativePad.SendSideLedColors(sideWireColors);
+
+            // Side ring is best-effort. On this firmware SwitchZoneToCustom(0x05) times
+            // out on every attempt (~1.2s) and, left fatal, drags the whole apply — and
+            // the persist below — down with it: the Custom slot never commits and the
+            // keyboard falls back to the profile's previous effect (user report
+            // 2026-09-01: "solid red wave"). Same non-fatal treatment already applied to
+            // BeginCustomFrameStream on 2026-08-27. On failure, re-select the keycap zone
+            // so PersistCustomLighting commits a clean keycap-only Custom slot instead of
+            // the half-state the failed ring zone-switch left the firmware in.
+            if (!_nativePad.SendSideLedColors(sideWireColors))
+            {
+                App.WriteLog("[Everest.ApplyEverestCustomLighting] side ring paint failed — keycaps only");
+                _nativePad.ReselectCustomKeycapZone();
+            }
             // Dynamic per-region effects (Wave/Breathing/Reactive/... on a painted
             // subset of keys) — optional third channel alongside the static keycap/
             // side-ring colors above, see EverestSideLedProtocol's per-region-effects
-            // section (2026-07-22 captures). Only sent when the caller actually has
-            // dynamic-effect LEDs assigned.
+            // section (2026-07-22 captures).
             if (ledEffectCode is { Length: > 0 } && effectParamPackets is { Count: > 0 })
+            {
                 ok &= _nativePad.SendCustomEffectRegions(ledEffectCode, effectParamPackets);
+            }
+            else
+            {
+                // No dynamic-effect regions this apply — still push an ALL-ZERO region
+                // bitmap so a region persisted to flash slot 6 by an EARLIER apply
+                // (Wave/Breathing/... assigned to some keys) is wiped. Without this the
+                // firmware keeps running that stale effect on top of the static keycap
+                // colors just sent, and the Custom "always shows a red wave" even after
+                // the user goes back to a plain paint (user report 2026-09-01: had put
+                // Wave on every key, persisted, then repainted static — K2 skipped the
+                // region packets entirely so the Wave stuck). Best-effort: the effects
+                // zone switch can time out like the side ring, don't fail the apply on it.
+                _nativePad.SendCustomEffectRegions(
+                    new byte[EverestSideLedProtocol.EffectRegionSlotCount],
+                    System.Array.Empty<byte[]>());
+            }
             if (persist) ok &= _nativePad.PersistCustomLighting();
             App.WriteLog($"[Everest.ApplyEverestCustomLighting] persist={persist} " +
                          $"effects={effectParamPackets?.Count ?? 0} -> {ok}");
@@ -1869,10 +1964,19 @@ public sealed class EverestService : IDisposable
         if (SignalRgbGuard.BlockLighting("Everest.BeginCustomFrameStream")) return false;
         try
         {
+            // No SwitchProfile preheat — see ApplyEverestCustomLighting's note (the
+            // "14 00 00 00 <profile> 06" switch made the firmware display stored slot 6
+            // and ignore the live frames, so DiagonalWave showed a red wave; 2026-09-01).
             _cachedMenuIndex = MenuIndexFor(Effect.Custom);
-            SwitchProfile(_cachedProfile, _cachedMenuIndex);
             bool ok = _nativePad.EnableCustomLighting(brightness);
             ok &= _nativePad.SendKeycapColors(keycapWireColors, brightness);
+            // Wipe any dynamic-effect region left in flash slot 6 by an earlier static
+            // Custom apply — otherwise the firmware runs that effect over our streamed
+            // frames and the animation "doesn't show" (same root cause as
+            // ApplyEverestCustomLighting's all-zero bitmap, 2026-09-01). Best-effort.
+            _nativePad.SendCustomEffectRegions(
+                new byte[EverestSideLedProtocol.EffectRegionSlotCount],
+                System.Array.Empty<byte[]>());
             if (sideWireColors is not null && !_nativePad.SendSideLedColors(sideWireColors))
                 App.WriteLog("[Everest.BeginCustomFrameStream] side ring paint failed — " +
                              "continuing with the keycap animation only");

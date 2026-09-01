@@ -102,6 +102,10 @@
   <string name="appshortcut_action_label">동작:</string>
   <string name="appshortcut_custom">사용자 지정…</string>
   <string name="obs_settings_title">OBS Studio 설정</string>
+  <string name="obs_setup_guide">1. OBS Studio에서 도구 &gt; WebSocket 서버 설정을 엽니다.
+2. "WebSocket 서버 사용"을 체크합니다(기본 포트 4455).
+3. "연결 정보 표시"를 클릭해 서버 비밀번호를 확인합니다(또는 "인증 사용" 체크를 해제하면 비밀번호를 사용하지 않습니다).
+4. 여기에 동일한 호스트 / 포트 / 비밀번호를 입력하고 "연결 테스트"를 클릭합니다.</string>
   <string name="obs_host_label">호스트:</string>
   <string name="obs_port_label">포트:</string>
   <string name="obs_password_label">비밀번호:</string>
@@ -176,11 +180,22 @@
   <string name="spotify_hint">developer.spotify.com/dashboard에서 직접 앱을 등록하고 Redirect URI를 "http://127.0.0.1:17564/callback"로 설정한 다음, Client ID/Secret을 여기에 붙여넣으세요.</string>
   <string name="spotify_setup_guide">1. developer.spotify.com/dashboard로 이동하여 "Create app"을 클릭하세요.
 2. Redirect URI: http://127.0.0.1:17564/callback
-3. Which API/SDKs are you planning to use: Web API를 선택하세요.
-4. 저장 후 Client ID를 복사하고, Client Secret은 "View client secret"을 클릭해 확인하세요.</string>
+3. "Which API/SDKs are you planning to use"에서 "Web API"를 선택하세요.
+4. 저장 후 Client ID를 복사하고, Client Secret은 "View client secret"을 클릭해 확인하세요.
+
+재생/일시정지, 다음/이전, 셔플, 반복, 볼륨은 동작합니다: Spotify Premium이면 Web API로, 아니면 시스템 미디어 키로 동작합니다.
+좋아요와 재생목록에 추가/제거는 사용할 수 없습니다: Spotify가 개인용(Development 모드) 앱에 대해 라이브러리와 재생목록 엔드포인트를 차단하므로 K2는 해당 동작을 숨깁니다.</string>
   <string name="spotify_client_id_label">Client ID:</string>
   <string name="spotify_client_secret_label">Client Secret:</string>
-  <string name="spotify_connected_as">연결된 계정</string>
+  <string name="spotify_connected_as">연결됨</string>
+  <string name="spotify_webapi_active">Web API 사용 가능 (Spotify Premium)</string>
+  <string name="spotify_email_hint">이 주소를 Spotify 앱의 "User Management"에 추가하세요</string>
+  <string name="spotify_email_reconnect">"User Management"에 필요한 계정 이메일을 보려면 다시 연결하세요</string>
+  <string name="spotify_library_403">Spotify는 Development 모드 앱에서 좋아요 / 재생목록에 저장을 차단합니다(2025년 플랫폼 변경). K2 문제가 아니며 새 앱이나 User Management로도 해결되지 않습니다. 재생 제어(재생/일시정지, 다음, 볼륨)는 계속 동작합니다. 전체 라이브러리 접근은 Spotify의 Extended Access 승인이 필요합니다.</string>
+  <string name="spotify_device_label">재생 기기:</string>
+  <string name="spotify_device_auto">자동(활성 기기)</string>
+  <string name="spotify_device_active">활성</string>
+  <string name="spotify_device_offline">오프라인</string>
   <string name="spotify_settings_button">Spotify 설정…</string>
   <string name="spotify_cmd_play_pause">재생/일시 정지</string>
   <string name="spotify_cmd_next">다음 트랙</string>
@@ -194,6 +209,7 @@
   <string name="spotify_cmd_volume_set">볼륨 설정</string>
   <string name="spotify_cmd_save_playlist">트랙을 플레이리스트에 저장</string>
   <string name="spotify_cmd_remove_playlist">플레이리스트에서 트랙 제거</string>
+  <string name="spotify_cmd_unavailable">사용 불가</string>
   <string name="youtube_settings_title">YouTube 설정</string>
   <string name="youtube_hint">console.cloud.google.com에서 YouTube Data API v3를 활성화한 데스크톱 앱 OAuth 클라이언트를 만든 다음, Client ID/Secret을 여기에 붙여넣으세요.</string>
   <string name="youtube_setup_guide">1. console.cloud.google.com으로 이동하여 프로젝트를 생성/선택한 다음 "YouTube Data API v3"를 활성화하세요 (APIs &amp; Services -&gt; Library).
@@ -268,6 +284,7 @@
   <string name="media_vol_down">Volume down</string>
   <string name="media_mute">Mute</string>
   <string name="media_shuffle">셔플</string>
+  <string name="media_repeat">반복</string>
   <string name="mouse_left">Left button</string>
   <string name="mouse_right">Right button</string>
   <string name="mouse_middle">Middle button</string>
@@ -279,7 +296,6 @@
   <string name="mouse_scroll_right">Scroll right</string>
   <string name="keys_modifiers_label">Modifiers:</string>
   <string name="keys_key_label">Key:</string>
-  <string name="keys_win_hint">The Windows key can be selected but is not sent by the current keystroke backend (SendKeys) — it is silently ignored.</string>
   <string name="gh_manage">Google Home 장치 관리…</string>
   <string name="gh_summary_missing">Google Home (바인딩 삭제됨)</string>
   <string name="gh_setup_title">Google Home 장치</string>
@@ -399,8 +415,13 @@
   <string name="settings_start_min_tray">트레이로 최소화된 상태로 바로 시작</string>
   <string name="settings_start_min_tray_hint">K2가 드라이버는 활성화된 상태로 시작되지만 창은 트레이에 숨겨집니다 — 트레이 아이콘에서 언제든지 열 수 있습니다.</string>
   <!-- DisplayPad 장치 매핑 -->
-  <string name="settings_dp_devicemap_group">DisplayPad 장치 매핑</string>
-  <string name="settings_dp_devicemap_btn">매핑 구성…</string>
+  <string name="settings_device_sync_group">장치 간 동기화</string>
+  <string name="sync_across_devices">장치 간 프로필 동기화</string>
+  <string name="sync_across_devices_hint">연결된 Mountain 장치에서 프로필을 전환하면 연결된 다른 모든 장치가 동일한 프로필 슬롯으로 전환됩니다.</string>
+  <string name="sync_lighting_across_devices">장치 간 조명 동기화</string>
+  <string name="sync_lighting_across_devices_hint">한 장치에서 조명 효과나 색상을 변경하면 연결된 다른 모든 장치에 반영됩니다(장치가 효과를 재현할 수 없는 경우 가장 가까운 항목으로).</string>
+  <string name="settings_dp_devicemap_group">장치 매핑</string>
+  <string name="settings_dp_devicemap_btn">DisplayPad 매핑</string>
   <string name="settings_dp_devicemap_hint">DisplayPad를 다른 USB 포트로 옮긴 후 저장된 프로파일이 잘못된 패널에 표시되는 경우(예: "DisplayPad 2"와 "DisplayPad 3"이 바뀐 경우), 이 기능을 사용하여 연결된 각 패드가 어떤 패널로 처리될지 다시 지정할 수 있습니다.</string>
   <string name="dp_devicemap_title">DisplayPad 장치 매핑</string>
   <string name="dp_devicemap_hint">연결된 각 패드가 펌웨어 버전과 함께 아래에 나열됩니다. "식별"을 클릭하면 패드의 백라이트가 깜박여 어느 행인지 확인할 수 있으며, 그 후 사용할 보드 번호를 설정하세요. 두 행이 같은 보드 번호를 공유할 수 없습니다.</string>
@@ -433,6 +454,7 @@
   <string name="hw_busy_importing_profile">프로파일을 가져오는 중입니다. 잠시만 기다려 주세요…</string>
   <string name="hw_busy_importing_profiles">프로파일을 가져오는 중입니다. 잠시만 기다려 주세요…</string>
   <string name="hw_busy_restoring_defaults">기본값을 복원하는 중입니다. 잠시만 기다려 주세요…</string>
+  <string name="hw_busy_sync_across_profiles">키보드에 프로필 간 동기화를 적용하는 중입니다. 잠시만 기다려 주세요…</string>
   <string name="hw_busy_restoring_key_images">디스플레이 키의 기본 이미지를 복원하는 중입니다. 잠시만 기다려 주세요…</string>
   <string name="hw_busy_clearing_image">디스플레이 키의 이미지를 지우는 중입니다. 잠시만 기다려 주세요…</string>
   <string name="hw_busy_writing_key_bindings">디스플레이 키 동작을 키보드에 기록하는 중입니다. 잠시만 기다려 주세요…</string>
@@ -616,6 +638,9 @@
   <string name="settings_sync_profiles">프로파일 간 동기화</string>
   <string name="settings_game_mode">게임 모드</string>
   <string name="settings_game_mode_tip">게임 모드는 게임 중 실수로 방해받지 않도록 특정 키 조합을 비활성화합니다.</string>
+  <string name="settings_game_mode_master">게임 모드 활성화</string>
+  <string name="settings_game_mode_master_hint_ev">키보드에서 Fn + Pause로도 전환할 수 있습니다. 아래 확인란에서 차단할 키를 선택합니다.</string>
+  <string name="settings_game_mode_master_hint_ev60">키보드에서 Fn + Win으로도 전환할 수 있습니다. 아래 확인란에서 차단할 키를 선택합니다.</string>
   <string name="settings_disable_shift_tab">Shift + Tab 비활성화</string>
   <string name="settings_disable_alt_f4">Alt + F4 비활성화</string>
   <string name="settings_disable_win_key">Windows 키 비활성화</string>
@@ -772,6 +797,7 @@
   <string name="txt_bg_solid">단색 배경</string>
   <string name="txt_bg_image">불러온 이미지 위에</string>
   <string name="txt_bg_color">배경:</string>
+  <string name="txt_style_only_header">텍스트 스타일</string>
   <string name="txt_color">텍스트:</string>
   <string name="txt_position_label">위치:</string>
   <string name="txt_icon_source_label">아이콘 소스:</string>
@@ -825,6 +851,7 @@
   <string name="rename_device_prompt">이 장치의 이름을 입력하세요:</string>
   <string name="profile_not_available_tip">이 장치에는 아직 사용할 수 없습니다 — 프로파일 저장 기능이 구현되지 않았습니다.</string>
   <!--프로파일 이름 변경 / 삭제-->
+  <string name="configure_profile">프로필 구성</string>
   <string name="rename_profile">프로파일 이름 변경</string>
   <string name="rename_profile_title">프로파일 이름 변경</string>
   <string name="rename_profile_prompt">이 프로파일의 이름을 입력하세요:</string>
@@ -979,6 +1006,8 @@
   <string name="discord_account_button">Discord 계정 (Client ID / Secret)…</string>
   <string name="discord_voicepage_return_label">음성 페이지를 다시 불러오기까지</string>
   <string name="discord_voicepage_return_hint">통화 중에 음성 페이지를 떠나 일반 프로필로 이동한 경우, 여기에 지정한 초만큼 돌아오지 않으면 화면 보호기처럼 저절로 다시 나타납니다. 끄면 새 통화가 오거나 "음성 페이지" 키를 눌렀을 때만 돌아옵니다.</string>
+  <string name="show_back_arrow_label">뒤로 화살표 표시</string>
+  <string name="show_back_arrow_hint">패드를 이전 프로필로 되돌리는 타일에 뒤로 화살표를 찍습니다. 꺼도 키 동작은 그대로이며, 표시만 없어져 아래 그림이 가려지지 않습니다.</string>
   <string name="act_emojibrowser">이모지 브라우저</string>
   <string name="emb_grp_smileys">스마일리</string>
   <string name="emb_grp_people">사람</string>
@@ -1010,6 +1039,7 @@
   <string name="makalu_setting_clickspeed">클릭 속도:</string>
   <string name="dp_icon_section">아이콘</string>
   <string name="dp_gallery_icon">기본 아이콘</string>
+  <string name="dp_spotify_cover_icon">Spotify 앨범 커버 사용</string>
   <string name="dp_gallery_icon_with_text">텍스트 포함</string>
   <string name="dp_gallery_icon_without_text">텍스트 없음</string>
   <string name="gallery_dialog_title">아이콘 갤러리</string>
@@ -1032,4 +1062,84 @@
   <string name="txt_icon_section">아이콘</string>
   <string name="txt_text_section">텍스트</string>
   <string name="txt_reset_icon">아이콘 재설정</string>
+
+  <!-- v1.3.2: guide buttons, PC monitor sensor list, Spotify profile -->
+  <string name="guide_button">가이드</string>
+  <string name="guide_none">이 섹션의 가이드는 아직 작성되지 않았습니다.</string>
+  <string name="guide_title">가이드</string>
+  <string name="guide_tooltip">이 섹션의 가이드 열기</string>
+  <string name="highlights_button">하이라이트</string>
+  <string name="highlights_tooltip">Base Camp에 없는 K2 기능과 켜는 방법</string>
+  <string name="profile_settings_focus_only">이 앱이 활성 상태일 때만</string>
+  <string name="profile_settings_focus_only_hint">K2는 연결된 앱이 맨 앞 창일 때만 이 프로필을 표시하며, 포커스를 잃으면 이전 프로필로 돌아갑니다.</string>
+  <string name="profile_settings_pick_running">실행 중인 앱에서…</string>
+  <string name="profile_settings_restore_on_close">앱이 닫히면 이전 프로필로 돌아가기</string>
+  <string name="profile_settings_restore_on_close_hint">연결된 앱이 종료되면 K2는 이전에 활성화되어 있던 프로필로 돌아갑니다. 단, 여전히 이 프로필에 있는 경우에만 적용됩니다. "활성 상태일 때만"이 켜져 있으면 무시됩니다.</string>
+  <string name="running_process_hint">현재 열려 있는 애플리케이션을 선택하세요. .exe 파일을 직접 찾아볼 수도 있습니다.</string>
+  <string name="running_process_title">실행 중인 앱 선택</string>
+  <string name="sensor_col_name">센서</string>
+  <string name="sensor_col_type">유형</string>
+  <string name="sensor_col_value">값</string>
+  <string name="sensor_count_fmt">센서 {0}개</string>
+  <string name="sensor_grp_battery">배터리</string>
+  <string name="sensor_grp_cooler">냉각</string>
+  <string name="sensor_grp_cpu">CPU</string>
+  <string name="sensor_grp_gpu">GPU</string>
+  <string name="sensor_grp_memory">메모리</string>
+  <string name="sensor_grp_motherboard">메인보드</string>
+  <string name="sensor_grp_network">네트워크</string>
+  <string name="sensor_grp_other">기타</string>
+  <string name="sensor_grp_storage">저장소</string>
+  <string name="sensor_pick_button">센서 선택…</string>
+  <string name="sensor_pick_hint">키에 표시할 하드웨어 센서를 선택하세요. 목록은 실시간으로 갱신됩니다. 아래 선택기로 현재값, 최소값, 최대값 또는 평균값 중 무엇을 표시할지 고를 수 있습니다.</string>
+  <string name="sensor_pick_none">먼저 센서를 선택하세요.</string>
+  <string name="sensor_pick_search">이름, 유형 또는 장치로 필터링</string>
+  <string name="sensor_pick_title">하드웨어 센서</string>
+  <string name="sensor_preview_fmt">현재 값: {0}</string>
+  <string name="sensor_reset_stats">최소/최대/평균 초기화</string>
+  <string name="sensor_show_label">표시:</string>
+  <string name="sensor_starting">하드웨어 센서를 읽는 중…</string>
+  <string name="sensor_stat_avg">평균</string>
+  <string name="sensor_stat_cur">현재</string>
+  <string name="sensor_stat_max">최대</string>
+  <string name="sensor_stat_min">최소</string>
+  <string name="sensor_unavailable">사용 가능한 하드웨어 센서가 없습니다.</string>
+  <string name="settings_persist_logs">로그 보관</string>
+  <string name="settings_persist_logs_hint">다음 시작 시 로그를 초기화하지 않고 각 세션의 로그를 보관합니다. 각 실행의 로그는 이름에 날짜와 시간이 붙어 "logs" 폴더로 이동됩니다. 업데이트 후 첫 실행에서 가끔 발생하는 충돌을 포착하는 데 유용합니다.</string>
+  <string name="spotify_account_button">Spotify 계정(Client ID / Secret)…</string>
+  <string name="spotify_cover_layout_label">커버 배치</string>
+  <string name="spotify_cover_layout_quad">커버를 4개 키에 표시</string>
+  <string name="spotify_cover_layout_single">커버를 1개 키, 텍스트를 3개 키에 표시</string>
+  <string name="spotify_cover_layout_single_hint">블록의 나머지 세 키에는 제목, 아티스트, 앨범이 각각 노래/아티스트/앨범 라벨과 함께 표시됩니다. 아래의 긴 텍스트 설정이 여기에 적용됩니다.</string>
+  <string name="spotify_device_hint">재생/볼륨/반복 키가 제어할 Spotify Connect 장치입니다. 자동은 현재 활성화된 장치로 명령을 보냅니다.</string>
+  <string name="spotify_field_album">앨범</string>
+  <string name="spotify_field_artist">아티스트</string>
+  <string name="spotify_field_song">노래</string>
+  <string name="spotify_foreground_only_hint">Spotify 앱이 맨 앞으로 나오는 순간 패드가 이 프로필로 전환되고, 맨 앞에서 벗어나는 순간 이전 프로필로 되돌립니다. 뒤로 화살표는 계속 작동합니다. 사용한 뒤에는 Spotify가 다시 포커스를 얻을 때까지(또는 위의 타이머가 되돌릴 때까지) 프로필이 표시되지 않습니다.</string>
+  <string name="spotify_foreground_only_label">Spotify가 앞에 있을 때만 표시</string>
+  <string name="spotify_position_center">가운데</string>
+  <string name="spotify_position_hint">2×2 커버 블록이 차지하는 열 쌍입니다. 주변의 재생/볼륨/반복 키 8개도 이에 맞춰 배치가 바뀝니다. 각 위치는 단순한 재배열이 아니라 고유한 배열을 가집니다.</string>
+  <string name="spotify_position_label">커버 블록 위치</string>
+  <string name="spotify_position_left">왼쪽</string>
+  <string name="spotify_position_right">오른쪽</string>
+  <string name="spotify_profile_config_hint">DisplayPad의 Spotify 프로필 왼쪽 2×2 블록이 재생 중인 내용을 표시하는 방식입니다.</string>
+  <string name="spotify_profile_config_title">Spotify 프로필</string>
+  <string name="spotify_return_hint">커버 타일의 뒤로 화살표가 패드를 다른 프로필로 넘긴 뒤 이 초 수가 지나면 Spotify 프로필이 저절로 돌아옵니다. 이동한 곳에 머무르려면 꺼 두세요.</string>
+  <string name="spotify_return_label">이 시간 후 이 프로필로 돌아가기</string>
+  <string name="spotify_source_label">트랙 데이터 소스</string>
+  <string name="spotify_source_local">로컬(Windows "재생 중")</string>
+  <string name="spotify_source_webapi">Spotify 계정(Web API)</string>
+  <string name="spotify_source_webapi_hint">Web API는 앨범 이름과 고해상도 커버를 추가하지만 Spotify 계정 연결이 필요합니다. 아무것도 반환하지 않으면 로컬 소스를 대신 사용합니다.</string>
+  <string name="spotify_text_mode_hint">티커(흐름)를 선택해도 K2의 키 그리드 미리보기는 타일을 정지된 한 줄로 표시합니다. 스크롤은 하드웨어 전용 효과이며 앱에서는 절대 애니메이션되지 않습니다.</string>
+  <string name="spotify_text_mode_label">긴 텍스트(1키 배치)</string>
+  <string name="spotify_text_mode_marquee">티커처럼 스크롤</string>
+  <string name="spotify_text_mode_static">정지 — "…"로 자르기</string>
+  <string name="sysmon_cpu_temp">CPU 온도</string>
+  <string name="sysmon_disk_all">모든 디스크</string>
+  <string name="sysmon_disk_label">어느 디스크:</string>
+  <string name="sysmon_disk_pick_fmt">디스크: {0}</string>
+  <string name="sysmon_gpu_temp">GPU 온도</string>
+  <string name="sysmon_mode_temp">온도</string>
+  <string name="sysmon_mode_usage">사용률</string>
+  <string name="sysmon_pick_sensor">센서 선택</string>
 </strings>

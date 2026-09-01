@@ -1,0 +1,129 @@
+<Window x:Class="K2.App.SensorPickerDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+        Title="{loc:Get sensor_pick_title}"
+        Width="620" Height="640" MinWidth="480" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="{DynamicResource K2AppFontFamily}"
+        Style="{DynamicResource K2WindowStyle}">
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="{loc:Get sensor_pick_hint}"
+                   Foreground="{DynamicResource K2TextMutedBrush}" FontSize="11"
+                   TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+        <TextBox Grid.Row="1" x:Name="TxtSearch" Height="26" Margin="0,0,0,8"
+                 VerticalContentAlignment="Center"
+                 ToolTip="{loc:Get sensor_pick_search}"
+                 TextChanged="TxtSearch_TextChanged"/>
+
+        <!-- Themed ListView (K2Theme's default ListView/ListViewItem = dark surface + white
+             text + hover/select) with a PLAIN ItemTemplate — no ListView.View/GridView, which
+             would need the separate K2GridViewListViewItem container style. Columns are a Grid
+             inside the row template, aligned to the header Grid above by matching widths. -->
+        <Grid Grid.Row="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="8,0,20,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="28"/>
+                    <ColumnDefinition Width="96"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="100"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="1" Text="{loc:Get sensor_col_type}"  Foreground="{DynamicResource K2TextMutedBrush}" FontSize="11"/>
+                <TextBlock Grid.Column="2" Text="{loc:Get sensor_col_name}"  Foreground="{DynamicResource K2TextMutedBrush}" FontSize="11"/>
+                <TextBlock Grid.Column="3" Text="{loc:Get sensor_col_value}" Foreground="{DynamicResource K2TextMutedBrush}" FontSize="11"
+                           HorizontalAlignment="Right"/>
+            </Grid>
+
+            <ListView Grid.Row="1" x:Name="LvSensors"
+                      SelectionMode="Single"
+                      HorizontalContentAlignment="Stretch"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      MouseDoubleClick="LvSensors_MouseDoubleClick">
+                <ListView.GroupStyle>
+                    <GroupStyle>
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Name}" FontWeight="Bold"
+                                           Foreground="{DynamicResource K2TextBrush}" Margin="2,8,0,3"/>
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </ListView.GroupStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="28"/>
+                                <ColumnDefinition Width="96"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="100"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding Icon}" FontSize="14"
+                                       FontFamily="Segoe UI Emoji"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Kind}"
+                                       Foreground="{DynamicResource K2TextMutedBrush}"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Grid.Column="2" Text="{Binding Name}"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Grid.Column="3" Text="{Binding DisplayValue}"
+                                       HorizontalAlignment="Right"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <!-- Shown until the first sensors report — LHM takes a second or two to open. -->
+            <TextBlock Grid.Row="1" x:Name="LblListOverlay"
+                       Text="{loc:Get sensor_starting}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Foreground="{DynamicResource K2TextMutedBrush}" FontSize="13"/>
+        </Grid>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,0">
+            <TextBlock Text="{loc:Get sensor_show_label}" VerticalAlignment="Center"
+                       Margin="0,0,10,0" Foreground="{DynamicResource K2TextBrush}"/>
+            <RadioButton x:Name="RbStatCur" GroupName="stat" Content="{loc:Get sensor_stat_cur}"
+                         IsChecked="True" VerticalAlignment="Center" Margin="0,0,12,0"
+                         Checked="Stat_Checked"/>
+            <RadioButton x:Name="RbStatMin" GroupName="stat" Content="{loc:Get sensor_stat_min}"
+                         VerticalAlignment="Center" Margin="0,0,12,0" Checked="Stat_Checked"/>
+            <RadioButton x:Name="RbStatMax" GroupName="stat" Content="{loc:Get sensor_stat_max}"
+                         VerticalAlignment="Center" Margin="0,0,12,0" Checked="Stat_Checked"/>
+            <RadioButton x:Name="RbStatAvg" GroupName="stat" Content="{loc:Get sensor_stat_avg}"
+                         VerticalAlignment="Center" Margin="0,0,12,0" Checked="Stat_Checked"/>
+            <Button x:Name="BtnResetStats" Content="{loc:Get sensor_reset_stats}"
+                    Padding="10,2" Click="BtnResetStats_Click"/>
+        </StackPanel>
+
+        <Grid Grid.Row="4" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" x:Name="LblStatus" VerticalAlignment="Center"
+                       Foreground="{DynamicResource K2TextMutedBrush}" FontSize="11"
+                       TextTrimming="CharacterEllipsis"/>
+            <Button Grid.Column="1" Content="{loc:Get ok}" IsDefault="True" MinWidth="72"
+                    Style="{StaticResource K2IconAccentButton}" Click="BtnOk_Click"
+                    Margin="0,0,8,0" Padding="0,0,7,0"/>
+            <Button Grid.Column="2" Content="{loc:Get cancel}" IsCancel="True" MinWidth="72" Padding="12,0,12,0"/>
+        </Grid>
+    </Grid>
+</Window>

@@ -42,6 +42,9 @@ Start as admin and keep in mind that it should close all Base Camp process autom
   <li><strong>Profiles</strong> Supports Base Camp XMLs and direct import from Base Camp database</li>
   <li><strong>Macros</strong> Full mapping interface and supports importing from Base Camp</li>
   <li><strong>Macros</strong> Rename devices</li>
+  <li><strong>Per-section Guide</strong> — a Guide button on every device panel and inside the action picker, plus a Highlights guide on the Home tab</li>
+  <li><strong>Profile-to-app link</strong> — show a profile only while its linked app is focused, and return to the previous profile when that app closes</li>
+  <li><strong>Persistent logs</strong> — keep every session's log with its date and time in the name instead of resetting it on the next start</li>
 </ul>
 </details>
 
@@ -78,6 +81,7 @@ Start as admin and keep in mind that it should close all Base Camp process autom
   <li>Display Dial: 8 pages (12h/24h format, analog/digital style, screensaver/auto-off)</li>
   <li>Dynamic layout (dock/numpad reposition based on what's attached)</li>
   <li>USB Recorder (diagnostic tool for comparing captures)</li>
+  <li>Game Mode: dedicated master on/off toggle (Fn+Pause / Fn+Win) next to the per-key disable selection</li>
 </ul>
 </details>
 
@@ -112,6 +116,8 @@ Start as admin and keep in mind that it should close all Base Camp process autom
   <li>Screensaver — the fullscreen image/GIF can kick in after an idle delay instead of always showing, and any key press brings the icons back</li>
   <li>Emoji browser — a key can turn the whole panel into an emoji picker for quick access to any emoji</li>
   <li>Backlight auto-off after N idle seconds</li>
+  <li>Spotify profile — a dedicated profile whose 2×2 block shows the live album cover (or cover plus scrolling Song/Artist/Album text), with play/pause, shuffle and repeat keys that follow the real playback state, a configurable block position, an auto-return timer and a "show only while Spotify is in front" option</li>
+  <li>PC Monitor key — pick any hardware sensor (live HWiNFO-style list with current/min/max/average) to display on a key</li>
 </ul>
 </details>
 

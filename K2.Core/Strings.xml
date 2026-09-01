@@ -115,6 +115,10 @@
   <string name="appshortcut_action_label">Action:</string>
   <string name="appshortcut_custom">Custom…</string>
   <string name="obs_settings_title">OBS Studio Settings</string>
+  <string name="obs_setup_guide">1. In OBS Studio open Tools &gt; WebSocket Server Settings.
+2. Tick "Enable WebSocket server" (default port 4455).
+3. Click "Show Connect Info" to read the Server Password (or untick "Enable Authentication" to use none).
+4. Enter the same Host / Port / Password here and click "Test connection".</string>
   <string name="obs_host_label">Host:</string>
   <string name="obs_port_label">Port:</string>
   <string name="obs_password_label">Password:</string>
@@ -189,11 +193,26 @@
   <string name="spotify_hint">Register your own app at developer.spotify.com/dashboard with Redirect URI "http://127.0.0.1:17564/callback", then paste its Client ID/Secret here.</string>
   <string name="spotify_setup_guide">1. Go to developer.spotify.com/dashboard and click "Create app".
 2. Redirect URI: http://127.0.0.1:17564/callback
-3. Which API/SDKs are you planning to use: Web API.
-4. Save, then copy the Client ID and click "View client secret" for the Client Secret.</string>
+3. "Which API/SDKs are you planning to use": tick "Web API".
+4. Save, then copy the Client ID and click "View client secret" for the Client Secret.
+
+Play/Pause, Next/Previous, Shuffle, Repeat and Volume work: on Spotify Premium through the Web API, otherwise via your system media keys.
+Like and Save/Remove-from-playlist are NOT available: Spotify blocks the library and playlist endpoints for personal (Development-mode) apps, so K2 hides those actions.</string>
   <string name="spotify_client_id_label">Client ID:</string>
   <string name="spotify_client_secret_label">Client Secret:</string>
-  <string name="spotify_connected_as">Connected as</string>
+  <string name="spotify_connected_as">Connected</string>
+  <string name="spotify_webapi_active">Web API active (Spotify Premium)</string>
+  <string name="spotify_email_hint">Add this address under "User Management" in your Spotify app</string>
+  <string name="spotify_email_reconnect">Reconnect to show the account email you need for "User Management"</string>
+  <string name="spotify_library_403">Spotify blocks Like / Save-to-playlist for Development-mode apps (a 2025 platform change) — not a K2 issue, and a new app / User Management won't help. Playback control (play/pause, next, volume) still works. Full library access needs Spotify to grant the app Extended Access.</string>
+  <string name="spotify_device_label">Playback device:</string>
+  <string name="spotify_device_auto">Automatic (active device)</string>
+  <string name="spotify_device_active">active</string>
+  <string name="spotify_device_offline">offline</string>
+  <string name="spotify_device_hint">Which Spotify Connect device the transport/volume/repeat keys control. Automatic sends the command to whichever device is currently active.</string>
+  <string name="spotify_field_song">Song</string>
+  <string name="spotify_field_artist">Artist</string>
+  <string name="spotify_field_album">Album</string>
   <string name="spotify_settings_button">Spotify settings…</string>
   <string name="spotify_cmd_play_pause">Play/Pause</string>
   <string name="spotify_cmd_next">Next Track</string>
@@ -207,6 +226,7 @@
   <string name="spotify_cmd_volume_set">Set Volume</string>
   <string name="spotify_cmd_save_playlist">Save Track to Playlist</string>
   <string name="spotify_cmd_remove_playlist">Remove Track from Playlist</string>
+  <string name="spotify_cmd_unavailable">unavailable</string>
   <string name="discord_settings_title">Discord Settings</string>
   <string name="discord_hint">Voice commands drive the Discord DESKTOP app through its local RPC pipe and need your own Discord application; "Send message" only needs a channel webhook URL.</string>
   <string name="discord_setup_guide">1. Go to discord.com/developers/applications and click "New Application".
@@ -259,8 +279,34 @@
   <string name="discord_profile_config_title">Discord voice profile</string>
   <string name="discord_profile_config_hint">Settings for the DisplayPad Discord voice page.</string>
   <string name="discord_account_button">Discord account (Client ID / Secret)…</string>
+  <string name="spotify_profile_config_title">Spotify profile</string>
+  <string name="spotify_profile_config_hint">How the DisplayPad Spotify profile's left 2×2 block shows what's playing.</string>
+  <string name="spotify_account_button">Spotify account (Client ID / Secret)…</string>
+  <string name="spotify_source_label">Track data source</string>
+  <string name="spotify_source_local">Local (Windows "now playing")</string>
+  <string name="spotify_source_webapi">Spotify account (Web API)</string>
+  <string name="spotify_source_webapi_hint">The Web API adds the album name and a higher-resolution cover, but needs the Spotify account connected. If it returns nothing, the local source is used instead.</string>
+  <string name="spotify_cover_layout_label">Cover layout</string>
+  <string name="spotify_cover_layout_quad">Cover across 4 tiles</string>
+  <string name="spotify_cover_layout_single">Cover on 1 tile and text on 3 tiles</string>
+  <string name="spotify_cover_layout_single_hint">The other three tiles of the block show the title, the artist and the album, each labeled Song/Artist/Album — this is what the Long text setting below applies to.</string>
+  <string name="spotify_text_mode_label">Long text (1-tile layout)</string>
+  <string name="spotify_text_mode_hint">When Ticker (marquee) is selected, K2’s own key grid preview still shows the tile as a static line — scrolling is a hardware-only effect and never animates in the app.</string>
+  <string name="spotify_text_mode_static">Static — trim with "…"</string>
+  <string name="spotify_text_mode_marquee">Scroll it like a ticker</string>
+  <string name="spotify_return_label">Return to this profile after</string>
+  <string name="spotify_return_hint">The Spotify profile comes back on its own this many seconds after the cover tile’s back arrow handed the pad over to another profile. Leave it off to stay where you went.</string>
+  <string name="spotify_foreground_only_label">Show only while Spotify is in front</string>
+  <string name="spotify_foreground_only_hint">The pad switches to this profile the moment the Spotify app takes the foreground, and hands it back to the profile you were on as soon as it loses it. The back arrow still works: after using it the profile stays away until Spotify is focused again (or the timer above brings it back).</string>
+  <string name="spotify_position_label">Cover block position</string>
+  <string name="spotify_position_hint">Which pair of columns the 2×2 cover block occupies. The 8 transport/volume/repeat keys around it change layout to match — each position has its own arrangement, not just a reflow.</string>
+  <string name="spotify_position_left">Left</string>
+  <string name="spotify_position_center">Center</string>
+  <string name="spotify_position_right">Right</string>
   <string name="discord_voicepage_return_label">Bring the voice page back after</string>
   <string name="discord_voicepage_return_hint">While a call is running, if you leave the voice page for a normal profile it comes back on its own once this many seconds pass without you returning to it — like a screensaver. Off = it only returns on a new call or a "voice page" key.</string>
+  <string name="show_back_arrow_label">Show back arrow</string>
+  <string name="show_back_arrow_hint">Stamps the return arrow on the tile that hands the pad back to the previous profile. The key works either way — turning this off only removes the mark, so the picture underneath is unobscured.</string>
   <string name="youtube_settings_title">YouTube Settings</string>
   <string name="youtube_hint">Create an OAuth Desktop-app client at console.cloud.google.com with the YouTube Data API v3 enabled, then paste its Client ID/Secret here.</string>
   <string name="youtube_setup_guide">1. Go to console.cloud.google.com, create/select a project, then enable "YouTube Data API v3" (APIs &amp; Services -&gt; Library).
@@ -347,6 +393,7 @@
   <string name="media_vol_down">Volume down</string>
   <string name="media_mute">Mute</string>
   <string name="media_shuffle">Shuffle</string>
+  <string name="media_repeat">Repeat</string>
   <string name="mouse_left">Left button</string>
   <string name="mouse_right">Right button</string>
   <string name="mouse_middle">Middle button</string>
@@ -358,7 +405,6 @@
   <string name="mouse_scroll_right">Scroll right</string>
   <string name="keys_modifiers_label">Modifiers:</string>
   <string name="keys_key_label">Key:</string>
-  <string name="keys_win_hint">The Windows key can be selected but is not sent by the current keystroke backend (SendKeys) — it is silently ignored.</string>
   <string name="gh_manage">Manage Google Home devices…</string>
   <string name="gh_summary_missing">Google Home (binding removed)</string>
   <string name="gh_setup_title">Google Home devices</string>
@@ -380,6 +426,15 @@
   <string name="gh_record_alt_armed">Recording the opposite action — now perform it on the page.</string>
   <string name="close">Close</string>
 
+  <!-- Per-section "Guide" button (bottom-right of every device panel) + popup -->
+  <string name="guide_button">Guide</string>
+  <string name="guide_tooltip">Open the guide for this section</string>
+  <string name="guide_title">Guide</string>
+  <string name="guide_none">The guide for this section hasn't been written yet.</string>
+  <!-- Home tab: same button, relabelled -->
+  <string name="highlights_button">Highlights</string>
+  <string name="highlights_tooltip">K2 features that Base Camp doesn't have — and how to turn them on</string>
+
   <!-- ═══════════════════════════════════════════════════════════════
        GENERAL SETTINGS TAB
        ═══════════════════════════════════════════════════════════════ -->
@@ -394,6 +449,8 @@
   <string name="log_off">Off</string>
   <string name="log_normal">Normal</string>
   <string name="log_verbose">Verbose</string>
+  <string name="settings_persist_logs">Persist logs</string>
+  <string name="settings_persist_logs_hint">Keep every session's log instead of resetting it on the next start: each run's log is moved into the "logs" folder with its date and time in the name. Useful for catching an occasional crash on the first launch after an update.</string>
   <string name="settings_dp_native">DisplayPad: native USB engine (experimental)</string>
   <string name="settings_dp_native_hint">Drives the DisplayPad directly over USB instead of the Mountain SDK: confirmed transfers (no icon corruption), no satellite process. Profile persistence on the device is not available; images are re-uploaded from the K2 database. Takes effect after restarting K2.</string>
   <string name="settings_ev_native">Everest Max: native USB engine (experimental, partial)</string>
@@ -482,8 +539,13 @@
   <string name="settings_start_min_tray">Start directly minimized to tray</string>
   <string name="settings_start_min_tray_hint">K2 starts with its drivers active but the window hidden in the tray — open it anytime from the tray icon.</string>
   <!-- DisplayPad device mapping -->
-  <string name="settings_dp_devicemap_group">DisplayPad device mapping</string>
-  <string name="settings_dp_devicemap_btn">Configure mapping…</string>
+  <string name="settings_device_sync_group">Device sync</string>
+  <string name="sync_across_devices">Sync profile across devices</string>
+  <string name="sync_across_devices_hint">Switching profile on one connected Mountain device switches every other connected device to the same profile slot.</string>
+  <string name="sync_lighting_across_devices">Sync lighting across devices</string>
+  <string name="sync_lighting_across_devices_hint">Changing the lighting effect or colour on one device mirrors it to every other connected device (nearest match where a device can't reproduce the effect).</string>
+  <string name="settings_dp_devicemap_group">Device mapping</string>
+  <string name="settings_dp_devicemap_btn">DisplayPad mapping</string>
   <string name="settings_dp_devicemap_hint">If you moved a DisplayPad to a different USB port and its saved profiles now show up on the wrong panel (e.g. "DisplayPad 2" and "DisplayPad 3" swapped), use this to reassign which panel each connected pad is treated as.</string>
   <string name="dp_devicemap_title">DisplayPad device mapping</string>
   <string name="dp_devicemap_hint">Each connected pad is listed below with its firmware version. Click "Identify" to blink a pad's backlight so you can tell which row it is, then set the board number it should use. Two rows cannot share the same board number.</string>
@@ -529,6 +591,7 @@
   <string name="hw_busy_importing_profile">Importing profile, please wait…</string>
   <string name="hw_busy_importing_profiles">Importing profiles, please wait…</string>
   <string name="hw_busy_restoring_defaults">Restoring defaults, please wait…</string>
+  <string name="hw_busy_sync_across_profiles">Applying sync across profiles on the keyboard, please wait…</string>
   <string name="hw_busy_restoring_key_images">Restoring the default images on the display keys, please wait…</string>
   <string name="hw_busy_clearing_image">Clearing the image on the display key, please wait…</string>
   <string name="hw_busy_writing_key_bindings">Writing the display key actions to the keyboard, please wait…</string>
@@ -726,6 +789,9 @@
   <string name="settings_sync_profiles">Sync across profiles</string>
   <string name="settings_game_mode">Game Mode</string>
   <string name="settings_game_mode_tip">Game mode disables certain key combinations to avoid accidentally interrupting a game.</string>
+  <string name="settings_game_mode_master">Game Mode enabled</string>
+  <string name="settings_game_mode_master_hint_ev">Can also be toggled on the keyboard with Fn + Pause. The checkboxes below choose which keys it blocks.</string>
+  <string name="settings_game_mode_master_hint_ev60">Can also be toggled on the keyboard with Fn + Win. The checkboxes below choose which keys it blocks.</string>
   <string name="settings_disable_shift_tab">Disable Shift + Tab</string>
   <string name="settings_disable_alt_f4">Disable Alt + F4</string>
   <string name="settings_disable_win_key">Disable Windows key</string>
@@ -883,6 +949,7 @@
   <string name="dp_add_text">Edit icon…</string>
   <string name="dp_icon_section">Icon</string>
   <string name="dp_gallery_icon">Default icon</string>
+  <string name="dp_spotify_cover_icon">Use Spotify album cover</string>
   <string name="dp_gallery_icon_with_text">With text</string>
   <string name="dp_gallery_icon_without_text">Without text</string>
   <string name="gallery_dialog_title">Icon gallery</string>
@@ -912,6 +979,7 @@
   <string name="txt_bg_solid">Solid color background</string>
   <string name="txt_bg_image">On top of the loaded image</string>
   <string name="txt_bg_color">Background:</string>
+  <string name="txt_style_only_header">Text style</string>
   <string name="txt_color">Text:</string>
   <string name="txt_position_label">Position:</string>
   <string name="txt_icon_source_label">Icon source:</string>
@@ -965,6 +1033,7 @@
   <string name="rename_device_prompt">Enter a name for this device:</string>
   <string name="profile_not_available_tip">Not available yet for this device — no profile storage implemented.</string>
   <!-- Rename / delete profile -->
+  <string name="configure_profile">Configure profile</string>
   <string name="rename_profile">Rename profile</string>
   <string name="rename_profile_title">Rename profile</string>
   <string name="rename_profile_prompt">Enter a name for this profile:</string>
@@ -985,6 +1054,13 @@
   <string name="profile_settings_exe_label">Launch executable</string>
   <string name="profile_settings_exe_hint">When this program starts, K2 automatically switches to this profile.</string>
   <string name="profile_settings_clear">Clear</string>
+  <string name="profile_settings_pick_running">From a running app…</string>
+  <string name="profile_settings_focus_only">Only while this app is in focus</string>
+  <string name="profile_settings_focus_only_hint">K2 shows this profile only while the linked app is the foreground window, and returns to the previous profile when it loses focus.</string>
+  <string name="profile_settings_restore_on_close">Return to the previous profile when the app closes</string>
+  <string name="profile_settings_restore_on_close_hint">When the linked app exits, K2 switches back to the profile that was active before — only if you are still on this profile. Ignored when "only while in focus" is on.</string>
+  <string name="running_process_title">Choose a running app</string>
+  <string name="running_process_hint">Pick an application that is currently open. You can also browse for its .exe directly.</string>
   <!-- Base Camp device picker (shown when the DB has profiles for more than one physical device of the same type) -->
   <string name="bc_pick_device_title">Choose Base Camp device</string>
   <string name="bc_pick_device_text">Base Camp has profiles for more than one device. Choose which one to import into "{0}":</string>
@@ -1054,7 +1130,44 @@
   <string name="sysmon_disk">Disk usage</string>
   <string name="sysmon_net_down">Download speed</string>
   <string name="sysmon_net_up">Upload speed</string>
+  <string name="sysmon_mode_usage">Usage</string>
+  <string name="sysmon_mode_temp">Temperature</string>
+  <string name="sysmon_disk_label">Which disk:</string>
+  <string name="sysmon_disk_all">All disks</string>
+  <string name="sysmon_cpu_temp">CPU temperature</string>
+  <string name="sysmon_gpu_temp">GPU temperature</string>
+  <string name="sysmon_disk_pick_fmt">Disk: {0}</string>
+  <string name="sysmon_pick_sensor">Sensor selection</string>
   <string name="speedtest_down">Speed test - download</string>
   <string name="speedtest_up">Speed test - upload</string>
   <string name="speedtest_ping">Speed test - ping</string>
+
+  <!-- Hardware-sensor picker for a "PC monitor" tile (HWiNFO-style list) -->
+  <string name="sensor_pick_button">Choose sensor…</string>
+  <string name="sensor_pick_title">Hardware sensor</string>
+  <string name="sensor_pick_hint">Pick any hardware sensor to show on the key. The list updates live; use the selector below to show its current, minimum, maximum or average value.</string>
+  <string name="sensor_pick_search">Filter by name, type or device</string>
+  <string name="sensor_pick_none">Select a sensor first.</string>
+  <string name="sensor_col_type">Type</string>
+  <string name="sensor_col_name">Sensor</string>
+  <string name="sensor_col_value">Value</string>
+  <string name="sensor_show_label">Show:</string>
+  <string name="sensor_stat_cur">Current</string>
+  <string name="sensor_stat_min">Minimum</string>
+  <string name="sensor_stat_max">Maximum</string>
+  <string name="sensor_stat_avg">Average</string>
+  <string name="sensor_reset_stats">Reset min/max/avg</string>
+  <string name="sensor_count_fmt">{0} sensors</string>
+  <string name="sensor_starting">Reading hardware sensors…</string>
+  <string name="sensor_unavailable">No hardware sensors available.</string>
+  <string name="sensor_preview_fmt">Current value: {0}</string>
+  <string name="sensor_grp_cpu">CPU</string>
+  <string name="sensor_grp_gpu">GPU</string>
+  <string name="sensor_grp_memory">Memory</string>
+  <string name="sensor_grp_storage">Storage</string>
+  <string name="sensor_grp_motherboard">Motherboard</string>
+  <string name="sensor_grp_network">Network</string>
+  <string name="sensor_grp_battery">Battery</string>
+  <string name="sensor_grp_cooler">Cooling</string>
+  <string name="sensor_grp_other">Other</string>
 </strings>

@@ -215,6 +215,41 @@ internal static class Everest60Protocol
     }
 
     /// <summary>
+    /// "Game Mode" key-lock (cmd 0x15). Reverse-engineered from a real Base Camp
+    /// USB capture (<c>_reference/usb_dumps/ev60_flags.pcapng</c>): a plain 64-byte
+    /// HID Feature Report on interface 2, <c>15 46 23 EA &lt;mask&gt; 00…</c>, one byte
+    /// of bitmask at payload offset 0 (K2 buffer index 5). The capture showed the
+    /// mask built up as 0x01 → 0x05 → 0x0D → 0x0F while the user ticked, in this
+    /// order, Shift+Tab, Alt+F4, Windows, Alt+Tab — i.e. <b>bit0=Shift(+Tab),
+    /// bit1=AltTab, bit2=AltF4, bit3=Win</b> (DIFFERENT from Everest Max's SDK
+    /// layout). No separate "game mode status/enable" command exists on the wire
+    /// for the Everest 60 — the bitmask alone is the whole feature.
+    /// </summary>
+    public static void SetGameMode(SafeFileHandle h, int mask, Action<string>? log = null)
+    {
+        var b = MakeBuf(0x15);
+        b[5] = (byte)(mask & 0x0F);
+        var resp = Everest60HidNative.SendFeature(h, b);
+        log?.Invoke($"[Ev60] SetGameMode(0x{mask & 0x0F:X2}) -> " +
+                    $"{(resp is { Length: > 1 } && resp[1] == 0x15 ? "ack" : "no-ack")}");
+    }
+
+    /// <summary>
+    /// Core / indicator LEDs on-off (cmd 0x10). Same capture as
+    /// <see cref="SetGameMode"/>: <c>10 46 23 EA &lt;0|1&gt; 00…</c> — Base Camp
+    /// re-sends this alongside every Game Mode write (its SaveSettings does
+    /// SetGameMode then SetIndicatorLed unconditionally).
+    /// </summary>
+    public static void SetCoreLed(SafeFileHandle h, bool on, Action<string>? log = null)
+    {
+        var b = MakeBuf(0x10);
+        b[5] = (byte)(on ? 1 : 0);
+        var resp = Everest60HidNative.SendFeature(h, b);
+        log?.Invoke($"[Ev60] SetCoreLed({on}) -> " +
+                    $"{(resp is { Length: > 1 } && resp[1] == 0x10 ? "ack" : "no-ack")}");
+    }
+
+    /// <summary>
     /// Custom per-key RGB (main 64 keys + optional 44-LED side ring + optional
     /// 17-key numpad accessory + optional 22-LED numpad ring). Mirrors
     /// controller.py's <c>set_lighting_custom()</c>: Begin(0x34) → Map(0x35, 14

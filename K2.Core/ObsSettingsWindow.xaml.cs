@@ -13,6 +13,7 @@ public partial class ObsSettingsWindow : Window
     public ObsSettingsWindow()
     {
         InitializeComponent();
+        RtbObsGuide.Document = SetupGuide.BuildDocument(Loc.Get("obs_setup_guide"), this);
         TxtObsHost.Text = ObsStore.Host;
         TxtObsPort.Text = ObsStore.Port;
         PwdObsPassword.Password = ObsStore.Password;

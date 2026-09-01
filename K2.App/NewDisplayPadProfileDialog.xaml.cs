@@ -1,4 +1,6 @@
-﻿using System.Windows;
+﻿using System;
+using System.Linq;
+using System.Windows;
 
 namespace K2.App;
 
@@ -14,7 +16,9 @@ public partial class NewDisplayPadProfileDialog : Window
 {
     /// <summary>Dedicated profile type names offered in <see cref="CbDedicatedType"/> — they must
     /// match the ids of <c>MainWindow.DpDedicatedCatalog</c>, which turns the pick into a reserved
-    /// profile slot on the selected device. Add new dedicated profile types in both places.</summary>
+    /// profile slot on the selected device. Add new dedicated profile types here; the combo shows
+    /// them alphabetically (<see cref="NewDisplayPadProfileDialog()"/>), declaration order here
+    /// doesn't matter.</summary>
     private static readonly string[] DedicatedTypes = { "Spotify", "Discord" };
 
     public bool IsDedicated { get; private set; }
@@ -23,7 +27,8 @@ public partial class NewDisplayPadProfileDialog : Window
     public NewDisplayPadProfileDialog()
     {
         InitializeComponent();
-        CbDedicatedType.ItemsSource = DedicatedTypes;
+        CbDedicatedType.ItemsSource =
+            DedicatedTypes.OrderBy(t => t, StringComparer.CurrentCultureIgnoreCase).ToArray();
         CbDedicatedType.SelectedIndex = 0;
     }
 

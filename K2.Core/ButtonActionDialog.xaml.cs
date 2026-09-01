@@ -24,6 +24,7 @@ public partial class ButtonActionDialog : Window
         InitializeComponent();
         _host = host;
         LblHeader.Text = Loc.Get("dlg_button_label").Replace("#?", $"#{buttonIndex}");
+        Closed += (_, _) => { _livePreviewTimer?.Stop(); _livePreviewTimer = null; };
 
         // Hide the "Page" type entirely (not just non-functional/empty like "macro") on
         // hosts with no DisplayPad-page concept — a MacroPad/Everest key can never
@@ -196,6 +197,7 @@ public partial class ButtonActionDialog : Window
         bool profile = tag == "profile";
         bool combo   = tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
                               or "dp_clock" or "dp_sysmon" or "dp_speedtest";
+        bool sysmon  = tag == "dp_sysmon";
         bool keys    = tag == "keys";
         bool hotkeyswitch = tag == "hotkeyswitch";
         bool multi   = tag == "multi";
@@ -212,6 +214,7 @@ public partial class ButtonActionDialog : Window
         BrowserPanel.Visibility  = browser ? Visibility.Visible : Visibility.Collapsed;
         ProfilePanel.Visibility  = profile ? Visibility.Visible : Visibility.Collapsed;
         ComboPanel.Visibility    = combo   ? Visibility.Visible : Visibility.Collapsed;
+        SysMonPanel.Visibility   = sysmon  ? Visibility.Visible : Visibility.Collapsed;
         KeysPanel.Visibility     = keys    ? Visibility.Visible : Visibility.Collapsed;
         HotkeySwitchPanel.Visibility = hotkeyswitch ? Visibility.Visible : Visibility.Collapsed;
         MultiPanel.Visibility    = multi   ? Visibility.Visible : Visibility.Collapsed;
@@ -227,6 +230,8 @@ public partial class ButtonActionDialog : Window
         if (profile) EnsureProfileRows();
         if (multi) EnsureMultiPanel();
         if (combo) EnsureComboPanel(tag);
+        if (sysmon) RefreshSysMonPanel();
+        UpdateLivePreview(tag);
         if (keys) EnsureKeysPanel();
         if (hotkeyswitch) EnsureHotkeySwitchPanel();
         if (appShortcut) EnsureAppShortcutPanel(tag);
@@ -313,9 +318,13 @@ public partial class ButtonActionDialog : Window
             ActionValue = SaveProfileSpec().ToJson();
         }
         else if (tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
-                 or "dp_clock" or "dp_sysmon" or "dp_speedtest")
+                 or "dp_clock" or "dp_speedtest")
         {
             ActionValue = SaveComboSpec();
+        }
+        else if (tag == "dp_sysmon")
+        {
+            ActionValue = SaveSysMonSpec();
         }
         else if (tag == "keys")
         {

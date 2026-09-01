@@ -1,0 +1,135 @@
+﻿<Window x:Class="K2.Core.SpotifyProfileConfigWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core"
+        Title="{loc:Get spotify_profile_config_title}"
+        Width="460" Height="660"
+        MinWidth="420" MinHeight="640"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Style="{DynamicResource K2WindowStyle}">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>   <!-- 0  title -->
+            <RowDefinition Height="Auto"/>   <!-- 1  hint -->
+            <RowDefinition Height="Auto"/>   <!-- 2  account button -->
+            <RowDefinition Height="Auto"/>   <!-- 3  source label + hint icon -->
+            <RowDefinition Height="Auto"/>   <!-- 4  source radios -->
+            <RowDefinition Height="Auto"/>   <!-- 5  device label + hint icon -->
+            <RowDefinition Height="Auto"/>   <!-- 6  device combo -->
+            <RowDefinition Height="Auto"/>   <!-- 7  (spacer) -->
+            <RowDefinition Height="Auto"/>   <!-- 8  layout label + hint icon -->
+            <RowDefinition Height="Auto"/>   <!-- 9  layout radios -->
+            <RowDefinition Height="Auto"/>   <!-- 10 position label + hint icon -->
+            <RowDefinition Height="Auto"/>   <!-- 11 position combo -->
+            <RowDefinition Height="Auto"/>   <!-- 12 (spacer) -->
+            <RowDefinition Height="Auto"/>   <!-- 13 text label -->
+            <RowDefinition Height="Auto"/>   <!-- 14 text radios -->
+            <RowDefinition Height="Auto"/>   <!-- 15 return-to-profile row -->
+            <RowDefinition Height="Auto"/>   <!-- 16 show-back-arrow row -->
+            <RowDefinition Height="Auto"/>   <!-- 17 foreground-only row -->
+            <RowDefinition Height="*"/>      <!-- 18 filler -->
+            <RowDefinition Height="Auto"/>   <!-- 19 buttons -->
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="{loc:Get spotify_profile_config_title}" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+        <TextBlock Grid.Row="1" Text="{loc:Get spotify_profile_config_hint}" TextWrapping="Wrap" Foreground="#9A9AA2" Margin="0,0,0,12"/>
+
+        <!-- Same window the "spotify" action combo opens: Client ID/Secret, Connect/Disconnect. -->
+        <Button Grid.Row="2" x:Name="BtnSpotifyAccount" Content="{loc:Get spotify_account_button}"
+                HorizontalAlignment="Left" Padding="12,5" Margin="0,0,0,16" Click="BtnSpotifyAccount_Click"/>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="{loc:Get spotify_source_label}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get spotify_source_webapi_hint}"/>
+        </StackPanel>
+        <StackPanel Grid.Row="4" Margin="0,0,0,4">
+            <RadioButton x:Name="RbSourceLocal" GroupName="src" Content="{loc:Get spotify_source_local}" Margin="0,2"
+                         Checked="Source_Changed"/>
+            <RadioButton x:Name="RbSourceWebApi" GroupName="src" Content="{loc:Get spotify_source_webapi}" Margin="0,2"
+                         Checked="Source_Changed"/>
+        </StackPanel>
+
+        <!-- Device picker: same combo/refresh pattern as a single key's own "spotify" action
+             (ButtonActionDialog), meaningful only for Web API — a "media" key has no device
+             concept at all, so this whole row hides while Source=Local. -->
+        <StackPanel Grid.Row="5" x:Name="PnlSpotifyDevice" Orientation="Horizontal" Margin="0,14,0,4">
+            <TextBlock Text="{loc:Get spotify_device_label}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get spotify_device_hint}"/>
+        </StackPanel>
+        <Grid Grid.Row="6" x:Name="RowSpotifyDevice" Margin="0,0,0,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <ComboBox x:Name="CbSpotifyDevice" Grid.Column="0" HorizontalAlignment="Left" Width="260"/>
+            <Button x:Name="BtnSpotifyDeviceRefresh" Grid.Column="1" Content="{loc:Get refresh}"
+                    Padding="10,2" Margin="6,0,0,0" Click="BtnSpotifyDeviceRefresh_Click"/>
+        </Grid>
+        <Border Grid.Row="7" Height="14"/>
+
+        <StackPanel Grid.Row="8" Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="{loc:Get spotify_cover_layout_label}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get spotify_cover_layout_single_hint}"/>
+        </StackPanel>
+        <StackPanel Grid.Row="9" Margin="0,0,0,4">
+            <RadioButton x:Name="RbLayoutQuad" GroupName="lay" Content="{loc:Get spotify_cover_layout_quad}" Margin="0,2"
+                         Checked="Layout_Changed"/>
+            <RadioButton x:Name="RbLayoutSingle" GroupName="lay" Content="{loc:Get spotify_cover_layout_single}" Margin="0,2"
+                         Checked="Layout_Changed"/>
+        </StackPanel>
+        <StackPanel Grid.Row="10" Orientation="Horizontal" Margin="0,14,0,4">
+            <TextBlock Text="{loc:Get spotify_position_label}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get spotify_position_hint}"/>
+        </StackPanel>
+        <ComboBox Grid.Row="11" x:Name="CbSpotifyPosition" Width="160" HorizontalAlignment="Left" Margin="0,0,0,4">
+            <ComboBoxItem Content="{loc:Get spotify_position_left}"/>
+            <ComboBoxItem Content="{loc:Get spotify_position_center}"/>
+            <ComboBoxItem Content="{loc:Get spotify_position_right}"/>
+        </ComboBox>
+        <Border Grid.Row="12" Height="14"/>
+
+        <StackPanel Grid.Row="13" Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock x:Name="LblTextMode" Text="{loc:Get spotify_text_mode_label}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get spotify_text_mode_hint}"/>
+        </StackPanel>
+        <StackPanel Grid.Row="14" x:Name="PnlTextMode" Margin="0,0,0,4">
+            <RadioButton x:Name="RbTextStatic" GroupName="txt" Content="{loc:Get spotify_text_mode_static}" Margin="0,2"/>
+            <RadioButton x:Name="RbTextMarquee" GroupName="txt" Content="{loc:Get spotify_text_mode_marquee}" Margin="0,2"/>
+        </StackPanel>
+
+        <!-- Same "come back on its own" pair the Discord voice page has, but per pad: it is the
+             cover tile's back arrow (DpSpotifyLeave) that arms it. -->
+        <StackPanel Grid.Row="15" Orientation="Horizontal" Margin="0,18,0,0">
+            <CheckBox x:Name="CkSpotifyReturn" Content="{loc:Get spotify_return_label}"
+                      VerticalAlignment="Center"/>
+            <TextBox x:Name="TxtSpotifyReturnSec" Width="52" Height="23" Margin="8,0,6,0"
+                     VerticalContentAlignment="Center" TextAlignment="Center"
+                     MaxLength="4" PreviewTextInput="DigitsOnly_PreviewTextInput"/>
+            <TextBlock Text="{loc:Get unit_seconds}" VerticalAlignment="Center" Foreground="#9A9AA2"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get spotify_return_hint}"/>
+        </StackPanel>
+
+        <!-- Order swapped 2026-09-01 (user request) — Foreground-only now sits between the two
+             return-related toggles instead of after Show back arrow. -->
+        <StackPanel Grid.Row="16" Orientation="Horizontal" Margin="0,10,0,0">
+            <CheckBox x:Name="CkSpotifyForeground" Content="{loc:Get spotify_foreground_only_label}"
+                      VerticalAlignment="Center"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get spotify_foreground_only_hint}"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="17" Orientation="Horizontal" Margin="0,14,0,0">
+            <CheckBox x:Name="CkSpotifyBackArrow" Content="{loc:Get show_back_arrow_label}"
+                      VerticalAlignment="Center"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get show_back_arrow_hint}"/>
+        </StackPanel>
+
+        <Grid Grid.Row="19" Margin="0,12,0,0">
+            <Button Style="{DynamicResource GuideBarButton}" HorizontalAlignment="Left" VerticalAlignment="Center"
+                    Content="{loc:Get guide_button}" ToolTip="{loc:Get guide_tooltip}" Click="BtnGuide_Click"/>
+            <Button Content="{loc:Get save}" Width="90" Padding="6,2" IsDefault="True"
+                    HorizontalAlignment="Right" Click="BtnSave_Click"/>
+        </Grid>
+    </Grid>
+</Window>

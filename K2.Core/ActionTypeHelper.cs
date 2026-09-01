@@ -219,9 +219,33 @@ public static class ActionTypeHelper
         ("remove_playlist",  "spotify_cmd_remove_playlist"),
     };
 
+    /// <summary>Commands that hit endpoints Spotify blocks for Development-mode apps (library /
+    /// playlist writes — see the "Web API + Development app" notes) and so <b>cannot work</b>
+    /// without Extended Access on the developer app. Kept in <see cref="SpotifyCommands"/> for
+    /// label/summary lookup and still executed by <see cref="ButtonActionEngine"/> (a
+    /// BC-imported or previously-saved key keeps working the day access is granted), but hidden
+    /// from the action picker so a new binding can't be made to something that just 403s.</summary>
+    public static readonly System.Collections.Generic.HashSet<string> SpotifyCommandsUnavailable = new()
+    {
+        "like_toggle", "save_playlist", "remove_playlist",
+    };
+
+    /// <summary>The <see cref="SpotifyCommands"/> entries offered in the action picker — i.e.
+    /// minus <see cref="SpotifyCommandsUnavailable"/>.</summary>
+    public static System.Collections.Generic.IEnumerable<(string Value, string LocKey)> SpotifyCommandsPickable
+        => System.Linq.Enumerable.Where(SpotifyCommands, c => !SpotifyCommandsUnavailable.Contains(c.Value));
+
     /// <summary>Display text for a "spotify" action: the localized label of the matching
-    /// <see cref="SpotifyCommands"/> entry, plus the stored argument when present.</summary>
-    public static string SpotifySummary(string? actionValue) => TildeCommandSummary(actionValue, "act_spotify", SpotifyCommands);
+    /// <see cref="SpotifyCommands"/> entry, plus the stored argument. The optional 3rd field
+    /// (<c>command[~arg][~deviceId]</c>, the per-key target device) is not shown here — it is
+    /// visible in the action dialog and would only be an opaque id in this one-line summary.</summary>
+    public static string SpotifySummary(string? actionValue)
+    {
+        if (string.IsNullOrWhiteSpace(actionValue)) return Loc.Get("act_spotify");
+        var p = actionValue.Split('~');
+        string upToArg = p.Length > 1 && p[1].Length > 0 ? $"{p[0]}~{p[1]}" : p[0];
+        return TildeCommandSummary(upToArg, "act_spotify", SpotifyCommands);
+    }
 
     /// <summary>K2's Discord command vocabulary — internal tags (Base Camp has no Discord
     /// action at all, so there's nothing to stay import-compatible with). Everything except
@@ -301,11 +325,61 @@ public static class ActionTypeHelper
         ("ping", "speedtest_ping"),
     };
 
+    /// <summary>Splits a <c>dp_sysmon</c> value bound to a specific hardware sensor —
+    /// <c>"&lt;lhm-id&gt;|&lt;stat&gt;|&lt;label&gt;"</c>, where <c>stat</c> is
+    /// <c>cur|min|max|avg</c> and <c>label</c> is the human name captured when the sensor was
+    /// picked. Returns null for the six legacy tokens (cpu/ram/gpu/disk/net_*), which have no
+    /// id — LHM identifiers always start with <c>'/'</c>.</summary>
+    public static (string Id, string Stat, string Label)? ParseSensorValue(string? value)
+    {
+        string v = (value ?? "").Trim();
+        if (v.Length == 0 || v[0] != '/') return null;
+        var parts = v.Split('|');
+        return (parts[0],
+                parts.Length > 1 && parts[1].Length > 0 ? parts[1] : "cur",
+                parts.Length > 2 ? string.Join("|", parts[2..]) : parts[0]);
+    }
+
+    /// <summary>Localized name of a sensor statistic (<c>cur|min|max|avg</c>) for the tile
+    /// summary and the sensor picker's combo item.</summary>
+    public static string SensorStatLabel(string? stat) => stat switch
+    {
+        "min" => Loc.Get("sensor_stat_min"),
+        "max" => Loc.Get("sensor_stat_max"),
+        "avg" => Loc.Get("sensor_stat_avg"),
+        _     => Loc.Get("sensor_stat_cur"),
+    };
+
     /// <summary>Display text for a "dp_clock"/"dp_sysmon"/"dp_speedtest" action: the localized
     /// name of the picked mode/metric, so the key list says "Analog clock" rather than
     /// "analog".</summary>
     public static string LiveTileSummary(string? actionType, string? actionValue)
     {
+        string value = (actionValue ?? "").Trim();
+
+        if (actionType == "dp_sysmon")
+        {
+            // A specific hardware sensor picked via "Choose sensor…".
+            if (ParseSensorValue(value) is { } sensor)
+                return $"{sensor.Label} · {SensorStatLabel(sensor.Stat)}";
+
+            // "PC monitor" preset refinements: "cpu:temp" / "gpu:temp" / "disk:<id>|<name>".
+            int colon = value.IndexOf(':');
+            if (colon > 0)
+            {
+                string basePart = value[..colon];
+                string arg = value[(colon + 1)..];
+                if (arg == "temp" && basePart is "cpu" or "gpu")
+                    return Loc.Get(basePart == "cpu" ? "sysmon_cpu_temp" : "sysmon_gpu_temp");
+                if (basePart == "disk")
+                {
+                    int bar = arg.IndexOf('|');
+                    string name = bar >= 0 ? arg[(bar + 1)..] : arg;
+                    return string.Format(Loc.Get("sysmon_disk_pick_fmt"), name);
+                }
+            }
+        }
+
         var table = actionType switch
         {
             "dp_clock"     => ClockModes,
@@ -313,7 +387,6 @@ public static class ActionTypeHelper
             "dp_speedtest" => SpeedTestMetrics,
             _              => Array.Empty<(string Value, string LocKey)>(),
         };
-        string value = (actionValue ?? "").Trim();
         foreach (var (v, locKey) in table)
             if (string.Equals(v, value, StringComparison.OrdinalIgnoreCase)) return Loc.Get(locKey);
         // An empty value means "never configured": show what the key WILL do, since the

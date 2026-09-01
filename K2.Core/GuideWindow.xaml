@@ -1,0 +1,32 @@
+<Window x:Class="K2.Core.GuideWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core"
+        Title="{loc:Get guide_title}"
+        Width="600" Height="640"
+        MinWidth="420" MinHeight="320"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Style="{DynamicResource K2WindowStyle}">
+
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="TxtHeading" Grid.Row="0"
+                   FontSize="17" FontWeight="SemiBold"
+                   TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                      Padding="0,0,8,0">
+            <StackPanel x:Name="PnlBody"/>
+        </ScrollViewer>
+
+        <Button Grid.Row="2" Content="{loc:Get close}" IsCancel="True" IsDefault="True"
+                HorizontalAlignment="Right" MinWidth="80" Padding="12,4"
+                Margin="0,14,0,0"/>
+    </Grid>
+</Window>

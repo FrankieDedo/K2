@@ -54,9 +54,22 @@ public partial class MainWindow
     /// <summary>Last page seen, so a change can be acted on once instead of every tick.</summary>
     private int _dockLastPage = -1;
 
-    /// <summary>When the dock last changed page — the only idle signal available from
-    /// here. See <see cref="DockShouldStopFeeding"/>.</summary>
+    /// <summary>When the dock last changed page — used only for the "[DOCK] page X -> Y
+    /// after Ns" log line now. The feed back-off keys off <see cref="_dockFeedActiveSince"/>
+    /// instead, which a Windows-side volume change also renews.</summary>
     private DateTime _dockPageSince = DateTime.UtcNow;
+
+    /// <summary>When the dock feed was last "renewed" by real activity: a page change, or a
+    /// volume change reported by Core Audio while the Volume page is up. <see
+    /// cref="DockShouldStopFeeding"/> measures idleness from here, so a user who changes
+    /// Windows volume keeps the dock's Volume page live for another timeout window —
+    /// turning the physical volume roller already resets the firmware's own idle counter
+    /// the same way.</summary>
+    private DateTime _dockFeedActiveSince = DateTime.UtcNow;
+
+    /// <summary>Last volume percent pushed to the dock, to skip redundant writes when the
+    /// Core Audio event and the 1 Hz poll agree. -1 = nothing pushed yet.</summary>
+    private int _dockLastVolumePushed = -1;
 
     /// <summary>Starts the 1 Hz dock feed. Same period as Base Camp's PcInfo_timer: the
     /// dock's pages are live readouts, and the tick is mostly a single read
@@ -67,12 +80,40 @@ public partial class MainWindow
         _dockPollTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _dockPollTimer.Tick += (_, _) => DockPollTick();
         _dockPollTimer.Start();
+
+        // Immediate Volume-page updates (and feed-window renewal) on any Windows-side
+        // volume change, instead of waiting up to a second for the poll.
+        SystemMonitor.VolumeChanged += OnSystemVolumeChanged;
+        SystemMonitor.StartVolumeNotifications();
     }
 
     private void CleanupMediaDock()
     {
         _dockPollTimer?.Stop();
         _dockPollTimer = null;
+        SystemMonitor.VolumeChanged -= OnSystemVolumeChanged;
+        SystemMonitor.StopVolumeNotifications();
+    }
+
+    /// <summary>Core Audio reported a volume change (any source). Fired on an audio worker
+    /// thread — hop to the UI thread, then, if the dock is actually on its Volume page,
+    /// push the new value now and renew the feed window so <see cref="DockShouldStopFeeding"/>
+    /// keeps it live.</summary>
+    private void OnSystemVolumeChanged()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_everest is not { IsOpen: true }) return;
+            if (_ndkUploadBusy) return;
+            if (!_everest.TryGetExtendInfo(out var info)) return;
+            if (info.byMMDockMenuIndex != DockPageVolume) return;
+
+            _dockFeedActiveSince = DateTime.UtcNow;   // a real volume change is dock activity
+            int vol = SystemMonitor.VolumePercent();
+            if (vol == _dockLastVolumePushed) return;
+            _everest.SetVolume(vol);
+            _dockLastVolumePushed = vol;
+        });
     }
 
     private void DockPollTick()
@@ -99,6 +140,7 @@ public partial class MainWindow
                          $"(menu=0x{info.byMMDockShowMenu:X2} screenSetup=0x{info.byMMDockScreenSetup:X2} " +
                          $"ss={info.wMMDockScreenSaver} off={info.wMMDockTurnOff})");
             _dockPageSince = DateTime.UtcNow;
+            _dockFeedActiveSince = DateTime.UtcNow;
         }
 
         if (!DockShouldStopFeeding(info))
@@ -127,8 +169,10 @@ public partial class MainWindow
     /// whole area came from and this is the one way the app could still cause it.
     /// </para>
     /// <para>
-    /// A page change resets the clock, so normal use is unaffected: the numbers stay live
-    /// the whole time the user is actually moving through the dock's pages.
+    /// A page change resets the clock (<see cref="_dockFeedActiveSince"/>), and so does a
+    /// Windows-side volume change while the Volume page is up, so normal use is unaffected:
+    /// the numbers stay live while the user is moving through the dock's pages or actually
+    /// changing the volume.
     /// </para>
     /// </summary>
     private bool DockShouldStopFeeding(EverestSdkNative.FW_EXTEND_INFO info)
@@ -143,7 +187,7 @@ public partial class MainWindow
         if (offOn && info.wMMDockTurnOff     > 0) timeout = Math.Min(timeout, info.wMMDockTurnOff);
         if (timeout == int.MaxValue) return false;   // neither timeout is armed
 
-        return (DateTime.UtcNow - _dockPageSince).TotalSeconds >= timeout;
+        return (DateTime.UtcNow - _dockFeedActiveSince).TotalSeconds >= timeout;
     }
 
     /// <summary>Pushes the current value of whichever page the dock is showing. Anything
@@ -159,7 +203,11 @@ public partial class MainWindow
             case DockPageNet:    _everest.SetPCInfo(PcInfoNet,  SystemMonitor.DownloadMbPerSec());  break;
             case DockPageRam:    _everest.SetPCInfo(PcInfoRam,  SystemMonitor.RamPercent());        break;
             case DockPageApm:    _everest.SetPCInfo(PcInfoApm,  ApmLastMinute());                   break;
-            case DockPageVolume: _everest.SetVolume(SystemMonitor.VolumePercent());                 break;
+            case DockPageVolume:
+                int vol = SystemMonitor.VolumePercent();
+                _everest.SetVolume(vol);
+                _dockLastVolumePushed = vol;
+                break;
         }
     }
 

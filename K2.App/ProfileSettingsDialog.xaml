@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
         Title="{loc:Get profile_settings_title}"
-        Width="380" SizeToContent="Height"
+        Width="420" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         ResizeMode="NoResize"
@@ -23,12 +23,26 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBox x:Name="TxtExePath" Grid.Column="0" IsReadOnly="True" Margin="0,0,6,0" Height="25" Padding="3,2,3,0"/>
+            <TextBox x:Name="TxtExePath" Grid.Column="0" IsReadOnly="True" Margin="0,0,6,0" Height="25" Padding="3,2,3,0"
+                     TextChanged="TxtExePath_TextChanged"/>
             <Button Grid.Column="1" Content="{loc:Get browse}" Click="BtnBrowse_Click" Margin="0,0,4,0" UseLayoutRounding="True" ScrollViewer.CanContentScroll="True" Padding="12,0,12,0"/>
             <Button Grid.Column="2" Content="{loc:Get profile_settings_clear}" Click="BtnClearExe_Click" UseLayoutRounding="True" ScrollViewer.CanContentScroll="True" Padding="12,0,12,0"/>
         </Grid>
+        <Button HorizontalAlignment="Left" Content="{loc:Get profile_settings_pick_running}"
+                Click="BtnPickRunning_Click" Margin="0,0,0,4" Padding="12,0,12,0"/>
         <TextBlock Text="{loc:Get profile_settings_exe_hint}" Foreground="#777" FontSize="10"
-                   TextWrapping="Wrap" Margin="0,0,0,12"/>
+                   TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <CheckBox x:Name="ChkFocusOnly" Content="{loc:Get profile_settings_focus_only}"
+                      Checked="ChkFocusOnly_Toggled" Unchecked="ChkFocusOnly_Toggled"/>
+            <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get profile_settings_focus_only_hint}"/>
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+            <CheckBox x:Name="ChkRestoreOnClose" Content="{loc:Get profile_settings_restore_on_close}"/>
+            <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get profile_settings_restore_on_close_hint}"/>
+        </StackPanel>
 
         <Grid>
             <Grid.ColumnDefinitions>

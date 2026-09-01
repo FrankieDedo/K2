@@ -50,6 +50,11 @@ public static class DiscordVoiceRoom
     private static string? _subscribedChannel;
     private static Task _worker = Task.CompletedTask;
 
+    /// <summary>How many times the current join has re-read the channel while waiting for the
+    /// local user's own voice state to show up in it — see the tail of <see cref="Refresh"/>.
+    /// Reset on every channel change.</summary>
+    private static int _selfWaitRetries;
+
     /// <summary>Id of the voice channel this roster describes, or null when not in a call.</summary>
     public static string? ChannelId { get; private set; }
 
@@ -90,6 +95,7 @@ public static class DiscordVoiceRoom
     {
         if (channelId == ChannelId) return;
         if (channelId is null) { Clear(); Raise(Changed); return; }
+        _selfWaitRetries = 0;
         Post(ipc => Refresh(ipc, channelId));
     }
 
@@ -109,12 +115,47 @@ public static class DiscordVoiceRoom
                 if (changed) Raise(SpeakingChanged);
                 return;
             }
+            case "VOICE_STATE_DELETE":
+                // Drop the leaver from the roster NOW, straight from the payload, instead of
+                // waiting for the queued GET_CHANNEL re-read below. GET_CHANNEL keeps listing a
+                // member for a second or two after they disconnect (the same server-side lag the
+                // self-wait loop in Refresh works around) and when several people leave a busy
+                // call at once the last DELETE is often the last event we get — so a stale
+                // Refresh would leave their circles, and the scroll arrows (gated on
+                // Participants.Count > 6 by the voice page), stuck on screen. The queued Refresh
+                // still runs and reconciles order/nicknames.
+                {
+                    string? gone = Str(data, "user_id");
+                    if (gone is null && data.ValueKind == JsonValueKind.Object
+                        && data.TryGetProperty("user", out var goneUser))
+                        gone = Str(goneUser, "id");
+                    if (gone is not null)
+                    {
+                        bool removed;
+                        lock (_gate)
+                        {
+                            int before = _participants.Length;
+                            _participants = _participants.Where(p => p.Id != gone).ToArray();
+                            removed = _participants.Length != before;
+                            _speaking.Remove(gone);
+                        }
+                        if (removed) Raise(Changed);
+                    }
+                }
+                goto case "VOICE_STATE_UPDATE";
             case "VOICE_STATE_CREATE":
             case "VOICE_STATE_UPDATE":
-            case "VOICE_STATE_DELETE":
                 // The event payload is one member's state; re-reading the whole channel is a
                 // single cheap RPC call and keeps ordering/nicknames consistent with a join.
-                if (ChannelId is string id) Post(ipc => Refresh(ipc, id));
+                //
+                // ChannelId is only committed at the END of the first Refresh, so on a fresh
+                // join the local user's OWN VOICE_STATE_CREATE — the event that normally first
+                // puts "you" (avatar and all) on the roster, because Discord's GET_CHANNEL
+                // doesn't list your voice state until the voice session is fully up — can land
+                // while ChannelId is still null. Falling back to the channel the bridge is
+                // switching to stops that event from being dropped and leaving your own circle
+                // blank until the next unrelated roster change (user report).
+                if ((ChannelId ?? DiscordBridge.VoiceChannelId) is string id) Post(ipc => Refresh(ipc, id));
                 return;
         }
     }
@@ -204,6 +245,24 @@ public static class DiscordVoiceRoom
 
         DiscordBridge.Log?.Invoke($"[Discord] room: {guildName}/{channelName} — {ordered.Length} member(s)");
         Raise(Changed);
+
+        // A brand-new join often returns before Discord has added the local user's OWN voice
+        // state to the channel: GET_CHANNEL then lists everyone but you, so the roster shows no
+        // "me" tile until the next unrelated change (user report — "on the first join my face
+        // isn't shown"). Re-read a few times, backing off, until you turn up.
+        if (self is not null && !ordered.Any(p => p.Self) && _selfWaitRetries < 5)
+        {
+            int attempt = ++_selfWaitRetries;
+            _ = Task.Delay(TimeSpan.FromMilliseconds(300 * attempt)).ContinueWith(_ =>
+            {
+                if (ChannelId == channelId && !Participants.Any(p => p.Self))
+                    Post(ipc2 => Refresh(ipc2, channelId));
+            }, TaskScheduler.Default);
+        }
+        else if (ordered.Any(p => p.Self))
+        {
+            _selfWaitRetries = 0;
+        }
     }
 
     private static void Resubscribe(DiscordIpc ipc, string channelId)

@@ -112,6 +112,7 @@ public partial class DpKeyConfigDialog : Window
         // "Edit icon" on demand.
 
         ChkDefaultIcon.IsChecked   = _spec.DefaultIcon;
+        ChkSpotifyCover.IsChecked  = _spec.SpotifyCover;
 
         _loadingUi = false;
 
@@ -135,6 +136,9 @@ public partial class DpKeyConfigDialog : Window
         // when the window is loaded.
         Loaded += (_, _) =>
         {
+            // EditIconDisabled/TextStyleOnlyRenderer are assigned by the caller AFTER the
+            // constructor (object-initializer syntax), so the button state is settled here.
+            UpdateIconControlsAvailability();
             RefreshActionSummary();
             if (_spec.DefaultIcon && ActionType == "dp_folder")
             {
@@ -153,6 +157,18 @@ public partial class DpKeyConfigDialog : Window
     // by the time "OK" is clicked.
     // =====================================================================
 
+    /// <summary>Set by the caller for a key whose picture belongs to a live overlay service
+    /// rather than to an action (today: the Spotify dedicated profile's 3 track-text tiles).
+    /// Renders the tile for a candidate <see cref="KeyIconSpec"/>, and its presence switches
+    /// "Edit icon" to the font+color-only popup. Null for every ordinary key.</summary>
+    internal Func<KeyIconSpec, string?>? TextStyleOnlyRenderer { get; set; }
+
+    /// <summary>Set by the caller for a key whose picture belongs to a live overlay and has
+    /// NOTHING to edit — the Spotify block's cover tile, and every tile of the 4-tile layout:
+    /// the picture is album art, there is no caption and no glyph. "Edit icon" is greyed out
+    /// there instead of opening a popup that can only answer "none" (user report 2026-09-01).</summary>
+    internal bool EditIconDisabled { get; set; }
+
     private DispatcherTimer? _liveTimer;
 
     private static bool IsLiveActionType(string? type) =>
@@ -164,6 +180,14 @@ public partial class DpKeyConfigDialog : Window
     private void UpdateLiveTimer()
     {
         bool shouldRun = _spec.DefaultIcon && IsLiveActionType(ActionType);
+
+        // Warm LHM up off-thread if the preview needs it (a "PC monitor" key on CPU/GPU
+        // temperature, a specific disk, or a "Choose sensor…" pick) — the resolvers return null
+        // until it's up, so the preview just shows "—" for a beat instead of freezing.
+        string v = ActionValue ?? "";
+        if (shouldRun && ActionType == "dp_sysmon" && (v.Contains(':') || v.StartsWith('/')))
+            System.Threading.Tasks.Task.Run(Services.HardwareSensors.Start);
+
         if (shouldRun)
         {
             if (_liveTimer is not null) return;
@@ -191,6 +215,16 @@ public partial class DpKeyConfigDialog : Window
     /// removing a picture by hand would immediately contradict that, so both are disabled).
     /// Unchecked: back to a manually managed picture.
     /// </summary>
+    /// <summary>"Use Spotify album cover" — on a "spotify" key, overlay the currently-playing
+    /// track's cover, live (see <see cref="DpSpotifyCoverKeyService"/>). Independent of "Default
+    /// icon": whatever picture the key has (generated or hand-picked) stays as the fallback for
+    /// when nothing is playing / Spotify is closed.</summary>
+    private void ChkSpotifyCover_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loadingUi) return;
+        _spec.SpotifyCover = ChkSpotifyCover.IsChecked == true;
+    }
+
     private void ChkDefaultIcon_Changed(object sender, RoutedEventArgs e)
     {
         if (_loadingUi) return;
@@ -216,8 +250,19 @@ public partial class DpKeyConfigDialog : Window
         BtnRemoveImage.IsEnabled = !isDefault;
 
         // "Edit icon" stays enabled either way — for a default icon it edits the caption/font/
-        // colors/icon-source the generator honours, for a custom one the full text tile.
-        BtnEditIcon.IsEnabled = true;
+        // colors/icon-source the generator honours, for a custom one the full text tile — unless
+        // the caller says this key's picture isn't editable at all (see EditIconDisabled).
+        BtnEditIcon.IsEnabled = !EditIconDisabled;
+
+        // "Use Spotify album cover" is only meaningful on a "spotify" action. When the action
+        // is something else, hide it and drop a stale flag so it can't linger on the key.
+        bool spotify = ActionType == "spotify";
+        ChkSpotifyCover.Visibility = spotify ? Visibility.Visible : Visibility.Collapsed;
+        if (!spotify && _spec.SpotifyCover)
+        {
+            _spec.SpotifyCover = false;
+            ChkSpotifyCover.IsChecked = false;
+        }
     }
 
     // =====================================================================
@@ -263,6 +308,19 @@ public partial class DpKeyConfigDialog : Window
     /// </summary>
     private void BtnAddText_Click(object sender, RoutedEventArgs e)
     {
+        // A key painted by a live overlay (the Spotify block's title/artist/album tiles): the
+        // words are the track's and the layout is the generator's, so the only things left to
+        // edit are the font and the text color. Before this, "Edit icon" on one of those keys
+        // just said "none" (user report 2026-09-01).
+        if (TextStyleOnlyRenderer is not null)
+        {
+            var styleDlg = new TextIconDialog(DpHidNative.IconSize, null, _spec.Clone(),
+                s => TextStyleOnlyRenderer(s), initialRotation: 0, textStyleOnly: true) { Owner = this };
+            if (styleDlg.ShowDialog() != true) return;
+            _spec = styleDlg.ResultSpec;
+            return;   // no picture to keep: the overlay repaints the key itself
+        }
+
         if (_spec.DefaultIcon)
         {
             if (string.IsNullOrEmpty(ActionType))
@@ -422,6 +480,7 @@ public partial class DpKeyConfigDialog : Window
         }
 
         RefreshActionSummary();
+        UpdateIconControlsAvailability();   // action may have changed to/from "spotify"
         UpdateLiveTimer();
     }
 
@@ -595,9 +654,20 @@ public partial class DpKeyConfigDialog : Window
                     break;
                 }
                 default:
-                    // Base Camp's ported gallery art vs. K2's hand-drawn glyph — spec.UseK2Icons
-                    // (the "Edit icon" radio pair) picks which one wins the tie; whichever side
-                    // has no art for this action/value falls back to the other automatically.
+                    // A transport/volume/repeat control — "media" or the equivalent "spotify"
+                    // Web API command — always gets K2's own solid shape, bypassing the gallery
+                    // tie-break entirely: icon_mapping.xml has a Base Camp row for every one of
+                    // these "spotify" commands, which would otherwise win by default (UseK2Icons
+                    // off) and cost the tile both its shared shape and its caption (gallery art
+                    // never draws one) — user report 2026-09-01.
+                    if (ActionIconFallback.IsControl(ActionType, ActionValue))
+                    {
+                        ok = ActionIconFallback.TryGenerate(ActionType!, ActionValue, DpHidNative.IconSize, dest, showCaption);
+                        break;
+                    }
+                    // Everything else: Base Camp's ported gallery art vs. K2's hand-drawn glyph —
+                    // spec.UseK2Icons (the "Edit icon" radio pair) picks which one wins the tie;
+                    // whichever side has no art for this action/value falls back to the other.
                     ok = spec.UseK2Icons
                         ? ActionIconFallback.TryGenerate(ActionType!, ActionValue, DpHidNative.IconSize, dest, showCaption)
                           || IconGalleryDefaults.TryGenerateKeyIcon(ActionType!, ActionValue, DpHidNative.IconSize, dest)
@@ -683,8 +753,9 @@ public partial class DpKeyConfigDialog : Window
         }
 
         _spec.Rotation = isGif ? 0 : _rotation;
-        // No picture left = nothing to remember about how it looked.
-        IconSpecJson = NewImagePath is null ? null : _spec.ToJson();
+        // No picture left = nothing to remember about how it looked — UNLESS "use Spotify cover"
+        // is on, which is a picture in its own right (painted live by DpSpotifyCoverKeyService).
+        IconSpecJson = (NewImagePath is null && !_spec.SpotifyCover) ? null : _spec.ToJson();
 
         DialogResult = true;
     }
