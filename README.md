@@ -11,6 +11,7 @@ The project of recreating Bae Camp is kinda complete, and most of the stuff shou
   Install or use the portable version, it should work just like Base Camp. If you don't want to start from scratch, when you start, you should be able to import every profile from Base Camp and if something goes wrong, you can still reimport later, manually or automatically. I still need to test if every setting is imported, but mappings and similar stuff should work.
 
 Start as admin and keep in mind that it should close all Base Camp process automatically (you can avoid this behaviour disabling it in the settings). If it does, you can restart them manually or just reboot the pc and you're back as before.
+<a href='https://github.com/FrankieDedo/K2/blob/master/docs/Installation.md'></a>
 
 <h1>Screenshots</summary></h1>
 <details>
