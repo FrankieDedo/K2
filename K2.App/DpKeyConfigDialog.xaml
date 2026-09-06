@@ -59,6 +59,15 @@
                         Width="150"
                         Click="BtnRemoveAction_Click"/>
             </StackPanel>
+
+            <!-- Speed-test key only: opens the endpoint/payload config popup. Visibility set in
+                 code-behind (UpdateSpeedTestConfigButton). -->
+            <Button x:Name="BtnSpeedTestConfig"
+                    Content="{loc:Get speedtest_config_button}"
+                    HorizontalAlignment="Left"
+                    Margin="0,8,0,0"
+                    Visibility="Collapsed"
+                    Click="BtnSpeedTestConfig_Click"/>
         </StackPanel>
 
         <Border Grid.Row="4" Height="1" Background="#2E2E36"/>
@@ -92,6 +101,13 @@
                           Content="{loc:Get dp_spotify_cover_icon}"
                           Visibility="Collapsed" Margin="0,6,0,0"
                           Checked="ChkSpotifyCover_Changed" Unchecked="ChkSpotifyCover_Changed"/>
+                <!-- Only when the pad has a "default icon background" image configured
+                     (Settings tab); visibility is set in code-behind (Loaded handler). -->
+                <CheckBox x:Name="ChkNoDefaultBg"
+                          Content="{loc:Get dp_use_default_bg}"
+                          IsChecked="True"
+                          Visibility="Collapsed" Margin="0,6,0,0"
+                          Checked="ChkNoDefaultBg_Changed" Unchecked="ChkNoDefaultBg_Changed"/>
             </StackPanel>
 
             <!-- Preview host: populated in code-behind — "No image" placeholder, or the

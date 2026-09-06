@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -52,6 +52,8 @@ public static class AppSettings
         public bool RestartBaseCampOnClose { get; set; }
         public bool SyncAcrossDevices { get; set; }
         public bool SyncLightingAcrossDevices { get; set; }
+        // Default ON: game profiles are a feature you turn OFF, not one you opt into.
+        public bool GameProfilesEnabled { get; set; } = true;
         public SignalRgbMode SignalRgbMode { get; set; } = SignalRgbMode.Yield;
         public List<string> RecentExecPaths { get; set; } = new();
         public List<string> RecentFolderPaths { get; set; } = new();
@@ -64,6 +66,7 @@ public static class AppSettings
         public bool BcImportPromptShown { get; set; }
         public string? BaseCampDllFolder { get; set; }
         public List<string> SavedPickerColors { get; set; } = new();
+        public List<string> DeviceOrder { get; set; } = new();
     }
 
     private static Data _data = new();
@@ -215,6 +218,31 @@ public static class AppSettings
         {
             if (_data.SyncAcrossDevices == value) return;
             _data.SyncAcrossDevices = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>Master switch for the game-profile feature (Settings &gt; Game profiles).
+    /// When false the Game profiles tab is hidden and no game profile is ever activated —
+    /// the feature goes away completely rather than merely being out of sight.
+    ///
+    /// <para>ON by default. Note this is only HALF the gate: the tab also requires at least one
+    /// connected DisplayPad, since a game profile has nothing to run on without one. See
+    /// <c>MainWindow.GameProfiles.cs</c>'s <c>RefreshGameTabVisibility</c>, which is the single
+    /// place both halves are ANDed together.</para></summary>
+    public static bool GameProfilesEnabled
+    {
+        get { EnsureLoaded(); return _data.GameProfilesEnabled; }
+    }
+
+    public static void SetGameProfilesEnabled(bool value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.GameProfilesEnabled == value) return;
+            _data.GameProfilesEnabled = value;
             Save();
         }
         Changed?.Invoke();
@@ -490,6 +518,35 @@ public static class AppSettings
     public static IReadOnlyList<string> SavedPickerColors
     {
         get { EnsureLoaded(); return _data.SavedPickerColors; }
+    }
+
+    /// <summary>User-defined device order — drives both the top tab strip and the Home
+    /// cards (see MainWindow.DeviceOrder.cs). One key per orderable device: a static kind
+    /// ("everest", "everest60", "makalu", "macropad"), a single DisplayPad unit
+    /// ("dp_&lt;logical id&gt;"), or the "displaypad" anchor marking where a never-seen pad
+    /// goes. Empty = the built-in default order. Only devices the user has actually
+    /// connected AND ordered end up here — the Device order popup only ever shows currently
+    /// connected devices, and reordering only writes back that visible set plus whatever was
+    /// already in here for devices now disconnected (DeviceOrderCatalog.Compose); a device
+    /// never connected is never added. Unknown entries (e.g. from a removed device kind) are
+    /// tolerated when read back (DeviceOrderCatalog.Resolve), so no migration is needed.</summary>
+    public static IReadOnlyList<string> DeviceOrder
+    {
+        get { EnsureLoaded(); return _data.DeviceOrder; }
+    }
+
+    public static void SetDeviceOrder(IEnumerable<string> order)
+    {
+        EnsureLoaded();
+        var list = new List<string>(order);
+        lock (_lock)
+        {
+            if (list.Count == _data.DeviceOrder.Count &&
+                list.TrueForAll(k => list.IndexOf(k) == _data.DeviceOrder.IndexOf(k))) return;
+            _data.DeviceOrder = list;
+            Save();
+        }
+        Changed?.Invoke();
     }
 
     private const int MaxSavedPickerColors = 30;

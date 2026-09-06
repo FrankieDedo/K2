@@ -11,9 +11,16 @@ namespace K2.App.Models;
 /// <summary>Single recorded action within a macro.</summary>
 public sealed class MacroInput
 {
-    /// <summary>"keydown", "keyup", "mousedown", "mouseup", "mousemove", "text"</summary>
+    /// <summary>"keydown", "keyup", "mousedown", "mouseup", "mousemove", "text", "k2action"</summary>
     [JsonPropertyName("type")]
     public string Type { get; set; } = "keydown";
+
+    /// <summary>For <c>Type == "k2action"</c>: the K2 button-action type
+    /// (<c>keys</c>/<c>exec</c>/<c>media</c>/…). The action's payload rides in
+    /// <see cref="Text"/>. Only write-effect actions are offered — never a
+    /// DisplayPad-visual-only type.</summary>
+    [JsonPropertyName("k2type")]
+    public string? K2Type { get; set; }
 
     /// <summary>Virtual key code (for key events) or mouse button name.</summary>
     [JsonPropertyName("key")]
@@ -34,6 +41,14 @@ public sealed class MacroInput
     [JsonPropertyName("text")]
     public string? Text { get; set; }
 
+    /// <summary>Capture-time only, never persisted: true if this mouse button
+    /// event landed on a window owned by K2 itself. <see cref="Services.MacroRecorder"/>
+    /// uses it to drop the click that starts/stops the recording; it is decided
+    /// at capture time with a pixel-accurate hit test, because by the time the
+    /// recording ends the window under those coordinates may have changed.</summary>
+    [JsonIgnore]
+    public bool OnOwnWindow { get; set; }
+
     /// <summary>Independent copy — so editing a duplicated macro's inputs
     /// (reorder/delete) never touches the source macro's list.</summary>
     public MacroInput Clone() => new()
@@ -43,7 +58,8 @@ public sealed class MacroInput
         DelayMs = DelayMs,
         X = X,
         Y = Y,
-        Text = Text
+        Text = Text,
+        K2Type = K2Type
     };
 
     /// <summary>

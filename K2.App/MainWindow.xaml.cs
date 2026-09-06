@@ -270,15 +270,20 @@ public partial class MainWindow : Window
     /// </summary>
     private void TcDevices_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        // A tab pulled out/re-added by ApplyDeviceOrder must not look like a user click:
+        // the transient selection would swap the content panel and re-activate a device.
+        if (_reorderingTabs) return;
         if (TcDevices.SelectedItem is not TabItem tab) return;
         string tag = tab.Tag as string ?? "";
 
         SetSettingsTabActive(false);
         SetMacroTabActive(false);
+        SetGameTabActive(false);
 
         // Show/hide content panels
-        PnlSettings.Visibility   = Visibility.Collapsed;
-        PnlMacro.Visibility      = Visibility.Collapsed;
+        PnlSettings.Visibility     = Visibility.Collapsed;
+        PnlMacro.Visibility        = Visibility.Collapsed;
+        PnlGameProfiles.Visibility = Visibility.Collapsed;
         PnlHome.Visibility       = tag == "home"             ? Visibility.Visible : Visibility.Collapsed;
         PnlEverest.Visibility    = tag == "everest"          ? Visibility.Visible : Visibility.Collapsed;
         PnlEverest60.Visibility  = tag == "everest60"        ? Visibility.Visible : Visibility.Collapsed;
@@ -320,6 +325,7 @@ public partial class MainWindow : Window
     {
         PnlSettings.Visibility   = Visibility.Visible;
         PnlHome.Visibility       = Visibility.Collapsed;
+        PnlGameProfiles.Visibility = Visibility.Collapsed;
         PnlMacro.Visibility      = Visibility.Collapsed;
         PnlEverest.Visibility    = Visibility.Collapsed;
         PnlEverest60.Visibility  = Visibility.Collapsed;
@@ -337,6 +343,7 @@ public partial class MainWindow : Window
         StopEvAccessoryPoll();
         SetSettingsTabActive(true);
         SetMacroTabActive(false);
+        SetGameTabActive(false);
     }
 
     /// <summary>Macro icon button: top-level section (not device-specific), same
@@ -346,6 +353,7 @@ public partial class MainWindow : Window
         PnlMacro.Visibility      = Visibility.Visible;
         PnlSettings.Visibility   = Visibility.Collapsed;
         PnlHome.Visibility       = Visibility.Collapsed;
+        PnlGameProfiles.Visibility = Visibility.Collapsed;
         PnlEverest.Visibility    = Visibility.Collapsed;
         PnlEverest60.Visibility  = Visibility.Collapsed;
         PnlMakalu.Visibility     = Visibility.Collapsed;
@@ -362,6 +370,7 @@ public partial class MainWindow : Window
         StopEvAccessoryPoll();
         SetSettingsTabActive(false);
         SetMacroTabActive(true);
+        SetGameTabActive(false);
         SelectFirstMacro();
     }
 
@@ -463,6 +472,10 @@ public partial class MainWindow : Window
         {
             case DpProfileItem dp: OpenProfileGearMenu(LstDpProfile, dp, fe); break;
             case DpDedicatedItem dd: DpShowDedicatedGear(dd, fe); break;
+            // A game row's gear goes straight to that game's settings — there is no menu to
+            // show first: rename/delete/link belong to the Game section, and the one thing
+            // wanted from here is the popup the card's own gear opens.
+            case DpGameSlotItem gs: ShowGameProfileConfig(gs.ProfileId); break;
             case EvProfileItem ev: OpenProfileGearMenu(LstEvProfile, ev, fe); break;
             case Ev60ProfileItem ev60: OpenProfileGearMenu(LstEv60Profile, ev60, fe); break;
             case MkProfileItem mk: OpenProfileGearMenu(LstMkProfile, mk, fe); break;

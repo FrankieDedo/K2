@@ -133,11 +133,23 @@ public partial class ButtonActionDialog
     private static readonly ComboOption[] SpeedTestOptions =
         ActionTypeHelper.SpeedTestMetrics.Select(m => new ComboOption(m.Value, m.LocKey)).ToArray();
 
+    /// <inheritdoc cref="ClockOptions"/>
+    private static readonly ComboOption[] EdStatusOptions =
+        ActionTypeHelper.EdStatusItems.Select(m => new ComboOption(m.Value, m.LocKey)).ToArray();
+
+    /// <summary>Zero Company's tactical readings — one card each, same shape as Elite's, but
+    /// with no extra panel: these tiles carry no optional keystroke because pressing one calls
+    /// the game's own function (see K2.App.Services.ZeroCompanyClient).</summary>
+    private static readonly ComboOption[] ZcStatusOptions =
+        ActionTypeHelper.ZcStatusItems.Select(m => new ComboOption(m.Value, m.LocKey)).ToArray();
+
     private static ComboOption[] OptionsFor(string tag) => tag switch
     {
         "dp_clock"     => ClockOptions,
         "dp_sysmon"    => SysMonOptions,
         "dp_speedtest" => SpeedTestOptions,
+        "dp_edstatus"  => EdStatusOptions,
+        "dp_zcstatus"  => ZcStatusOptions,
         "oscmd"   => OsCmdOptions,
         "media"   => MediaOptions,
         "mouse"   => MouseOptions,
@@ -163,6 +175,9 @@ public partial class ButtonActionDialog
         "dp_clock"     => "act_dp_clock",
         "dp_sysmon"    => "act_dp_sysmon",
         "dp_speedtest" => "act_dp_speedtest",
+        "dp_screen"    => "act_dp_screen",
+        "dp_edstatus"  => "act_dp_edstatus",
+        "dp_zcstatus"  => "act_dp_zcstatus",
         _            => "dlg_value",
     };
 
@@ -190,6 +205,13 @@ public partial class ButtonActionDialog
         PopulateCombo(tag, null);
         UpdateComboArgVisibility();
         if (tag == "spotify") _ = LoadSpotifyDevicesAsync(null);
+        if (tag == "dp_edstatus")
+        {
+            // A newly picked Elite tile is a pure readout until the pilot types a key here.
+            EnsureEdShortcutPanel();
+            ParseShortcut("", ChkEdCtrl, ChkEdShift, ChkEdAlt, ChkEdWin, CbEdKeyValue);
+            SetEdColor(ActionTypeHelper.EdTileColor.Orange, blink: false);
+        }
     }
 
     private void LoadComboSpec(string tag, string currentValue)
@@ -198,7 +220,18 @@ public partial class ButtonActionDialog
         _comboPanelTag = tag;
         LblComboPanel.Text = Loc.Get(LabelKeyFor(tag));
 
-        if (tag == "spotify")
+        if (tag == "dp_edstatus")
+        {
+            // "state|shortcut" — the state picks the card, the shortcut fills the optional key
+            // row. Splitting here is also what stops an existing override from being silently
+            // dropped by SaveComboSpec the next time the dialog is opened and OK'd.
+            var (state, keys, color, blink) = ActionTypeHelper.SplitEdStatusValue(currentValue);
+            EnsureEdShortcutPanel();
+            ParseShortcut(keys ?? "", ChkEdCtrl, ChkEdShift, ChkEdAlt, ChkEdWin, CbEdKeyValue);
+            SetEdColor(color, blink);
+            PopulateCombo(tag, state);
+        }
+        else if (tag == "spotify")
         {
             var (cmd, arg, device) = SplitSpotifyValue(currentValue);
             PopulateCombo(tag, cmd);
@@ -243,8 +276,10 @@ public partial class ButtonActionDialog
         BtnTwitchSettings.Visibility = tag == "twitch" ? Visibility.Visible : Visibility.Collapsed;
         BtnSpotifySettings.Visibility = tag == "spotify" ? Visibility.Visible : Visibility.Collapsed;
         PnlSpotifyDevice.Visibility = tag == "spotify" ? Visibility.Visible : Visibility.Collapsed;
+        PnlEdShortcut.Visibility = tag == "dp_edstatus" ? Visibility.Visible : Visibility.Collapsed;
         BtnDiscordSettings.Visibility = tag == "discord" ? Visibility.Visible : Visibility.Collapsed;
         BtnAudioDeviceRefresh.Visibility = tag == "audiodevice" ? Visibility.Visible : Visibility.Collapsed;
+        BtnScreenProbeEdit.Visibility = tag == "dp_screen" ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>"Choose sensor…" button in the "PC monitor" panel (shown while the "Sensor
@@ -465,6 +500,41 @@ public partial class ButtonActionDialog
             foreach (var binding in GoogleHomeStore.List().Where(b => b.IsEnabled))
                 CbComboValue.Items.Add(new ComboBoxItem { Content = binding.Name, Tag = binding.Id });
         }
+        else if (tag == "dp_screen")
+        {
+            // Dynamic list owned by the host (K2.App keeps the probe definitions), like "macro".
+            // Tag carries the full wire value "<id>|<name>" so SaveComboSpec can store it as-is
+            // and the label travels with the key — see ActionTypeHelper.ParseScreenValue.
+            foreach (var (id, name) in _host?.ListScreenProbes() ?? System.Array.Empty<(string, string)>())
+                CbComboValue.Items.Add(new ComboBoxItem { Content = name, Tag = $"{id}|{name}" });
+
+            // A key bound to a probe that has since been DELETED keeps its binding: re-add that
+            // one entry, marked, instead of letting the dialog silently rebind the key to
+            // whatever sits at index 0. Same rule as the offline Spotify device below.
+            //
+            // Matched on the ID alone, never on the whole wire: a probe the user RENAMED is still
+            // the same probe, and comparing the stored label against the current one would file a
+            // live probe under "deleted" for the sole crime of having a new name.
+            if (ActionTypeHelper.ParseScreenValue(selectValue) is { } bound &&
+                !CbComboValue.Items.OfType<ComboBoxItem>().Any(
+                    i => ActionTypeHelper.ParseScreenValue((string?)i.Tag)?.Id == bound.Id))
+            {
+                CbComboValue.Items.Add(new ComboBoxItem
+                {
+                    Content = (bound.Label.Length > 0 ? bound.Label : bound.Id)
+                              + "  (" + Loc.Get("screen_probe_missing") + ")",
+                    Tag = selectValue,
+                });
+            }
+
+            // The card that CREATES one. Its Tag is a sentinel, never a real wire value, so it
+            // can always re-open the calibration window (see SubActionCard_Click).
+            CbComboValue.Items.Add(new ComboBoxItem
+            {
+                Content = Loc.Get("screen_probe_new"),
+                Tag = ScreenProbeNewTag,
+            });
+        }
         else if (tag == "audiodevice")
         {
             // Dynamic list too, but sourced live from Windows itself (not a stored
@@ -524,6 +594,13 @@ public partial class ButtonActionDialog
         var match = CbComboValue.Items.OfType<ComboBoxItem>()
             .FirstOrDefault(i => string.Equals((string?)i.Tag, selectValue, System.StringComparison.OrdinalIgnoreCase));
 
+        // A "Screen reading" whose stored label is stale (the probe was renamed since the key was
+        // assigned) matches on the id, and saving then refreshes the label to the current name.
+        if (match is null && tag == "dp_screen" &&
+            ActionTypeHelper.ParseScreenValue(selectValue) is { } wantedProbe)
+            match = CbComboValue.Items.OfType<ComboBoxItem>().FirstOrDefault(
+                i => ActionTypeHelper.ParseScreenValue((string?)i.Tag)?.Id == wantedProbe.Id);
+
         // A "PC monitor" value that's a full sensor wire selects the "Sensor selection" card.
         if (match is null && tag == "dp_sysmon" && ActionTypeHelper.ParseSensorValue(selectValue) is not null)
             match = CbComboValue.Items.OfType<ComboBoxItem>()
@@ -568,9 +645,47 @@ public partial class ButtonActionDialog
         PopulateCombo("googlehome", selectedId);
     }
 
+    private bool _edShortcutPopulated;
+
+    private ActionTypeHelper.EdTileColor SelectedEdColor() =>
+        RbEdGreen.IsChecked == true ? ActionTypeHelper.EdTileColor.Green
+        : RbEdRed.IsChecked == true ? ActionTypeHelper.EdTileColor.Red
+        : ActionTypeHelper.EdTileColor.Orange;
+
+    private void SetEdColor(ActionTypeHelper.EdTileColor color, bool blink)
+    {
+        RbEdOrange.IsChecked = color == ActionTypeHelper.EdTileColor.Orange;
+        RbEdGreen.IsChecked = color == ActionTypeHelper.EdTileColor.Green;
+        RbEdRed.IsChecked = color == ActionTypeHelper.EdTileColor.Red;
+        RbEdSteady.IsChecked = !blink;
+        RbEdBlink.IsChecked = blink;
+        UpdateEdLookVisibility();
+    }
+
+    /// <summary>The colour/blink block belongs to Elite Dangerous alone: it is drawn from that
+    /// profile's cockpit art, so on any other host (a dp_edstatus key on an ordinary page, or a
+    /// different game) it would offer a look K2 cannot render. The optional keystroke above it
+    /// stays available everywhere.</summary>
+    private void UpdateEdLookVisibility() =>
+        PnlEdLook.Visibility = GameProfileSpecs.ById(_gameProfile?.Id) is { ArtFolder.Length: > 0 }
+            ? Visibility.Visible : Visibility.Collapsed;
+
+    private void EnsureEdShortcutPanel()
+    {
+        if (_edShortcutPopulated) return;
+        _edShortcutPopulated = true;
+        PopulateKeyItems(CbEdKeyValue);
+    }
+
     private string SaveComboSpec()
     {
         string cmd = CbComboValue.SelectedItem is ComboBoxItem ci ? (string?)ci.Tag ?? "" : "";
+
+        // An Elite tile keeps its optional keystroke and its art colour after the state.
+        if (_comboPanelTag == "dp_edstatus")
+            return ActionTypeHelper.BuildEdStatusValue(
+                cmd, BuildShortcut(ChkEdCtrl, ChkEdShift, ChkEdAlt, ChkEdWin, CbEdKeyValue),
+                SelectedEdColor(), RbEdBlink.IsChecked == true);
 
         string arg = "";
         if (_comboPanelTag is not null && CommandNeedsArg(_comboPanelTag, cmd))

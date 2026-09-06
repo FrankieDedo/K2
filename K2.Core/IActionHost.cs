@@ -155,6 +155,21 @@ public interface IActionHost
     /// <c>disk:&lt;Id&gt;</c>. Empty on a host with no sensor backend.</summary>
     IReadOnlyList<(string Id, string Name)> ListStorageDisks() => System.Array.Empty<(string, string)>();
 
+    /// <summary>True on a host that can define SCREEN PROBES — user-made readings taken off
+    /// another program's window (K2.App's DisplayPad host, backed by
+    /// <c>K2.App.Services.ScreenProbeStore</c>). When false the "Screen reading" action type is
+    /// hidden entirely: it would have nothing to offer and no way to create anything.</summary>
+    bool SupportsScreenProbes => false;
+
+    /// <summary>The probes defined on this machine, as <c>(Id, Name)</c> — the picker's list for
+    /// a <c>dp_screen</c> key. Empty on a host with no probe store.</summary>
+    IReadOnlyList<(string Id, string Name)> ListScreenProbes() => System.Array.Empty<(string, string)>();
+
+    /// <summary>Opens the probe calibration window on <paramref name="probeId"/>, or on a NEW
+    /// probe when it is null/empty. Returns the id of the probe that was saved (the new one's, or
+    /// the edited one's), or null when the user cancelled or the host has no such window.</summary>
+    string? EditScreenProbe(string? probeId) => null;
+
     /// <summary>The current on-tile reading a live key (<c>dp_sysmon</c>/…) would show for
     /// <paramref name="actionValue"/> right now — e.g. "62°", "34%", "—" — so the action dialog
     /// can preview it. Non-blocking; null when the host has no live-tile backend or the value

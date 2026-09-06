@@ -49,6 +49,12 @@ public partial class MainWindow
     /// <see cref="DpActivateBackgroundDevice"/>) and cannot go through the UI-bound fields.</summary>
     internal readonly DisplayPadStore _dpStore = new();
 
+    /// <summary>Set by <see cref="CleanupDisplayPad"/> before <see cref="_dpStore"/> and the
+    /// engines are disposed: every callback that can still arrive from a background thread
+    /// (Discord room / avatar downloads) checks it and gives up instead of querying a closed
+    /// database.</summary>
+    private bool _dpTornDown;
+
     // ---- Key model ----
     internal readonly DisplayPadKey[] _dpKeys = Enumerable.Range(0, 12)
         .Select(i => new DisplayPadKey(i)).ToArray();
@@ -221,6 +227,10 @@ public partial class MainWindow
         DpRebuildKeyGrid();
         DpApplyDefaultKeyMap();
         DpInitLiveKeyPreviewTimer();
+
+        // Speed-test endpoint/payload config is global (one SpeedTestService for the whole app);
+        // load whatever the user last saved so dp_speedtest keys use it from the first press.
+        SpeedTestService.ApplyConfig(SpeedTestConfig.Load(_dpStore));
 
         // The Spotify dedicated profile's 2×2 block has no stored icons — mirror its live
         // cover/track tiles into the app's own grid whenever the service repaints them.
@@ -1152,6 +1162,140 @@ public partial class MainWindow
         DpGetAutoOffTimer(id).Configure(enabled, seconds);
     }
 
+    // ── Default icon background (device-scoped, Settings tab) ─────────────
+    // A pad-wide image painted behind every auto-generated default icon in place of the
+    // background colour. Baked into the generated PNGs (via IconStyleScope) rather than
+    // composited at upload time, so changing it triggers DpRerenderDefaultIcons.
+
+    /// <summary>Folds the pad's current "default icon background" image into <paramref name="spec"/>
+    /// (mutates + returns it): sets <see cref="KeyIconSpec.BgImagePath"/> when the pad has one
+    /// configured and this is a default icon that hasn't opted out, else clears it. This is the
+    /// single rule every default-icon render on the K2.App side goes through.
+    ///
+    /// <para>EXCEPT for a key that brought its OWN background: a curated game profile bakes the
+    /// cockpit-frame art into the key's stored spec (<see cref="KeyIconSpec.TextOnly"/> marks
+    /// those), and clearing it here is what left the Elite profile's plain-shortcut keys with no
+    /// frame on the pad while the live status tiles kept theirs — the live renderer re-applies
+    /// its background every tick and so papered over the same bug.</para></summary>
+    private KeyIconSpec DpWithDefaultBg(int deviceId, KeyIconSpec spec)
+    {
+        if (spec is { TextOnly: true, BgImagePath.Length: > 0 }) return spec;
+
+        spec.BgImagePath = spec.DefaultIcon && !spec.NoDefaultBg
+            ? _dpStore.GetDefaultBgImage(deviceId)
+            : null;
+        return spec;
+    }
+
+    /// <summary>Generates a fresh default-icon PNG for the seed sites (dp_back / dp_folder /
+    /// Spotify controls) through the SAME <see cref="DpDefaultIconRenderer"/> the key dialog
+    /// uses — so a newly created key already carries the pad's default background. Returns the
+    /// PNG path or null.</summary>
+    private string? DpGenDefaultIcon(int deviceId, string actionType, string? actionValue,
+        string? pageName = null)
+        => DpDefaultIconRenderer.Render(actionType, actionValue,
+            DpWithDefaultBg(deviceId, new KeyIconSpec { DefaultIcon = true }),
+            pageName, DpHidNative.IconSize);
+
+    private void BtnDpDefaultBgEdit_Click(object sender, RoutedEventArgs e)
+    {
+        if (DpSelectedDeviceId() is not int id) return;
+        var ofd = new Microsoft.Win32.OpenFileDialog
+        {
+            Title  = Loc.Get("dp_default_bg_dialog_title"),
+            Filter = "Images (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|All files|*.*",
+        };
+        if (ofd.ShowDialog(this) != true) return;
+
+        string? cropped = ImageCropDialog.Show(this, ofd.FileName,
+            DpHidNative.IconSize, DpHidNative.IconSize, Loc.Get("dp_default_bg_dialog_title"));
+        if (cropped is null) return;
+
+        string dir = Path.Combine(K2Paths.For("K2.DisplayPad"), "default_bg");
+        Directory.CreateDirectory(dir);
+        // Fresh name each save so cached icon PNGs (which fingerprint bg path + mtime)
+        // invalidate regardless of OS timestamp resolution.
+        string dest = Path.Combine(dir, $"{id}_{DateTime.UtcNow.Ticks:x}.png");
+        File.Copy(cropped, dest, overwrite: true);
+
+        // Drop the previous file for this device, if any.
+        var old = _dpStore.GetDefaultBgImage(id);
+        _dpStore.SetDefaultBgImage(id, dest);
+        if (old is not null && !string.Equals(old, dest, StringComparison.OrdinalIgnoreCase))
+            try { File.Delete(old); } catch { }
+
+        DpLog($"[BG] device {id} default icon background <- {Path.GetFileName(ofd.FileName)}");
+        LblStatus.Text = Loc.Get("dp_default_bg_set_ok");
+        DpRefreshDefaultBgUi(id);
+        DpRerenderDefaultIcons(id);
+    }
+
+    private void BtnDpDefaultBgRemove_Click(object sender, RoutedEventArgs e)
+    {
+        if (DpSelectedDeviceId() is not int id) return;
+        var old = _dpStore.GetDefaultBgImage(id);
+        if (old is null) return;
+        _dpStore.ClearDefaultBgImage(id);
+        try { File.Delete(old); } catch { }
+        DpLog($"[BG] device {id} default icon background cleared");
+        DpRefreshDefaultBgUi(id);
+        DpRerenderDefaultIcons(id);
+    }
+
+    /// <summary>Thumbnail + label + "Remove" enablement for the Settings-tab group, refreshed
+    /// on device selection and after every change.</summary>
+    private void DpRefreshDefaultBgUi(int id)
+    {
+        var path = _dpStore.GetDefaultBgImage(id);
+        LblDpDefaultBg.Text = path is null ? Loc.Get("dp_default_bg_none") : Path.GetFileName(path);
+        BtnDpDefaultBgRemove.IsEnabled = path is not null;
+        if (path is null) { DpDefaultBgThumb.Background = System.Windows.Media.Brushes.Transparent; return; }
+        try
+        {
+            var bi = new System.Windows.Media.Imaging.BitmapImage();
+            bi.BeginInit();
+            bi.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            bi.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreImageCache;
+            bi.UriSource = new Uri(path);
+            bi.EndInit();
+            bi.Freeze();
+            DpDefaultBgThumb.Background = new System.Windows.Media.ImageBrush(bi)
+                { Stretch = System.Windows.Media.Stretch.UniformToFill };
+        }
+        catch { DpDefaultBgThumb.Background = System.Windows.Media.Brushes.Transparent; }
+    }
+
+    /// <summary>Re-bakes every stored default-icon PNG on this device (all profiles/pages) so
+    /// the pad's "default icon background" image (set, changed, or removed) takes effect. Keys
+    /// with a hand-loaded picture, opted out (<see cref="KeyIconSpec.NoDefaultBg"/>), or with no
+    /// action are left alone. Live tiles are re-rendered too but DpLiveTileService owns their
+    /// on-device repaint.</summary>
+    private void DpRerenderDefaultIcons(int id)
+    {
+        int changed = 0;
+        foreach (int profile in _dpStore.GetExistingProfiles(id))
+        foreach (var r in _dpStore.LoadAllButtons(id, profile))
+        {
+            if (string.IsNullOrEmpty(r.ActionType)) continue;
+            var spec = KeyIconSpec.FromJson(r.IconSpec);
+            if (spec is not { DefaultIcon: true } || spec.NoDefaultBg) continue;
+
+            string? pageName = r.ActionType == "dp_folder" && int.TryParse(r.ActionValue, out int pg)
+                ? _dpStore.GetFolderName(pg) : null;
+
+            string? dest = DpDefaultIconRenderer.Render(
+                r.ActionType, r.ActionValue, DpWithDefaultBg(id, spec.Clone()), pageName, DpHidNative.IconSize);
+            if (dest is null || string.Equals(dest, r.ImagePath, StringComparison.OrdinalIgnoreCase)) continue;
+
+            _dpStore.SaveButton(id, profile, r.PageId, r.ButtonIndex, dest, r.ActionType, r.ActionValue);
+            changed++;
+        }
+        DpLog($"[BG] device {id}: re-rendered {changed} default icon(s)");
+
+        if (id == DpSelectedDeviceId()) DpReloadCurrentProfile();
+        else DpRequestRepaint(id);
+    }
+
     // ── Device selection (driven by top-level TcDevices) ──────────
     private void CbDpDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -1224,6 +1368,8 @@ public partial class MainWindow
         }
         finally { _dpSuppressAutoOff = false; }
 
+        DpRefreshDefaultBgUi(id);
+
         DpReloadAndPreloadProfile();
         DpSyncSpotifyCoverService(id);
     }
@@ -1242,19 +1388,20 @@ public partial class MainWindow
         if (sel is not int id) return;
         bool isActive = id == DpSelectedDeviceId();
 
-        List<int> real;
-        int cur;
-        if (isActive)
-        {
-            if (LstDpProfile.ItemsSource is not List<DpProfileItem> items) return;
-            real = items.Where(x => !x.IsNew).Select(x => x.Slot).ToList();
-            cur  = LstDpProfile.SelectedItem is DpProfileItem pi ? pi.Slot : (real.Count > 0 ? real[0] : 1);
-        }
-        else
-        {
-            real = _dpStore.GetExistingProfiles(id);
-            cur  = _dpStore.GetCurrentProfile(id);
-        }
+        // The cycle runs over the device's real slots, ordinary AND game ones, from the store
+        // rather than from the UI list: the list leaves reserved slots out (they have their own
+        // sections), so an active device cycling from it could never reach a game profile, nor
+        // get off one — the pad went round the ordinary profiles and the game page was gone for
+        // good (user report 2026-09-06). A game profile IS a profile you can be on, so it is one
+        // you can step onto.
+        //
+        // Dedicated slots stay out: Spotify and Discord are takeovers with their own triggers,
+        // and Discord's slot must never become current at all.
+        List<int> real = _dpStore.GetExistingProfiles(id)
+            .Where(sl => !DpIsDedicatedName(_dpStore.GetProfileName(id, sl)))
+            .ToList();
+        // The store, not the list's selection: on a game slot nothing is selected up there.
+        int cur = _dpStore.GetCurrentProfile(id);
         if (real.Count == 0) return;
 
         int curIdx = real.IndexOf(cur);
@@ -1294,6 +1441,10 @@ public partial class MainWindow
         // untested state that raced with our own image re-upload burst and corrupted
         // the icons (confirmed via photo: garbled icons except the last few uploaded).
         _dpStore.SetCurrentProfile(id, slot);
+        // A profile key on the pad is the user's own hand as much as the list is: a game
+        // profile they step onto must not be taken away by the focus rule a second later, and
+        // one they step off must be left alone for as long as it is configured to wait.
+        NotifyManualProfileChoice(id, slot);
         if (isActive)
         {
             DpSelectProfileSlot(slot);
@@ -1368,7 +1519,8 @@ public partial class MainWindow
     private void DpSpotifyLeave(int id)
     {
         var ordinary = _dpStore.GetExistingProfiles(id)
-            .Where(slot => !DpIsDedicatedName(_dpStore.GetProfileName(id, slot)))
+            .Where(slot => !DpIsDedicatedName(_dpStore.GetProfileName(id, slot))
+                        && !DpIsGameProfileName(_dpStore.GetProfileName(id, slot)))
             .ToList();
         if (ordinary.Count == 0) { DpLog($"[SPT] device {id}: nothing to go back to"); return; }
 
@@ -1432,7 +1584,7 @@ public partial class MainWindow
 
         int seconds = SpotifyCoverConfig.ClampReturnSeconds(cfg.ReturnSeconds);
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
-        timer.Tick += (_, _) =>
+        timer.Tick += async (_, _) =>
         {
             DpSpotifyCancelReturnTimer(id);
             int slot = DpSpotifySlot(id);
@@ -1440,12 +1592,51 @@ public partial class MainWindow
             // back on it (in which case DpSyncSpotifyCoverService cancelled us anyway).
             if (slot == 0 || !_dpDeviceIds.Contains(id)) return;
             if (_dpStore.GetCurrentProfile(id) == slot) return;
+
+            bool ready;
+            try { ready = await DpSpotifyReturnConditionMet(cfg).ConfigureAwait(true); }
+            catch (Exception ex) { DpLog($"[SPT] device {id}: return condition check threw: {ex.Message}"); ready = false; }
+
+            // Conditions may have moved on while the (possibly async) check ran above.
+            if (!_dpDeviceIds.Contains(id) || _dpSpotifyReturnTimers.ContainsKey(id)) return;
+            if (_dpStore.GetCurrentProfile(id) == slot) return;
+
+            if (!ready)
+            {
+                // Not there yet (Spotify closed / device offline) — keep waiting instead of
+                // giving up outright, so it comes back the moment it becomes true without
+                // needing a fresh trigger (user request 2026-09-01).
+                DpLog($"[SPT] device {id}: return condition ({cfg.ReturnConditionToken}) not met — retrying in {seconds}s");
+                DpSpotifyArmReturnTimer(id);
+                return;
+            }
             DpLog($"[SPT] device {id}: return timer elapsed — back to the Spotify profile");
             DpSpotifySwitchTo(id, slot);
         };
         _dpSpotifyReturnTimers[id] = timer;
         timer.Start();
-        DpLog($"[SPT] device {id}: return timer armed ({seconds}s)");
+        DpLog($"[SPT] device {id}: return timer armed ({seconds}s, condition {cfg.ReturnConditionToken})");
+    }
+
+    /// <summary>Whether <see cref="SpotifyCoverConfig.ReturnCondition"/> currently holds — see its
+    /// remarks for what each value checks.</summary>
+    private static async Task<bool> DpSpotifyReturnConditionMet(SpotifyCoverConfig cfg)
+    {
+        switch (cfg.ReturnCondition)
+        {
+            case SpotifyReturnCondition.SpotifyRunning:
+                return System.Diagnostics.Process.GetProcessesByName("Spotify").Length > 0;
+
+            case SpotifyReturnCondition.DeviceReachable:
+                if (!SpotifyStore.IsConnected) return false;   // nothing to ask
+                var devices = await SpotifyBridge.GetDevicesAsync().ConfigureAwait(true);
+                return string.IsNullOrEmpty(cfg.Device)
+                    ? devices.Count > 0
+                    : devices.Any(d => d.Id == cfg.Device);
+
+            default:
+                return true;
+        }
     }
 
     private void DpSpotifyCancelReturnTimer(int id)
@@ -1481,7 +1672,8 @@ public partial class MainWindow
         SpotifyCoverConfig.ParseBackArrow(_dpStore.GetSetting($"spotify.{id}.backArrow")),
         SpotifyCoverConfig.ParseForegroundOnly(_dpStore.GetSetting($"spotify.{id}.fgOnly")),
         SpotifyCoverConfig.ParsePosition(_dpStore.GetSetting($"spotify.{id}.position")),
-        SpotifyCoverConfig.ParseDevice(_dpStore.GetSetting($"spotify.{id}.device")));
+        SpotifyCoverConfig.ParseDevice(_dpStore.GetSetting($"spotify.{id}.device")),
+        SpotifyCoverConfig.ParseReturnCondition(_dpStore.GetSetting($"spotify.{id}.returnCond")));
 
     internal void DpWriteSpotifyCoverConfig(int id, SpotifyCoverConfig cfg)
     {
@@ -1495,6 +1687,7 @@ public partial class MainWindow
         _dpStore.SetSetting($"spotify.{id}.fgOnly", cfg.ForegroundOnlyToken);
         _dpStore.SetSetting($"spotify.{id}.position", cfg.PositionToken);
         _dpStore.SetSetting($"spotify.{id}.device", cfg.Device);
+        _dpStore.SetSetting($"spotify.{id}.returnCond", cfg.ReturnConditionToken);
     }
 
     /// <summary>Feeds the app's own DisplayPad grid a still preview of the Spotify dedicated
@@ -1665,9 +1858,7 @@ public partial class MainWindow
     /// refresh the tile when the action changes (user request 2026-09-01).</summary>
     private void DpSeedSpotifyKey(int deviceId, int slot, int btn, string actionType, string value)
     {
-        string dest = DpAutoIconCachePath(actionType, value);
-        string? img = ActionIconFallback.TryGenerate(actionType, value, DpHidNative.IconSize, dest)
-            ? dest : null;
+        string? img = DpGenDefaultIcon(deviceId, actionType, value);
         _dpStore.SaveButton(deviceId, slot, btn, img, actionType, value);
         _dpStore.SaveIconSpec(deviceId, slot, 0, btn, new KeyIconSpec { DefaultIcon = true }.ToJson());
     }
@@ -1772,14 +1963,25 @@ public partial class MainWindow
             // the "Dedicated profiles" section below. Falling back to items[0] there would show
             // the wrong profile as current; the panel's owner is mirrored in that list instead.
             var row = items.Find(x => x.Slot == slot && !x.IsNew);
-            if (row is null && DpSelectedDeviceId() is int devId && DpActiveDedicated(devId) is string ded)
+            if (row is null && DpSelectedDeviceId() is int devId)
             {
-                LstDpProfile.SelectedItem = null;
-                DpSelectDedicated(ded);
-                return;
+                if (DpActiveDedicated(devId) is string ded)
+                {
+                    LstDpProfile.SelectedItem = null;
+                    DpSelectDedicated(ded);
+                    return;
+                }
+                // Same for a game profile's reserved slot: it has a row of its own below.
+                if (DpIsGameProfileName(_dpStore.GetProfileName(devId, slot)))
+                {
+                    LstDpProfile.SelectedItem = null;
+                    DpSelectGameSlot(slot);
+                    return;
+                }
             }
             LstDpProfile.SelectedItem = row ?? items[0];
             DpSelectDedicated(null);
+            DpSelectGameSlot(null);
         }
         finally { _dpSuppressProfile = false; }
     }
@@ -1809,6 +2011,8 @@ public partial class MainWindow
                 // Reserved slot of a dedicated profile: it is listed in the "Dedicated profiles"
                 // section instead (see MainWindow.DisplayPad.Dedicated.cs), never twice.
                 if (DpIsDedicatedName(name)) continue;
+                // Reserved slot of a game profile: it lives in the Game profiles tab.
+                if (DpIsGameProfileName(name)) continue;
                 items.Add(new DpProfileItem(slot, name));
             }
             // Find the next free slot — DisplayPad profiles are pure K2-side bookkeeping
@@ -1821,14 +2025,21 @@ public partial class MainWindow
             LstDpProfile.ItemsSource = items;
 
             DpRefreshDedicated(deviceId);
+            DpRefreshGameSlots(deviceId);
 
             int current = _dpStore.GetCurrentProfile(deviceId);
             var match = items.Find(x => x.Slot == current && !x.IsNew);
             string? dedicated = DpActiveDedicated(deviceId);
+            // A game slot is filtered out of the list above for the same reason a dedicated one
+            // is, so it is current in exactly the same way: nothing selected up here, the row
+            // below carrying the selection.
+            int? gameSlot = DpActiveGameSlot(deviceId);
             // While a dedicated profile owns the panel NOTHING above is current — the selection
             // lives in the other list, so the two can never both look active.
-            LstDpProfile.SelectedItem = dedicated is not null ? null : match ?? items[0];
+            LstDpProfile.SelectedItem =
+                dedicated is not null || gameSlot is not null ? null : match ?? items[0];
             DpSelectDedicated(dedicated);
+            DpSelectGameSlot(gameSlot);
 
             DpRegisterProfileLaunchWatchers(deviceId, existing);
         }
@@ -1891,6 +2102,8 @@ public partial class MainWindow
         // Whatever the user picks here, the panel goes back to a normal profile — see
         // DpLeaveDedicatedForProfile for why Discord's exit is only temporary.
         DpLeaveDedicatedForProfile(id);
+        DpSelectGameSlot(null);
+        if (!pi.IsNew) NotifyManualProfileChoice(id, profile);
 
         if (pi.IsNew)
         {
@@ -2472,6 +2685,10 @@ public partial class MainWindow
             key.IconSpecJson) { Owner = this };
         // Cover tile (and every tile of the 4-tile layout): album art, nothing to style.
         dlg.EditIconDisabled = liveOverlay && !textTile;
+        // Pad-wide "default icon background" image (Settings tab): shows the per-key opt-out
+        // checkbox and gets baked behind the generated tile unless the key opts out.
+        dlg.DefaultBgImagePath = _dpStore.GetDefaultBgImage(id);
+        dlg.OpenSpeedTestConfig = () => DpOpenSpeedTestConfig(dlg);
         if (textTile)
             dlg.TextStyleOnlyRenderer = spec =>
             {
@@ -2546,6 +2763,18 @@ public partial class MainWindow
 
         // This edit may have added or removed a "dp_folder" (page) action — refresh the tab.
         UpdateDpPagesTabVisibility();
+    }
+
+    /// <summary>Opens the speed-test endpoint/payload popup (global config, one for the whole
+    /// app), persists it to <see cref="_dpStore"/> and pushes it into the live service. Reached
+    /// from the "Configure speed test…" button on a <c>dp_speedtest</c> key's config dialog.</summary>
+    private void DpOpenSpeedTestConfig(Window owner)
+    {
+        var win = new SpeedTestConfigWindow(SpeedTestConfig.Load(_dpStore)) { Owner = owner };
+        if (win.ShowDialog() != true) return;
+        win.Result.Save(_dpStore);
+        SpeedTestService.ApplyConfig(win.Result);
+        DpLog($"[SPEEDTEST] config saved: {win.Result.Summary}");
     }
 
     /// <summary>Rebuilds the Key Binding section's mapped-keys list (LvDpKeys) —
@@ -2999,13 +3228,18 @@ public partial class MainWindow
         key.ActionValue = pageId.ToString();
 
         // Auto-generate the tile's picture — same glyph+caption convention already used
-        // for the "folder" (Open Folder) action, see IconImageGenerator.TryGenerateFolderIcon —
-        // so a freshly created page is never left with a blank, actionless-looking tile.
-        string dest = DpAutoIconCachePath("dpfolder", name);
-        if (IconImageGenerator.TryGenerateFolderIcon(name, DpHidNative.IconSize, dest))
+        // for the "folder" (Open Folder) action — so a freshly created page is never left
+        // with a blank, actionless-looking tile. Goes through DpDefaultIconRenderer so it
+        // also picks up the pad's "default icon background" image.
+        string? dest = DpGenDefaultIcon(id, "dp_folder", pageId.ToString(), name);
+        if (dest is not null)
             DpUploadAndPersist(id, profile, key, dest);
         else
             _dpStore.SaveButton(id, profile, _currentDpPageId, key.Index, key.ImagePath, key.ActionType, key.ActionValue);
+        // Mark it a default icon so DpRerenderDefaultIcons refreshes it when the pad's
+        // default background changes later.
+        key.IconSpecJson = new KeyIconSpec { DefaultIcon = true }.ToJson();
+        _dpStore.SaveIconSpec(id, profile, _currentDpPageId, key.Index, key.IconSpecJson);
 
         DpLog($"[ACT] key #{key.Index} <- dp_folder \"{name}\" (page {pageId})");
         UpdateDpPagesTabVisibility();
@@ -3231,11 +3465,12 @@ public partial class MainWindow
 
         if (string.IsNullOrEmpty(key.ImagePath) || !File.Exists(key.ImagePath))
         {
-            string caption = Loc.Get("dp_back");
-            string dest = DpAutoIconCachePath("dpback", caption);
-            if (IconImageGenerator.TryGenerateBackIcon(caption, DpHidNative.IconSize, dest))
+            string? dest = DpGenDefaultIcon(id, "dp_back", null);
+            if (dest is not null)
             {
                 DpUploadAndPersist(id, DpCurrentProfile(), key, dest);
+                key.IconSpecJson = new KeyIconSpec { DefaultIcon = true }.ToJson();
+                _dpStore.SaveIconSpec(id, DpCurrentProfile(), _currentDpPageId, key.Index, key.IconSpecJson);
                 DpLog($"[ACT] key #{key.Index} <- dp_back (auto icon)");
                 return;
             }
@@ -3264,10 +3499,9 @@ public partial class MainWindow
         if (pageId == 0) return; // root page has nowhere to go back to
         if (_dpStore.LoadPage(id, profile, pageId).Any(r => r.ButtonIndex == 0)) return;
 
-        string caption = Loc.Get("dp_back");
-        string dest = DpAutoIconCachePath("dpback", caption);
-        string? imagePath = IconImageGenerator.TryGenerateBackIcon(caption, DpHidNative.IconSize, dest) ? dest : null;
+        string? imagePath = DpGenDefaultIcon(id, "dp_back", null);
         _dpStore.SaveButton(id, profile, pageId, 0, imagePath, "dp_back", null);
+        _dpStore.SaveIconSpec(id, profile, pageId, 0, new KeyIconSpec { DefaultIcon = true }.ToJson());
         DpLog($"[ACT] device {id} page {pageId}: key #0 defaulted to dp_back");
     }
 
@@ -3384,6 +3618,10 @@ public partial class MainWindow
             progressive++;
         }
 
+        // A DisplayPad appearing or going away is half the Game profiles gate (the other half
+        // is the Settings master switch) — re-evaluate it here rather than polling.
+        RefreshGameTabVisibility();
+
         // Sync top-level device tabs for DisplayPad (fixed order: Everest Max > Everest 60 >
         // Makalu > DisplayPad > MacroPad — see the comment above TabEverest in MainWindow.xaml)
         RemoveDeviceTabs("dp_");
@@ -3437,7 +3675,27 @@ public partial class MainWindow
             : "0 DisplayPad tabs created (SDK reported no plugged device)");
     }
 
-    private int DpCurrentProfile() => LstDpProfile.SelectedItem is DpProfileItem pi ? pi.Slot : 1;
+    /// <summary>The profile the FOREGROUND device is on, as everything that paints or edits the
+    /// active tab reads it.
+    ///
+    /// <para>The profile list is the answer whenever it has a selection. It does not always have
+    /// one: a game profile's reserved slot is filtered out of that list (it has a section of its
+    /// own, like the dedicated profiles), and the fallback used to be a flat <c>1</c>. So a pad
+    /// that WAS on a game profile repainted profile 1 over it — the page arrived on every
+    /// background pad and never on the one whose tab was open, which is exactly how the user saw
+    /// it: "non mi compare mai sul displaypad 2, se lo metto su displaypad 1 allora ok"
+    /// (2026-09-06; the pad in question was the selected tab). The store knows which slot it is,
+    /// so ask it before falling back.</para></summary>
+    private int DpCurrentProfile()
+    {
+        if (LstDpProfile.SelectedItem is DpProfileItem pi) return pi.Slot;
+        if (DpSelectedDeviceId() is int id)
+        {
+            int current = _dpStore.GetCurrentProfile(id);
+            if (DpIsGameProfileName(_dpStore.GetProfileName(id, current))) return current;
+        }
+        return 1;
+    }
 
     /// <summary>
     /// Reloads the current page's keys from the store and uploads images.
@@ -3465,7 +3723,7 @@ public partial class MainWindow
         var rows = _dpStore.LoadPage(id, profile, pageId);
         DpLog($"[DB] loaded {rows.Count} records for device={id} profile={profile} page={pageId}");
         DiscordVoiceKeyService.Sync(_dpClient, DpLogAsync, id, rotation, rows);   // see DpUploadPageForDevice
-        DpLiveTileService.Sync(_dpClient, DpLogAsync, id, rotation, rows);        // clock/monitor/speed-test keys
+        DpLiveTileService.Sync(_dpClient, DpLogAsync, id, rotation, rows, _dpStore.GetDefaultBgImage(id)); // clock/monitor/speed-test keys
         DpSpotifyCoverKeyService.Sync(_dpClient, DpLogAsync, id, rotation, rows); // "spotify" keys with the album-cover icon option
 
         // Stop every animated-GIF loop on this device NOW (synchronously) — a page/profile
@@ -3747,7 +4005,7 @@ public partial class MainWindow
         // DiscordVoiceKeyService) — re-synced on every repaint so it always matches the
         // page actually on the panel.
         DiscordVoiceKeyService.Sync(_dpClient, DpLogAsync, id, rotation, rows);
-        DpLiveTileService.Sync(_dpClient, DpLogAsync, id, rotation, rows);   // see DpReloadCurrentProfile
+        DpLiveTileService.Sync(_dpClient, DpLogAsync, id, rotation, rows, _dpStore.GetDefaultBgImage(id));   // see DpReloadCurrentProfile
         DpSpotifyCoverKeyService.Sync(_dpClient, DpLogAsync, id, rotation, rows);   // idem
         var fullscreen = _dpStore.GetFullscreenImage(id, profile, pageId);
         // Screensaver mode: painted later by DpScreensaverTimeout, not now — see
@@ -4102,6 +4360,12 @@ public partial class MainWindow
         // all that's lost is the shrink effect on the very press that triggered the switch.
         if (_dpRepaintBusy.GetValueOrDefault(id)) return;
 
+        // A live tile drawn WITHOUT the panel's counter-rotation (the Zero Company scroll
+        // arrows, which have to point along the pad's real rows) must bounce without it too:
+        // sending the same picture back at ctx.Rotation turned the arrow for the length of the
+        // press, so the key flipped orientation on every click on a pad mounted vertical.
+        if (DpLiveTileService.SkipsRotation(id, btnIndex)) rotation = 0;
+
         var previous = _dpUploadChain.TryGetValue(id, out var p) ? p : Task.CompletedTask;
         var next = previous.ContinueWith(_ => _dpClient.UploadImage(id, imgPath, btnIndex, rotation, pressed),
             TaskScheduler.Default);
@@ -4227,7 +4491,8 @@ public partial class MainWindow
             if (!DpLiveTileService.IsLiveType(key.ActionType)) continue;
             string path = DpLiveTileService.UiPreviewPath(id, key.Index);
             var spec = KeyIconSpec.FromJson(key.IconSpecJson);
-            if (!DpLiveTileService.RenderNow(key.ActionType!, key.ActionValue, spec, path)) continue;
+            if (!DpLiveTileService.RenderNow(key.ActionType!, key.ActionValue, spec, path,
+                    _dpStore.GetDefaultBgImage(id))) continue;
             if (key.ImagePath != path) key.ImagePath = path;
             key.TouchPreview();
         }
@@ -4239,6 +4504,11 @@ public partial class MainWindow
 
     private void CleanupDisplayPad()
     {
+        // Everything below is disposed here; anything still calling back into this partial after
+        // that point would find a closed SQLite connection (user report 2026-09-03).
+        _dpTornDown = true;
+        DvpUnhook();
+
         _dpKeyLiveTimer?.Stop();
         _dpKeyLiveTimer = null;
         _dvpReconnectTimer?.Stop();

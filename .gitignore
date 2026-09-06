@@ -25,3 +25,7 @@ __pycache__/
 # --- Artefatti di build dell'installer (ricreati da build-installer.bat) --
 Installer/publish/
 Installer/output/
+
+# --- Config locale di Claude Code (non versionata) -------------------------
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

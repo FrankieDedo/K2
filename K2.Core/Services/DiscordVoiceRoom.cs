@@ -50,6 +50,33 @@ public static class DiscordVoiceRoom
     private static string? _subscribedChannel;
     private static Task _worker = Task.CompletedTask;
 
+    /// <summary>The channel we were most recently ASKED to show (by <see cref="OnChannelChanged"/>).
+    /// Unlike <see cref="ChannelId"/>, which is only committed at the tail of <see cref="Refresh"/>
+    /// a whole RPC round trip later, this updates synchronously on the reader thread — so it is the
+    /// only reliable "is this pass still wanted?" check while a bot bounces the user across servers
+    /// faster than a Refresh completes.</summary>
+    private static volatile string? _targetChannel;
+
+    /// <summary>1 while an event-driven <see cref="Refresh"/> is already waiting on the worker.
+    /// A queued pass re-reads the WHOLE channel when it runs, so anything queued behind it would
+    /// only repeat the same two RPC round trips — and raise <see cref="Changed"/> (a full
+    /// DisplayPad repaint) again — for the very same roster. See <see cref="PostRefresh"/>.</summary>
+    private static int _refreshQueued;
+
+    /// <summary><see cref="Environment.TickCount64"/> of the last completed refresh, for the
+    /// minimum spacing enforced in <see cref="PostRefresh"/>.</summary>
+    private static long _lastRefreshTicks;
+
+    /// <summary>Shortest gap between two event-driven refreshes. A busy call (ten people, mute /
+    /// volume / speaking traffic) delivers VOICE_STATE_UPDATE far faster than a GET_CHANNEL +
+    /// GET_GUILD round trip, and every pass repaints twelve keys over USB — user report
+    /// 2026-09-03: hundreds of identical "room:" lines per second and the whole app crawling.</summary>
+    private static readonly TimeSpan MinRefreshGap = TimeSpan.FromMilliseconds(400);
+
+    /// <summary>Channel + roster of the last committed refresh, so an unchanged re-read stays
+    /// silent instead of logging and repainting again (see <see cref="Signature"/>).</summary>
+    private static string? _lastSignature;
+
     /// <summary>How many times the current join has re-read the channel while waiting for the
     /// local user's own voice state to show up in it — see the tail of <see cref="Refresh"/>.
     /// Reset on every channel change.</summary>
@@ -90,10 +117,19 @@ public static class DiscordVoiceRoom
 
     // ---------------------------------------------------------------- input from the bridge
 
-    /// <summary>The client joined (or left, with null) a voice channel.</summary>
+    /// <summary>The client joined (or left, with null) a voice channel.
+    ///
+    /// <para>De-dup is against <see cref="_targetChannel"/>, NOT <see cref="ChannelId"/>: the
+    /// latter only catches up at the end of <see cref="Refresh"/>, so when a bot moves the user
+    /// server→server faster than a Refresh round trip the incoming id can still equal the
+    /// old committed <c>ChannelId</c>. Dropping it there left the page subscribed to — and
+    /// forever re-reading — a channel the user had already left: empty roster (not even "you"),
+    /// and no recovery when others joined later, because their VOICE_STATE events arrived on a
+    /// channel we were no longer subscribed to (user report).</para></summary>
     internal static void OnChannelChanged(string? channelId)
     {
-        if (channelId == ChannelId) return;
+        if (channelId == _targetChannel) return;
+        _targetChannel = channelId;
         if (channelId is null) { Clear(); Raise(Changed); return; }
         _selfWaitRetries = 0;
         Post(ipc => Refresh(ipc, channelId));
@@ -148,14 +184,14 @@ public static class DiscordVoiceRoom
                 // The event payload is one member's state; re-reading the whole channel is a
                 // single cheap RPC call and keeps ordering/nicknames consistent with a join.
                 //
-                // ChannelId is only committed at the END of the first Refresh, so on a fresh
-                // join the local user's OWN VOICE_STATE_CREATE — the event that normally first
-                // puts "you" (avatar and all) on the roster, because Discord's GET_CHANNEL
-                // doesn't list your voice state until the voice session is fully up — can land
-                // while ChannelId is still null. Falling back to the channel the bridge is
-                // switching to stops that event from being dropped and leaving your own circle
-                // blank until the next unrelated roster change (user report).
-                if ((ChannelId ?? DiscordBridge.VoiceChannelId) is string id) Post(ipc => Refresh(ipc, id));
+                // Use _targetChannel (the channel we're currently meant to show) as the primary
+                // source: ChannelId is only committed at the END of a Refresh, so on a fresh join
+                // the local user's OWN VOICE_STATE_CREATE can land while it is still null, and
+                // right after a fast server switch it can still hold the OLD channel. Both cases
+                // would otherwise re-read the wrong channel (or drop the event). The bridge value
+                // is the last-resort fallback for the instant before OnChannelChanged has run.
+                if ((_targetChannel ?? DiscordBridge.VoiceChannelId ?? ChannelId) is string id)
+                    PostRefresh(id);
                 return;
         }
     }
@@ -171,23 +207,59 @@ public static class DiscordVoiceRoom
 
     /// <summary>Queues one RPC round trip on the room's own serialized worker. Never call
     /// <c>DiscordIpc.Send</c> straight from <see cref="OnRpcEvent"/> — see the class remarks.</summary>
-    private static void Post(Action<DiscordIpc> work)
+    /// <param name="started">Runs on the worker the moment this item reaches the head of the
+    /// queue, whether or not an RPC handle can be obtained — <see cref="PostRefresh"/> uses it to
+    /// clear its "already queued" flag without ever latching it on a failed connection.</param>
+    private static void Post(Action<DiscordIpc> work, Action? started = null)
     {
         lock (_gate)
             _worker = _worker.ContinueWith(_ =>
             {
                 try
                 {
-                    var ipc = DiscordBridge.RoomIpc(msg => DiscordBridge.Log?.Invoke($"[Discord] room: {msg}"));
+                    started?.Invoke();
+                    // Silent sink: this runs once per queued item, so a Discord that is simply
+                    // not connected (or a token refresh that keeps failing) would repeat the
+                    // same "[EXEC] discord: …" line for every roster event of the session.
+                    var ipc = DiscordBridge.RoomIpc(_ => { });
                     if (ipc is not null) work(ipc);
                 }
                 catch (Exception ex) { DiscordBridge.Log?.Invoke($"[Discord] room error: {ex.Message}"); }
             }, TaskScheduler.Default);
     }
 
+    /// <summary>Queues an event-driven <see cref="Refresh"/>, collapsing bursts.
+    ///
+    /// <para>Discord sends a VOICE_STATE_UPDATE for every mute/deafen/volume/suppress change of
+    /// every member, so a busy call produces them far faster than one refresh (GET_CHANNEL +
+    /// GET_GUILD) completes — and each refresh raises <see cref="Changed"/>, which repaints all
+    /// twelve keys of every pad over USB. Queueing one pass per event turned that into a
+    /// self-sustaining flood. Two guards: at most one pass may be waiting (the one that runs
+    /// re-reads the whole channel anyway, so a second would be redundant), and passes are spaced
+    /// by <see cref="MinRefreshGap"/> — the wait happens BEFORE the flag is cleared, so every
+    /// event arriving meanwhile folds into the pass that is about to run.</para></summary>
+    private static void PostRefresh(string channelId)
+    {
+        if (Interlocked.Exchange(ref _refreshQueued, 1) == 1) return;
+
+        Post(ipc => Refresh(ipc, channelId), started: () =>
+        {
+            long wait = (long)MinRefreshGap.TotalMilliseconds - (Environment.TickCount64 - _lastRefreshTicks);
+            if (wait > 0) Thread.Sleep((int)Math.Min(wait, (long)MinRefreshGap.TotalMilliseconds));
+            Interlocked.Exchange(ref _refreshQueued, 0);
+            _lastRefreshTicks = Environment.TickCount64;
+        });
+    }
+
     /// <summary>Reads the channel (roster + guild) and re-arms the per-channel subscriptions.</summary>
     private static void Refresh(DiscordIpc ipc, string channelId)
     {
+        // A newer channel change was queued behind this one while it waited its turn on the
+        // worker. Its own Refresh will do the work against the right channel, so anything this
+        // stale pass does — resubscribe, commit the roster, keep retrying for "you" — would just
+        // be undone or, worse, latch the channel the user already left.
+        if (_targetChannel != channelId) return;
+
         Resubscribe(ipc, channelId);
 
         var ch = ipc.Send("GET_CHANNEL", new { channel_id = channelId }, Timeout, out var error);
@@ -231,6 +303,10 @@ public static class DiscordVoiceRoom
             }
         }
 
+        // GET_CHANNEL + GET_GUILD above can each block for seconds; bail if the user has been
+        // moved on to another channel in the meantime rather than committing a stale roster.
+        if (_targetChannel != channelId) return;
+
         lock (_gate)
         {
             _participants = ordered;
@@ -243,8 +319,18 @@ public static class DiscordVoiceRoom
         GuildName = guildName;
         GuildIconUrl = guildIcon;
 
-        DiscordBridge.Log?.Invoke($"[Discord] room: {guildName}/{channelName} — {ordered.Length} member(s)");
-        Raise(Changed);
+        // Most refreshes are triggered by somebody else's state change and come back with exactly
+        // the roster we already show. Raising Changed for those repaints every key of every pad
+        // for nothing (and logs a line each time) — the second half of the flood in the user
+        // report above.
+        string signature = Signature(channelId, guildName, channelName, ordered);
+        bool unchanged = signature == _lastSignature;
+        _lastSignature = signature;
+
+        // No log line for a successful refresh on purpose: it fires on every roster/mute change
+        // of every member of the call and said nothing a bug report ever needed. Only failures
+        // below/above are worth a line.
+        if (!unchanged) Raise(Changed);
 
         // A brand-new join often returns before Discord has added the local user's OWN voice
         // state to the channel: GET_CHANNEL then lists everyone but you, so the roster shows no
@@ -255,7 +341,7 @@ public static class DiscordVoiceRoom
             int attempt = ++_selfWaitRetries;
             _ = Task.Delay(TimeSpan.FromMilliseconds(300 * attempt)).ContinueWith(_ =>
             {
-                if (ChannelId == channelId && !Participants.Any(p => p.Self))
+                if (_targetChannel == channelId && ChannelId == channelId && !Participants.Any(p => p.Self))
                     Post(ipc2 => Refresh(ipc2, channelId));
             }, TaskScheduler.Default);
         }
@@ -264,6 +350,14 @@ public static class DiscordVoiceRoom
             _selfWaitRetries = 0;
         }
     }
+
+    /// <summary>Everything the voice page actually draws, as one comparable string: channel,
+    /// server, and each member's identity/name/avatar/mute/deafen in roster order. Speaking rings
+    /// are deliberately NOT part of it — they ride on <see cref="SpeakingChanged"/>.</summary>
+    private static string Signature(string channelId, string guildName, string channelName,
+                                    Participant[] roster) =>
+        $"{channelId}|{guildName}|{channelName}|" +
+        string.Join(";", roster.Select(p => $"{p.Id},{p.Name},{p.AvatarUrl},{(p.Mute ? 1 : 0)}{(p.Deaf ? 1 : 0)}"));
 
     private static void Resubscribe(DiscordIpc ipc, string channelId)
     {
@@ -292,6 +386,8 @@ public static class DiscordVoiceRoom
             _speaking.Clear();
         }
         _subscribedChannel = null;
+        _targetChannel = null;
+        _lastSignature = null;
         ChannelId = null;
         ChannelName = GuildName = "";
         GuildIconUrl = null;

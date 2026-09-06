@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using K2.Core.Services;
 
 namespace K2.Core;
@@ -41,7 +42,8 @@ public static class ActionTypeHelper
     /// key context menu's "Set as back") since it is just as DisplayPad-page-specific as
     /// "dp_folder".</summary>
     public static readonly string[] PageOnlyActionTypes =
-        { "dp_folder", "dp_back", "dp_emojibrowser", "dp_clock", "dp_sysmon", "dp_speedtest" };
+        { "dp_folder", "dp_back", "dp_emojibrowser", "dp_clock", "dp_sysmon", "dp_speedtest",
+          "dp_edstatus", "dp_zcstatus", "dp_screen" };
 
     /// <summary>
     /// True for a "macro" (Play Macro) action with no playable macro assigned — either no
@@ -325,6 +327,79 @@ public static class ActionTypeHelper
         ("ping", "speedtest_ping"),
     };
 
+    /// <summary>Ship states an Elite Dangerous tile (<c>dp_edstatus</c>) can mirror.
+    ///
+    /// <para>Each token names one bit of the game's <c>Status.json</c> <c>Flags</c> field (see
+    /// <c>K2.App.Services.EliteStatusReader</c>, which owns the bit values) except
+    /// <c>pips</c>, which draws the SYS/ENG/WEP power distribution as three bars like the
+    /// cockpit's own gauge.</para>
+    ///
+    /// <para>Two of these read INVERTED on purpose. <c>flightassist</c> is backed by the
+    /// "FlightAssist Off" bit, so the tile lights up when assist is OFF — that is the state a
+    /// pilot needs shouting at them, and it matches how the game itself annunciates it. The
+    /// three alarm states (<c>overheat</c>, <c>lowfuel</c>, <c>danger</c>) paint red rather
+    /// than amber for the same reason.</para></summary>
+    public static readonly (string Value, string LocKey, string GroupLocKey)[] EdStatusItems =
+    {
+        // Cockpit toggles
+        ("gear",            "edstatus_gear",                   "edgrp_cockpit"),
+        ("scoop",           "edstatus_scoop",                  "edgrp_cockpit"),
+        ("lights",          "edstatus_lights",                 "edgrp_cockpit"),
+        ("hardpoints",      "edstatus_hardpoints",             "edgrp_combat"),
+        ("silent",          "edstatus_silent",                 "edgrp_cockpit"),
+        ("nightvision",     "edstatus_nightvision",            "edgrp_cockpit"),
+        ("flightassist",    "edstatus_flightassist",           "edgrp_cockpit"),
+        ("flightassist_on", "edstatus_flightassist_on",        "edgrp_cockpit"),
+
+        // Gauges
+        ("pips",            "edstatus_pips",                   "edgrp_gauges"),
+        ("fuel",            "edstatus_fuel",                   "edgrp_gauges"),
+        ("fuelres",         "edstatus_fuelres",                "edgrp_gauges"),
+        ("cargo",           "edstatus_cargo",                  "edgrp_gauges"),
+
+        // Flight & navigation
+        ("supercruise",     "edstatus_supercruise",            "edgrp_flight"),
+        ("fsdcharging",     "edstatus_fsdcharging",            "edgrp_flight"),
+        ("fsdjump",         "edstatus_fsdjump",                "edgrp_flight"),
+        ("fsdcooldown",     "edstatus_fsdcooldown",            "edgrp_flight"),
+        ("scooping",        "edstatus_scooping",               "edgrp_flight"),
+        ("docked",          "edstatus_docked",                 "edgrp_flight"),
+        ("landed",          "edstatus_landed",                 "edgrp_flight"),
+        ("glide",           "edstatus_glide",                  "edgrp_flight"),
+        ("analysis",        "edstatus_analysis",               "edgrp_flight"),
+        ("shields",         "edstatus_shields",                "edgrp_combat"),
+        ("wing",            "edstatus_wing",                   "edgrp_flight"),
+
+        // Alarms
+        ("overheat",        "edstatus_overheat",               "edgrp_alarms"),
+        ("lowfuel",         "edstatus_lowfuel",                "edgrp_alarms"),
+        ("danger",          "edstatus_danger",                 "edgrp_alarms"),
+        ("interdicted",     "edstatus_interdicted",            "edgrp_alarms"),
+        ("masslock",        "edstatus_masslock",               "edgrp_alarms"),
+
+        // Vehicle
+        ("inship",          "edstatus_inship",                 "edgrp_vehicle"),
+        ("infighter",       "edstatus_infighter",              "edgrp_vehicle"),
+        ("insrv",           "edstatus_insrv",                  "edgrp_vehicle"),
+
+        // SRV
+        ("srvhandbrake",    "edstatus_srvhandbrake",           "edgrp_srv"),
+        ("srvturret",       "edstatus_srvturret",              "edgrp_srv"),
+        ("srvdriveassist",  "edstatus_srvdriveassist",         "edgrp_srv"),
+        ("srvhighbeam",     "edstatus_srvhighbeam",            "edgrp_srv"),
+
+        // On foot (Odyssey)
+        ("onfoot",          "edstatus_onfoot",                 "edgrp_onfoot"),
+        ("intaxi",          "edstatus_intaxi",                 "edgrp_onfoot"),
+        ("multicrew",       "edstatus_multicrew",              "edgrp_onfoot"),
+        ("aimdownsight",    "edstatus_aimdownsight",           "edgrp_onfoot"),
+        ("breathable",      "edstatus_breathable",             "edgrp_onfoot"),
+        ("lowoxygen",       "edstatus_lowoxygen",              "edgrp_onfoot"),
+        ("lowhealth",       "edstatus_lowhealth",              "edgrp_onfoot"),
+        ("verycold",        "edstatus_verycold",               "edgrp_onfoot"),
+        ("veryhot",         "edstatus_veryhot",                "edgrp_onfoot"),
+    };
+
     /// <summary>Splits a <c>dp_sysmon</c> value bound to a specific hardware sensor —
     /// <c>"&lt;lhm-id&gt;|&lt;stat&gt;|&lt;label&gt;"</c>, where <c>stat</c> is
     /// <c>cur|min|max|avg</c> and <c>label</c> is the human name captured when the sensor was
@@ -340,6 +415,23 @@ public static class ActionTypeHelper
                 parts.Length > 2 ? string.Join("|", parts[2..]) : parts[0]);
     }
 
+    /// <summary>Splits a <c>dp_screen</c> value — <c>"&lt;probe-id&gt;|&lt;label&gt;"</c>, the id
+    /// of a screen probe plus the name it had when the key was assigned. Null for an empty value
+    /// (a key whose probe was never chosen).
+    ///
+    /// <para>The label is carried in the value on purpose, exactly like the sensor picker's
+    /// (<see cref="ParseSensorValue"/>): the probe definitions live in K2.App, and K2.Core — which
+    /// draws the key lists and the action dialog — must be able to NAME a key without reaching
+    /// into the host for it. It also means a key whose probe was deleted still says which reading
+    /// it used to show instead of turning into a bare id.</para></summary>
+    public static (string Id, string Label)? ParseScreenValue(string? value)
+    {
+        string v = (value ?? "").Trim();
+        if (v.Length == 0) return null;
+        int bar = v.IndexOf('|');
+        return bar < 0 ? (v, "") : (v[..bar], v[(bar + 1)..]);
+    }
+
     /// <summary>Localized name of a sensor statistic (<c>cur|min|max|avg</c>) for the tile
     /// summary and the sensor picker's combo item.</summary>
     public static string SensorStatLabel(string? stat) => stat switch
@@ -353,9 +445,298 @@ public static class ActionTypeHelper
     /// <summary>Display text for a "dp_clock"/"dp_sysmon"/"dp_speedtest" action: the localized
     /// name of the picked mode/metric, so the key list says "Analog clock" rather than
     /// "analog".</summary>
+    /// <summary>One command a game profile's action picker can assign to a key: an ordinary
+    /// action type plus its value, named by a loc key. A family mixes the two kinds freely —
+    /// a live <c>dp_edstatus</c> tile that mirrors the ship AND a plain <c>keys</c> shortcut that
+    /// only sends a keystroke — because a pilot picking "Frame Shift Drive" does not care which
+    /// of the two K2 uses to deliver it.</summary>
+    public sealed record GameCommand(string ActionType, string ActionValue, string LocKey);
+
+    /// <summary>Elite Dangerous' commands, grouped into the families the picker shows as its
+    /// second level (the game replaces the old generic "Game controls" category). Order here is
+    /// the order on screen.
+    ///
+    /// <para>Every <c>dp_edstatus</c> state comes from <see cref="EdStatusItems"/> — that array
+    /// stays the single source of truth for which states exist and what they are called — and the
+    /// plain shortcuts are added into the family they belong to rather than being parked in a
+    /// separate "quick commands" bucket.</para></summary>
+    public static readonly (string LocKey, string Glyph, GameCommand[] Items)[] EliteCommandFamilies =
+        BuildEliteFamilies();
+
+    private static (string LocKey, string Glyph, GameCommand[] Items)[] BuildEliteFamilies()
+    {
+        static GameCommand Ed(string state) =>
+            new("dp_edstatus", state, "edstatus_" + state);
+        static GameCommand Keys(string shortcut, string locKey) =>
+            new("keys", shortcut, locKey);
+
+        // The shortcuts that are not backed by a status bit, filed under the family a pilot would
+        // look in. Binds are the game's shipped keyboard defaults.
+        var extra = new Dictionary<string, GameCommand[]>
+        {
+            ["edgrp_combat"] = new[]
+            {
+                Keys("V", "act_dp_ed_heatsink"),
+                Keys("T", "act_dp_ed_target"),
+            },
+            ["edgrp_flight"] = new[] { Keys("J", "act_dp_ed_fsd") },
+        };
+
+        var order = new[]
+        {
+            ("edgrp_cockpit", "🛠"),
+            ("edgrp_combat",  "🎯"),
+            ("edgrp_gauges",  "📊"),
+            ("edgrp_flight",  "🚀"),
+            ("edgrp_alarms",  "⚠"),
+            ("edgrp_vehicle", "🛸"),
+            ("edgrp_srv",     "🚜"),
+            ("edgrp_onfoot",  "🚶"),
+        };
+
+        var result = new List<(string, string, GameCommand[])>();
+        foreach (var (group, glyph) in order)
+        {
+            var items = EdStatusItems.Where(i => i.GroupLocKey == group).Select(i => Ed(i.Value)).ToList();
+            if (extra.TryGetValue(group, out var more)) items.AddRange(more);
+            if (items.Count > 0) result.Add((group, glyph, items.ToArray()));
+        }
+        return result.ToArray();
+    }
+
+    /// <summary>Tactical states a Star Wars: Zero Company tile (<c>dp_zcstatus</c>) can mirror,
+    /// and — for the ones that name a command — perform when pressed.
+    ///
+    /// <para>Unlike Elite's tiles, which read a status file and press a keystroke, these both
+    /// read and act through the game's own remote-control API (see
+    /// <c>K2.App.Services.ZeroCompanyClient</c>): a squad key really selects that character, an
+    /// ability key really opens that ability. Nothing here sends a guessed keystroke.</para>
+    ///
+    /// <para><b>What is deliberately missing.</b> There is no "end turn": the game exposes no
+    /// such function, only the team-state machinery behind it, and driving that directly would
+    /// be guessing at the game's own state transitions. A player who wants it can still bind a
+    /// keyboard shortcut on any key.</para></summary>
+    public static readonly (string Value, string LocKey, string GroupLocKey)[] ZcStatusItems =
+    {
+        // Squad — press selects that member; the tile shows their health.
+        ("unit1",     "zcstatus_unit1",     "zcgrp_squad"),
+        ("unit2",     "zcstatus_unit2",     "zcgrp_squad"),
+        ("unit3",     "zcstatus_unit3",     "zcgrp_squad"),
+        ("unit4",     "zcstatus_unit4",     "zcgrp_squad"),
+        ("unit5",     "zcstatus_unit5",     "zcgrp_squad"),
+        ("unit6",     "zcstatus_unit6",     "zcgrp_squad"),
+        ("nextchar",  "zcstatus_nextchar",  "zcgrp_squad"),
+        ("prevchar",  "zcstatus_prevchar",  "zcgrp_squad"),
+
+        // The selected character.
+        ("sel_hp",    "zcstatus_sel_hp",    "zcgrp_selected"),
+        ("sel_ap",    "zcstatus_sel_ap",    "zcgrp_selected"),
+        ("sel_armor", "zcstatus_sel_armor", "zcgrp_selected"),
+        ("sel_canact","zcstatus_sel_canact","zcgrp_selected"),
+
+        // Turn state.
+        ("turn",      "zcstatus_turn",      "zcgrp_turn"),
+        ("round",     "zcstatus_round",     "zcgrp_turn"),
+
+        // Action slots of the selected soldier. A slot shows the ability at its position in the
+        // game's own wheel order, OFFSET by the page the panel is scrolled to — so seven slots
+        // reach a wheel of any length, and the numbering here is the slot, not the ability.
+        ("act1",      "zcstatus_act1",      "zcgrp_abilities"),
+        ("act2",      "zcstatus_act2",      "zcgrp_abilities"),
+        ("act3",      "zcstatus_act3",      "zcgrp_abilities"),
+        ("act4",      "zcstatus_act4",      "zcgrp_abilities"),
+        ("act5",      "zcstatus_act5",      "zcgrp_abilities"),
+        ("act6",      "zcstatus_act6",      "zcgrp_abilities"),
+        ("act7",      "zcstatus_act7",      "zcgrp_abilities"),
+        ("scroll",    "zcstatus_scroll",    "zcgrp_abilities"),
+    };
+
+    /// <summary>Zero Company's commands, grouped into the families the picker shows as its second
+    /// level. Built from <see cref="ZcStatusItems"/> so that array stays the only place a state
+    /// is declared.</summary>
+    public static readonly (string LocKey, string Glyph, GameCommand[] Items)[] ZeroCompanyCommandFamilies =
+        BuildZeroCompanyFamilies();
+
+    private static (string LocKey, string Glyph, GameCommand[] Items)[] BuildZeroCompanyFamilies()
+    {
+        var order = new[]
+        {
+            ("zcgrp_squad",     "👥"),
+            ("zcgrp_selected",  "🎖"),
+            ("zcgrp_abilities", "✨"),
+            ("zcgrp_turn",      "⏱"),
+        };
+
+        var result = new List<(string, string, GameCommand[])>();
+        foreach (var (group, glyph) in order)
+        {
+            var items = ZcStatusItems
+                .Where(i => i.GroupLocKey == group)
+                .Select(i => new GameCommand("dp_zcstatus", i.Value, i.LocKey))
+                .ToArray();
+            if (items.Length > 0) result.Add((group, glyph, items));
+        }
+        return result.ToArray();
+    }
+
+    /// <summary>Deadside's commands, grouped into the families the picker shows as its second
+    /// level. All of them are plain keystrokes: the game reports nothing back, so there is no
+    /// live tile type to offer alongside them.
+    ///
+    /// <para>The shortcuts are the game's OWN shipped defaults, read out of the
+    /// <c>DefaultInput.ini</c> packaged in its pak. Note the asymmetry with the curated page: a
+    /// tile the catalogue ships follows the player's real bindings (see
+    /// <c>MainWindow.DeadsideSyncedBind</c>), while a command picked from here becomes the user's
+    /// own tile and keeps the default it was assigned — the same trade the Elite families make,
+    /// and the reason the twelve keys that matter are on the shipped page.</para>
+    ///
+    /// <para>Missing on purpose: movement and aim (they stay under the hand on the keyboard),
+    /// sprint and walk (the game binds them to bare modifiers, which K2's shortcut syntax cannot
+    /// send alone), and everything the game binds to the mouse — ping, camera, weapon
+    /// cycling.</para></summary>
+    public static readonly (string LocKey, string Glyph, GameCommand[] Items)[] DeadsideCommandFamilies =
+        BuildDeadsideFamilies();
+
+    private static (string LocKey, string Glyph, GameCommand[] Items)[] BuildDeadsideFamilies()
+    {
+        static GameCommand K(string shortcut, string locKey) => new("keys", shortcut, locKey);
+
+        var quickSlots = new List<GameCommand>();
+        for (int i = 1; i <= 7; i++) quickSlots.Add(K(i.ToString(), "act_dp_ds_quickslot" + i));
+        for (int i = 8; i <= 11; i++) quickSlots.Add(K("F" + (i - 7), "act_dp_ds_quickslot" + i));
+
+        return new (string, string, GameCommand[])[]
+        {
+            ("dsgrp_field", "🎒", new[]
+            {
+                K("Tab", "act_dp_ds_inventory"),
+                K("M",   "act_dp_ds_map"),
+                K("O",   "act_dp_ds_quests"),
+                K("B",   "act_dp_ds_build"),
+                K("G",   "act_dp_ds_breakup"),
+                K("N",   "act_dp_ds_motions"),
+                K("H",   "act_dp_ds_hood"),
+            }),
+            ("dsgrp_combat", "🎯", new[]
+            {
+                K("R",        "act_dp_ds_reload"),
+                K("X",        "act_dp_ds_firemode"),
+                K("CapsLock", "act_dp_ds_aim"),
+                K("End",      "act_dp_ds_scopemode"),
+                K("PageUp",   "act_dp_ds_scopezoomin"),
+                K("PageDown", "act_dp_ds_scopezoomout"),
+            }),
+            ("dsgrp_move", "🚶", new[]
+            {
+                K("C",     "act_dp_ds_crouch"),
+                K("Z",     "act_dp_ds_prone"),
+                K("Space", "act_dp_ds_jump"),
+                K("V",     "act_dp_ds_autorun"),
+            }),
+            ("dsgrp_quickslot", "🔢", quickSlots.ToArray()),
+            ("dsgrp_vehicle", "🚗", new[]
+            {
+                K("F", "act_dp_ds_veh_use"),
+                K("G", "act_dp_ds_veh_seat"),
+                K("T", "act_dp_ds_veh_light"),
+                K("N", "act_dp_ds_veh_horn"),
+                K("V", "act_dp_ds_veh_autorun"),
+            }),
+            ("dsgrp_squad", "💬", new[]
+            {
+                K("J",  "act_dp_ds_chat_global"),
+                K("K",  "act_dp_ds_chat_local"),
+                K("L",  "act_dp_ds_chat_squad"),
+                K("P",  "act_dp_ds_squad_list"),
+                K("F5", "act_dp_ds_squad_confirm"),
+                K("F6", "act_dp_ds_voice"),
+            }),
+        };
+    }
+
+    /// <summary>Family a <c>dp_zcstatus</c> value belongs to, as a loc key. Same job as
+    /// <see cref="EdStatusGroupLocKey"/> for the other game.</summary>
+    public static string? ZcStatusGroupLocKey(string? value)
+    {
+        string v = (value ?? "").Trim();
+        foreach (var item in ZcStatusItems)
+            if (string.Equals(item.Value, v, System.StringComparison.OrdinalIgnoreCase))
+                return item.GroupLocKey;
+        return null;
+    }
+
+    /// <summary>Family a <c>dp_edstatus</c> value belongs to, as a loc key — the heading the
+    /// action picker groups its cards under. Null for a value the catalogue doesn't know.</summary>
+    public static string? EdStatusGroupLocKey(string? value)
+    {
+        string v = SplitEdStatusValue(value).State;
+        foreach (var item in EdStatusItems)
+            if (string.Equals(item.Value, v, System.StringComparison.OrdinalIgnoreCase))
+                return item.GroupLocKey;
+        return null;
+    }
+
+    /// <summary>The three colours an Elite tile's art comes in. <see cref="EdTileColor.Orange"/>
+    /// is the game's own HUD hue and the default; the other two are there for a pilot who wants a
+    /// key to stand out (a warning in red, a "ready" state in green).</summary>
+    public enum EdTileColor { Orange, Green, Red }
+
+    /// <summary>Splits a <c>dp_edstatus</c> value into its three fields:
+    /// <c>state[|shortcut[|colour]]</c>.
+    ///
+    /// <para><c>state</c> is the cockpit reading. <c>shortcut</c> is the OPTIONAL keystroke the
+    /// tile also sends when pressed (<c>"gear|Ctrl + G"</c>); absent means a read-only tile,
+    /// except for the states that carry a built-in default bind (see
+    /// <c>DpLiveTileService.EdDefaultKeys</c>). <c>colour</c> is the OPTIONAL art colour
+    /// (<c>"gear||green"</c> — note the empty middle field when there is no shortcut); absent
+    /// means orange.</para></summary>
+    public static (string State, string? Keys, EdTileColor Color, bool Blink) SplitEdStatusValue(string? value)
+    {
+        string[] parts = (value ?? "").Split('|');
+        string state = parts[0].Trim();
+        string? keys = parts.Length > 1 && parts[1].Trim().Length > 0 ? parts[1].Trim() : null;
+        var color = parts.Length > 2 ? ParseEdTileColor(parts[2]) : EdTileColor.Orange;
+        bool blink = parts.Length > 3 &&
+                     string.Equals(parts[3].Trim(), "blink", System.StringComparison.OrdinalIgnoreCase);
+        return (state, keys, color, blink);
+    }
+
+    /// <summary>Rebuilds the wire value. Trailing fields are only written when they differ from
+    /// the defaults (orange, steady), so an untouched tile keeps the plain <c>"gear"</c> /
+    /// <c>"gear|L"</c> shape it has always had and nothing that reads those values has to
+    /// change.</summary>
+    public static string BuildEdStatusValue(string state, string? keys, EdTileColor color, bool blink)
+    {
+        bool hasKeys = !string.IsNullOrWhiteSpace(keys);
+        string k = hasKeys ? keys!.Trim() : "";
+
+        if (blink) return $"{state}|{k}|{EdTileColorName(color)}|blink";
+        if (color != EdTileColor.Orange) return $"{state}|{k}|{EdTileColorName(color)}";
+        return hasKeys ? $"{state}|{k}" : state;
+    }
+
+    public static string EdTileColorName(EdTileColor c) => c switch
+    {
+        EdTileColor.Green => "green",
+        EdTileColor.Red   => "red",
+        _                 => "orange",
+    };
+
+    private static EdTileColor ParseEdTileColor(string? s) => (s ?? "").Trim().ToLowerInvariant() switch
+    {
+        "green" => EdTileColor.Green,
+        "red"   => EdTileColor.Red,
+        _       => EdTileColor.Orange,
+    };
+
     public static string LiveTileSummary(string? actionType, string? actionValue)
     {
         string value = (actionValue ?? "").Trim();
+
+        // An Elite tile may carry a per-key shortcut override after a bar ("gear|Ctrl + G");
+        // the summary names the STATE, the override is an implementation detail of the press.
+        if (actionType == "dp_edstatus")
+            value = SplitEdStatusValue(value).State;
 
         if (actionType == "dp_sysmon")
         {
@@ -380,11 +761,21 @@ public static class ActionTypeHelper
             }
         }
 
+        // A screen probe names itself: the label captured when the probe was picked.
+        if (actionType == "dp_screen")
+            return ParseScreenValue(value) is { } probe && probe.Label.Length > 0
+                ? probe.Label
+                : Loc.Get("act_dp_screen");
+
+        // EdStatusItems carries a 3rd field (the picker's family heading) the other tables don't;
+        // projected away here so all four share one lookup.
         var table = actionType switch
         {
             "dp_clock"     => ClockModes,
             "dp_sysmon"    => SysMonMetrics,
             "dp_speedtest" => SpeedTestMetrics,
+            "dp_edstatus"  => Array.ConvertAll(EdStatusItems, i => (i.Value, i.LocKey)),
+            "dp_zcstatus"  => Array.ConvertAll(ZcStatusItems, i => (i.Value, i.LocKey)),
             _              => Array.Empty<(string Value, string LocKey)>(),
         };
         foreach (var (v, locKey) in table)
@@ -445,7 +836,9 @@ public static class ActionTypeHelper
             "youtube"  => string.IsNullOrEmpty(val) ? Loc.Get("act_youtube") : val,
             "pyscript" => Loc.Get("act_pyscript"),
             "dp_emojibrowser" => Loc.Get("act_emojibrowser"),
-            "dp_clock" or "dp_sysmon" or "dp_speedtest" => LiveTileSummary(actionType, actionValue),
+            "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus"
+                or "dp_screen"
+                       => LiveTileSummary(actionType, actionValue),
             _          => IsUnrecognized(actionType) ? Loc.Get("act_unrecognized") : actionType ?? "",
         };
     }

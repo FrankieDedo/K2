@@ -34,6 +34,7 @@ public partial class DiscordProfileConfigWindow : Window
         CkDiscordReturn.IsChecked = DiscordStore.VoicePageReturnEnabled;
         TxtDiscordReturnSec.Text = DiscordStore.VoicePageReturnSeconds.ToString(CultureInfo.InvariantCulture);
         CkDiscordBackArrow.IsChecked = DiscordStore.VoicePageBackArrow;
+        CkDiscordForeground.IsChecked = DiscordStore.VoicePageForegroundOnly;
     }
 
     private void BtnDiscordAccount_Click(object sender, RoutedEventArgs e)
@@ -149,6 +150,7 @@ public partial class DiscordProfileConfigWindow : Window
         DiscordStore.PushToTalkHotkey = TxtDiscordPttHotkey.Text.Trim();
         DiscordStore.VoicePageReturnEnabled = CkDiscordReturn.IsChecked == true;
         DiscordStore.VoicePageBackArrow = CkDiscordBackArrow.IsChecked == true;
+        DiscordStore.VoicePageForegroundOnly = CkDiscordForeground.IsChecked == true;
         if (int.TryParse(TxtDiscordReturnSec.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int sec))
             DiscordStore.VoicePageReturnSeconds = sec;   // setter clamps to a sane range
         Close();

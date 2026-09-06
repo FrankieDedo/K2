@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using K2.App.Models;
@@ -10,7 +10,7 @@ namespace K2.App;
 /// <summary>
 /// MainWindow partial: Home tab — a grid of cards, one per currently connected
 /// device (mirrors Base Camp's own device-picker screen), each linking to its
-/// top-level tab. Rebuilt from scratch on every call (cheap: a handful of items)
+/// top-level tab, in the same order as the tab strip. Rebuilt from scratch on every call (cheap: a handful of items)
 /// rather than diffed, whenever ANY device's connection state — or, for Everest
 /// Max/60, its attached accessories — changes. See call sites: SetDeviceTabVisible
 /// (MainWindow.xaml.cs), DpRefreshDevices (MainWindow.DisplayPad.cs),
@@ -21,42 +21,45 @@ public partial class MainWindow
 {
     private readonly System.Collections.ObjectModel.ObservableCollection<HomeDeviceTile> _homeTiles = new();
 
-    /// <summary>Rebuilds the Home tab's tile grid from the current tab visibility/
-    /// header state — same fixed order as the tab strip (Everest Max > Everest 60 >
-    /// Makalu > DisplayPad > MacroPad). Only tabs that are actually Visible (i.e.
-    /// connected — see SetDeviceTabVisible) get a tile.</summary>
+    /// <summary>Rebuilds the Home tab's tile grid by walking the top-level tab strip
+    /// in its CURRENT order — so the cards always match the tabs, including the
+    /// user-defined device order (see MainWindow.DeviceOrder.cs, applied first here).
+    /// Only tabs that are actually Visible (i.e. connected — see SetDeviceTabVisible)
+    /// get a tile.</summary>
     private void RefreshHomeTiles()
     {
+        ApplyDeviceOrder();
         _homeTiles.Clear();
 
-        if (TabEverest.Visibility == Visibility.Visible)
-            _homeTiles.Add(new HomeDeviceTile(
-                TabEverest.Header as string ?? Loc.Get("tab_everest"),
-                HomeImage(EvHomeImageFile()), TabEverest,
-                imageWidth: 330, imageHeight: 225)); // enlarged artwork per user request
+        foreach (var tab in TcDevices.Items.OfType<TabItem>())
+        {
+            if (ReferenceEquals(tab, TabHome) || tab.Visibility != Visibility.Visible) continue;
+            string tag = tab.Tag as string ?? "";
 
-        if (TabEverest60.Visibility == Visibility.Visible)
-            _homeTiles.Add(new HomeDeviceTile(
-                TabEverest60.Header as string ?? Loc.Get("tab_everest60"),
-                HomeImage(Ev60HomeImageFile()), TabEverest60));
-
-        if (TabMakalu.Visibility == Visibility.Visible)
-            _homeTiles.Add(new HomeDeviceTile(
-                TabMakalu.Header as string ?? Loc.Get("tab_makalu"),
-                HomeImage(MkHomeImageFile()), TabMakalu));
-
-        // DisplayPad: one tile per connected unit (its tabs are added/removed
-        // outright by DpRefreshDevices, not toggled via SetDeviceTabVisible).
-        foreach (var dpTab in TcDevices.Items.OfType<TabItem>()
-                     .Where(t => (t.Tag as string)?.StartsWith("dp_") == true))
-            _homeTiles.Add(new HomeDeviceTile(
-                dpTab.Header as string ?? Loc.Get("tab_displaypad"),
-                HomeImage("displaypad.png"), dpTab));
-
-        if (TabMacroPad.Visibility == Visibility.Visible)
-            _homeTiles.Add(new HomeDeviceTile(
-                TabMacroPad.Header as string ?? Loc.Get("tab_macropad"),
-                HomeImage("macropad.png"), TabMacroPad));
+            if (ReferenceEquals(tab, TabEverest))
+                _homeTiles.Add(new HomeDeviceTile(
+                    tab.Header as string ?? Loc.Get("tab_everest"),
+                    HomeImage(EvHomeImageFile()), tab,
+                    imageWidth: 330, imageHeight: 225)); // enlarged artwork per user request
+            else if (ReferenceEquals(tab, TabEverest60))
+                _homeTiles.Add(new HomeDeviceTile(
+                    tab.Header as string ?? Loc.Get("tab_everest60"),
+                    HomeImage(Ev60HomeImageFile()), tab));
+            else if (ReferenceEquals(tab, TabMakalu))
+                _homeTiles.Add(new HomeDeviceTile(
+                    tab.Header as string ?? Loc.Get("tab_makalu"),
+                    HomeImage(MkHomeImageFile()), tab));
+            // DisplayPad: one tile per connected unit (its tabs are added/removed
+            // outright by DpRefreshDevices, not toggled via SetDeviceTabVisible).
+            else if (tag.StartsWith("dp_"))
+                _homeTiles.Add(new HomeDeviceTile(
+                    tab.Header as string ?? Loc.Get("tab_displaypad"),
+                    HomeImage("displaypad.png"), tab));
+            else if (ReferenceEquals(tab, TabMacroPad))
+                _homeTiles.Add(new HomeDeviceTile(
+                    tab.Header as string ?? Loc.Get("tab_macropad"),
+                    HomeImage("macropad.png"), tab));
+        }
 
         PnlHomeEmpty.Visibility  = _homeTiles.Count == 0 ? Visibility.Visible   : Visibility.Collapsed;
         ScrHomeTiles.Visibility  = _homeTiles.Count == 0 ? Visibility.Collapsed : Visibility.Visible;

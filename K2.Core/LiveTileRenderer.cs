@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -188,6 +188,796 @@ public static class LiveTileRenderer
             return Save(canvas, outputPngPath);
         }
         catch { return false; }
+    }
+
+    /// <summary>
+    /// Segmented variant of <see cref="TryRenderGauge"/>: the same 270° dial, but cut into
+    /// <paramref name="segments"/> discrete blocks that light up one by one instead of a
+    /// continuous sweep — the way a game's own AP pips or a gauge's tick marks read.
+    ///
+    /// <para>Every segment is drawn twice: dim for the track, bright for the ones that are
+    /// filled, so an empty dial still shows how many there ARE. That matters for the small
+    /// counts (3 action points), where "2 of 3" has to be legible at a glance; a large count
+    /// (health) is passed a fixed dozen ticks instead, since a 35-block dial would just be a
+    /// dashed ring.</para>
+    ///
+    /// <para><paramref name="accent"/> is passed in rather than taken from the ambient icon
+    /// theme: these dials belong to a game profile and wear the GAME's colour, which is the
+    /// whole point of the tile reading as part of the game's own HUD.</para>
+    /// </summary>
+    public static bool TryRenderSegmentedGauge(string valueText, double? fraction, string caption,
+                                               int size, string outputPngPath,
+                                               Color accent, int segments,
+                                               TileEmphasis emphasis = TileEmphasis.ShadowLitCore)
+    {
+        try
+        {
+            segments = Math.Clamp(segments, 1, 24);
+            using var canvas = new Bitmap(size, size);
+            using (var g = NewGraphics(canvas, size))
+            {
+                bool withCaption = caption.Length > 0;
+
+                if (fraction is double f)
+                {
+                    float ring = size * (withCaption ? 0.46f : 0.76f);
+                    float left = (size - ring) / 2f;
+                    float top = withCaption ? size * 0.04f : (size - ring) / 2f;
+                    float thickness = Math.Max(3f, size * 0.075f);
+                    var rect = new RectangleF(left + thickness / 2f, top + thickness / 2f,
+                                              ring - thickness, ring - thickness);
+
+                    DrawSegmentedDial(g, rect, thickness, segments, f, accent, emphasis, size);
+                    float inner = ring * 0.62f;
+                    DrawFitted(g, valueText,
+                               new RectangleF(left + (ring - inner) / 2f, top + (ring - inner) / 2f, inner, inner),
+                               size * 0.30f, TextColor);
+                }
+                else
+                {
+                    DrawCenteredValue(g, valueText,
+                        new RectangleF(size * 0.06f, 0, size * 0.88f,
+                                       withCaption ? size * ValueBottomWithCaption : size),
+                        size, TextColor);
+                }
+
+                if (withCaption)
+                    DrawSegmentedCaption(g, size, caption, emphasis);
+            }
+            return Save(canvas, outputPngPath);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Widths (as a multiple of the segment's own thickness) and alphas of the halo
+    /// passes, widest and faintest first. Three strokes rather than a real blur: on a 102 px key
+    /// the difference is not visible and this costs three DrawArc calls instead of a full-tile
+    /// convolution.
+    ///
+    /// <para>Tuned TIGHT: the innermost pass is nearly opaque and barely wider than the block
+    /// itself, so the white sits right on the edge of the lit segment and falls away fast. A wide
+    /// faint cloud reads as fog on a key this small — the light has to look like it comes off the
+    /// segment, not like the segment is behind frosted glass.</para></summary>
+    private static readonly (float WidthScale, int Alpha)[] GlowPasses =
+        { (1.62f, 46), (1.34f, 120), (1.14f, 225) };
+
+    /// <summary>Draws the 270 degree segmented dial — the shared half of every tile that carries
+    /// one: the unlit track, the shadow under the lit blocks, their colour, and the lit core
+    /// inside them. Split out of <see cref="TryRenderSegmentedGauge"/> when the squad tile needed
+    /// the same dial around a different centre, so the two can never drift apart.</summary>
+    private static void DrawSegmentedDial(Graphics g, RectangleF rect, float thickness,
+                                          int segments, double? fraction, Color accent,
+                                          TileEmphasis emphasis, int size)
+    {
+        if (fraction is not double f) return;
+        segments = Math.Clamp(segments, 1, 24);
+
+            // The gap eats into each segment's own share, so more segments means thinner
+            // blocks rather than a dial that grows past its 270°.
+            float share = 270f / segments;
+            float gap = Math.Min(share * 0.30f, 7f);
+            float block = share - gap;
+
+            // How many are lit: rounded, but never rounded away — any non-zero reading
+            // keeps at least one block, because "1 HP left" must not look like death.
+            int lit = (int)Math.Round(Math.Clamp(f, 0d, 1d) * segments);
+            if (f > 0 && lit == 0) lit = 1;
+
+            using var dim = new Pen(Dim(accent, 0.22f), thickness) { StartCap = LineCap.Flat, EndCap = LineCap.Flat };
+            using var on = new Pen(accent, thickness) { StartCap = LineCap.Flat, EndCap = LineCap.Flat };
+
+            // ORDER MATTERS, and it is the whole of this method's shape:
+            //   1. every block's shadow — lit AND unlit, so the dial is seated on the frame art as
+            //      one object instead of only where it happens to be lit;
+            //   2. the unlit track;
+            //   3. the lit blocks and their cores.
+            // Drawing a lit block's shadow after the unlit ones would smear it across its dark
+            // neighbours; underneath everything, it darkens the art and nothing else.
+            if (emphasis is TileEmphasis.Shadow or TileEmphasis.ShadowLitCore)
+                foreach (var (widthScale, alpha) in ShadowPasses)
+                {
+                    using var shadow = new Pen(Color.FromArgb(alpha, Color.Black), thickness * widthScale)
+                        { StartCap = LineCap.Round, EndCap = LineCap.Round };
+                    for (int i = 0; i < segments; i++)
+                        g.DrawArc(shadow, rect, 135f + i * share + gap / 2f, block);
+                }
+
+            for (int i = lit; i < segments; i++)
+                g.DrawArc(dim, rect, 135f + i * share + gap / 2f, block);
+
+            // The old white halo, kept as a mode.
+            if (emphasis == TileEmphasis.WhiteHalo)
+            {
+                Color halo = TowardsWhite(accent, 0.88f);
+                foreach (var (widthScale, alpha) in GlowPasses)
+                {
+                    using var glow = new Pen(Color.FromArgb(alpha, halo), thickness * widthScale)
+                        { StartCap = LineCap.Round, EndCap = LineCap.Round };
+                    for (int i = 0; i < lit; i++)
+                        g.DrawArc(glow, rect, 135f + i * share + gap / 2f, block);
+                }
+            }
+
+            // The block's own colour, full width.
+            for (int i = 0; i < lit; i++)
+                g.DrawArc(on, rect, 135f + i * share + gap / 2f, block);
+
+            // The lit core: progressively thinner, progressively whiter strokes down the
+            // MIDDLE of the same arc. Nothing is drawn outside the block, so the light
+            // cannot bridge the dial's gaps — the pips stay countable however bright the
+            // centre gets, which is what an outward bloom could not promise.
+            if (emphasis == TileEmphasis.ShadowLitCore)
+            {
+                // Inset along the arc as well as across it: without this the core runs
+                // right into the block's short edges and the white reads as a bar with
+                // blue sides rather than a light sitting inside a blue block.
+                //
+                // Measured in the ARC's own geometry, not as a share of the block: the
+                // pull-back that has to happen is half the stroke's width, and that is a
+                // fixed number of pixels whatever the block's length — a percentage would
+                // leave a 12-block dial's short segments touching their edges while
+                // over-trimming a 3-block one. Capped so a very short block keeps a core.
+                float radius = (rect.Width + rect.Height) / 4f;
+                float degPerPixel = (float)(180d / Math.PI / Math.Max(radius, 1f));
+                float insetDeg = thickness / 2f * degPerPixel;
+                float inset = Math.Min(insetDeg * CoreEndInsetScale, block * CoreMaxInsetShare);
+
+                // The core's SHAPE follows the block's. A long block (a dial of three)
+                // is a bar lying along the arc: the light keeps its length and narrows
+                // across the thickness, which is what makes it read as a lit tube.
+                //
+                // A short block (a dial of twelve) is nearly square, and a bar of light
+                // inside it points the wrong way whichever axis you pick — so there the
+                // core shrinks on BOTH axes at once: a smaller square of light floating
+                // inside the block, fading out on every side.
+                float arcLength = block / degPerPixel;
+                bool squareBlock = arcLength < thickness * SquareBlockRatio;
+
+                float usableSweep = block - inset * 2f;
+                float usableWidth = Math.Max(thickness - inset / degPerPixel * 2f, 1f);
+
+                // One pad-pixel of extra reach on a square core, centre and falloff
+                // alike. Expressed as a fraction of the tile rather than a literal 1f:
+                // the same tile is also drawn at preview sizes, where a hard-coded pixel
+                // would be a different amount of light.
+                float widen = size / (float)DpPixelReference;
+
+                foreach (var (scale, alpha) in CorePasses)
+                {
+                    // Radially the falloff is allowed to spill one pixel PAST the block,
+                    // top and bottom. Nothing sits above or below a segment — its
+                    // neighbours are beside it along the arc — so the light can breathe
+                    // there without blurring two pips into one.
+                    float penWidth = squareBlock
+                        ? Math.Min(usableWidth * scale + widen * 2f, thickness + widen * 2f)
+                        : thickness * scale;
+                    float sweep = squareBlock
+                        ? Math.Min(usableSweep * scale + widen * degPerPixel, block)
+                        : usableSweep;
+                    // Both axes shrink around the block's own centre, so the light stays
+                    // centred in it instead of creeping towards one end.
+                    float lead = gap / 2f + inset + (usableSweep - sweep) / 2f;
+
+                    // A square core shrinks on two axes at once, so each pass leaves far
+                    // less ink than the bar's does and the ladder as a whole comes out
+                    // pale. The boost buys back the brightness WITHOUT shortening the
+                    // ladder, which is what keeps the falloff soft.
+                    int ink = squareBlock
+                        ? Math.Min((int)(alpha * SquareCoreBoost), 255)
+                        : alpha;
+                    using var core = new Pen(Color.FromArgb(ink, CoreLight(accent)),
+                                             Math.Max(penWidth, 0.6f))
+                    {
+                        // Flat caps on a square core: rounded ones turn the little block
+                        // of light into a dot as it shrinks.
+                        StartCap = squareBlock ? LineCap.Flat : LineCap.Round,
+                        EndCap   = squareBlock ? LineCap.Flat : LineCap.Round,
+                    };
+                    for (int i = 0; i < lit; i++)
+                        g.DrawArc(core, rect, 135f + i * share + lead, sweep);
+                }
+            }
+    }
+
+    /// <summary>
+    /// The squad-member tile: one soldier's health AND action points on a single key.
+    ///
+    /// <para>Health is the segmented dial plus the number, pushed to the LEFT of the dial's
+    /// middle with a heart under it — the heart sits in the arc's own gap at the bottom, which is
+    /// otherwise dead space, so the reading gains an icon without giving up any room. Action
+    /// points are three horizontal bars stacked on the right, lit one per point: on a key this
+    /// small a second dial would be unreadable, while bars are countable at a glance.</para>
+    ///
+    /// <para>Everything wears the same treatment as the dial — shadow underneath, a soft lit core
+    /// inside — only along a straight line instead of an arc, so the two halves of the tile read
+    /// as one object.</para>
+    /// </summary>
+    public static bool TryRenderUnitTile(string healthText, double? healthFraction,
+                                         int actionPoints, int maxActionPoints,
+                                         string caption, int size, string outputPngPath,
+                                         Color accent, bool withDial = true,
+                                         TileEmphasis emphasis = TileEmphasis.ShadowLitCore)
+    {
+        try
+        {
+            using var canvas = new Bitmap(size, size);
+            using (var g = NewGraphics(canvas, size))
+            {
+                bool withCaption = caption.Length > 0;
+
+                // The readout lives in the tile's upper band, above the caption strip.
+                float bandTop = size * 0.04f;
+                float bandHeight = (withCaption ? size * SegCaptionTop : (float)size) - bandTop;
+
+                // Left column: the health reading. Right column: the action-point bars. The
+                // split is fixed rather than measured so a three-digit health and a one-digit
+                // one put their bars in the same place — a row of these keys sits side by side
+                // on the pad and the bars have to line up across them.
+                float leftWidth = size * 0.58f;
+
+                if (withDial)
+                {
+                    // The dial keeps the health company on the left. It is allowed to run a
+                    // little TALLER than the band — the caption strip below starts with its own
+                    // padding, so the extra height costs nothing — because the band's height,
+                    // not the column's width, is what was holding the dial small.
+                    float ring = Math.Min(leftWidth * 1.02f, bandHeight * 1.08f);
+                    float left = size * DialLeftMargin + (leftWidth - ring) / 2f;
+                    float top = bandTop + (bandHeight - ring) / 2f;
+                    float thickness = Math.Max(2.5f, size * 0.062f);
+                    var rect = new RectangleF(left + thickness / 2f, top + thickness / 2f,
+                                              ring - thickness, ring - thickness);
+                    DrawSegmentedDial(g, rect, thickness, HealthDialTicks,
+                                      healthFraction, accent, emphasis, size);
+
+                    // The number gets the dial's whole inner width and sits low in it, the way
+                    // the plain gauge tiles read — the heart then tucks into the arc's gap
+                    // underneath instead of pushing the reading up.
+                    // No heart any more: the number owns the dial's inside, so it is drawn as
+                    // big as the dial allows. DrawFitted only shrinks when the string does not
+                    // fit, which for this box means from three digits up — two digits always
+                    // come out at the full size, and that is the common case.
+                    // Centred on the DIAL, both axes: the arc's gap is at the bottom, so a box
+                    // pushed up to clear it (as it was when the heart lived there) now just reads
+                    // as a number sitting high in its own circle.
+                    float inner = ring * 0.80f;
+                    var numberBox = new RectangleF(left + (ring - inner) / 2f,
+                                                   top + (ring - inner) / 2f, inner, inner);
+                    DrawFitted(g, healthText, numberBox, size * 0.50f, TextColor,
+                               boostPx: 0f, semibold: true);
+
+                }
+                else
+                {
+                    // No dial: the number gets the whole left column and the heart sits under it.
+                    var numberBox = new RectangleF(size * 0.045f, bandTop, leftWidth, bandHeight);
+                    DrawFitted(g, healthText, numberBox, size * 0.50f, TextColor,
+                               boostPx: 0f, semibold: true);
+                }
+
+                // Three bars, equally spaced, lit from the top down.
+                int bars = Math.Max(maxActionPoints, 1);
+                float barLeft = size * 0.045f + leftWidth + size * 0.03f;
+                float barRight = size * 0.93f;
+                float barThickness = Math.Max(2f, size * 0.075f);
+                float span = bandHeight * 0.62f;
+                float firstY = bandTop + (bandHeight - span) / 2f;
+                float step = bars > 1 ? span / (bars - 1) : 0f;
+
+                // Same three phases as the dial — all the shadows, then the dark bars, then
+                // the lit ones — so a lit bar's shadow never lands on top of the bar above it.
+                for (int i = 0; i < bars; i++)
+                    DrawBarShadow(g, barLeft, barRight, BarY(i), barThickness, emphasis);
+                for (int i = 0; i < bars; i++)
+                    DrawBarBody(g, barLeft, barRight, BarY(i), barThickness,
+                                accent, i < actionPoints, emphasis, size);
+
+                float BarY(int i) => bars > 1 ? firstY + i * step : bandTop + bandHeight / 2f;
+
+                if (withCaption) DrawSegmentedCaption(g, size, caption, emphasis);
+            }
+            return Save(canvas, outputPngPath);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>How far in from the tile's left edge the health dial starts. Smaller than the
+    /// right-hand margin on purpose: the dial is the reading the eye goes to first, and pulling
+    /// it outwards buys the action-point bars the room they need on the other side.</summary>
+    private const float DialLeftMargin = 0.02f;
+
+    /// <summary>The dark pad under one action-point bar. Drawn for EVERY bar, lit or not, and
+    /// for all of them before any bar body — see the call site: a shadow painted after its
+    /// neighbours would darken them instead of the art.</summary>
+    private static void DrawBarShadow(Graphics g, float x0, float x1, float y, float thickness,
+                                      TileEmphasis emphasis)
+    {
+        if (emphasis is not (TileEmphasis.Shadow or TileEmphasis.ShadowLitCore)) return;
+
+        foreach (var (widthScale, alpha) in ShadowPasses)
+            using (var shadow = new Pen(Color.FromArgb(alpha, Color.Black), thickness * widthScale)
+                       { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                g.DrawLine(shadow, x0, y, x1, y);
+    }
+
+    /// <summary>One action-point bar: the same colour and lit-core stack the dial's blocks carry,
+    /// so the two halves of the tile belong together. An unlit bar is the dim track alone,
+    /// exactly like an unlit block.</summary>
+    private static void DrawBarBody(Graphics g, float x0, float x1, float y, float thickness,
+                                    Color accent, bool lit, TileEmphasis emphasis, int size)
+    {
+        if (!lit)
+        {
+            using var dim = new Pen(Dim(accent, 0.22f), thickness) { StartCap = LineCap.Flat, EndCap = LineCap.Flat };
+            g.DrawLine(dim, x0, y, x1, y);
+            return;
+        }
+
+        using (var on = new Pen(accent, thickness) { StartCap = LineCap.Flat, EndCap = LineCap.Flat })
+            g.DrawLine(on, x0, y, x1, y);
+
+        if (emphasis != TileEmphasis.ShadowLitCore) return;
+
+        // Same ladder as the dial's long blocks: the light narrows across the stroke and stops
+        // short of the ends, so it reads as something lit inside the bar rather than a shorter
+        // bar drawn on top of it.
+        float widen = size / (float)DpPixelReference;
+        float inset = thickness / 2f + widen;
+        foreach (var (scale, alpha) in CorePasses)
+        {
+            using var core = new Pen(Color.FromArgb(alpha, CoreLight(accent)),
+                                     Math.Max(thickness * scale, 0.6f))
+                { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            g.DrawLine(core, x0 + inset, y, x1 - inset, y);
+        }
+    }
+
+    /// <summary>Blocks in the health dial of a squad tile. Health runs to dozens, so it gets a
+    /// fixed scale of ticks rather than one block per point — the same count
+    /// <c>DpLiveTileService</c> passes for a standalone health gauge, kept in step by hand
+    /// because the two live on opposite sides of the K2.Core/K2.App line.</summary>
+    private const int HealthDialTicks = 12;
+
+    /// <summary>An ability tile: the game's own ability icon over the profile's frame, with the
+    /// ability name underneath.
+    ///
+    /// <para>The icon is a PNG on disk, not something read from the game — the artwork lives in
+    /// the game's IoStore container, which nothing here can open. See
+    /// <c>ZeroCompanyClient.AbilityIconPath</c> for where the files are expected and what happens
+    /// when one is missing: the tile falls back to the caption alone, which is exactly the tile
+    /// this replaces, so a half-populated icon folder degrades one key at a time.</para>
+    ///
+    /// <para>The icon is tinted with the tile's accent when it is a flat white/alpha glyph, and
+    /// drawn as-is when it has colour of its own — decided by <paramref name="tint"/>.</para>
+    /// </summary>
+    /// <param name="iconScale">Fraction of the usual icon box to draw into. 1 for a real ability
+    /// icon; smaller for the placeholder art of an EMPTY slot, which should read as furniture
+    /// inside the frame rather than as another ability.</param>
+    /// <param name="iconOpacity">Alpha the icon is drawn at, for the same reason — an empty slot's
+    /// glyph is faded so a full row of real abilities still stands out from the gaps in it. This
+    /// is the ONE place the "don't dim the artwork" rule above is deliberately broken: here the
+    /// dimness IS the meaning, because there is no ability behind the picture at all.</param>
+    public static bool TryRenderAbilityTile(string? iconPath, string caption, bool lit,
+                                            int size, string outputPngPath, Color accent,
+                                            bool tint = false,
+                                            TileEmphasis emphasis = TileEmphasis.ShadowLitCore,
+                                            float iconScale = 1f, float iconOpacity = 1f)
+    {
+        try
+        {
+            using var canvas = new Bitmap(size, size);
+            using (var g = NewGraphics(canvas, size))
+            {
+                // The icon owns the whole key: no caption, and only enough margin to keep it off
+                // the frame art's lit border. The game's icons carry their own padding inside the
+                // 512x512 square, so the inset here is deliberately small — anything larger and
+                // the glyph reads as a stamp floating in the middle of the tile.
+                bool withCaption = caption.Length > 0;
+                float box = size * IconTileFill * iconScale;
+                var rect = new RectangleF((size - box) / 2f, (size - box) / 2f, box, box);
+
+                if (iconPath is { Length: > 0 } && File.Exists(iconPath))
+                {
+                    // The box is square; the PNG need not be. The game's own ability icons are
+                    // (128x128), but the placeholder art is not, and stretching it to the square
+                    // made a squat, fat silhouette. Fit inside the box and keep the ratio.
+                    // The icon is drawn as it is. Whether the ability is usable is said by the
+                    // FRAME behind it — the profile ships a lit and an unlit one and the painter
+                    // picks between them — so dimming the artwork on top would say it twice, and
+                    // badly: a washed-out icon reads as a broken render, not as "unavailable".
+                    using var icon = new Bitmap(iconPath);
+                    if (icon.Width != icon.Height && icon.Width > 0 && icon.Height > 0)
+                    {
+                        float k = Math.Min(box / icon.Width, box / icon.Height);
+                        float w = icon.Width * k, h = icon.Height * k;
+                        rect = new RectangleF((size - w) / 2f, (size - h) / 2f, w, h);
+                    }
+
+                    if (tint || iconOpacity < 1f)
+                    {
+                        var matrix = new System.Drawing.Imaging.ColorMatrix
+                        {
+                            Matrix00 = tint ? accent.R / 255f : 1f,
+                            Matrix11 = tint ? accent.G / 255f : 1f,
+                            Matrix22 = tint ? accent.B / 255f : 1f,
+                            Matrix33 = iconOpacity,
+                        };
+                        using var attrs = new System.Drawing.Imaging.ImageAttributes();
+                        attrs.SetColorMatrix(matrix);
+                        g.DrawImage(icon,
+                                    new Rectangle((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height),
+                                    0, 0, icon.Width, icon.Height, GraphicsUnit.Pixel, attrs);
+                    }
+                    else
+                    {
+                        g.DrawImage(icon, new Rectangle((int)rect.X, (int)rect.Y,
+                                                        (int)rect.Width, (int)rect.Height));
+                    }
+                }
+                // With no icon file the tile is its caption alone — which is exactly the tile
+                // this replaces, so an icon folder that only covers some abilities degrades one
+                // key at a time instead of all at once.
+
+                if (withCaption) DrawSegmentedCaption(g, size, caption, emphasis);
+            }
+            return Save(canvas, outputPngPath);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>A scroll arrow, for the key that pages a profile's action rows up or down.
+    ///
+    /// <para>Drawn rather than shipped as art: it has to wear the profile's accent and the same
+    /// shadow/lit-core treatment as everything else on the page, and a PNG would have to be
+    /// re-exported for every profile that ever wants one.</para>
+    ///
+    /// <para><paramref name="enabled"/> false draws the arrow dimmed — a key that has nowhere to
+    /// scroll says so instead of vanishing, which would leave a hole in the panel.</para></summary>
+    /// <param name="artPath">The profile's own arrow PNG. When it is there the tile is that
+    /// picture — the profile ships art that matches its frame, and a drawn triangle next to it
+    /// would look like a placeholder. The polygon below stays as the fallback for a profile that
+    /// ships no arrows.</param>
+    public static bool TryRenderScrollArrow(bool down, bool enabled, int size, string outputPngPath,
+                                            Color accent, string? artPath = null,
+                                            TileEmphasis emphasis = TileEmphasis.ShadowLitCore)
+    {
+        try
+        {
+            bool drawnFromArt = false;
+            using var canvas = new Bitmap(size, size);
+            using (var g = NewGraphics(canvas, size))
+            {
+                if (artPath is { Length: > 0 } && File.Exists(artPath))
+                {
+                    // The PNG exactly as it is: no tint and no dimming. The art is drawn for this
+                    // key and already says whether it is available; touching its alpha here only
+                    // made it look like a rendering fault.
+                    using var art = new Bitmap(artPath);
+                    float box = size * IconTileFill;
+                    g.DrawImage(art, new Rectangle((int)((size - box) / 2f), (int)((size - box) / 2f),
+                                                   (int)box, (int)box));
+
+                    drawnFromArt = true;
+                }
+
+                if (!drawnFromArt) DrawArrowShape(g, size, down, enabled, accent, emphasis);
+            }
+            return Save(canvas, outputPngPath);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>The drawn fallback arrow, for a profile that ships none of its own.</summary>
+    private static void DrawArrowShape(Graphics g, int size, bool down, bool enabled,
+                                       Color accent, TileEmphasis emphasis)
+    {
+        {
+                float w = size * 0.44f, h = size * 0.26f;
+                float cx = size / 2f, cy = size / 2f;
+                float tipY = down ? cy + h / 2f : cy - h / 2f;
+                float baseY = down ? cy - h / 2f : cy + h / 2f;
+
+                using var path = new GraphicsPath();
+                path.AddPolygon(new[]
+                {
+                    new PointF(cx - w / 2f, baseY),
+                    new PointF(cx + w / 2f, baseY),
+                    new PointF(cx, tipY),
+                });
+
+                Color ink = enabled ? accent : Dim(accent, 0.35f);
+
+                if (emphasis is TileEmphasis.Shadow or TileEmphasis.ShadowLitCore)
+                    foreach (var (widthScale, alpha) in ShadowPasses)
+                        using (var shadow = new Pen(Color.FromArgb(alpha, Color.Black),
+                                                    size * 0.03f * widthScale)
+                                   { LineJoin = LineJoin.Round })
+                            g.DrawPath(shadow, path);
+
+                using (var fill = new SolidBrush(ink)) g.FillPath(fill, path);
+
+                if (enabled && emphasis == TileEmphasis.ShadowLitCore)
+                    using (var core = new SolidBrush(Color.FromArgb(110, CoreLight(accent))))
+                    {
+                        using var inner = new GraphicsPath();
+                        inner.AddPolygon(new[]
+                        {
+                            new PointF(cx - w / 4f, baseY + (down ? h * 0.16f : -h * 0.16f)),
+                            new PointF(cx + w / 4f, baseY + (down ? h * 0.16f : -h * 0.16f)),
+                            new PointF(cx, tipY + (down ? -h * 0.18f : h * 0.18f)),
+                        });
+                        g.FillPath(core, inner);
+                    }
+        }
+    }
+
+    /// <summary>How a live tile's ink is separated from the art behind it.</summary>
+    public enum TileEmphasis
+    {
+        /// <summary>Near-white halo hugging the ink.</summary>
+        WhiteHalo,
+        /// <summary>Only a soft dark shadow behind the ink — contrast, no extra light.</summary>
+        Shadow,
+        /// <summary>A dark shadow behind everything, and a WHITE CORE running down the middle
+        /// of each lit segment that falls away towards its edges — a block lit from inside, like
+        /// a neon tube, instead of a block with light spilling around it.</summary>
+        ShadowLitCore,
+    }
+
+    /// <summary>Widths and alphas of the dark pad drawn under a lit segment. Wider and much
+    /// softer than the light passes: a shadow that is visible AS a shadow has already failed.</summary>
+    private static readonly (float WidthScale, int Alpha)[] ShadowPasses =
+        { (3.40f, 40), (2.75f, 62), (2.15f, 92), (1.70f, 125), (1.35f, 160) };
+
+    /// <summary>The lit core: fractions of the segment's own thickness, narrowing as they get
+    /// whiter, so the centre line reaches pure white and the colour takes back over within a
+    /// pixel or two. All strictly INSIDE the block — see the call site.</summary>
+    /// <summary>The lit core, as fractions of the segment's own thickness with the alpha each
+    /// pass adds. MANY faint passes rather than a few strong ones: the alphas accumulate, so a
+    /// long ladder of thin layers is what produces a smooth falloff from white to the block's
+    /// colour, while three heavy ones produce visible steps and a hard-edged white bar.</summary>
+    private static readonly (float WidthScale, int Alpha)[] CorePasses =
+    {
+        (0.98f,  6), (0.92f,  8), (0.86f, 10), (0.80f, 12), (0.74f, 14),
+        (0.68f, 17), (0.62f, 20), (0.55f, 24), (0.48f, 29), (0.41f, 35),
+        // The innermost rungs — the ones that make the bright centre — are deliberately 15%
+        // lighter than the ladder's curve would put them: the centre reads as a soft hot spot
+        // rather than a solid white dot, while the outer rungs keep the falloff wide.
+        (0.34f, 37), (0.27f, 46), (0.20f, 60), (0.13f, 81), (0.08f, 106),
+    };
+
+    /// <summary>A block counts as "square" — and gets a square core rather than a bar — once its
+    /// length along the arc drops below this multiple of its thickness.</summary>
+    private const float SquareBlockRatio = 1.35f;
+
+    /// <summary>Opacity multiplier for a square core — see the call site for why it needs one.</summary>
+    private const float SquareCoreBoost = 1.75f;
+
+    /// <summary>The tile size the pixel-denominated tweaks above were judged at — the DisplayPad's
+    /// own icon edge. Anything measured in "pixels" is scaled by size/this so it looks the same
+    /// on the hardware and in the config dialog's larger preview.</summary>
+    private const int DpPixelReference = 102;
+
+    /// <summary>The colour the lit core burns to at its centre: the accent pushed most of the
+    /// way to pure cyan and then part of the way to white — a light cyan rather than white, so
+    /// the hot spot still belongs to the tile's own hue instead of bleaching out of it.</summary>
+    private static Color CoreLight(Color accent) =>
+        TowardsWhite(Blend(accent, Color.FromArgb(0, 255, 255), 0.60f), 0.45f);
+
+    /// <summary>Linear mix of two colours, <paramref name="amount"/> of the way from
+    /// <paramref name="from"/> to <paramref name="to"/>.</summary>
+    private static Color Blend(Color from, Color to, float amount) => Color.FromArgb(
+        from.R + (int)((to.R - from.R) * amount),
+        from.G + (int)((to.G - from.G) * amount),
+        from.B + (int)((to.B - from.B) * amount));
+
+    /// <summary>Multiplier on the "half a stroke width" pull-back at each end of the core (see
+    /// the call site, where it is turned into degrees of arc).</summary>
+    private const float CoreEndInsetScale = 1.15f;
+
+    /// <summary>Ceiling on that pull-back, as a share of the block's own sweep, so a very short
+    /// segment is not trimmed out of existence.</summary>
+    private const float CoreMaxInsetShare = 0.34f;
+
+    /// <summary>Pushes a colour towards white by <paramref name="amount"/> — how the cyan accent
+    /// becomes the near-white the halo is made of, without hard-coding a second colour that would
+    /// stop matching if the profile's accent ever changed.</summary>
+    private static Color TowardsWhite(Color c, float amount) => Color.FromArgb(
+        c.R + (int)((255 - c.R) * amount),
+        c.G + (int)((255 - c.G) * amount),
+        c.B + (int)((255 - c.B) * amount));
+
+    /// <summary>The tile's caption over a soft white halo, so a name reads against the profile's
+    /// own frame art instead of merging into it.
+    ///
+    /// <para>The halo is the SAME caption drawn as a white silhouette on a transparent layer,
+    /// blurred and composited underneath — same font, same wrap, same shrink-to-fit, because it
+    /// goes through the very same drawing call. Doing it as a layer rather than as offset copies
+    /// is what keeps it a glow instead of a bold outline.</para></summary>
+    private static void DrawSegmentedCaption(Graphics g, int size, string caption,
+                                             TileEmphasis emphasis)
+    {
+        try
+        {
+            if (emphasis is TileEmphasis.Shadow or TileEmphasis.ShadowLitCore)
+            {
+                // A ladder from widest-and-faintest to narrowest-and-densest. The shadow has to
+                // reach well past the letters AND be nearly solid where it touches them, and one
+                // blurred layer cannot do both — the wide radius that gives the reach is the same
+                // one that thins out the middle. Each rung adds a little more darkness closer in,
+                // which is what makes the falloff gradual instead of a grey patch with an edge.
+                // The two widest rungs carry most of the weight now. They act FAR from the
+                // glyphs, so leaning on them darkens the art all around the label — under the
+                // last line included, where the frame art is brightest — without hardening the
+                // rim against the letters, which is what the narrow rungs below do.
+                Underlay(g, size, caption, Color.Black, Math.Max(1, size / 5),  gain: 1.25f, times: 2);
+                Underlay(g, size, caption, Color.Black, Math.Max(1, size / 9),  gain: 1.15f, times: 1);
+                Underlay(g, size, caption, Color.Black, Math.Max(1, size / 14), gain: 1.10f, times: 1);
+                Underlay(g, size, caption, Color.Black, Math.Max(1, size / 21), gain: 1.60f, times: 1);
+                Underlay(g, size, caption, Color.Black, Math.Max(1, size / 32), gain: 2.40f, times: 1);
+            }
+
+            if (emphasis == TileEmphasis.WhiteHalo)
+                Underlay(g, size, caption, Color.White, Math.Max(1, size / 52), gain: 3.2f, times: 2);
+        }
+        catch { /* the underlay is decoration: a failure here must not cost us the caption */ }
+
+        DrawCompactCaption(g, size, caption, null);
+    }
+
+    /// <summary>The caption strip of a segmented tile: higher up the key and with tighter leading
+    /// than <c>IconImageGenerator.DrawCaption</c>'s.
+    ///
+    /// <para>Two lines of a name ("LUCO" / "BRONC") are one label, and the font's own line height
+    /// leaves them looking like two separate captions; GDI+ has no leading control, so the lines
+    /// are placed by hand at <see cref="CaptionLeading"/> of the font size. Everything else is
+    /// kept faithful to the shared helper — the same font, the same shrink-to-fit, the same
+    /// per-key "Edit icon" overrides — so these tiles still sit next to the others.</para></summary>
+    private static void DrawCompactCaption(Graphics g, int size, string caption, Color? colorOverride)
+    {
+        caption = IconStyleScope.OverrideCaption ?? caption;
+        if (caption.Length == 0) return;
+
+        string[] lines = caption.Split('\n');
+        // The usable width is narrower than the tile: the frame art has a lit border, and a
+        // caption that runs up against it looks cramped however well it fits geometrically.
+        var strip = new RectangleF(size * 0.09f, size * SegCaptionTop,
+                                   size * 0.82f, size * (SegCaptionBottom - SegCaptionTop));
+
+        float start = (float)(IconStyleScope.OverrideFontSize
+            ?? (Math.Max(9f, size * 0.13f) + 4f) * CaptionFontScaleWithText);
+
+        float fontSize = start;
+        for (; fontSize >= 8f; fontSize -= 1f)
+        {
+            using var probe = IconImageGenerator.CaptionFont(fontSize);
+            bool fits = lines.Length * fontSize * CaptionLeading <= strip.Height;
+            foreach (string line in lines)
+                fits &= g.MeasureString(line, probe).Width <= strip.Width;
+            if (fits) break;
+        }
+
+        using var font = IconImageGenerator.CaptionFont(fontSize);
+        using var brush = new SolidBrush(colorOverride ?? IconStyleScope.OverrideText ?? Color.White);
+        using var format = new StringFormat { Alignment = StringAlignment.Center,
+                                              LineAlignment = StringAlignment.Center };
+
+        float step = fontSize * CaptionLeading;
+        float top = strip.Y + (strip.Height - lines.Length * step) / 2f;
+        for (int i = 0; i < lines.Length; i++)
+            g.DrawString(lines[i], font, brush,
+                         new RectangleF(strip.X, top + i * step, strip.Width, step), format);
+    }
+
+    /// <summary>Caption strip of a segmented tile — a few points higher than the shared one, so
+    /// the label sits closer to its dial and away from the frame art's bottom edge.</summary>
+    /// <summary>How much of the key's edge an ability icon covers. The rest is the margin that
+    /// keeps it clear of the profile frame's glowing border.</summary>
+    private const float IconTileFill = 0.86f;
+
+    private const float SegCaptionTop    = 0.425f;
+    private const float SegCaptionBottom = 0.90f;
+
+    /// <summary>Line height as a multiple of the font size. Below 1 the ascenders and descenders
+    /// of adjacent lines would start to touch.</summary>
+    private const float CaptionLeading = 1.02f;
+
+    /// <summary>Draws the caption as a flat silhouette of <paramref name="colour"/> on its own
+    /// layer, blurs it and composites it under the real text <paramref name="times"/> times.
+    /// Going through the very same <see cref="DrawCompactCaption"/> is what keeps font, layout
+    /// and shrink-to-fit identical, so the underlay can never drift from the letters it belongs
+    /// to.</summary>
+    private static void Underlay(Graphics g, int size, string caption, Color colour,
+                                 int radius, float gain, int times)
+    {
+        // The layer is BIGGER than the tile and the caption is drawn inset into it. The bottom
+        // line of a caption sits close to the tile's edge, so a blur on a same-size layer runs
+        // out of pixels exactly there and the shadow fades away under the last line — which is
+        // the one place it is most needed, since that edge is where the frame art is brightest.
+        int margin = radius + 2;
+        using var layer = new Bitmap(size + margin * 2, size + margin * 2);
+        using (var lg = Graphics.FromImage(layer))
+        {
+            lg.SmoothingMode = SmoothingMode.HighQuality;
+            lg.TextRenderingHint = TextRenderingHint.AntiAlias;
+            lg.TranslateTransform(margin, margin);
+            DrawCompactCaption(lg, size, caption, colour);
+        }
+        BoxBlurAlpha(layer, radius, gain, colour);
+        for (int i = 0; i < times; i++) g.DrawImage(layer, -margin, -margin);
+    }
+
+    /// <param name="gain">Multiplies the blurred alpha before it is written back (clamped at
+    /// full opacity). A gain above 1 is what turns a soft falloff into a solid rim: the pixels
+    /// nearest the ink saturate to white while the far tail still fades out.</param>
+    /// <param name="ink">The flat colour the blurred layer is tinted with — the blur only
+    /// carries alpha, so the silhouette's colour is written back here.</param>
+    private static void BoxBlurAlpha(Bitmap bmp, int radius, float gain, Color ink)
+    {
+        int w = bmp.Width, h = bmp.Height;
+        var data = bmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.ReadWrite,
+                                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        try
+        {
+            int stride = data.Stride;
+            var buf = new byte[stride * h];
+            System.Runtime.InteropServices.Marshal.Copy(data.Scan0, buf, 0, buf.Length);
+
+            var alpha = new float[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                    alpha[y * w + x] = buf[y * stride + x * 4 + 3];
+
+            var tmp = new float[w * h];
+            int span = radius * 2 + 1;
+
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    float sum = 0;
+                    for (int k = -radius; k <= radius; k++)
+                        sum += alpha[y * w + Math.Clamp(x + k, 0, w - 1)];
+                    tmp[y * w + x] = sum / span;
+                }
+
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    float sum = 0;
+                    for (int k = -radius; k <= radius; k++)
+                        sum += tmp[Math.Clamp(y + k, 0, h - 1) * w + x];
+
+                    int a = (int)Math.Clamp(sum / span * gain, 0f, 255f);
+                    int i = y * stride + x * 4;
+                    buf[i]     = ink.B;                       // BGRA order
+                    buf[i + 1] = ink.G;
+                    buf[i + 2] = ink.R;
+                    buf[i + 3] = (byte)a;
+                }
+
+            System.Runtime.InteropServices.Marshal.Copy(buf, 0, data.Scan0, buf.Length);
+        }
+        finally { bmp.UnlockBits(data); }
     }
 
     // Live-tile layout when a generated caption is shown: value up top, a tall caption strip
@@ -398,6 +1188,172 @@ public static class LiveTileRenderer
         return 8f;
     }
 
+    // ─────────────────────── Elite Dangerous status ───────────────────────
+
+    /// <summary>What an Elite Dangerous status tile (<c>dp_edstatus</c>) is showing.</summary>
+    public enum EdState
+    {
+        /// <summary>Game not running, or its status file never written — the tile says so
+        /// instead of claiming the gear is up.</summary>
+        Unknown,
+        /// <summary>The state's bit is clear.</summary>
+        Off,
+        /// <summary>The state's bit is set.</summary>
+        On,
+        /// <summary>Set, and it's something the pilot needs to react to (overheating, low fuel,
+        /// interdiction, flight assist off).</summary>
+        Alarm,
+    }
+
+    // Cockpit palette, taken from the game's own HUD rather than the tile accent: these keys sit
+    // on the desk next to the screen and reading as "part of the cockpit" is the entire point.
+    private static readonly Color EdDefaultAccent = Color.FromArgb(255, 122, 20);   // ED orange
+    private static readonly Color EdAlarm         = Color.FromArgb(232,  66, 46);
+    private static readonly Color EdUnknown       = Color.FromArgb( 70,  70, 74);
+
+    /// <summary>Hue the Elite tiles are drawn in. The caller sets it — the whole profile changes
+    /// colour with the ship's flight-assist state (see <c>GameProfileTheme</c>), so the accent
+    /// cannot be a constant here. Null falls back to the game's own orange.
+    ///
+    /// <para>Deliberately a plain static: every render of this service is serialised on the tile
+    /// timer's single thread (see <c>DpLiveTileService.PushDevice</c>), so there is no window in
+    /// which two renders would disagree about the colour.</para></summary>
+    public static Color? EdAccentOverride { get; set; }
+
+    private static Color EdAccent => EdAccentOverride ?? EdDefaultAccent;
+
+    // "Lit" is the accent brightened towards white, "unlit" the same hue heavily dimmed — derived
+    // rather than hard-coded so a new accent needs one colour, not three.
+    private static Color EdLit => Lighten(EdAccent, 0.42f);
+    private static Color EdUnlit => Dim(EdAccent, 0.42f);
+
+    private static Color Lighten(Color c, float t) => Color.FromArgb(
+        (int)(c.R + (255 - c.R) * t),
+        (int)(c.G + (255 - c.G) * t),
+        (int)(c.B + (255 - c.B) * t));
+
+    private static Color EdColor(EdState s) => s switch
+    {
+        EdState.On      => EdLit,
+        EdState.Alarm   => EdAlarm,
+        EdState.Off     => EdUnlit,
+        _               => EdUnknown,
+    };
+
+    /// <summary>
+    /// Renders one boolean cockpit-state tile: a square annunciator that is hollow when the
+    /// state is off and filled when it's on — the same shape the game's own dashboard uses for
+    /// LANDING GEAR / CARGO SCOOP, so the pad reads like an extension of the panel.
+    /// <para><see cref="EdState.Unknown"/> draws a grey hollow square with a dash: the game
+    /// isn't running, and a tile that looked "off" would be indistinguishable from a real
+    /// retracted gear.</para>
+    /// </summary>
+    public static bool TryRenderEdStatus(EdState state, string caption, int size, string outputPngPath)
+    {
+        try
+        {
+            using var canvas = new Bitmap(size, size);
+            using (var g = NewGraphics(canvas, size))
+            {
+                // NO annunciator shape: an Elite tile is a backlit HUD label over the
+                // profile's cockpit art, and nothing else. The rounded square this used to draw
+                // (hollow when off, filled when on) sat on top of that art and read as a second,
+                // competing widget — dropped on request 2026-09-05. The state is still legible:
+                // ApplyEdStyle picks the lit/dim background and caption colour for it, and the
+                // flight-assist key its red/green pair.
+                //
+                // NOTE the shape of this method: the Save() MUST stay outside the Graphics'
+                // using block. GDI+ keeps the bitmap locked while a Graphics is attached to it,
+                // so saving from in here throws — and the catch below would swallow it into a
+                // silent "tile never renders", which is exactly what an early return did.
+                IconImageGenerator.DrawCenteredText(g, size, caption);
+            }
+            return Save(canvas, outputPngPath);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Renders the SYS/ENG/WEP power distribution as three vertical bars, the cockpit's own
+    /// gauge. The game reports pips in HALF units (0..8 for the four-pip maximum), which is why
+    /// each bar is drawn as four segments that can each be half-lit.
+    /// </summary>
+    public static bool TryRenderEdPips(int sys, int eng, int wep, string caption,
+                                       int size, string outputPngPath)
+    {
+        try
+        {
+            using var canvas = new Bitmap(size, size);
+            using (var g = NewGraphics(canvas, size))
+            {
+                bool withCaption = caption.Length > 0;
+                float areaTop = size * 0.08f;
+                float areaBottom = size * (withCaption ? 0.52f : 0.80f);
+                float areaHeight = areaBottom - areaTop;
+
+                float barW = size * 0.16f;
+                float gap = size * 0.10f;
+                float totalW = barW * 3 + gap * 2;
+                float x0 = (size - totalW) / 2f;
+
+                int[] halves = { Math.Clamp(sys, 0, 8), Math.Clamp(eng, 0, 8), Math.Clamp(wep, 0, 8) };
+                string[] labels = { "S", "E", "W" };
+
+                const int segs = 4;
+                float segGap = areaHeight * 0.06f;
+                float segH = (areaHeight - segGap * (segs - 1)) / segs;
+
+                for (int b = 0; b < 3; b++)
+                {
+                    float x = x0 + b * (barW + gap);
+                    for (int s = 0; s < segs; s++)
+                    {
+                        // Segments fill from the BOTTOM, like the cockpit gauge.
+                        float y = areaBottom - segH - s * (segH + segGap);
+                        var seg = new RectangleF(x, y, barW, segH);
+
+                        int halvesIntoThisSeg = halves[b] - s * 2;      // 2 halves per segment
+                        using var dimBrush = new SolidBrush(EdUnlit);
+                        g.FillRectangle(dimBrush, seg);
+
+                        if (halvesIntoThisSeg > 0)
+                        {
+                            float frac = halvesIntoThisSeg >= 2 ? 1f : 0.5f;
+                            var lit = new RectangleF(seg.X, seg.Bottom - seg.Height * frac,
+                                                     seg.Width, seg.Height * frac);
+                            using var onBrush = new SolidBrush(EdLit);
+                            g.FillRectangle(onBrush, lit);
+                        }
+                    }
+
+                    // Bar letter directly under its bar — SYS/ENG/WEP won't fit at this width.
+                    if (!withCaption)
+                        DrawFitted(g, labels[b],
+                                   new RectangleF(x, areaBottom + size * 0.02f, barW, size * 0.16f),
+                                   size * 0.16f, EdLit);
+                }
+
+                if (withCaption)
+                    IconImageGenerator.DrawCaption(g, size, caption,
+                        topFrac: CaptionTopWithText, startFontScale: CaptionFontScaleWithText);
+            }
+            return Save(canvas, outputPngPath);
+        }
+        catch { return false; }
+    }
+
+    private static GraphicsPath RoundedRect(RectangleF r, float radius)
+    {
+        float d = radius * 2f;
+        var p = new GraphicsPath();
+        p.AddArc(r.Left, r.Top, d, d, 180, 90);
+        p.AddArc(r.Right - d, r.Top, d, d, 270, 90);
+        p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        p.AddArc(r.Left, r.Bottom - d, d, d, 90, 90);
+        p.CloseFigure();
+        return p;
+    }
+
     // ─────────────────────────── Drawing helpers ───────────────────────────
 
     /// <summary>Text/hand color — the per-key "Edit icon" text color when set, white otherwise
@@ -410,7 +1366,7 @@ public static class LiveTileRenderer
         g.SmoothingMode = SmoothingMode.HighQuality;
         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-        g.Clear(IconImageGenerator.TileBackground);
+        IconImageGenerator.PaintTileBackground(g, size);
         IconImageGenerator.ClipToRoundedTile(g, size);
         return g;
     }
@@ -454,8 +1410,17 @@ public static class LiveTileRenderer
     /// <paramref name="startPx"/> until it fits both ways. Same shrink-don't-truncate rule as
     /// <see cref="IconImageGenerator"/>'s captions, but sized for a headline value rather than a
     /// label, and with a hard floor so a pathological string still renders something.</summary>
-    private static void DrawFitted(Graphics g, string text, RectangleF rect, float startPx, Color color)
+    /// <param name="boostPx">Drawn this much larger than the size that measured as fitting.
+    /// A point of deliberate overflow: inside a dial the reading can crowd its box by a pixel
+    /// and still look right, and stepping the shrink loop by whole pixels otherwise costs a
+    /// visible amount of size on a 102 px key.</param>
+    /// <param name="semibold">Force the stock semibold face instead of the key's own font.</param>
+    private static void DrawFitted(Graphics g, string text, RectangleF rect, float startPx, Color color,
+                                   float boostPx = 0f, bool semibold = false)
     {
+        Font Face(float px) =>
+            semibold ? IconImageGenerator.SemiboldFont(px) : IconImageGenerator.CaptionFont(px);
+
         using var brush = new SolidBrush(color);
         using var format = new StringFormat
         {
@@ -465,15 +1430,20 @@ public static class LiveTileRenderer
         };
         for (float px = startPx; px >= 8f; px -= 1f)
         {
-            using var font = IconImageGenerator.CaptionFont(px);
+            using var font = Face(px);
             SizeF measured = g.MeasureString(text, font);
             if (measured.Width <= rect.Width && measured.Height <= rect.Height)
             {
-                g.DrawString(text, font, brush, rect, format);
+                using var drawn = Face(px + boostPx);
+                // The boosted string is drawn into a box grown to match. GDI+ CLIPS a
+                // NoWrap string to its rectangle, so drawing the bigger face into the
+                // original box silently ate the last digit ("24" came out as "2").
+                var grown = RectangleF.Inflate(rect, boostPx * 3f, boostPx * 3f);
+                g.DrawString(text, drawn, brush, grown, format);
                 return;
             }
         }
-        using var smallest = IconImageGenerator.CaptionFont(8f);
+        using var smallest = Face(8f);
         g.DrawString(text, smallest, brush, rect, format);
     }
 

@@ -137,7 +137,8 @@ public partial class TextIconDialog : Window
                           int initialRotation = 0,
                           bool rotationEnabled = true,
                           Func<string?>? getCroppedImagePath = null,
-                          bool textStyleOnly = false)
+                          bool textStyleOnly = false,
+                          bool bgColorLocked = false)
     {
         InitializeComponent();
 
@@ -237,6 +238,13 @@ public partial class TextIconDialog : Window
 
         _textStyleOnly = textStyleOnly;
         if (textStyleOnly) ApplyTextStyleOnlyMode();
+
+        // Default icon on a pad that has a "default icon background" image (and this key hasn't
+        // opted out): the tile background is that image, so the background-colour picker would
+        // do nothing — hide it (mirrors ApplyTextStyleOnlyMode's approach).
+        if (bgColorLocked && !textStyleOnly)
+            foreach (var el in new FrameworkElement[] { LblBgColor, BtnBgColor })
+                el.Visibility = Visibility.Collapsed;
 
         RefreshPreview();
     }

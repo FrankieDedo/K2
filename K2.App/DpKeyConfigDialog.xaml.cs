@@ -45,6 +45,10 @@ public partial class DpKeyConfigDialog : Window
 
     // ---- State ----------------------------------------------------------
     private readonly int _keyIndex;
+
+    /// <summary>Action categories this key may pick from, or null for the ordinary set — see the
+    /// constructor's <c>allowedCategories</c>.</summary>
+    private readonly string[]? _allowedCategories;
     /// <summary>Current image path in the dialog (not yet cropped/rotated on disk —
     /// for GIFs it stays the original file, for static images it's the source loaded
     /// into the CropEditor).</summary>
@@ -73,15 +77,22 @@ public partial class DpKeyConfigDialog : Window
     // Constructor
     // =====================================================================
 
+    /// <param name="allowedCategories">Passed straight to <see cref="ButtonActionDialog"/> to
+    /// restrict which action categories the picker offers — the game profile editor limits its
+    /// keys to Input and Game controls. Null keeps the ordinary set.</param>
     public DpKeyConfigDialog(
         int keyIndex,
         string? currentImagePath,
         string? currentActionType,
         string? currentActionValue,
-        string? iconSpecJson = null)
+        string? iconSpecJson = null,
+        string[]? allowedCategories = null,
+        ButtonActionDialog.GamePickerProfile? gameProfile = null)
     {
         InitializeComponent();
+        _gameProfile = gameProfile;
 
+        _allowedCategories = allowedCategories;
         _keyIndex     = keyIndex;
         _pendingPath  = currentImagePath;
         _originalPath = currentImagePath;
@@ -136,11 +147,21 @@ public partial class DpKeyConfigDialog : Window
         // when the window is loaded.
         Loaded += (_, _) =>
         {
-            // EditIconDisabled/TextStyleOnlyRenderer are assigned by the caller AFTER the
-            // constructor (object-initializer syntax), so the button state is settled here.
+            // EditIconDisabled/TextStyleOnlyRenderer/DefaultBgImagePath are assigned by the
+            // caller AFTER the constructor (object-initializer syntax), so anything that
+            // depends on them is settled here.
+            if (DefaultBgImagePath is not null)
+            {
+                _loadingUi = true;
+                ChkNoDefaultBg.IsChecked = !_spec.NoDefaultBg;   // checkbox = "use the default bg"
+                _loadingUi = false;
+                ChkNoDefaultBg.Visibility = Visibility.Visible;
+            }
             UpdateIconControlsAvailability();
             RefreshActionSummary();
-            if (_spec.DefaultIcon && ActionType == "dp_folder")
+            // Re-render now that DefaultBgImagePath is known (constructor rendered without it),
+            // and always for dp_folder (needs the owner's action host to resolve the name).
+            if (_spec.DefaultIcon && (DefaultBgImagePath is not null || ActionType == "dp_folder"))
             {
                 RegenerateDefaultIcon();
                 RefreshImagePreview();
@@ -169,10 +190,24 @@ public partial class DpKeyConfigDialog : Window
     /// there instead of opening a popup that can only answer "none" (user report 2026-09-01).</summary>
     internal bool EditIconDisabled { get; set; }
 
+    /// <summary>Set by the caller (MainWindow) to the pad's "default icon background" image path
+    /// (Settings tab) when one is configured, else null. When set, a default icon is baked with
+    /// that image behind it instead of the background colour, and this dialog shows the
+    /// "use the default icon background" opt-out checkbox for the key.</summary>
+    internal string? DefaultBgImagePath { get; set; }
+
+    /// <summary>Set by the caller (MainWindow) for a <c>dp_speedtest</c> key: opens the speed-test
+    /// endpoint/payload configuration popup. Null everywhere else — the button that invokes it
+    /// only shows while the key's action is <c>dp_speedtest</c>.</summary>
+    internal Action? OpenSpeedTestConfig { get; set; }
+
+    private void BtnSpeedTestConfig_Click(object sender, RoutedEventArgs e) => OpenSpeedTestConfig?.Invoke();
+
     private DispatcherTimer? _liveTimer;
 
     private static bool IsLiveActionType(string? type) =>
-        type is "dp_clock" or "dp_sysmon" or "dp_speedtest";
+        type is "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus"
+             or "dp_screen";
 
     /// <summary>Starts/stops the 1 Hz preview refresh to match whether the CURRENT action is a
     /// live type with its default icon active — called after every change that could flip
@@ -242,8 +277,28 @@ public partial class DpKeyConfigDialog : Window
         UpdateLiveTimer();
     }
 
+    /// <summary>"Use the default icon background" — only visible when the pad has one configured
+    /// (<see cref="DefaultBgImagePath"/>). Ticked = the key uses the pad image; unticked stores
+    /// the per-key opt-out and hands the key back to its plain background colour (the colour
+    /// picker in "Edit icon" is re-enabled). Re-renders the tile either way.</summary>
+    private void ChkNoDefaultBg_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loadingUi) return;
+        _spec.NoDefaultBg = ChkNoDefaultBg.IsChecked != true;
+        if (_spec.DefaultIcon)
+        {
+            RegenerateDefaultIcon();
+            RefreshImagePreview();
+        }
+    }
+
     private void UpdateIconControlsAvailability()
     {
+        // Speed-test config button: only meaningful while this key runs a speed test.
+        BtnSpeedTestConfig.Visibility =
+            ActionType == "dp_speedtest" && OpenSpeedTestConfig is not null
+                ? Visibility.Visible : Visibility.Collapsed;
+
         bool isDefault = _spec.DefaultIcon;
 
         BtnLoadImage.IsEnabled   = !isDefault;
@@ -332,10 +387,13 @@ public partial class DpKeyConfigDialog : Window
 
             var seed = _spec.Clone();
             seed.Text ??= AutoCaption();   // prefill with the caption the generator would draw
+            // The pad's default background image is in effect for this key → its bg-colour
+            // picker does nothing, so lock it away.
+            bool bgLocked = DefaultBgImagePath is not null && !_spec.NoDefaultBg;
             // No croppable source to hand over — the generator owns the glyph's framing, so
             // the Icon section shows only the rotation picker (no crop viewport).
             var defDlg = new TextIconDialog(DpHidNative.IconSize, null, seed,
-                s => RenderDefaultIcon(s), initialRotation: _rotation) { Owner = this };
+                s => RenderDefaultIcon(s), initialRotation: _rotation, bgColorLocked: bgLocked) { Owner = this };
             if (defDlg.ShowDialog() != true) return;
 
             _spec = defDlg.ResultSpec;
@@ -454,7 +512,16 @@ public partial class DpKeyConfigDialog : Window
 
     private void BtnConfigureAction_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new ButtonActionDialog(_keyIndex, ActionType, ActionValue, (Owner as MainWindow)?._dpActionHost) { Owner = this };
+        // The owner is MainWindow for an ordinary DisplayPad key but GameProfileConfigDialog for
+        // a game-profile one, so fall back to the application's main window — same resolution
+        // ResolvePageName already used. Without the fallback the host came through null, and a
+        // null host reads as "no page concept": ButtonActionDialog then strips every
+        // PageOnlyActionType from its type list, which is what made the "Elite Dangerous status"
+        // card (and the clock/monitor/speed-test ones) vanish from a game profile's picker.
+        var host = (Owner as MainWindow)?._dpActionHost
+                   ?? (Application.Current?.MainWindow as MainWindow)?._dpActionHost;
+        var dlg = new ButtonActionDialog(_keyIndex, ActionType, ActionValue,
+            host, allowedCategories: _allowedCategories, gameProfile: _gameProfile) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
         string? oldType = ActionType, oldValue = ActionValue;
@@ -487,6 +554,7 @@ public partial class DpKeyConfigDialog : Window
     /// <summary>Page name resolved the last time the "Page" action type was configured in
     /// this dialog session — used by <see cref="RefreshActionSummary"/> since <see cref="ActionValue"/>
     /// for "dp_folder" is just the page id, not a human-readable name.</summary>
+    private readonly ButtonActionDialog.GamePickerProfile? _gameProfile;
     private string? _dpFolderName;
 
     /// <summary>Removing the action also clears the key's picture — a picture with no
@@ -553,130 +621,31 @@ public partial class DpKeyConfigDialog : Window
     }
 
     /// <summary>
-    /// Renders the key's default icon — the picture that belongs to its ACTION (the executable's
-    /// own icon, a disk folder's Windows icon, a hand-drawn folder/back/nav glyph, ported Base
-    /// Camp gallery art, or the MDL2 fallback tile) — styled with <paramref name="spec"/>.
+    /// Renders the key's default icon via the shared <see cref="DpDefaultIconRenderer"/> (the
+    /// switch used to live here; extracted 2026-09-02 so the seed sites and the pad-background
+    /// re-render pass share it). Also the delegate <see cref="TextIconDialog"/> calls in
+    /// "default icon" mode, so its live preview is the real tile.
     ///
-    /// The style (background/text color, font, caption text) reaches the generators through
-    /// <see cref="IconStyleScope"/> rather than ~10 extra parameters; see that class.
-    /// Returns the generated PNG's path, or null when this action type has no default icon.
-    /// This is also the delegate <see cref="TextIconDialog"/> calls in "default icon" mode, so
-    /// its live preview is the real tile, rendered by the real generator.
+    /// The style (background image/color, text color, font, caption) reaches the generators
+    /// through <see cref="IconStyleScope"/>; here we first fold in the pad-wide "default icon
+    /// background" image (<see cref="DefaultBgImagePath"/>) unless this key opted out.
     /// </summary>
     private string? RenderDefaultIcon(KeyIconSpec spec, string? pageName = null)
     {
         if (string.IsNullOrEmpty(ActionType)) return null;
 
-        // Caption for the two payload-less action types (see ButtonActionDialog for
-        // "dp_emojibrowser"; "dp_back" is placed by DpEnsureDefaultBackButton and never
-        // carries a value), which therefore have nothing to draw a caption FROM.
-        string? caption = ActionType switch
-        {
-            "dp_emojibrowser" => Loc.Get("emb_caption"),
-            "dp_back"         => Loc.Get("dp_back"),
-            _                 => null,
-        };
-        // Only the generators that DRAW FROM the value need one; every other type can still
-        // get its glyph tile from ActionIconFallback with an empty value (e.g. "disable").
-        bool needsValue = ActionType is "exec" or "folder" or "dp_folder" or "googlehome" or "emoji";
-        if (needsValue && string.IsNullOrWhiteSpace(ActionValue)) return null;
+        // A key that brought its OWN background (a game profile's cockpit-frame art, marked by
+        // TextOnly) keeps it — clearing it here is what made this preview show a plain glyph tile
+        // for a key the pad draws as a backlit label. Same rule as MainWindow's DpWithDefaultBg.
+        if (spec is not { TextOnly: true, BgImagePath.Length: > 0 })
+            spec.BgImagePath = DefaultBgImagePath is not null && !spec.NoDefaultBg
+                ? DefaultBgImagePath : null;
 
-        // ActionValue is the bare page id — without this the tile would read "2407".
+        // ActionValue is the bare page id for dp_folder — resolve it to a name here.
         if (ActionType == "dp_folder")
             pageName ??= _dpFolderName ?? ResolvePageName(ActionValue);
 
-        bool showCaption = spec.ShowText;
-        // The user's own caption (typed in "Edit icon") replaces whatever the generator would
-        // draw; it also reaches the generators that derive their caption internally through
-        // IconStyleScope.OverrideCaption.
-        string? userText = string.IsNullOrWhiteSpace(spec.Text) ? null : spec.Text;
-
-        // Cache key includes the style, so two styled variants of the same action can't
-        // collide on one cached PNG.
-        string dest = AutoIconCachePath(ActionType!,
-            $"{caption ?? ActionValue ?? ""}|{pageName}|{spec.StyleFingerprint}");
-
-        bool ok;
-        using (IconStyleScope.Push(spec))
-        {
-            switch (ActionType)
-            {
-                case "dp_back":
-                    ok = IconImageGenerator.TryGenerateBackIcon(userText ?? caption!, DpHidNative.IconSize, dest, showCaption);
-                    break;
-                // A real (color) emoji rather than a thin MDL2 outline, captioned just "Emoji":
-                // the full action name would be ellipsized on a 102 px tile.
-                case "dp_emojibrowser":
-                    ok = EmojiGlyphRenderer.TryGenerateEmojiIcon(
-                        "\U0001F600", DpHidNative.IconSize, dest, showCaption ? userText ?? caption! : "");
-                    break;
-                case "exec":
-                    ok = IconImageGenerator.TryGenerateExecIcon(ActionValue!, DpHidNative.IconSize, dest);
-                    break;
-                case "folder":
-                    ok = IconImageGenerator.TryGenerateDiskFolderIcon(ActionValue!, DpHidNative.IconSize, dest, showCaption);
-                    break;
-                case "dp_folder":
-                    ok = IconImageGenerator.TryGenerateFolderIcon(pageName ?? ActionValue!, DpHidNative.IconSize, dest, showCaption);
-                    break;
-                case "googlehome":
-                    ok = GoogleHomeIconCatalog.TryGenerateKeyIcon(ActionValue!, DpHidNative.IconSize, dest, showCaption);
-                    break;
-                case "emoji":
-                    ok = EmojiGlyphRenderer.TryGenerateEmojiIcon(ActionValue!, DpHidNative.IconSize, dest);
-                    break;
-                // Live tiles (clock / PC monitor / speed test): what's rendered here is only the
-                // PREVIEW — on the hardware these keys are repainted continuously by
-                // DpLiveTileService, which owns them (see its remarks). Drawn with the real
-                // renderer and the real current values, so the preview is what the key will
-                // actually look like a second from now.
-                case "dp_clock":
-                    ok = LiveTileRenderer.TryRenderClock(ActionValue, DateTime.Now,
-                            showCaption ? userText ?? "" : "", DpHidNative.IconSize, dest);
-                    break;
-                case "dp_sysmon":
-                {
-                    var (text, fraction) = DpLiveTileService.TileValue(ActionType!, ActionValue);
-                    ok = LiveTileRenderer.TryRenderGauge(text, fraction,
-                            showCaption ? userText ?? DpLiveTileService.TileCaption(ActionType!, ActionValue) : "",
-                            DpHidNative.IconSize, dest);
-                    break;
-                }
-                case "dp_speedtest":
-                {
-                    var (text, fraction) = DpLiveTileService.TileValue(ActionType!, ActionValue);
-                    bool isPing = ActionValue == "ping";
-                    ok = LiveTileRenderer.TryRenderSpeedTile(text, fraction,
-                            showCaption ? userText ?? DpLiveTileService.TileCaption(ActionType!, ActionValue) : "",
-                            showCaption ? DpLiveTileService.SpeedTestUnit(ActionValue ?? "") : "",
-                            DpHidNative.IconSize, dest,
-                            ownValueSize: isPing, valueTopPad: isPing ? 0.06f : 0f);
-                    break;
-                }
-                default:
-                    // A transport/volume/repeat control — "media" or the equivalent "spotify"
-                    // Web API command — always gets K2's own solid shape, bypassing the gallery
-                    // tie-break entirely: icon_mapping.xml has a Base Camp row for every one of
-                    // these "spotify" commands, which would otherwise win by default (UseK2Icons
-                    // off) and cost the tile both its shared shape and its caption (gallery art
-                    // never draws one) — user report 2026-09-01.
-                    if (ActionIconFallback.IsControl(ActionType, ActionValue))
-                    {
-                        ok = ActionIconFallback.TryGenerate(ActionType!, ActionValue, DpHidNative.IconSize, dest, showCaption);
-                        break;
-                    }
-                    // Everything else: Base Camp's ported gallery art vs. K2's hand-drawn glyph —
-                    // spec.UseK2Icons (the "Edit icon" radio pair) picks which one wins the tie;
-                    // whichever side has no art for this action/value falls back to the other.
-                    ok = spec.UseK2Icons
-                        ? ActionIconFallback.TryGenerate(ActionType!, ActionValue, DpHidNative.IconSize, dest, showCaption)
-                          || IconGalleryDefaults.TryGenerateKeyIcon(ActionType!, ActionValue, DpHidNative.IconSize, dest)
-                        : IconGalleryDefaults.TryGenerateKeyIcon(ActionType!, ActionValue, DpHidNative.IconSize, dest)
-                          || ActionIconFallback.TryGenerate(ActionType!, ActionValue, DpHidNative.IconSize, dest, showCaption);
-                    break;
-            }
-        }
-        return ok ? dest : null;
+        return DpDefaultIconRenderer.Render(ActionType, ActionValue, spec, pageName, DpHidNative.IconSize);
     }
 
     /// <summary>The caption a default icon carries when the user hasn't typed one — what
@@ -692,26 +661,11 @@ public partial class DpKeyConfigDialog : Window
         "googlehome"      => GoogleHomeIconCatalog.CaptionFor(ActionValue) ?? ActionValue,
         // Live tiles: the short symbol/abbreviation the tile carries by default ("CPU", "download"),
         // so "Edit icon" starts from the real wording. A clock face has none — it needs no label.
-        "dp_clock" or "dp_sysmon" or "dp_speedtest"
+        "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus" or "dp_screen"
                           => DpLiveTileService.TileCaption(ActionType!, ActionValue) is { Length: > 0 } c ? c : null,
         "exec" or "emoji" => null,   // these tiles never draw a caption
         _                 => ActionIconFallback.Caption(ActionType, ActionValue),
     };
-
-    private static string AutoIconCachePath(string kind, string sourceValue)
-    {
-        Directory.CreateDirectory(AutoIconCacheRoot);
-
-        long mtime = 0;
-        if (kind == "exec") { try { mtime = File.GetLastWriteTimeUtc(ExecActionPayload.PathOf(sourceValue)).Ticks; } catch { } }
-        byte[] hash = System.Security.Cryptography.SHA1.HashData(
-            System.Text.Encoding.UTF8.GetBytes($"{kind}|{sourceValue}|{mtime}"));
-        return Path.Combine(AutoIconCacheRoot, Convert.ToHexString(hash).ToLowerInvariant() + $"_{kind}.png");
-    }
-
-    /// <summary>Matches <c>MainWindow.DpAutoIconDir</c> exactly.</summary>
-    private static readonly string AutoIconCacheRoot = Path.Combine(
-        K2Paths.For("K2.DisplayPad"), "auto_icons");
 
     // =====================================================================
     // OK / Cancel
@@ -753,6 +707,10 @@ public partial class DpKeyConfigDialog : Window
         }
 
         _spec.Rotation = isGif ? 0 : _rotation;
+        // BgImagePath is an ambient render input (the pad's default background), never a stored
+        // choice — it's re-derived from the device setting on every generation. Only NoDefaultBg
+        // (the opt-out) is persisted.
+        _spec.BgImagePath = null;
         // No picture left = nothing to remember about how it looked — UNLESS "use Spotify cover"
         // is on, which is a picture in its own right (painted live by DpSpotifyCoverKeyService).
         IconSpecJson = (NewImagePath is null && !_spec.SpotifyCover) ? null : _spec.ToJson();

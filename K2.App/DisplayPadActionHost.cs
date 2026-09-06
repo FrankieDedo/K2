@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Threading;
 using K2.App.Models;
@@ -89,8 +89,27 @@ internal sealed class DisplayPadActionHost : IActionHost
         return Services.HardwareSensors.StorageDisks();
     }
 
+    bool IActionHost.SupportsScreenProbes => true;
+
+    IReadOnlyList<(string Id, string Name)> IActionHost.ListScreenProbes() =>
+        Services.ScreenProbeStore.All().Select(p => (p.Id, p.Name)).ToList();
+
+    string? IActionHost.EditScreenProbe(string? probeId) => _win.Dispatcher.Invoke(() =>
+    {
+        var owner = System.Windows.Application.Current?.Windows
+            .OfType<System.Windows.Window>().FirstOrDefault(w => w.IsActive) ?? _win;
+        var dlg = new ScreenProbeDialog(probeId) { Owner = owner };
+        return dlg.ShowDialog() == true ? dlg.SavedProbeId : null;
+    });
+
     string? IActionHost.PreviewLiveTile(string? actionType, string? actionValue)
     {
+        if (actionType == "dp_screen")
+        {
+            var (screenText, _) = Services.DpLiveTileService.TileValue(actionType, actionValue ?? "");
+            return string.IsNullOrEmpty(screenText) ? null : screenText;
+        }
+
         if (actionType is not ("dp_sysmon" or "dp_speedtest")) return null;
 
         string v = actionValue ?? "";

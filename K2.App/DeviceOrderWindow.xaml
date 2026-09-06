@@ -1,0 +1,72 @@
+﻿<Window x:Class="K2.App.DeviceOrderWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+        Title="{loc:Get device_order_title}"
+        Width="420" SizeToContent="Height"
+        MinWidth="380"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Style="{DynamicResource K2WindowStyle}">
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- title -->
+            <RowDefinition Height="Auto"/>  <!-- hint -->
+            <RowDefinition Height="10"/>
+            <RowDefinition Height="Auto"/>  <!-- rows -->
+            <RowDefinition Height="Auto"/>  <!-- empty text -->
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>  <!-- buttons -->
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="{loc:Get device_order_title}" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+        <TextBlock Grid.Row="1" Text="{loc:Get device_order_hint}" Foreground="#9A9AA2"
+                   TextWrapping="Wrap" FontSize="12"/>
+
+        <ScrollViewer Grid.Row="3" MaxHeight="320" VerticalScrollBarVisibility="Auto">
+            <ItemsControl x:Name="LvDeviceOrder">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="#232328" CornerRadius="6" Margin="0,0,0,6" Padding="10,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <!-- Only currently connected devices are ever listed here — see
+                                     MainWindow.BuildDeviceOrderRows. A disconnected device is
+                                     never shown, but its last saved position is remembered
+                                     (DeviceOrderCatalog.Compose) so it reappears there if
+                                     reconnected; a device never connected before is never
+                                     remembered or shown at all. -->
+                                <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                           VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                <Button Grid.Column="1" Content="&#x25B2;" Width="30" Padding="0,2" Margin="0,0,6,0"
+                                        ToolTip="{loc:Get device_order_move_up}"
+                                        Tag="{Binding Key}" Click="BtnMoveUp_Click"/>
+                                <Button Grid.Column="2" Content="&#x25BC;" Width="30" Padding="0,2"
+                                        ToolTip="{loc:Get device_order_move_down}"
+                                        Tag="{Binding Key}" Click="BtnMoveDown_Click"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <TextBlock x:Name="TxtDeviceOrderEmpty" Grid.Row="4" Text="{loc:Get device_order_none_connected}"
+                   Foreground="#9A9AA2" TextWrapping="Wrap" FontSize="12" Visibility="Collapsed"/>
+
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="{loc:Get device_order_reset}" MinWidth="90" Padding="6,2" Margin="0,0,8,0"
+                    Click="BtnReset_Click"/>
+            <Button Content="{loc:Get save}" Width="90" Padding="6,2" IsDefault="True"
+                    Style="{StaticResource K2IconAccentButton}"
+                    Click="BtnSave_Click" Margin="0,0,8,0"/>
+            <Button Content="{loc:Get cancel}" IsCancel="True" MinWidth="72"/>
+        </StackPanel>
+    </Grid>
+</Window>

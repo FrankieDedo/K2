@@ -69,6 +69,26 @@ public sealed class KeyIconSpec
     /// normal stored/generated picture.</summary>
     public bool SpotifyCover { get; set; }
 
+    /// <summary>DisplayPad only: opt THIS key OUT of the pad-wide "default icon background"
+    /// image (Settings &gt; Default icon background). When a pad has that image configured it
+    /// is baked behind every default icon automatically; ticking this leaves the key on its
+    /// plain background colour instead. No effect for a custom (hand-loaded) picture.</summary>
+    public bool NoDefaultBg { get; set; }
+
+    /// <summary>NOT a user choice made in the key dialog — an <b>ambient</b> field the caller
+    /// fills in right before pushing an <see cref="IconStyleScope"/>: the absolute path of the
+    /// pad's already-cropped "default icon background" PNG, or null. Serialized so the
+    /// <see cref="StyleFingerprint"/> stays stable within a render, but it is re-derived from
+    /// the device setting on every generation and never trusted from an old stored spec.</summary>
+    public string? BgImagePath { get; set; }
+
+    /// <summary>NOT a user choice — another ambient field, set by a curated profile's own tile
+    /// writer (see <c>GameProfileCatalog</c>/<c>MainWindow.GameProfiles.EnsureGameSlot</c>):
+    /// when true, the default-icon renderer skips the action's own glyph entirely and draws
+    /// only <see cref="BgImagePath"/> plus the caption, centered — used by the Elite Dangerous
+    /// profile so its twelve keys read as backlit HUD tiles instead of a mismatched icon set.</summary>
+    public bool TextOnly { get; set; }
+
     // -----------------------------------------------------------------
     // Serialization — one JSON blob stored in a single DB column, so adding a field later
     // needs no schema migration.
@@ -91,7 +111,19 @@ public sealed class KeyIconSpec
     /// the auto-icon cache key so two style variants of the same action don't collide on the
     /// same cached PNG.</summary>
     public string StyleFingerprint =>
-        $"{ShowText}|{Text}|{FontFamily}|{FontSize:0.##}|{BgColor}|{TextColor}|{UseK2Icons}|{SpotifyCover}";
+        $"{ShowText}|{Text}|{FontFamily}|{FontSize:0.##}|{BgColor}|{TextColor}|{UseK2Icons}|{SpotifyCover}|{NoDefaultBg}|{TextOnly}|{BgImageFingerprint}";
+
+    /// <summary>Path + last-write time of <see cref="BgImagePath"/>, so re-cropping the pad's
+    /// default background (same file name) invalidates every cached icon PNG that used it.</summary>
+    private string BgImageFingerprint
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(BgImagePath)) return "";
+            try { return $"{BgImagePath}:{System.IO.File.GetLastWriteTimeUtc(BgImagePath).Ticks}"; }
+            catch { return BgImagePath!; }
+        }
+    }
 
     // -----------------------------------------------------------------
     // Color helpers (shared by the GDI+ and WPF renderers)
@@ -128,6 +160,19 @@ public static class IconStyleScope
 
     /// <summary>Background color override (GDI+), or null to keep the generator's own.</summary>
     public static System.Drawing.Color? OverrideBg => KeyIconSpec.ParseColor(_current?.BgColor);
+
+    /// <summary>Absolute path of an image to paint behind the tile INSTEAD of the background
+    /// colour (the pad-wide "default icon background"), or null. Only honoured for a default
+    /// icon that hasn't opted out — the caller already applies that rule when filling
+    /// <see cref="KeyIconSpec.BgImagePath"/>; here we only re-check the file exists.</summary>
+    public static string? OverrideBgImage
+    {
+        get
+        {
+            var p = _current?.BgImagePath;
+            return !string.IsNullOrWhiteSpace(p) && System.IO.File.Exists(p) ? p : null;
+        }
+    }
 
     /// <summary>Text color override (GDI+), or null for the stock white.</summary>
     public static System.Drawing.Color? OverrideText => KeyIconSpec.ParseColor(_current?.TextColor);

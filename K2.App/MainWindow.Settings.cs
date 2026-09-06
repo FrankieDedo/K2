@@ -1,4 +1,4 @@
-// MainWindow.Settings.cs — partial class: centralized General Settings tab.
+﻿// MainWindow.Settings.cs — partial class: centralized General Settings tab.
 //
 // Debug UI/behavior on every device comes from the single AppSettings.DebugMode
 // flag, read from the plain-text %LOCALAPPDATA%\K2\k2_debug.cfg (see
@@ -353,6 +353,7 @@ public partial class MainWindow
         CkK2Autostart.IsChecked = Services.K2AutostartService.IsEnabled();
 
         CkSyncAcrossDevices.IsChecked = AppSettings.SyncAcrossDevices;
+        CkGameProfilesEnabled.IsChecked = AppSettings.GameProfilesEnabled;
         CkSyncLightingAcrossDevices.IsChecked = AppSettings.SyncLightingAcrossDevices;
 
         InitAppFontCombo();

@@ -355,6 +355,24 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>Every device id this store has ever saved keys for — including pads that are not
+    /// plugged in right now.
+    ///
+    /// <para>A DisplayPad's id is not stable across sessions: unplug one, or change the order they
+    /// enumerate in, and the same physical pad comes back under a different id, leaving its old
+    /// rows behind. Anything that has to CLEAN UP after itself must therefore walk this list and
+    /// not the set of connected devices, or it will keep tidying the pad in front of it while the
+    /// mess accumulates on the ids nobody looks at any more.</para></summary>
+    public List<int> GetKnownDeviceIds()
+    {
+        var result = new List<int>();
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT DISTINCT DeviceId FROM Buttons ORDER BY DeviceId";
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) result.Add(r.GetInt32(0));
+        return result;
+    }
+
     /// <summary>Returns the profile slots that have at least one saved key for the device.</summary>
     public List<int> GetExistingProfiles(int deviceId)
     {
@@ -387,6 +405,25 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
 
     public void SetRotation(int deviceId, int rotation) =>
         SetSetting($"device.{deviceId}.rotation", rotation.ToString());
+
+    // ---------- default icon background (device-scoped, all profiles/pages) ----------
+
+    /// <summary>Absolute path of the pad's "default icon background" PNG (Settings tab), or
+    /// null if none is set or the file no longer exists. Painted behind every auto-generated
+    /// default icon on this device in place of the background colour — see
+    /// <c>IconStyleScope.OverrideBgImage</c> / <c>MainWindow.DisplayPad.cs</c>'s
+    /// <c>DpWithDefaultBg</c> / <c>DpRerenderDefaultIcons</c>.</summary>
+    public string? GetDefaultBgImage(int deviceId)
+    {
+        var p = GetSetting($"device.{deviceId}.defaultBgImage");
+        return !string.IsNullOrEmpty(p) && File.Exists(p) ? p : null;
+    }
+
+    public void SetDefaultBgImage(int deviceId, string path) =>
+        SetSetting($"device.{deviceId}.defaultBgImage", path);
+
+    public void ClearDefaultBgImage(int deviceId) =>
+        SetSetting($"device.{deviceId}.defaultBgImage", "");
 
     // ---------- profile names ----------
 

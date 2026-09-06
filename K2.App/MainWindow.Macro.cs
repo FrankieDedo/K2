@@ -9,6 +9,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using K2.App.Models;
 using K2.App.Services;
 using K2.Core;
@@ -27,6 +28,29 @@ public partial class MainWindow
     private bool _macroShowPressRelease = true;
     private MacroDefinition? _recordingMacro;
 
+    /// <summary>-1 = the Record button's normal full-replace capture. &gt;=0 = an
+    /// "insert recording here" started from a row's + menu: the captured inputs
+    /// are spliced into <see cref="MacroDefinition.Inputs"/> at this index on
+    /// Stop instead of replacing the list.</summary>
+    private int _macroInsertAt = -1;
+
+    /// <summary>Past this many captured steps the live INPUTS list stops updating
+    /// during a recording (the running count keeps going). A mouse-movement
+    /// capture produces hundreds of steps a second and keeping the ListView in
+    /// sync with it costs more than the recording itself.</summary>
+    private const int MacroLivePreviewLimit = 400;
+
+    /// <summary>K2 action types offered as a macro step — write-effect only
+    /// (no "none"/"disable", no DisplayPad-visual-only types, and not "macro"
+    /// itself to avoid recursive playback).</summary>
+    private static readonly string[] MacroK2AllowedTypes =
+    {
+        "url", "exec", "folder", "browser", "profile", "oscmd", "media", "mouse",
+        "keys", "hotkeyswitch", "multi", "command", "text", "googlehome",
+        "adobe", "davinci", "zoom", "obs", "twitch", "spotify", "discord",
+        "audiodevice", "youtube", "pyscript"
+    };
+
     // ─────────────────────── Init ───────────────────────
 
     private void InitMacroPanel()
@@ -37,6 +61,11 @@ public partial class MainWindow
             _macroRecorder = new MacroRecorder();
             _macroRecorder.InputRecorded += OnMacroInputRecorded;
             _macroPlayer = new MacroPlayer();
+            _macroPlayer.K2ActionRequested += (t, v) => Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try { _engine?.Execute(t, v); }
+                catch (Exception ex) { LogEverest($"[MACRO] k2action '{t}' failed: {ex.Message}"); }
+            }));
 
             _macroPlayer.PlaybackStarted += () => Dispatcher.Invoke(() =>
             {
@@ -97,6 +126,8 @@ public partial class MainWindow
     private void LbMacros_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_macroLoading) return;
+        _macroRecorder?.CancelCaptureSingleKey();
+        _macroKeyCaptureRow = null;
         if (_macroRecorder?.IsRecording == true)
         {
             // Can't switch macros mid-recording — Stop() assigns the capture
@@ -183,6 +214,8 @@ public partial class MainWindow
     private void BtnMacroRecord_Click(object sender, RoutedEventArgs e)
     {
         if (_macroRecorder is null) return;
+        _macroRecorder.CancelCaptureSingleKey();
+        _macroKeyCaptureRow = null;
         var m = SelectedMacro;
         if (m is null)
         {
@@ -192,32 +225,55 @@ public partial class MainWindow
         }
 
         if (_macroRecorder.IsRecording)
-        {
-            // Stop recording
-            var inputs = _macroRecorder.Stop();
-            m.Inputs = inputs;
-            _recordingMacro = null;
-            TblMacroInputCount.Text = Loc.Get("macro_actions_count", inputs.Count);
-            BtnMacroRecord.Content = Loc.Get("macro_start_recording");
-            RebuildInputRows();
-            RefreshMacroAssignments();
-            SaveCurrentMacro();
-            LogEverest($"[MACRO] Recording stopped: {inputs.Count} actions");
-        }
+            StopMacroRecording();
         else
-        {
-            // Start recording
-            bool mouse = CkMacroMouse.IsChecked == true;
-            bool keyboard = CkMacroKeyboard.IsChecked == true;
-            bool mouseMovement = CkMacroMouseMovement.IsChecked == true;
-            _recordingMacro = m;
-            _macroInputRows.Clear();
-            TblMacroInputCount.Text = Loc.Get("macro_actions_count", 0);
-            _macroRecorder.SetOwnerWindow(_hWnd);
-            _macroRecorder.Start(mouse, keyboard, mouseMovement);
-            BtnMacroRecord.Content = Loc.Get("macro_record_stop");
-            LogEverest("[MACRO] Recording started" + (mouse ? " (with mouse)" : ""));
-        }
+            StartMacroRecording(m, -1);
+    }
+
+    /// <summary>Starts a capture into <paramref name="m"/>. <paramref name="insertAt"/>
+    /// -1 = the captured inputs replace the whole macro on Stop (Record button);
+    /// &gt;=0 = they are spliced in at that index (row + menu).</summary>
+    private void StartMacroRecording(MacroDefinition m, int insertAt)
+    {
+        if (_macroRecorder is null || _macroRecorder.IsRecording) return;
+        bool mouse = CkMacroMouse.IsChecked == true;
+        bool keyboard = CkMacroKeyboard.IsChecked == true;
+        bool mouseMovement = CkMacroMouseMovement.IsChecked == true;
+
+        _recordingMacro = m;
+        _macroInsertAt = insertAt >= 0 ? Math.Clamp(insertAt, 0, m.Inputs.Count) : -1;
+        _macroInputRows.Clear();
+        if (_macroInsertAt >= 0)
+            RebuildInputRows();                                   // keep existing rows visible
+        TblMacroInputCount.Text = Loc.Get("macro_actions_count",
+            _macroInsertAt >= 0 ? m.Inputs.Count : 0);
+        _macroRecorder.SetOwnerWindow(_hWnd);
+        _macroRecorder.Start(mouse, keyboard, mouseMovement);
+        BtnMacroRecord.Content = Loc.Get("macro_record_stop");
+        LogEverest($"[MACRO] Recording started (insertAt={_macroInsertAt})" + (mouse ? " (with mouse)" : ""));
+    }
+
+    private void StopMacroRecording()
+    {
+        if (_macroRecorder is null) return;
+        var captured = _macroRecorder.Stop();
+        var m = _recordingMacro ?? SelectedMacro;
+        int at = _macroInsertAt;
+        _macroInsertAt = -1;
+        _recordingMacro = null;
+        BtnMacroRecord.Content = Loc.Get("macro_start_recording");
+        if (m is null) return;
+
+        if (at >= 0 && at <= m.Inputs.Count)
+            m.Inputs.InsertRange(at, captured);
+        else
+            m.Inputs = captured;
+
+        TblMacroInputCount.Text = Loc.Get("macro_actions_count", m.Inputs.Count);
+        RebuildInputRows();
+        RefreshMacroAssignments();
+        SaveCurrentMacro();
+        LogEverest($"[MACRO] Recording stopped: +{captured.Count} step(s), {m.Inputs.Count} total");
     }
 
     /// <summary>Live feed for the INPUTS list while recording — appends each
@@ -227,12 +283,38 @@ public partial class MainWindow
     /// button click).</summary>
     private void OnMacroInputRecorded(MacroInput input)
     {
-        if (_macroRecorder is null) return;
-        int index = _macroRecorder.Inputs.Count - 1;
-        if (index < 0) return;
-        var row = BuildInputRow(input, index);
-        _macroInputRows.Add(row);
-        TblMacroInputCount.Text = Loc.Get("macro_actions_count", _macroRecorder.Inputs.Count);
+        // Notifications are coalesced by MacroRecorder (a mouse-move recording
+        // fires far too often for one row-add each), so resync the whole preview
+        // from the current snapshot rather than appending a single row.
+        if (_macroRecorder is null || !_macroRecorder.IsRecording) return;
+
+        // One snapshot per tick — the Inputs property copies the list on every
+        // access, so reading it three times would triple the allocation.
+        var live = _macroRecorder.Inputs;
+        int total = _macroInsertAt >= 0
+            ? (_recordingMacro?.Inputs.Count ?? 0) + live.Count
+            : live.Count;
+        TblMacroInputCount.Text = Loc.Get("macro_actions_count", total);
+
+        // Mouse-movement recordings pile up thousands of steps — past this point
+        // show the running count only; the full list is rebuilt once on Stop().
+        if (live.Count > MacroLivePreviewLimit) return;
+
+        if (_macroInsertAt >= 0)
+        {
+            // Splice preview: the new steps land mid-list, so order changes.
+            RebuildInputRows();
+        }
+        else
+        {
+            // Append only what is new. Clearing and rebuilding the whole
+            // ObservableCollection on every tick is expensive and gets worse the
+            // longer the recording runs — that cost is what users saw as K2
+            // stuttering while recording.
+            for (int i = _macroInputRows.Count; i < live.Count; i++)
+                _macroInputRows.Add(BuildInputRow(live[i], i));
+        }
+
         if (LvMacroInputs.Items.Count > 0)
             LvMacroInputs.ScrollIntoView(LvMacroInputs.Items[^1]);
     }
@@ -298,6 +380,24 @@ public partial class MainWindow
         SaveCurrentMacro();
     }
 
+    /// <summary>Writes the value in the Custom-delay box into every step's
+    /// per-row <see cref="MacroInput.DelayMs"/> at once (per-row delays are
+    /// consumed by "Recorded" playback). Does not touch the playback mode.</summary>
+    private void BtnMacroDelayApplyAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (_macroRecorder?.IsRecording == true) return;
+        var m = SelectedMacro;
+        if (m is null || m.Inputs.Count == 0) return;
+
+        if (!int.TryParse(TxtMacroCustomDelay.Text, out int ms) || ms < 0) ms = 0;
+        if (ms > 600000) ms = 600000;                 // 10 min sanity cap
+
+        foreach (var inp in m.Inputs) inp.DelayMs = ms;
+        RebuildInputRows();
+        SaveCurrentMacro();
+        LogEverest($"[MACRO] delay {ms}ms applied to all {m.Inputs.Count} step(s)");
+    }
+
     private void RbMacroPlayback_Checked(object sender, RoutedEventArgs e)
     {
         if (_macroLoading) return;
@@ -320,6 +420,95 @@ public partial class MainWindow
     {
         _macroShowPressRelease = CkMacroShowPressRelease.IsChecked == true;
         RebuildInputRows();
+    }
+
+    // ─────────── Per-step delay editing (INPUTS list, column 4) ───────────
+
+    /// <summary>Digits only — the per-step delay is a plain millisecond count.</summary>
+    private void MacroInputDelay_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        foreach (char c in e.Text)
+            if (!char.IsDigit(c)) { e.Handled = true; return; }
+    }
+
+    /// <summary>Enter commits the edit (and moves focus off the box).</summary>
+    private void MacroInputDelay_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || sender is not TextBox tb) return;
+        var scope = FocusManager.GetFocusScope(tb);
+        FocusManager.SetFocusedElement(scope, this);
+        e.Handled = true;
+    }
+
+    /// <summary>Writes the edited delay back into the underlying
+    /// <see cref="MacroInput"/> and persists. Recorded-delay playback is the
+    /// only mode that consumes per-step delays (No delay / Custom override
+    /// them), but the value is stored regardless so switching back to
+    /// "Recorded" keeps the edits.</summary>
+    private void MacroInputDelay_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_macroLoading || _macroRecorder?.IsRecording == true) return;
+        if (sender is not TextBox { DataContext: MacroInputRow row } tb) return;
+        var m = SelectedMacro;
+        if (m is null || row.SourceIndex < 0 || row.SourceIndex >= m.Inputs.Count) return;
+
+        if (!int.TryParse(tb.Text, out int ms) || ms < 0) ms = 0;
+        if (ms > 600000) ms = 600000;                 // 10 min sanity cap
+        tb.Text = ms.ToString();
+        row.DelayMs = ms;
+        if (m.Inputs[row.SourceIndex].DelayMs == ms) return;
+        m.Inputs[row.SourceIndex].DelayMs = ms;
+        SaveCurrentMacro();
+    }
+
+    // ─────────── Per-step key re-recording (INPUTS list) ───────────
+
+    private MacroInputRow? _macroKeyCaptureRow;
+
+    /// <summary>Re-records a single keyboard row's key: arms a one-shot global
+    /// capture and, on the next key press, overwrites ONLY that row's key
+    /// identity — the row stays a press or a release exactly as before, so a
+    /// "key B down" row pressed with A becomes "key A down" and nothing else
+    /// changes. Click again on the armed row to cancel.</summary>
+    private void BtnMacroInputRecordKey_Click(object sender, RoutedEventArgs e)
+    {
+        if (_macroRecorder is null || _macroRecorder.IsRecording) return;
+        if (sender is not Button { CommandParameter: MacroInputRow row }) return;
+        var m = SelectedMacro;
+        if (m is null || row.SourceIndex < 0 || row.SourceIndex >= m.Inputs.Count) return;
+
+        bool wasThisRow = _macroRecorder.IsCapturingSingleKey
+                          && ReferenceEquals(_macroKeyCaptureRow, row);
+        _macroRecorder.CancelCaptureSingleKey();
+        _macroKeyCaptureRow = null;
+        if (wasThisRow)
+        {
+            TblMacroInputCount.Text = Loc.Get("macro_actions_count", m.Inputs.Count);
+            return;
+        }
+
+        _macroKeyCaptureRow = row;
+        _macroRecorder.SetOwnerWindow(_hWnd);
+        bool ok = _macroRecorder.BeginCaptureSingleKey(vk => Dispatcher.Invoke(() =>
+        {
+            if (!ReferenceEquals(_macroKeyCaptureRow, row)) return;
+            _macroKeyCaptureRow = null;
+            var mm = SelectedMacro;
+            if (mm is null || row.SourceIndex < 0 || row.SourceIndex >= mm.Inputs.Count) return;
+            if (mm.Inputs[row.SourceIndex].Key != vk)
+            {
+                mm.Inputs[row.SourceIndex].Key = vk;
+                SaveCurrentMacro();
+                LogEverest($"[MACRO] Row {row.SourceIndex + 1} key -> {KeyName(vk)}");
+            }
+            RebuildInputRows();
+            TblMacroInputCount.Text = Loc.Get("macro_actions_count", mm.Inputs.Count);
+        }));
+
+        TblMacroInputCount.Text = ok
+            ? Loc.Get("macro_capture_press_key")
+            : Loc.Get("macro_actions_count", m.Inputs.Count);
+        if (!ok) _macroKeyCaptureRow = null;
     }
 
     private void BtnMacroInputDelete_Click(object sender, RoutedEventArgs e)
@@ -356,6 +545,75 @@ public partial class MainWindow
             (m.Inputs[row.SourceIndex], m.Inputs[row.SourceIndex + 1]);
         RebuildInputRows();
         SaveCurrentMacro();
+    }
+
+    // ─────────── Insert a step above / below a row (Base Camp-style) ───────────
+
+    /// <summary>The row "+" button just opens its context menu on a left click
+    /// (WPF only does that for right-click by default).</summary>
+    private void BtnMacroInsertMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (_macroRecorder?.IsRecording == true) return;
+        if (sender is not Button b || b.ContextMenu is null) return;
+        b.ContextMenu.PlacementTarget = b;
+        b.ContextMenu.IsOpen = true;
+    }
+
+    /// <summary>Handles all four "+ menu" items. Tag = "rec-above" | "rec-below"
+    /// | "k2-above" | "k2-below".</summary>
+    private void MacroInsertItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (_macroRecorder is null || _macroRecorder.IsRecording) return;
+        if (sender is not MenuItem { Tag: string what, DataContext: MacroInputRow row }) return;
+        var m = SelectedMacro;
+        if (m is null) return;
+
+        int at = what.EndsWith("above") ? row.SourceIndex : row.SourceIndex + 1;
+        at = Math.Clamp(at, 0, m.Inputs.Count);
+
+        if (what.StartsWith("rec-"))
+        {
+            StartMacroRecording(m, at);
+            return;
+        }
+        var step = PromptForK2Action();
+        if (step is null) return;
+        m.Inputs.Insert(at, step);
+        RebuildInputRows();
+        TblMacroInputCount.Text = Loc.Get("macro_actions_count", m.Inputs.Count);
+        SaveCurrentMacro();
+    }
+
+    /// <summary>Bottom-toolbar button: append a K2 action step at the end.</summary>
+    private void BtnMacroAddK2Action_Click(object sender, RoutedEventArgs e)
+    {
+        if (_macroRecorder?.IsRecording == true) return;
+        var m = SelectedMacro;
+        if (m is null) return;
+        var step = PromptForK2Action();
+        if (step is null) return;
+        m.Inputs.Add(step);
+        RebuildInputRows();
+        TblMacroInputCount.Text = Loc.Get("macro_actions_count", m.Inputs.Count);
+        SaveCurrentMacro();
+    }
+
+    /// <summary>Opens the shared action picker restricted to write-effect types
+    /// and returns a ready <see cref="MacroInput"/> of type "k2action", or null
+    /// if cancelled / left at "none".</summary>
+    private MacroInput? PromptForK2Action()
+    {
+        var dlg = new ButtonActionDialog(0, "none", "", this, MacroK2AllowedTypes) { Owner = this };
+        if (dlg.ShowDialog() != true) return null;
+        if (string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType is "none" or "disable")
+            return null;
+        return new MacroInput
+        {
+            Type = "k2action",
+            K2Type = dlg.ActionType,
+            Text = dlg.ActionValue,
+            DelayMs = 0
+        };
     }
 
     private void BtnMacroImportBC_Click(object sender, RoutedEventArgs e)
@@ -425,13 +683,31 @@ public partial class MainWindow
     private void RebuildInputRows()
     {
         _macroInputRows.Clear();
+        var m = SelectedMacro;
         if (_macroRecorder?.IsRecording == true)
         {
-            for (int i = 0; i < _macroRecorder.Inputs.Count; i++)
-                _macroInputRows.Add(BuildInputRow(_macroRecorder.Inputs[i], i));
+            var live = _macroRecorder.Inputs;
+            if (_macroInsertAt >= 0 && m is not null)
+            {
+                // Existing inputs with the live capture spliced at the target
+                // index (SourceIndex is cosmetic here — row edits are disabled
+                // while recording).
+                int n = 0;
+                int at = Math.Clamp(_macroInsertAt, 0, m.Inputs.Count);
+                for (int i = 0; i < at; i++)
+                    _macroInputRows.Add(BuildInputRow(m.Inputs[i], n++));
+                for (int i = 0; i < live.Count; i++)
+                    _macroInputRows.Add(BuildInputRow(live[i], n++));
+                for (int i = at; i < m.Inputs.Count; i++)
+                    _macroInputRows.Add(BuildInputRow(m.Inputs[i], n++));
+            }
+            else
+            {
+                for (int i = 0; i < live.Count; i++)
+                    _macroInputRows.Add(BuildInputRow(live[i], i));
+            }
             return;
         }
-        var m = SelectedMacro;
         if (m is null) return;
         for (int i = 0; i < m.Inputs.Count; i++)
             _macroInputRows.Add(BuildInputRow(m.Inputs[i], i));
@@ -452,12 +728,17 @@ public partial class MainWindow
             "keydown" or "keyup" => KeyName(inp.Key),
             "mousedown" or "mouseup" => inp.Key switch
             {
-                1 => "Left Click",
-                2 => "Right Click",
+                MacroRecorder.MouseLeft   => "Left Click",
+                MacroRecorder.MouseRight  => "Right Click",
+                MacroRecorder.MouseMiddle => "Middle Click",
+                MacroRecorder.MouseX1     => "Mouse Button 4",
+                MacroRecorder.MouseX2     => "Mouse Button 5",
                 _ => $"Mouse {inp.Key}"
             },
+            "mousewheel" => inp.Key >= 0 ? $"Wheel Up ({inp.Key})" : $"Wheel Down ({inp.Key})",
             "mousemove" => $"Move ({inp.X},{inp.Y})",
             "text" => $"\"{inp.Text}\"",
+            "k2action" => K2ActionLabel(inp.K2Type, inp.Text),
             _ => inp.Type
         };
         return new MacroInputRow
@@ -468,8 +749,20 @@ public partial class MainWindow
             DelayMs = inp.DelayMs,
             IsPress = isPress,
             ShowIndicator = _macroShowPressRelease,
-            SourceIndex = index
+            SourceIndex = index,
+            IsKeyboard = inp.Type is "keydown" or "keyup"
         };
+    }
+
+    /// <summary>Row label for a "k2action" step: the localized action-type name
+    /// plus a short slice of its payload.</summary>
+    private static string K2ActionLabel(string? k2Type, string? payload)
+    {
+        string name = string.IsNullOrEmpty(k2Type) ? "K2" : Loc.Get("act_" + k2Type);
+        if (string.IsNullOrWhiteSpace(name) || name == "act_" + k2Type) name = k2Type ?? "K2";
+        payload = payload?.Replace("\r", " ").Replace("\n", " ").Trim() ?? "";
+        if (payload.Length > 40) payload = payload[..40] + "…";
+        return payload.Length == 0 ? $"K2: {name}" : $"K2: {name} — {payload}";
     }
 
     /// <summary>

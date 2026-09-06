@@ -42,13 +42,13 @@
         </Border>
 
         <TextBlock Grid.Row="3" Text="{loc:Get discord_client_id_label}" Margin="0,0,0,4"/>
-        <TextBox   x:Name="TxtDiscordClientId" Grid.Row="4" Height="25" Margin="0,0,0,10" VerticalContentAlignment="Center"/>
+        <TextBox   x:Name="TxtDiscordClientId" Grid.Row="4" Height="25" Margin="0,0,0,10" Padding="4,0" VerticalContentAlignment="Center"/>
 
         <TextBlock Grid.Row="5" Text="{loc:Get discord_client_secret_label}" Margin="0,0,0,4"/>
-        <PasswordBox x:Name="PwdDiscordClientSecret" Grid.Row="6" Height="25" Margin="0,0,0,10" VerticalContentAlignment="Center"/>
+        <PasswordBox x:Name="PwdDiscordClientSecret" Grid.Row="6" Height="25" Margin="0,0,0,10" Padding="4,0" VerticalContentAlignment="Center"/>
 
         <TextBlock Grid.Row="7" Text="{loc:Get discord_webhook_label}" Margin="0,0,0,4"/>
-        <TextBox   x:Name="TxtDiscordWebhook" Grid.Row="8" Height="25" Margin="0,0,0,4" VerticalContentAlignment="Center"/>
+        <TextBox   x:Name="TxtDiscordWebhook" Grid.Row="8" Height="25" Margin="0,0,0,4" Padding="4,0" VerticalContentAlignment="Center"/>
         <TextBlock Grid.Row="9" Text="{loc:Get discord_webhook_hint}" TextWrapping="Wrap"
                    Foreground="#9A9AA2" FontSize="11" Margin="0,0,0,10"/>
 

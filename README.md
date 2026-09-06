@@ -45,6 +45,8 @@ Start as admin and keep in mind that it should close all Base Camp process autom
   <li><strong>Per-section Guide</strong> — a Guide button on every device panel and inside the action picker, plus a Highlights guide on the Home tab</li>
   <li><strong>Profile-to-app link</strong> — show a profile only while its linked app is focused, and return to the previous profile when that app closes</li>
   <li><strong>Persistent logs</strong> — keep every session's log with its date and time in the name instead of resetting it on the next start</li>
+  <li><strong>Macro step editing</strong> — set the delay before any step (or apply one delay to every line), re-record a single key, and insert recorded steps or K2 actions above or below any step</li>
+  <li><strong>Device order</strong> — choose the order the connected devices appear in</li>
 </ul>
 </details>
 
@@ -66,6 +68,8 @@ Start as admin and keep in mind that it should close all Base Camp process autom
   <li><strong>Discord integration</strong> — mute/deafen, push-to-talk toggle, mic/output volume, join/leave a voice channel, per-user volume/mute, send a message; mute/deafen keys show your live status</li>
   <li><strong>Switch audio output device</strong> — send sound to a different speaker/headset with one key</li>
   <li><strong>Third party application commands</strong> — Same as Base Camp, support Adobe Suite, DaVinci Resolve, Zoom, OBS, Twitch, Youtube, Spotify</li>
+  <li><strong>Screen reading</strong> — capture a frame of any program's window, draw a rectangle over a bar, gauge or indicator, and the key shows that value live</li>
+  <li><strong>Speed test</strong> — configurable server (Cloudflare, LibreSpeed, an Ookla-compatible server, a plain test file or a custom endpoint), transfer sizes and timeout, with a test button in the settings</li>
 </ul>
 </details>
 
@@ -118,6 +122,8 @@ Start as admin and keep in mind that it should close all Base Camp process autom
   <li>Backlight auto-off after N idle seconds</li>
   <li>Spotify profile — a dedicated profile whose 2×2 block shows the live album cover (or cover plus scrolling Song/Artist/Album text), with play/pause, shuffle and repeat keys that follow the real playback state, a configurable block position, an auto-return timer and a "show only while Spotify is in front" option</li>
   <li>PC Monitor key — pick any hardware sensor (live HWiNFO-style list with current/min/max/average) to display on a key</li>
+  <li>Game profiles — ready-made per-game profiles (Elite Dangerous, Deadside, Zero Company) that take over while the game is running, with keys that follow the live in-game state, multiple pages, an auto-return timer and a "show only while the game is in front" option</li>
+  <li>Default key background — one background image reused by every key that has no picture of its own</li>
 </ul>
 </details>
 
@@ -136,7 +142,6 @@ Start as admin and keep in mind that it should close all Base Camp process autom
 <strong>I still got something to port from Base Camp</strong>
 
 <ul>
-  <li>More in-detail macro steps editing</li>
   <li>Tested Makalu Max support (i don't have one, if you want to sell yours, tell me lol)</li>
   <li>Please, tell me if you find that something else wasn't ported from Base Camp!</li>
 </ul>

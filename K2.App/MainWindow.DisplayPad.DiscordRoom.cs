@@ -22,12 +22,16 @@ namespace K2.App;
 ///
 /// <code>
 ///   rotation 0/180 (2 rows × 6 columns)          rotation 90/270 (6 rows × 2 columns)
-///   [srv][mic][aud][ptt][ cam][hang]             [ srv ][ mic ]
-///   [ u ][ u ][ u ][ u ][ u  ][ u  ]             [ aud ][ ptt ]
-///                                                [cam  ][hang ]
-///   with more than 6 people in the call:         [  u  ][  u  ]
-///   [srv][mic][aud][ptt][ cam][hang]             [  u  ][  u  ]
-///   [ ◀ ][you][ u ][ u ][ u  ][ ▶  ]             [  u  ][  u  ]
+///   [srv][mic][aud][ptt][ cam][hang]             [ u ][srv ]
+///   [ u ][ u ][ u ][ u ][ u  ][ u  ]             [ u ][mic ]
+///                                                [ u ][aud ]
+///   with more than 6 people in the call:         [ u ][ptt ]
+///   [srv][mic][aud][ptt][ cam][hang]             [ u ][cam ]
+///   [ ◀ ][you][ u ][ u ][ u  ][ ▶  ]             [ u ][hang]
+///
+///   The rotated pad keeps the very same two strips — controls on one, roster on the other,
+///   in the same order — standing up instead of lying down (only the tiles are turned);
+///   the scroll arrows become ▲/▼ and sit at the ends of the roster strip.
 /// </code>
 ///
 /// The roster row always starts with the local user (<see cref="DiscordVoiceRoom"/> pins them to
@@ -51,10 +55,29 @@ public partial class MainWindow
 
     private bool _dvpHooked;
 
+    /// <summary>The three <see cref="DiscordVoiceRoom"/>/<see cref="DiscordAvatarCache"/>
+    /// subscriptions, kept so <see cref="DvpUnhook"/> can take them off again at teardown.</summary>
+    private Action? _dvpOnChanged, _dvpOnSpeaking, _dvpOnAvatar;
+
     /// <summary>Retries the RPC connection while it isn't open — see
     /// <see cref="DvpEnsureHooked"/>'s remarks on why the one-shot attempt at hook time isn't
     /// enough.</summary>
     private DispatcherTimer? _dvpReconnectTimer;
+
+    /// <summary>Polls the foreground window once a second while
+    /// <see cref="DiscordStore.VoicePageForegroundOnly"/> is on: shows the voice page only while
+    /// the Discord app is in front and hides it again the moment it isn't (see
+    /// <see cref="DvpPollForeground"/>). Runs unconditionally — cheap, and a no-op unless the flag
+    /// is set and a call is running.</summary>
+    private DispatcherTimer? _dvpForegroundTimer;
+
+    /// <summary>Tracks whether the foreground-only flag was on last tick, so turning it OFF
+    /// mid-call can bring the page straight back instead of waiting for the next roster change.</summary>
+    private bool _dvpForegroundWasEnabled;
+
+    /// <summary>Process name of Discord's desktop client (no extension — matched against
+    /// <see cref="ProfileLaunchWatcher.CurrentForegroundProcessName"/>).</summary>
+    private const string DiscordExeName = "Discord";
 
     /// <summary>Devices whose user pressed the server key to send the page away. Cleared when a
     /// NEW call starts, so dismissing this call's page never mutes the next one.</summary>
@@ -101,10 +124,19 @@ public partial class MainWindow
         if (_dvpHooked) return;
         _dvpHooked = true;
 
-        // All three arrive on background threads (RPC reader / download task).
-        DiscordVoiceRoom.Changed += () => Dispatcher.BeginInvoke(DvpOnRoomChanged);
-        DiscordVoiceRoom.SpeakingChanged += () => Dispatcher.BeginInvoke(DvpRepaintAll);
-        DiscordAvatarCache.Downloaded += () => Dispatcher.BeginInvoke(DvpRepaintAll);
+        // All three arrive on background threads (RPC reader / download task), so their queued
+        // callbacks can still be sitting in the dispatcher queue while the window closes and
+        // CleanupDisplayPad disposes the store underneath them — every one of them reads it (the
+        // dedicated-profile check). Unhooked there, and each callback re-checks the flag because
+        // BeginInvoke items posted just before the unhook still run afterwards (user report
+        // 2026-09-03: "ExecuteReader can only be called when the connection is open", repeated
+        // for as long as the app took to exit).
+        _dvpOnChanged = () => Dispatcher.BeginInvoke(() => { if (!_dpTornDown) DvpOnRoomChanged(); });
+        _dvpOnSpeaking = () => Dispatcher.BeginInvoke(() => { if (!_dpTornDown) DvpRepaintAll(); });
+        _dvpOnAvatar = () => Dispatcher.BeginInvoke(() => { if (!_dpTornDown) DvpRepaintAll(); });
+        DiscordVoiceRoom.Changed += _dvpOnChanged;
+        DiscordVoiceRoom.SpeakingChanged += _dvpOnSpeaking;
+        DiscordAvatarCache.Downloaded += _dvpOnAvatar;
 
         // Without this the page would only ever appear on the NEXT join: the RPC connection is
         // opened lazily, and the current channel is read as part of that handshake.
@@ -121,6 +153,82 @@ public partial class MainWindow
             if (DiscordStore.IsConnected && !DiscordBridge.IsRpcOpen) DiscordBridge.StartLiveVoiceState();
         };
         _dvpReconnectTimer.Start();
+
+        _dvpForegroundTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromSeconds(1),
+        };
+        _dvpForegroundTimer.Tick += (_, _) => DvpPollForeground();
+        _dvpForegroundTimer.Start();
+    }
+
+    /// <summary>False only when the foreground-only flag is on AND Discord is not the app in
+    /// front — the gate every "open the voice page" path checks before opening.</summary>
+    private static bool DvpForegroundGateOpen() =>
+        !DiscordStore.VoicePageForegroundOnly || DvpDiscordInForeground();
+
+    private static bool DvpDiscordInForeground() =>
+        string.Equals(ProfileLaunchWatcher.CurrentForegroundProcessName(), DiscordExeName,
+            StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// While <see cref="DiscordStore.VoicePageForegroundOnly"/> is on and a call is running, keeps
+    /// the voice page visible exactly while the Discord client owns the foreground window: opens it
+    /// when Discord comes to the front, hides it (back to the normal profile) when it leaves. A
+    /// page the user sent away with the server key (<see cref="_dvpDismissed"/>) stays away — this
+    /// only drives the focus-following behaviour, not the explicit dismiss.
+    /// </summary>
+    private void DvpPollForeground()
+    {
+        if (_dpTornDown) return;
+        bool enabled = DiscordStore.VoicePageForegroundOnly;
+        bool wasEnabled = _dvpForegroundWasEnabled;
+        _dvpForegroundWasEnabled = enabled;
+
+        if (DiscordVoiceRoom.ChannelId is null) return;   // no call → nothing to gate
+
+        // Flag just turned OFF mid-call: undo any hide it caused so the page isn't stuck away
+        // until the next roster change.
+        if (!enabled)
+        {
+            if (!wasEnabled) return;
+            foreach (int id in _dpDeviceIds.ToList())
+            {
+                if (!DpHasDedicated(id, "Discord") || _dvpDismissed.Contains(id)) continue;
+                if (!_dpDiscordRoom.ContainsKey(id) && !DpEmojiBrowserActive(id)) DvpOpen(id);
+            }
+            return;
+        }
+
+        bool inFront = DvpDiscordInForeground();
+        foreach (int id in _dpDeviceIds.ToList())
+        {
+            if (!DpHasDedicated(id, "Discord") || _dvpDismissed.Contains(id)) continue;
+
+            if (inFront)
+            {
+                if (!_dpDiscordRoom.ContainsKey(id) && !DpEmojiBrowserActive(id)) DvpOpen(id);
+            }
+            else if (_dpDiscordRoom.ContainsKey(id))
+            {
+                DpLog($"[DVP] device {id}: Discord left the foreground — hiding voice page");
+                DvpExit(id);   // repaints the real profile; does NOT mark the page dismissed
+            }
+        }
+    }
+
+    /// <summary>Takes the voice page off the live model and stops its timers — called from
+    /// <c>CleanupDisplayPad</c> BEFORE the store/engines are disposed.</summary>
+    private void DvpUnhook()
+    {
+        if (_dvpOnChanged is not null) DiscordVoiceRoom.Changed -= _dvpOnChanged;
+        if (_dvpOnSpeaking is not null) DiscordVoiceRoom.SpeakingChanged -= _dvpOnSpeaking;
+        if (_dvpOnAvatar is not null) DiscordAvatarCache.Downloaded -= _dvpOnAvatar;
+        _dvpOnChanged = _dvpOnSpeaking = _dvpOnAvatar = null;
+
+        _dvpForegroundTimer?.Stop();
+        _dvpForegroundTimer = null;
+        DvpCancelAllReturnTimers();
     }
 
     /// <summary>Channel joined/left (or the roster changed): open, close or repaint.</summary>
@@ -139,7 +247,8 @@ public partial class MainWindow
         bool inCall = channel is not null;
         foreach (int id in _dpDeviceIds.ToList())
         {
-            if (inCall && DpHasDedicated(id, "Discord") && !_dvpDismissed.Contains(id)) DvpOpen(id);
+            if (inCall && DpHasDedicated(id, "Discord") && !_dvpDismissed.Contains(id)
+                && DvpForegroundGateOpen()) DvpOpen(id);
             else if (!inCall) DvpExit(id);   // DvpExit also drops any pending return timer
         }
     }
@@ -222,6 +331,7 @@ public partial class MainWindow
     {
         if (DiscordVoiceRoom.ChannelId is null || !DpHasDedicated(devId, "Discord")) return;
         if (_dvpDismissed.Contains(devId) || !_dpDeviceIds.Contains(devId)) return;
+        if (!DvpForegroundGateOpen()) return;   // foreground-only: the poll reopens it once Discord is in front
         DvpOpen(devId);
     }
 
@@ -269,7 +379,7 @@ public partial class MainWindow
         DpSpotifyCoverKeyService.Stop(devId);
 
         int rotation = _dpStore.GetRotation(devId);
-        _dpDiscordRoom[devId] = new DvpState { Rotation = rotation, V2P = EmbPhysicalForVisual(rotation) };
+        _dpDiscordRoom[devId] = new DvpState { Rotation = rotation, V2P = DvpPhysicalForVisual(rotation) };
         DpLog($"[DVP] device {devId}: Discord voice page opened ({DiscordVoiceRoom.GuildName}/{DiscordVoiceRoom.ChannelName})");
         DvpPaint(devId);
         DvpSyncDedicatedUi(devId, active: true);
@@ -452,6 +562,33 @@ public partial class MainWindow
     /// <summary>Visual slot of the push-to-talk key, the one key with its own press feedback.</summary>
     private const int DvpPttSlot = 3;
 
+    /// <summary>
+    /// Physical key index for each of this page's 12 slots.
+    ///
+    /// <para>Unlike the emoji browser (<see cref="EmbPhysicalForVisual"/>), the voice page does
+    /// NOT reflow into the rotated grid's reading order: the six controls stay on one physical
+    /// row of six and the roster on the other, exactly as they sit on an unrotated pad, so a
+    /// vertically mounted panel shows the same two strips — just standing up (user request).
+    /// Only the ORDER along each strip is flipped so slot 0 is always the top one, and the tiles
+    /// themselves are turned by <c>UploadImage</c>'s rotation argument as everywhere else.</para>
+    /// </summary>
+    private static int[] DvpPhysicalForVisual(int rotation)
+    {
+        // Landscape mounts read as the plain 2×6 grid (and 180° flips it), which is what the
+        // shared map already does.
+        if (rotation is not (90 or 270)) return EmbPhysicalForVisual(rotation);
+
+        const int cols = 6;
+        var map = new int[12];
+        for (int i = 0; i < map.Length; i++)
+        {
+            int row = i / cols, col = i % cols;
+            // At 90° physical column 0 lands at the top; at 270° it lands at the bottom.
+            map[i] = row * cols + (rotation == 90 ? col : cols - 1 - col);
+        }
+        return map;
+    }
+
     /// <summary>One key's picture onto the device, chained onto the same per-device upload chain as
     /// every other icon write so it can never race a repaint.</summary>
     private void DvpUpload(int devId, string tile, int btnIndex, int rotation, bool shrink)
@@ -506,8 +643,11 @@ public partial class MainWindow
             int last = Math.Max(0, (others.Count - 1) / DvpScrollSlots) * DvpScrollSlots;
             if (st.Offset > last) st.Offset = last;
 
-            tiles[st.V2P[6]] = DvpNavTile(IconImageGenerator.NavShape.Left);
-            tiles[st.V2P[11]] = DvpNavTile(IconImageGenerator.NavShape.Right);
+            // The roster strip runs top-to-bottom on a rotated pad, so the scroll arrows have to
+            // point that way too (the tiles are turned with the panel, not with the strip).
+            bool tall = st.Rotation is 90 or 270;
+            tiles[st.V2P[6]] = DvpNavTile(tall ? IconImageGenerator.NavShape.Up : IconImageGenerator.NavShape.Left);
+            tiles[st.V2P[11]] = DvpNavTile(tall ? IconImageGenerator.NavShape.Down : IconImageGenerator.NavShape.Right);
 
             tiles[st.V2P[7]] = DvpParticipantTile(self);
             users[st.V2P[7]] = self.Id;

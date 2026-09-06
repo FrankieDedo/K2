@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:K2.Core"
         Title="{loc:Get spotify_profile_config_title}"
-        Width="460" Height="660"
-        MinWidth="420" MinHeight="640"
+        Width="460" Height="700"
+        MinWidth="420" MinHeight="680"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
@@ -27,10 +27,12 @@
             <RowDefinition Height="Auto"/>   <!-- 13 text label -->
             <RowDefinition Height="Auto"/>   <!-- 14 text radios -->
             <RowDefinition Height="Auto"/>   <!-- 15 return-to-profile row -->
-            <RowDefinition Height="Auto"/>   <!-- 16 show-back-arrow row -->
-            <RowDefinition Height="Auto"/>   <!-- 17 foreground-only row -->
-            <RowDefinition Height="*"/>      <!-- 18 filler -->
-            <RowDefinition Height="Auto"/>   <!-- 19 buttons -->
+            <RowDefinition Height="Auto"/>   <!-- 16 return-condition label + hint -->
+            <RowDefinition Height="Auto"/>   <!-- 17 return-condition combo -->
+            <RowDefinition Height="Auto"/>   <!-- 18 show-back-arrow row -->
+            <RowDefinition Height="Auto"/>   <!-- 19 foreground-only row -->
+            <RowDefinition Height="*"/>      <!-- 20 filler -->
+            <RowDefinition Height="Auto"/>   <!-- 21 buttons -->
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" Text="{loc:Get spotify_profile_config_title}" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
@@ -103,7 +105,7 @@
              cover tile's back arrow (DpSpotifyLeave) that arms it. -->
         <StackPanel Grid.Row="15" Orientation="Horizontal" Margin="0,18,0,0">
             <CheckBox x:Name="CkSpotifyReturn" Content="{loc:Get spotify_return_label}"
-                      VerticalAlignment="Center"/>
+                      VerticalAlignment="Center" Checked="ReturnEnabled_Changed" Unchecked="ReturnEnabled_Changed"/>
             <TextBox x:Name="TxtSpotifyReturnSec" Width="52" Height="23" Margin="8,0,6,0"
                      VerticalContentAlignment="Center" TextAlignment="Center"
                      MaxLength="4" PreviewTextInput="DigitsOnly_PreviewTextInput"/>
@@ -111,21 +113,34 @@
             <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get spotify_return_hint}"/>
         </StackPanel>
 
+        <!-- Sub-condition of the return timer above: WHEN it's allowed to actually switch back,
+             not whether it counts down at all (user request 2026-09-01). -->
+        <StackPanel Grid.Row="16" Orientation="Horizontal" Margin="0,10,0,4">
+            <TextBlock x:Name="LblSpotifyReturnCondition" Text="{loc:Get spotify_return_condition_label}"
+                       FontSize="11" Foreground="#9A9AA2" VerticalAlignment="Center"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get spotify_return_condition_hint}"/>
+        </StackPanel>
+        <ComboBox Grid.Row="17" x:Name="CbSpotifyReturnCondition" Width="260" HorizontalAlignment="Left" Margin="0,0,0,4">
+            <ComboBoxItem Content="{loc:Get spotify_return_condition_always}"/>
+            <ComboBoxItem Content="{loc:Get spotify_return_condition_running}"/>
+            <ComboBoxItem x:Name="CbiSpotifyReturnConditionReachable" Content="{loc:Get spotify_return_condition_reachable}"/>
+        </ComboBox>
+
         <!-- Order swapped 2026-09-01 (user request) — Foreground-only now sits between the two
              return-related toggles instead of after Show back arrow. -->
-        <StackPanel Grid.Row="16" Orientation="Horizontal" Margin="0,10,0,0">
+        <StackPanel Grid.Row="18" Orientation="Horizontal" Margin="0,10,0,0">
             <CheckBox x:Name="CkSpotifyForeground" Content="{loc:Get spotify_foreground_only_label}"
                       VerticalAlignment="Center"/>
             <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get spotify_foreground_only_hint}"/>
         </StackPanel>
 
-        <StackPanel Grid.Row="17" Orientation="Horizontal" Margin="0,14,0,0">
+        <StackPanel Grid.Row="19" Orientation="Horizontal" Margin="0,14,0,0">
             <CheckBox x:Name="CkSpotifyBackArrow" Content="{loc:Get show_back_arrow_label}"
                       VerticalAlignment="Center"/>
             <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get show_back_arrow_hint}"/>
         </StackPanel>
 
-        <Grid Grid.Row="19" Margin="0,12,0,0">
+        <Grid Grid.Row="21" Margin="0,12,0,0">
             <Button Style="{DynamicResource GuideBarButton}" HorizontalAlignment="Left" VerticalAlignment="Center"
                     Content="{loc:Get guide_button}" ToolTip="{loc:Get guide_tooltip}" Click="BtnGuide_Click"/>
             <Button Content="{loc:Get save}" Width="90" Padding="6,2" IsDefault="True"

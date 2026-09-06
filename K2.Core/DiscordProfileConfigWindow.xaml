@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:K2.Core"
         Title="{loc:Get discord_profile_config_title}"
-        Width="470" Height="360"
-        MinWidth="420" MinHeight="340"
+        Width="470" Height="470"
+        MinWidth="420" MinHeight="450"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
@@ -20,8 +20,9 @@
             <RowDefinition Height="Auto"/>   <!-- 6 ptt row -->
             <RowDefinition Height="Auto"/>   <!-- 7 return-timer row -->
             <RowDefinition Height="Auto"/>   <!-- 8 show-back-arrow row -->
-            <RowDefinition Height="*"/>      <!-- 9 filler -->
-            <RowDefinition Height="Auto"/>   <!-- 10 buttons -->
+            <RowDefinition Height="Auto"/>   <!-- 9 foreground-only row -->
+            <RowDefinition Height="*"/>      <!-- 10 filler -->
+            <RowDefinition Height="Auto"/>   <!-- 11 buttons -->
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" Text="{loc:Get discord_profile_config_title}" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
@@ -82,7 +83,13 @@
             <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get show_back_arrow_hint}"/>
         </StackPanel>
 
-        <Grid Grid.Row="10" Margin="0,12,0,0">
+        <StackPanel Grid.Row="9" Orientation="Horizontal" Margin="0,12,0,0">
+            <CheckBox x:Name="CkDiscordForeground" Content="{loc:Get discord_foreground_only_label}"
+                      VerticalAlignment="Center"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get discord_foreground_only_hint}"/>
+        </StackPanel>
+
+        <Grid Grid.Row="11" Margin="0,12,0,0">
             <Button Style="{DynamicResource GuideBarButton}" HorizontalAlignment="Left" VerticalAlignment="Center"
                     Content="{loc:Get guide_button}" ToolTip="{loc:Get guide_tooltip}" Click="BtnGuide_Click"/>
             <Button Content="{loc:Get save}" Width="90" Padding="6,2" IsDefault="True"

@@ -2489,6 +2489,17 @@ public partial class MainWindow
             LogEverest($"[KEY ] {(e.FromNativeKeyReport ? "hidUsage" : "wMatrix")}=0x{rawMatrix:X2} " +
                        $"{(e.Pressed ? "down" : "up")}");
 
+        // Feed real keystrokes into an in-progress macro recording. While K2 is
+        // the foreground window the Everest stops emitting standard keyboard
+        // input (presses arrive only as these NKRO native reports), so
+        // MacroRecorder's global WH_KEYBOARD_LL hook would capture nothing.
+        // De-dupe inside MacroRecorder handles the case where both paths fire.
+        if (e.FromNativeKeyReport && _macroRecorder?.IsRecording == true)
+        {
+            int vk = K2.App.Services.HidKeyboardUsage.ToVirtualKey(rawMatrix);
+            if (vk != 0) _macroRecorder.InjectKey(vk, e.Pressed);
+        }
+
         // ---- Guided remapping in progress: capture wMatrix → matrixId ----
         if (e.Pressed && _evMapAwaitingIndex >= 0 && _evMapAwaitingIndex < _evMapKeyDefs.Length)
         {

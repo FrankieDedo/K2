@@ -1,0 +1,133 @@
+﻿<Window x:Class="K2.App.GameProfileConfigDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+        Title="{loc:Get game_profile_config_title}"
+        Width="640" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource K2SurfaceBrush}"
+        Foreground="{DynamicResource K2TextBrush}"
+        ResizeMode="NoResize">
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" x:Name="TxtTitle" FontSize="16" FontWeight="Bold" Margin="0,0,0,4"/>
+        <TextBlock Grid.Row="1" Text="{loc:Get game_profile_config_hint}" TextWrapping="Wrap"
+                   Foreground="#9A9AA2" Margin="0,0,0,14"/>
+
+        <CheckBox Grid.Row="2" x:Name="CkEnabled" Content="{loc:Get game_profile_active}"
+                  FontSize="14" Margin="0,0,0,12"/>
+
+        <!-- Device picker: only rendered when more than one DisplayPad is connected. With one
+             pad the profile is bound to it silently — a one-item combo is a decision the user
+             cannot make. -->
+        <StackPanel Grid.Row="3" x:Name="PnlDevice" Orientation="Horizontal" Margin="0,0,0,12">
+            <TextBlock Text="{loc:Get game_profile_device_label}" VerticalAlignment="Center"/>
+            <ComboBox x:Name="CbDevice" Width="220" Height="26" Margin="8,0,0,0"/>
+        </StackPanel>
+
+        <!-- Which executable this profile follows. Empty = the catalogue's process name, resolved
+             on this machine by GameExeResolver (running process, then Steam). A path typed or
+             picked here overrides BOTH halves at once: the watcher arms on that file's process
+             name and the card's icon is extracted from that same file, so a non-Steam, portable
+             or renamed install works without K2 having to guess where it lives. -->
+        <StackPanel Grid.Row="4" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{loc:Get game_profile_exe_label}" VerticalAlignment="Center"/>
+                <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get game_profile_exe_hint}"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                <TextBox x:Name="TxtExePath" Width="404" Height="23"
+                         VerticalContentAlignment="Center"
+                         TextChanged="TxtExePath_TextChanged"/>
+                <Button x:Name="BtnExeBrowse" Content="{loc:Get game_profile_exe_browse}" Height="23"
+                        Padding="8,0" Margin="6,0,0,0" Click="BtnExeBrowse_Click"/>
+                <Button x:Name="BtnExeClear" Content="{loc:Get game_profile_exe_clear}" Height="23"
+                        Padding="8,0" Margin="6,0,0,0" Click="BtnExeClear_Click"/>
+            </StackPanel>
+            <!-- Only shown while the box is empty: says what "auto" actually resolved to, so the
+                 user can see whether they need to override it at all. -->
+            <TextBlock x:Name="TxtExeAuto" Foreground="#9A9AA2" Margin="0,4,0,0"
+                       TextTrimming="CharacterEllipsis"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="0,0,0,10">
+            <CheckBox x:Name="CkReturn" Content="{loc:Get game_profile_return_label}"
+                      VerticalAlignment="Center"/>
+            <TextBox x:Name="TxtReturnSec" Width="52" Height="23" Margin="8,0,6,0"
+                     VerticalContentAlignment="Center"/>
+            <TextBlock Text="{loc:Get unit_seconds}" VerticalAlignment="Center" Foreground="#9A9AA2"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get game_profile_return_hint}"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="6" Orientation="Horizontal" Margin="0,0,0,16">
+            <CheckBox x:Name="CkForeground" Content="{loc:Get game_profile_foreground_label}"
+                      VerticalAlignment="Center"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get game_profile_foreground_hint}"/>
+        </StackPanel>
+
+        <!-- Tile editor: one DisplayPad page at a time, 6x2 exactly like the hardware.
+             Clicking a key opens the same DpKeyConfigDialog the normal profiles use. -->
+        <StackPanel Grid.Row="7" Margin="0,0,0,14">
+            <!-- The pad itself, same picture and same key geometry as the DisplayPad device
+                 section (Assets/mkd_bg.png, screen area 55..455 x 130..330, 60x60 keys with
+                 8/10 gaps — see DpRebuildKeyGrid): the keys are shown ON the device rather than
+                 as an abstract grid, so what you configure looks like what you'll be holding.
+                 Scaled to fit the dialog by the Viewbox; the canvas keeps device coordinates. -->
+            <Viewbox MaxWidth="560" HorizontalAlignment="Center">
+                <Canvas x:Name="CvsGameKeys" Width="510" Height="370" ClipToBounds="True">
+                    <Canvas.Background>
+                        <ImageBrush ImageSource="Assets/mkd_bg.png" Stretch="Fill"/>
+                    </Canvas.Background>
+                </Canvas>
+            </Viewbox>
+
+            <!-- Page controls live UNDER the pad: they belong to the thing they page through, and
+                 above it they read as part of the settings list. The prev/next pair only appears
+                 once there is more than one page — a "Page 1 of 1" with two dead arrows is noise. -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,14,0,4">
+                <StackPanel x:Name="PnlPageNav" Orientation="Horizontal" Visibility="Collapsed"
+                            VerticalAlignment="Center" Margin="0,0,12,0">
+                    <!-- Real arrows, not the single-guillemets this started as: at the dialog's
+                         12 px those glyphs are a hairline and read as two empty buttons on the
+                         dark surface. Foreground is set explicitly for the same reason — a Button
+                         does not inherit the Window's, so it fell back to the near-black default. -->
+                    <Button x:Name="BtnPagePrev" Content="&#x2190;" Width="30" Height="22"
+                            FontSize="15" FontWeight="Bold"
+                            Foreground="{DynamicResource K2TextBrush}"
+                            Click="BtnPagePrev_Click"/>
+                    <TextBlock x:Name="TxtPage" VerticalAlignment="Center" Foreground="#9A9AA2"
+                               MinWidth="110" TextAlignment="Center"/>
+                    <Button x:Name="BtnPageNext" Content="&#x2192;" Width="30" Height="22"
+                            FontSize="15" FontWeight="Bold"
+                            Foreground="{DynamicResource K2TextBrush}"
+                            Click="BtnPageNext_Click"/>
+                </StackPanel>
+                <Button x:Name="BtnPageAdd" Content="{loc:Get game_profile_add_page}" Height="22"
+                        Padding="10,0" Click="BtnPageAdd_Click"/>
+                <Button x:Name="BtnPageRemove" Content="{loc:Get game_profile_remove_page}" Height="22"
+                        Padding="10,0" Margin="6,0,0,0" Visibility="Collapsed"
+                        Click="BtnPageRemove_Click"/>
+            </StackPanel>
+        </StackPanel>
+
+        <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="{loc:Get game_profile_reset_tiles}" Padding="8,3" Margin="0,0,8,0"
+                    Click="BtnResetTiles_Click"/>
+            <Button Content="{loc:Get save}" Width="90" Padding="6,2" IsDefault="True"
+                    Click="BtnSave_Click"/>
+            <Button Content="{loc:Get cancel}" Width="90" Padding="6,2" Margin="8,0,0,0"
+                    IsCancel="True"/>
+        </StackPanel>
+    </Grid>
+</Window>
