@@ -276,8 +276,36 @@ public static class ActionTypeHelper
     };
 
     /// <summary>Display text for a "discord" action: the localized label of the matching
-    /// <see cref="DiscordCommands"/> entry, plus the stored argument when present.</summary>
-    public static string DiscordSummary(string? actionValue) => TildeCommandSummary(actionValue, "act_discord", DiscordCommands);
+    /// <see cref="DiscordCommands"/> entry, plus the stored argument when present. "join voice
+    /// channel" shows the channel <i>name</i> rather than the raw <c>id|name</c> arg.</summary>
+    public static string DiscordSummary(string? actionValue)
+    {
+        string value = actionValue ?? "";
+        int tilde = value.IndexOf('~');
+        if (tilde >= 0 && value.AsSpan(0, tilde).Trim().Equals("join_voice", StringComparison.OrdinalIgnoreCase))
+        {
+            string name = DiscordVoiceChannelName(value[(tilde + 1)..]);
+            string label = Loc.Get("discord_cmd_join_voice");
+            return name.Length > 0 ? $"{label} — {name}" : label;
+        }
+        return TildeCommandSummary(actionValue, "act_discord", DiscordCommands);
+    }
+
+    /// <summary>Channel name out of a <c>join_voice</c> argument. Accepts the current
+    /// <c>"id|name"</c> shape, a bare channel id (→ empty, no name known), and the legacy
+    /// picker entry <c>"id  #name (guild)"</c>.</summary>
+    public static string DiscordVoiceChannelName(string? joinVoiceArg)
+    {
+        string s = (joinVoiceArg ?? "").Trim();
+        if (s.Length == 0) return "";
+
+        int pipe = s.IndexOf('|');
+        if (pipe >= 0) return s[(pipe + 1)..].Trim();
+
+        int i = 0;
+        while (i < s.Length && char.IsDigit(s[i])) i++;
+        return s[i..].TrimStart().TrimStart('#').Trim();
+    }
 
     // ───────────────── Live DisplayPad tiles (K2-only, see LiveTileRenderer) ─────────────────
     //
@@ -919,7 +947,10 @@ public static class ActionTypeHelper
     {
         var payload = ProfileTargetPayload.Parse(val);
         if (payload is null) return val; // legacy plain "Next" | "Previous" | "1".."N"
-        return payload.Targets.Count == 0 ? Loc.Get("act_profile") : string.Join(", ", payload.Targets.ConvertAll(t => t.Target));
+        // Show the profile's real name (captured at save time) rather than its slot number.
+        return payload.Targets.Count == 0
+            ? Loc.Get("act_profile")
+            : string.Join(", ", payload.Targets.ConvertAll(t => string.IsNullOrWhiteSpace(t.Name) ? t.Target : t.Name));
     }
 
     /// <summary>Normalizes Base Camp's "OS Commands" SubFunctionType/FunctionValue (e.g.

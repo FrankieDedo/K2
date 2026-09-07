@@ -1267,6 +1267,8 @@ J'aime et Ajouter/Retirer de la playlist ne sont PAS disponibles : Spotify bloqu
   <string name="settings_game_profiles_needs_dp">L'onglet demande aussi au moins un DisplayPad connecté — sans lui, un profil de jeu n'a rien sur quoi tourner.</string>
   <string name="game_profile_config_title">Réglages du profil de jeu</string>
   <string name="game_profile_config_hint">Comment ce profil se comporte pendant que son jeu tourne, et ce que font ses touches.</string>
+  <string name="profile_mode_on_launch">Afficher le profil quand l'app associée s'ouvre</string>
+  <string name="profile_mode_on_select">Afficher le profil uniquement quand il est sélectionné</string>
   <string name="game_profile_device_label">DisplayPad :</string>
   <string name="game_profile_exe_label">Exécutable du jeu :</string>
   <string name="file_not_found_fmt">Ce fichier n'existe plus :

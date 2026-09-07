@@ -75,6 +75,14 @@ public partial class MainWindow
     /// mid-call can bring the page straight back instead of waiting for the next roster change.</summary>
     private bool _dvpForegroundWasEnabled;
 
+    /// <summary>How many times <see cref="DvpReconcileAll"/> has forced a fresh voice-state read
+    /// after finding an open pipe with no known channel. Bounded so a pad that has the Discord
+    /// dedicated profile but simply isn't in a call doesn't fire a GET every reconcile forever —
+    /// once a call turns up <see cref="DiscordVoiceRoom.ChannelId"/> is non-null and the forced
+    /// read stops on its own.</summary>
+    private int _dvpForcedVoiceReads;
+    private const int DvpMaxForcedVoiceReads = 8;
+
     /// <summary>Process name of Discord's desktop client (no extension — matched against
     /// <see cref="ProfileLaunchWatcher.CurrentForegroundProcessName"/>).</summary>
     private const string DiscordExeName = "Discord";
@@ -147,10 +155,19 @@ public partial class MainWindow
         // own, so a call joined afterwards was never seen and the dedicated page stayed closed
         // until the user happened to open the DisplayPad tab, which retries it as a side effect
         // (user report 2026-08-26). Cheap poll: a no-op once the pipe is actually open.
-        _dvpReconnectTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+        //
+        // Once the pipe IS open it does a second job — DvpReconcileAll — because the event path
+        // (DvpOnRoomChanged) only opens the page on the pads that exist WHEN Changed fires: a
+        // call already in progress when K2 starts raises its one Changed before the DisplayPads
+        // have enumerated, and Discord + K2 launched together can hand back a null channel on
+        // the first read. The reconcile replays both (user report 2026-09-06: "non parte, né con
+        // chiamata già in corso né aprendo Discord dopo").
+        _dvpReconnectTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         _dvpReconnectTimer.Tick += (_, _) =>
         {
+            if (_dpTornDown) return;
             if (DiscordStore.IsConnected && !DiscordBridge.IsRpcOpen) DiscordBridge.StartLiveVoiceState();
+            else DvpReconcileAll();
         };
         _dvpReconnectTimer.Start();
 
@@ -161,6 +178,11 @@ public partial class MainWindow
         _dvpForegroundTimer.Tick += (_, _) => DvpPollForeground();
         _dvpForegroundTimer.Start();
     }
+
+    /// <summary>False when the user set the voice page to "show only when selected": no path may
+    /// open it on its own then — it comes up only from <see cref="DvpReopen"/> (the Discord row or
+    /// a <c>voice page</c> key). See <see cref="DiscordStore.VoicePageActivationOnSelect"/>.</summary>
+    private static bool DvpAutoActivateEnabled() => !DiscordStore.VoicePageActivationOnSelect;
 
     /// <summary>False only when the foreground-only flag is on AND Discord is not the app in
     /// front — the gate every "open the voice page" path checks before opening.</summary>
@@ -181,6 +203,9 @@ public partial class MainWindow
     private void DvpPollForeground()
     {
         if (_dpTornDown) return;
+        // Foreground-follow is a sub-option of the auto behaviour — off entirely in "show only
+        // when selected" mode.
+        if (!DvpAutoActivateEnabled()) return;
         bool enabled = DiscordStore.VoicePageForegroundOnly;
         bool wasEnabled = _dvpForegroundWasEnabled;
         _dvpForegroundWasEnabled = enabled;
@@ -217,6 +242,50 @@ public partial class MainWindow
         }
     }
 
+    /// <summary>
+    /// Brings the voice page into agreement with the live call state for every pad that has the
+    /// Discord dedicated profile: opens it where a call is running and the gates allow, closes it
+    /// where there is no call. <see cref="DvpOnRoomChanged"/> already does this, but only for the
+    /// pads that exist WHEN its <c>Changed</c> event fires — so a call already in progress at K2
+    /// startup (its one <c>Changed</c> raised before the DisplayPads enumerated) is never replayed,
+    /// and neither is the case where Discord handed back a null channel on the first read because
+    /// it was still starting up alongside K2. This is the catch-up: cheap, idempotent, and safe to
+    /// call on the reconnect timer and after every profile refresh.
+    /// </summary>
+    private void DvpReconcileAll()
+    {
+        if (_dpTornDown) return;
+
+        // Pipe open but still no channel: ask the client once more, a bounded number of times,
+        // in case the initial GET_SELECTED_VOICE_CHANNEL lost the race with Discord's own startup.
+        if (DiscordBridge.IsRpcOpen && DiscordVoiceRoom.ChannelId is null
+            && _dvpForcedVoiceReads < DvpMaxForcedVoiceReads
+            && _dpDeviceIds.Any(id => DpHasDedicated(id, "Discord")))
+        {
+            _dvpForcedVoiceReads++;
+            DiscordBridge.RefreshVoiceStateNow();
+        }
+
+        bool inCall = DiscordVoiceRoom.ChannelId is not null;
+        foreach (int id in _dpDeviceIds.ToList())
+        {
+            if (!DpHasDedicated(id, "Discord")) continue;
+
+            if (inCall)
+            {
+                if (!DvpAutoActivateEnabled()) continue;
+                if (_dvpDismissed.Contains(id) || !DvpForegroundGateOpen()) continue;
+                if (!_dpDiscordRoom.ContainsKey(id) && !DpEmojiBrowserActive(id)
+                    && !_dpScreensaverShowing.Contains(id))
+                    DvpOpen(id);
+            }
+            else if (_dpDiscordRoom.ContainsKey(id))
+            {
+                DvpExit(id);
+            }
+        }
+    }
+
     /// <summary>Takes the voice page off the live model and stops its timers — called from
     /// <c>CleanupDisplayPad</c> BEFORE the store/engines are disposed.</summary>
     private void DvpUnhook()
@@ -247,8 +316,8 @@ public partial class MainWindow
         bool inCall = channel is not null;
         foreach (int id in _dpDeviceIds.ToList())
         {
-            if (inCall && DpHasDedicated(id, "Discord") && !_dvpDismissed.Contains(id)
-                && DvpForegroundGateOpen()) DvpOpen(id);
+            if (inCall && DvpAutoActivateEnabled() && DpHasDedicated(id, "Discord")
+                && !_dvpDismissed.Contains(id) && DvpForegroundGateOpen()) DvpOpen(id);
             else if (!inCall) DvpExit(id);   // DvpExit also drops any pending return timer
         }
     }
@@ -269,7 +338,8 @@ public partial class MainWindow
     private void DvpArmReturnTimer(int devId)
     {
         DvpCancelReturnTimer(devId);
-        if (!DiscordStore.VoicePageReturnEnabled || DiscordVoiceRoom.ChannelId is null) return;
+        if (!DvpAutoActivateEnabled() || !DiscordStore.VoicePageReturnEnabled
+            || DiscordVoiceRoom.ChannelId is null) return;
         if (!DpHasDedicated(devId, "Discord")) return;
 
         var timer = new DispatcherTimer
@@ -372,6 +442,31 @@ public partial class MainWindow
         // paint half of each. Everything else that keeps repainting its own tiles is stopped for
         // the same reason it is stopped for the browser/screensaver.
         if (DpEmojiBrowserActive(devId)) return;
+        // Same rule for the screensaver: while its image owns the panel nothing live may paint
+        // over it, dedicated profiles included (user request 2026-09-06). DpScreensaverWake
+        // repaints on the first key press, and DvpRestoreAfterRepaint brings the page back then.
+        if (_dpScreensaverShowing.Contains(devId)) return;
+
+        // The voice page is an overlay ON TOP of an ordinary profile — the pad "keeps working
+        // normally underneath" until the call ends. That contract breaks when the profile
+        // underneath is the OTHER dedicated one (Spotify): its 2×2 cover block keeps painting
+        // through the call, and the profile grid keeps resolving to the Spotify slot (user report
+        // 2026-09-07, both dedicated set to "show only when selected"). Move the pad off the
+        // Spotify slot onto a real profile and stop its cover overlay before taking over; the
+        // call ending then repaints that ordinary profile, not Spotify.
+        if (_dpStore.GetProfileName(devId, _dpStore.GetCurrentProfile(devId)) == SpotifyProfileName)
+        {
+            SpotifyCoverService.Stop(devId);
+            var ordinary = DpOrdinaryProfiles(devId);
+            if (ordinary.Count > 0)
+            {
+                _dpStore.SetCurrentProfile(devId, ordinary[0]);
+                _dpBgPageId[devId] = 0;
+                if (_dpBgPageHistory.TryGetValue(devId, out var hist)) hist.Clear();
+                DpLog($"[DVP] device {devId}: was on Spotify dedicated slot — moved to ordinary profile {ordinary[0]} before voice-page takeover");
+            }
+        }
+
         DpGifAnimator.StopAllForDevice(devId);
         DpFullscreenAnimator.Stop(devId);
         DpLiveTileService.Stop(devId);
@@ -603,6 +698,9 @@ public partial class MainWindow
     private void DvpPaint(int devId)
     {
         if (!_dpDiscordRoom.TryGetValue(devId, out var st)) return;
+        // A roster/speaking event mid-screensaver must not tick tiles into the image — the page
+        // is put back wholesale on wake (see DvpOpen's screensaver guard).
+        if (_dpScreensaverShowing.Contains(devId)) return;
 
         var all = DiscordVoiceRoom.Participants;
         var tiles = new string?[12];

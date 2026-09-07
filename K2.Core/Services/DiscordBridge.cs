@@ -155,6 +155,23 @@ public static class DiscordBridge
         System.Threading.Tasks.Task.Run(() => EnsureReady(_ => { }));
     }
 
+    /// <summary>Forces a fresh read of the client's currently-selected voice channel on a
+    /// background thread — for a host that already has an open pipe but no known channel and
+    /// suspects it missed the initial state (Discord still starting when the pipe opened, or a
+    /// call already running before K2 launched). No-op when the pipe isn't open; safe to call
+    /// from any thread other than the RPC reader (same as every other command path).</summary>
+    public static void RefreshVoiceStateNow()
+    {
+        DiscordIpc? ipc;
+        lock (_lock) ipc = _ipc is { IsOpen: true } ? _ipc : null;
+        if (ipc is null) return;
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            try { RefreshVoiceState(ipc); }
+            catch (Exception ex) { Log?.Invoke($"[Discord] forced voice-state read: {ex.Message}"); }
+        });
+    }
+
     /// <summary>A connected+authenticated RPC handle for <see cref="DiscordVoiceRoom"/>'s worker
     /// thread (null when Discord isn't configured/running). Same path key execution takes, so the
     /// room never opens a second pipe of its own.</summary>
@@ -388,21 +405,21 @@ public static class DiscordBridge
 
     // ---------------------------------------------------------------- pickers
 
-    /// <summary>Voice channels the connected account can see, as
-    /// <c>"id  #name (guild)"</c> entries — the id-first shape <see cref="ParseChannelId"/>
-    /// reads back, so the action value stays valid even if the channel is renamed. Used to
-    /// populate the "join voice channel" argument list in the action dialog; returns an empty
-    /// array when Discord isn't connected/running (the combo stays free-text).</summary>
-    public static string[] ListVoiceChannels()
+    /// <summary>Voice channels the connected account can see, as <c>(id, name, guild)</c>
+    /// triples. The action dialog shows "name (guild)" to the user but stores <c>id|name</c> as
+    /// the action value — the id keeps the binding valid after a channel rename, the name feeds
+    /// the default-icon caption offline. Returns an empty list when Discord isn't connected/
+    /// running (the combo stays free-text).</summary>
+    public static IReadOnlyList<(string Id, string Name, string Guild)> ListVoiceChannelChoices()
     {
         var ipc = EnsureReady(_ => { });
-        if (ipc is null) return Array.Empty<string>();
+        if (ipc is null) return Array.Empty<(string, string, string)>();
 
         var guilds = ipc.Send("GET_GUILDS", null, CommandTimeout, out _);
         if (guilds is not { ValueKind: JsonValueKind.Object } g || !g.TryGetProperty("guilds", out var list))
-            return Array.Empty<string>();
+            return Array.Empty<(string, string, string)>();
 
-        var result = new List<string>();
+        var result = new List<(string, string, string)>();
         foreach (var guild in list.EnumerateArray())
         {
             string guildId = guild.TryGetProperty("id", out var gid) ? gid.GetString() ?? "" : "";
@@ -420,17 +437,17 @@ public static class DiscordBridge
                     continue;
                 string id = ch.TryGetProperty("id", out var cid) ? cid.GetString() ?? "" : "";
                 string name = ch.TryGetProperty("name", out var cname) ? cname.GetString() ?? "" : "";
-                if (id.Length > 0) result.Add($"{id}  #{name} ({guildName})");
+                if (id.Length > 0) result.Add((id, name, guildName));
             }
         }
-        return result.ToArray();
+        return result;
     }
 
     // ---------------------------------------------------------------- helpers
 
     /// <summary>First run of digits in the stored value — accepts both a bare channel id and a
     /// whole picker entry ("id  #name (guild)").</summary>
-    private static string? ParseChannelId(string value)
+    internal static string? ParseChannelId(string value)
     {
         var digits = new string(value.SkipWhile(c => !char.IsDigit(c)).TakeWhile(char.IsDigit).ToArray());
         return digits.Length > 0 ? digits : null;

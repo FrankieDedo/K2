@@ -58,6 +58,9 @@ public partial class SpotifyProfileConfigWindow : Window
         InitializeComponent();
         _initialDevice = current.Device;
 
+        RbModeSelect.IsChecked = current.ActivationOnSelect;
+        RbModeLaunch.IsChecked = !current.ActivationOnSelect;
+
         RbSourceWebApi.IsChecked = current.Source == SpotifyCoverSource.WebApi;
         RbSourceLocal.IsChecked = !RbSourceWebApi.IsChecked;
 
@@ -89,7 +92,22 @@ public partial class SpotifyProfileConfigWindow : Window
         UpdateTextModeEnabled();
         UpdateDeviceRowVisibility();
         UpdateReturnConditionEnabled();
+        ApplyModeVisibility();
         if (RbSourceWebApi.IsChecked == true) _ = LoadSpotifyDevicesAsync(_initialDevice);
+    }
+
+    private void Mode_Changed(object sender, RoutedEventArgs e) => ApplyModeVisibility();
+
+    /// <summary>The return timer, its condition and the foreground-only flag are sub-options of
+    /// "show when Spotify opens" — hidden when the profile is set to show only when picked by hand.</summary>
+    private void ApplyModeVisibility()
+    {
+        if (PnlSpotifyReturn is null) return;
+        var vis = RbModeSelect.IsChecked == true ? Visibility.Collapsed : Visibility.Visible;
+        PnlSpotifyReturn.Visibility = vis;
+        PnlSpotifyReturnCond.Visibility = vis;
+        CbSpotifyReturnCondition.Visibility = vis;
+        PnlSpotifyForeground.Visibility = vis;
     }
 
     private void Source_Changed(object sender, RoutedEventArgs e)
@@ -236,7 +254,8 @@ public partial class SpotifyProfileConfigWindow : Window
                 1 => SpotifyReturnCondition.SpotifyRunning,
                 2 => SpotifyReturnCondition.DeviceReachable,
                 _ => SpotifyReturnCondition.Always,
-            });
+            },
+            RbModeSelect.IsChecked == true);
         Saved = true;
         Close();
     }

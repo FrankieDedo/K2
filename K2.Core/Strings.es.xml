@@ -1283,6 +1283,8 @@ Me gusta y Anadir/Quitar de la lista NO estan disponibles: Spotify bloquea los e
   <string name="settings_game_profiles_needs_dp">La pestaña también necesita al menos un DisplayPad conectado — sin él, un perfil de juego no tiene dónde funcionar.</string>
   <string name="game_profile_config_title">Ajustes del perfil de juego</string>
   <string name="game_profile_config_hint">Cómo se comporta este perfil mientras su juego está en ejecución, y qué hacen sus teclas.</string>
+  <string name="profile_mode_on_launch">Mostrar el perfil cuando se abre la app asociada</string>
+  <string name="profile_mode_on_select">Mostrar el perfil solo cuando está seleccionado</string>
   <string name="game_profile_device_label">DisplayPad:</string>
   <string name="game_profile_exe_label">Ejecutable del juego:</string>
   <string name="file_not_found_fmt">Este archivo ya no existe:

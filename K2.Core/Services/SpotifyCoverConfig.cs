@@ -82,7 +82,8 @@ public readonly record struct SpotifyCoverConfig(
     bool ForegroundOnly = false,
     SpotifyCoverPosition Position = SpotifyCoverPosition.Left,
     string Device = "",
-    SpotifyReturnCondition ReturnCondition = SpotifyReturnCondition.Always)
+    SpotifyReturnCondition ReturnCondition = SpotifyReturnCondition.Always,
+    bool ActivationOnSelect = false)
 {
     public const int DefaultReturnSeconds = 10;
 
@@ -116,6 +117,12 @@ public readonly record struct SpotifyCoverConfig(
     public string ForegroundOnlyToken => ForegroundOnly ? "1" : "0";
 
     public static bool ParseForegroundOnly(string? s) => s == "1";
+
+    /// <summary>"Show the profile only when selected": the reserved Spotify slot stays an ordinary
+    /// pick, never armed on Spotify's process/foreground. Off by default (absent reads as false),
+    /// so a pad that predates the setting keeps today's auto behaviour.</summary>
+    public string ActivationOnSelectToken => ActivationOnSelect ? "1" : "0";
+    public static bool ParseActivationOnSelect(string? s) => s == "1";
 
     public static SpotifyCoverPosition ParsePosition(string? s) => s switch
     {

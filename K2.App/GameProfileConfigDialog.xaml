@@ -19,6 +19,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" x:Name="TxtTitle" FontSize="16" FontWeight="Bold" Margin="0,0,0,4"/>
@@ -28,10 +29,21 @@
         <CheckBox Grid.Row="2" x:Name="CkEnabled" Content="{loc:Get game_profile_active}"
                   FontSize="14" Margin="0,0,0,12"/>
 
+        <!-- Activation mode. "On launch" keeps today's behaviour (auto-switch on the game's
+             process, with the executable / return-timer / foreground sub-options below it);
+             "on select" makes it an ordinary reserved slot, shown only when picked by hand from
+             the pad's Game profiles list — the sub-options are hidden then. -->
+        <StackPanel Grid.Row="3" Margin="0,0,0,12">
+            <RadioButton x:Name="RbModeLaunch" GroupName="gpmode" Margin="0,2"
+                         Content="{loc:Get profile_mode_on_launch}" Checked="Mode_Changed"/>
+            <RadioButton x:Name="RbModeSelect" GroupName="gpmode" Margin="0,2"
+                         Content="{loc:Get profile_mode_on_select}" Checked="Mode_Changed"/>
+        </StackPanel>
+
         <!-- Device picker: only rendered when more than one DisplayPad is connected. With one
              pad the profile is bound to it silently — a one-item combo is a decision the user
              cannot make. -->
-        <StackPanel Grid.Row="3" x:Name="PnlDevice" Orientation="Horizontal" Margin="0,0,0,12">
+        <StackPanel Grid.Row="4" x:Name="PnlDevice" Orientation="Horizontal" Margin="0,0,0,12">
             <TextBlock Text="{loc:Get game_profile_device_label}" VerticalAlignment="Center"/>
             <ComboBox x:Name="CbDevice" Width="220" Height="26" Margin="8,0,0,0"/>
         </StackPanel>
@@ -41,7 +53,7 @@
              picked here overrides BOTH halves at once: the watcher arms on that file's process
              name and the card's icon is extracted from that same file, so a non-Steam, portable
              or renamed install works without K2 having to guess where it lives. -->
-        <StackPanel Grid.Row="4" Margin="0,0,0,12">
+        <StackPanel Grid.Row="5" x:Name="PnlExeRow" Margin="0,0,0,12">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="{loc:Get game_profile_exe_label}" VerticalAlignment="Center"/>
                 <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get game_profile_exe_hint}"/>
@@ -61,7 +73,7 @@
                        TextTrimming="CharacterEllipsis"/>
         </StackPanel>
 
-        <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="0,0,0,10">
+        <StackPanel Grid.Row="6" x:Name="PnlReturnRow" Orientation="Horizontal" Margin="0,0,0,10">
             <CheckBox x:Name="CkReturn" Content="{loc:Get game_profile_return_label}"
                       VerticalAlignment="Center"/>
             <TextBox x:Name="TxtReturnSec" Width="52" Height="23" Margin="8,0,6,0"
@@ -70,7 +82,7 @@
             <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get game_profile_return_hint}"/>
         </StackPanel>
 
-        <StackPanel Grid.Row="6" Orientation="Horizontal" Margin="0,0,0,16">
+        <StackPanel Grid.Row="7" x:Name="PnlForegroundRow" Orientation="Horizontal" Margin="0,0,0,16">
             <CheckBox x:Name="CkForeground" Content="{loc:Get game_profile_foreground_label}"
                       VerticalAlignment="Center"/>
             <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get game_profile_foreground_hint}"/>
@@ -78,7 +90,7 @@
 
         <!-- Tile editor: one DisplayPad page at a time, 6x2 exactly like the hardware.
              Clicking a key opens the same DpKeyConfigDialog the normal profiles use. -->
-        <StackPanel Grid.Row="7" Margin="0,0,0,14">
+        <StackPanel Grid.Row="8" Margin="0,0,0,14">
             <!-- The pad itself, same picture and same key geometry as the DisplayPad device
                  section (Assets/mkd_bg.png, screen area 55..455 x 130..330, 60x60 keys with
                  8/10 gaps — see DpRebuildKeyGrid): the keys are shown ON the device rather than
@@ -102,14 +114,17 @@
                          12 px those glyphs are a hairline and read as two empty buttons on the
                          dark surface. Foreground is set explicitly for the same reason — a Button
                          does not inherit the Window's, so it fell back to the near-black default. -->
+                    <!-- Padding="0" is load-bearing: the implicit Button style sets Padding="12,0",
+                         which on a 30px-wide button swallows the whole glyph — the "next" arrow in
+                         particular vanished (user report). -->
                     <Button x:Name="BtnPagePrev" Content="&#x2190;" Width="30" Height="22"
-                            FontSize="15" FontWeight="Bold"
+                            Padding="0" FontSize="15" FontWeight="Bold"
                             Foreground="{DynamicResource K2TextBrush}"
                             Click="BtnPagePrev_Click"/>
                     <TextBlock x:Name="TxtPage" VerticalAlignment="Center" Foreground="#9A9AA2"
                                MinWidth="110" TextAlignment="Center"/>
                     <Button x:Name="BtnPageNext" Content="&#x2192;" Width="30" Height="22"
-                            FontSize="15" FontWeight="Bold"
+                            Padding="0" FontSize="15" FontWeight="Bold"
                             Foreground="{DynamicResource K2TextBrush}"
                             Click="BtnPageNext_Click"/>
                 </StackPanel>
@@ -121,7 +136,13 @@
             </StackPanel>
         </StackPanel>
 
-        <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
+        <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right">
+            <!-- Same "Guide" button as the other config popups (Discord / Spotify): shared
+                 GuideBarButton style, icon + label. Opens K2.Core's GuideWindow on this game's
+                 own block (gameprofile:<id>). -->
+            <Button x:Name="BtnGuide" Style="{DynamicResource GuideBarButton}" VerticalAlignment="Center"
+                    Margin="0,0,10,0" Content="{loc:Get guide_button}" ToolTip="{loc:Get guide_tooltip}"
+                    Click="BtnGuide_Click"/>
             <Button Content="{loc:Get game_profile_reset_tiles}" Padding="8,3" Margin="0,0,8,0"
                     Click="BtnResetTiles_Click"/>
             <Button Content="{loc:Get save}" Width="90" Padding="6,2" IsDefault="True"

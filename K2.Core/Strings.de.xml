@@ -1281,6 +1281,8 @@ Wiedergabe/Pause, Weiter/Zurück, Zufall, Wiederholen und Lautstärke funktionie
   <string name="settings_game_profiles_needs_dp">Der Reiter braucht außerdem mindestens ein angeschlossenes DisplayPad — ohne eines hat ein Spielprofil nichts, worauf es laufen könnte.</string>
   <string name="game_profile_config_title">Einstellungen des Spielprofils</string>
   <string name="game_profile_config_hint">Wie sich dieses Profil verhält, während sein Spiel läuft, und was seine Tasten tun.</string>
+  <string name="profile_mode_on_launch">Das Profil anzeigen, wenn die zugehörige App geöffnet wird</string>
+  <string name="profile_mode_on_select">Das Profil nur anzeigen, wenn es ausgewählt ist</string>
   <string name="game_profile_device_label">DisplayPad:</string>
   <string name="game_profile_exe_label">Spiel-EXE:</string>
   <string name="file_not_found_fmt">Diese Datei existiert nicht mehr:

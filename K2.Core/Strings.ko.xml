@@ -1257,6 +1257,8 @@
   <string name="settings_game_profiles_needs_dp">이 탭에는 연결된 DisplayPad도 최소 하나 필요합니다. DisplayPad가 없으면 게임 프로필이 표시될 곳이 없습니다.</string>
   <string name="game_profile_config_title">게임 프로필 설정</string>
   <string name="game_profile_config_hint">게임이 실행되는 동안 이 프로필이 어떻게 동작하는지, 그리고 키가 무엇을 하는지 설정합니다.</string>
+  <string name="profile_mode_on_launch">연결된 앱이 열릴 때 프로필 표시</string>
+  <string name="profile_mode_on_select">선택했을 때만 프로필 표시</string>
   <string name="game_profile_device_label">DisplayPad:</string>
   <string name="game_profile_exe_label">게임 실행 파일:</string>
   <string name="file_not_found_fmt">이 파일은 더 이상 존재하지 않습니다:

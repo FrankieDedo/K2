@@ -1258,6 +1258,8 @@ Gosto e Adicionar/Remover da playlist NAO estao disponiveis: o Spotify bloqueia 
   <string name="settings_game_profiles_needs_dp">O separador também precisa de pelo menos um DisplayPad ligado — sem ele, um perfil de jogo não tem onde funcionar.</string>
   <string name="game_profile_config_title">Definições do perfil de jogo</string>
   <string name="game_profile_config_hint">Como este perfil se comporta enquanto o seu jogo está a correr, e o que fazem as suas teclas.</string>
+  <string name="profile_mode_on_launch">Mostrar o perfil quando a app associada é aberta</string>
+  <string name="profile_mode_on_select">Mostrar o perfil apenas quando selecionado</string>
   <string name="game_profile_device_label">DisplayPad:</string>
   <string name="game_profile_exe_label">Executável do jogo:</string>
   <string name="file_not_found_fmt">Este ficheiro já não existe:

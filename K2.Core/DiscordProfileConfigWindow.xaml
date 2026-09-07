@@ -28,11 +28,21 @@
         <TextBlock Grid.Row="0" Text="{loc:Get discord_profile_config_title}" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
         <TextBlock Grid.Row="1" Text="{loc:Get discord_profile_config_hint}" TextWrapping="Wrap" Foreground="#9A9AA2" Margin="0,0,0,12"/>
 
-        <!-- Same window the "discord" action combo opens from its "Manage" button: Client ID/Secret,
-             webhook URL, Connect/Disconnect. Kept out of this popup on purpose — this one only
-             carries the voice-page knobs. -->
-        <Button Grid.Row="2" x:Name="BtnDiscordAccount" Content="{loc:Get discord_account_button}"
-                HorizontalAlignment="Left" Padding="12,5" Margin="0,0,0,16" Click="BtnDiscordAccount_Click"/>
+        <!-- Activation mode + account button. "On launch" keeps today's behaviour (the voice page
+             opens on its own when a call starts, and the return-timer / foreground-only options
+             below apply); "on select" makes it open only when the Discord row (or a voice-page
+             key) is picked, and hides those sub-options. -->
+        <StackPanel Grid.Row="2" Margin="0,0,0,16">
+            <RadioButton x:Name="RbModeLaunch" GroupName="dcmode" Margin="0,2"
+                         Content="{loc:Get profile_mode_on_launch}" Checked="Mode_Changed"/>
+            <RadioButton x:Name="RbModeSelect" GroupName="dcmode" Margin="0,2"
+                         Content="{loc:Get profile_mode_on_select}" Checked="Mode_Changed"/>
+            <!-- Same window the "discord" action combo opens from its "Manage" button: Client
+                 ID/Secret, webhook URL, Connect/Disconnect. Kept out of this popup on purpose —
+                 this one only carries the voice-page knobs. -->
+            <Button x:Name="BtnDiscordAccount" Content="{loc:Get discord_account_button}"
+                    HorizontalAlignment="Left" Padding="12,5" Margin="0,12,0,0" Click="BtnDiscordAccount_Click"/>
+        </StackPanel>
 
         <!-- Webcam shortcut. Read-only: filled by RECORDING the combination, never typed, so what is
              stored can't disagree with what the keyboard actually sends. -->
@@ -67,7 +77,7 @@
                     Padding="10,2" Margin="6,0,0,0" Click="BtnDiscordRecordPtt_Click"/>
         </Grid>
 
-        <StackPanel Grid.Row="7" Orientation="Horizontal" Margin="0,0,0,4">
+        <StackPanel Grid.Row="7" x:Name="PnlDiscordReturn" Orientation="Horizontal" Margin="0,0,0,4">
             <CheckBox x:Name="CkDiscordReturn" Content="{loc:Get discord_voicepage_return_label}"
                       VerticalAlignment="Center"/>
             <TextBox x:Name="TxtDiscordReturnSec" Width="52" Height="23" Margin="8,0,6,0"
@@ -83,7 +93,7 @@
             <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get show_back_arrow_hint}"/>
         </StackPanel>
 
-        <StackPanel Grid.Row="9" Orientation="Horizontal" Margin="0,12,0,0">
+        <StackPanel Grid.Row="9" x:Name="PnlDiscordForeground" Orientation="Horizontal" Margin="0,12,0,0">
             <CheckBox x:Name="CkDiscordForeground" Content="{loc:Get discord_foreground_only_label}"
                       VerticalAlignment="Center"/>
             <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get discord_foreground_only_hint}"/>

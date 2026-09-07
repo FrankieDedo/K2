@@ -1267,6 +1267,8 @@
   <string name="settings_game_profiles_needs_dp">该选项卡还需要至少连接一台 DisplayPad —— 没有它，游戏配置就没有可运行的设备。</string>
   <string name="game_profile_config_title">游戏配置设置</string>
   <string name="game_profile_config_hint">设置该配置在游戏运行期间的行为，以及它的按键作用。</string>
+  <string name="profile_mode_on_launch">当关联应用打开时显示该配置</string>
+  <string name="profile_mode_on_select">仅在选中时显示该配置</string>
   <string name="game_profile_device_label">DisplayPad：</string>
   <string name="game_profile_exe_label">游戏可执行文件：</string>
   <string name="file_not_found_fmt">该文件已不存在：

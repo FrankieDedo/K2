@@ -49,6 +49,11 @@ public partial class GameProfileConfigDialog : Window
     public int ResultReturnSeconds { get; private set; } = DefaultReturnSeconds;
     public bool ResultForegroundOnly { get; private set; }
 
+    /// <summary>True when the user chose "show the profile only when selected": the caller then
+    /// keeps the reserved slot but does not arm the launch watcher for it. Only meaningful once
+    /// the dialog returned true.</summary>
+    public bool ResultActivationManual { get; private set; }
+
     /// <summary>The executable the user pinned this profile to, or null for "let K2 find it".
     /// Only meaningful once the dialog returned true.</summary>
     public string? ResultExePath { get; private set; }
@@ -68,7 +73,8 @@ public partial class GameProfileConfigDialog : Window
                                    string? gameIconPath = null,
                                    string? exePathOverride = null,
                                    string? autoResolvedExe = null,
-                                   string? autoExeName = null)
+                                   string? autoExeName = null,
+                                   bool activationManual = false)
     {
         InitializeComponent();
 
@@ -81,6 +87,10 @@ public partial class GameProfileConfigDialog : Window
         CkReturn.IsChecked = returnEnabled;
         TxtReturnSec.Text = returnSeconds.ToString(CultureInfo.InvariantCulture);
         CkForeground.IsChecked = foregroundOnly;
+
+        RbModeSelect.IsChecked = activationManual;
+        RbModeLaunch.IsChecked = !activationManual;
+        ApplyModeVisibility();
 
         _autoResolvedExe = autoResolvedExe;
         _autoExeName = autoExeName ?? "";
@@ -104,6 +114,30 @@ public partial class GameProfileConfigDialog : Window
         }
 
         ShowPage(0);
+    }
+
+    // ─────────────────────────── Per-game guide ───────────────────────────
+
+    /// <summary>Opens the shared <see cref="GuideWindow"/> on this game's own guide block
+    /// (<c>gameprofile:&lt;id&gt;</c> in <c>Guides/guide.&lt;lang&gt;.md</c>) — what the keys do,
+    /// how the tiles behave, the known limits, and anything to enable inside the game. Same button
+    /// and same window as the Discord / Spotify config popups.</summary>
+    private void BtnGuide_Click(object sender, RoutedEventArgs e) =>
+        new GuideWindow("gameprofile:" + _profileId, TxtTitle.Text) { Owner = this }.ShowDialog();
+
+    // ─────────────────────────── Activation mode ───────────────────────────
+
+    private void Mode_Changed(object sender, RoutedEventArgs e) => ApplyModeVisibility();
+
+    /// <summary>The executable, return-timer and foreground rows are sub-options of "show when the
+    /// app opens" — they mean nothing for a profile that only ever shows when picked by hand, so
+    /// they are hidden in that mode. The window is <c>SizeToContent="Height"</c>, so it reflows.</summary>
+    private void ApplyModeVisibility()
+    {
+        var vis = RbModeSelect.IsChecked == true ? Visibility.Collapsed : Visibility.Visible;
+        PnlExeRow.Visibility = vis;
+        PnlReturnRow.Visibility = vis;
+        PnlForegroundRow.Visibility = vis;
     }
 
     // ─────────────────────────── Executable override ───────────────────────────
@@ -185,6 +219,11 @@ public partial class GameProfileConfigDialog : Window
 
         // Paging chrome only exists once there is something to page through.
         PnlPageNav.Visibility = _pages.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        // A game whose layout is fixed (Zero Company's tactical grid) doesn't offer extra pages —
+        // "Remove" still shows for any stale page left over from before that rule, so they can be
+        // cleared.
+        BtnPageAdd.Visibility = GameProfileSpecs.AllowsExtraPages(_profileId)
+            ? Visibility.Visible : Visibility.Collapsed;
         // Only pages the USER added can be removed; the catalogue's own pages are the profile.
         BtnPageRemove.Visibility = _pageIndex >= ShippedPageCount ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -600,6 +639,7 @@ public partial class GameProfileConfigDialog : Window
         ResultEnabled = CkEnabled.IsChecked == true;
         ResultReturnEnabled = CkReturn.IsChecked == true;
         ResultForegroundOnly = CkForeground.IsChecked == true;
+        ResultActivationManual = RbModeSelect.IsChecked == true;
 
         ResultReturnSeconds =
             int.TryParse(TxtReturnSec.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int s)
@@ -611,7 +651,9 @@ public partial class GameProfileConfigDialog : Window
         // name nothing produces and the card would lose its icon, with nothing on screen saying
         // why. Refuse the save and leave the user in the dialog to fix it.
         string exe = TxtExePath.Text.Trim().Trim('"');
-        if (exe.Length > 0 && !File.Exists(exe))
+        // In "show only when selected" mode the executable is not used to arm anything, so a stale
+        // path there must not block the save — it is kept as-is for if the user switches back.
+        if (!ResultActivationManual && exe.Length > 0 && !File.Exists(exe))
         {
             MessageBox.Show(this, string.Format(Loc.Get("file_not_found_fmt"), exe),
                             Loc.Get("game_profile_config_title"),

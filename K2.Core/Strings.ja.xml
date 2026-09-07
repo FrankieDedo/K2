@@ -1258,6 +1258,8 @@
   <string name="settings_game_profiles_needs_dp">このタブには接続済みの DisplayPad も 1 台以上必要です。DisplayPad がないと、ゲームプロファイルを動かす先がありません。</string>
   <string name="game_profile_config_title">ゲームプロファイルの設定</string>
   <string name="game_profile_config_hint">ゲームの動作中にこのプロファイルがどう振る舞うか、そしてキーが何をするかを設定します。</string>
+  <string name="profile_mode_on_launch">関連付けられたアプリが起動したときにプロファイルを表示</string>
+  <string name="profile_mode_on_select">選択されたときだけプロファイルを表示</string>
   <string name="game_profile_device_label">DisplayPad:</string>
   <string name="game_profile_exe_label">ゲームの実行ファイル:</string>
   <string name="file_not_found_fmt">このファイルはもう存在しません:

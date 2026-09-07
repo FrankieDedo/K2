@@ -1252,6 +1252,8 @@ Mi piace e Aggiungi/Rimuovi dalla playlist NON sono disponibili: Spotify blocca 
   <string name="settings_game_profiles_needs_dp">La scheda richiede anche almeno un DisplayPad collegato — senza, un profilo gioco non ha nulla su cui girare.</string>
   <string name="game_profile_config_title">Impostazioni profilo gioco</string>
   <string name="game_profile_config_hint">Come si comporta questo profilo mentre il suo gioco è in esecuzione, e cosa fanno i suoi tasti.</string>
+  <string name="profile_mode_on_launch">Mostra il profilo quando si apre l'applicazione associata</string>
+  <string name="profile_mode_on_select">Mostra il profilo quando viene selezionato</string>
   <string name="game_profile_device_label">DisplayPad:</string>
   <string name="game_profile_exe_label">Eseguibile del gioco:</string>
   <string name="file_not_found_fmt">Questo file non esiste più:

@@ -121,7 +121,12 @@ internal static class DpLiveTileService
             if (!_devices.TryGetValue(deviceId, out ctx)) return;
             foreach (var key in ctx.Keys) _lastStamp.Remove((deviceId, key.Button));
         }
-        PushDevice(deviceId, ctx);
+        // Never paint inline on the caller's thread: PushDevice runs Render (per-key PNG cache
+        // writes) and UploadImage (the DisplayPad HID _ioLock, which stalls for seconds when the
+        // panel is mid-transfer). A Zero Company scroll press reached here on the dispatcher and
+        // froze the app, while also racing the 1 Hz tick for the same cache files. All paint work
+        // goes on the single pump thread.
+        Enqueue(() => PushDevice(deviceId, ctx));
     }
 
     /// <summary>True when this overlay currently owns that key — the repaint paths use it to SKIP
@@ -161,6 +166,12 @@ internal static class DpLiveTileService
             int i = Array.FindIndex(ctx.Keys, k => k.Button == buttonIndex);
             if (i < 0) return false;
             key = ctx.Keys[i];
+
+            // The image actually sitting on the key wins over re-deriving from live state: the
+            // bounce re-uploads THAT picture, and after a scroll-arrow press the page has already
+            // flipped while the pump thread has yet to repaint the key (see _lastSkipRot).
+            if (_lastSkipRot.TryGetValue((deviceId, buttonIndex), out bool remembered))
+                return remembered;
         }
         return ZcSkipsRotation(key);
     }
@@ -209,6 +220,8 @@ internal static class DpLiveTileService
             _devices.Remove(deviceId);
             foreach (var stale in _lastStamp.Keys.Where(k => k.Device == deviceId).ToList())
                 _lastStamp.Remove(stale);
+            foreach (var stale in _lastSkipRot.Keys.Where(k => k.Device == deviceId).ToList())
+                _lastSkipRot.Remove(stale);
             EnsureTimerLocked();
         }
     }
@@ -248,7 +261,7 @@ internal static class DpLiveTileService
                                                  (k.Value.Contains(':') || k.Value.StartsWith('/')))))
             System.Threading.Tasks.Task.Run(HardwareSensors.Start);
 
-        foreach (var (id, ctx) in targets) PushDevice(id, ctx);
+        foreach (var (id, ctx) in targets) Enqueue(() => PushDevice(id, ctx));
     }
 
     private static void OnSpeedTestChanged()
@@ -261,13 +274,43 @@ internal static class DpLiveTileService
                 .Select(kv => (kv.Key, kv.Value))
                 .ToList();
         }
-        foreach (var (id, ctx) in targets) PushDevice(id, ctx);
+        foreach (var (id, ctx) in targets) Enqueue(() => PushDevice(id, ctx));
     }
 
-    /// <summary>Renders and uploads whatever changed on one device. Runs on the timer thread, so
-    /// every render/upload of this service is serialized against itself — two threads writing the
-    /// same per-key PNG while a third reads it for upload is exactly the kind of race the icon
-    /// pipeline has been bitten by before.</summary>
+    // ─────────────────────────── Paint pump ───────────────────────────
+
+    /// <summary>Every <see cref="Render"/> + UploadImage this service does runs here, one job at a
+    /// time, off whatever thread asked for it. The pipeline writes per-key PNG cache files and
+    /// takes the DisplayPad's HID <c>_ioLock</c> (seconds of stall while the panel is mid-transfer),
+    /// so a repaint must never run inline on the dispatcher — a Zero Company scroll press did, and
+    /// froze the app while racing the 1 Hz tick for the same files. <see cref="Tick"/>,
+    /// <see cref="OnSpeedTestChanged"/> and <see cref="Repaint"/> only enqueue, which also keeps
+    /// this service's own uploads serialized against themselves.</summary>
+    private static readonly System.Collections.Concurrent.BlockingCollection<Action> _pump = new();
+
+    private static readonly Thread _pumpThread = StartPump();
+
+    private static Thread StartPump()
+    {
+        var t = new Thread(() =>
+        {
+            foreach (var job in _pump.GetConsumingEnumerable())
+            {
+                try { job(); }
+                catch (Exception ex) { App.WriteLog($"[LIVE] pump job failed: {ex.Message}"); }
+            }
+        })
+        { IsBackground = true, Name = "K2 LiveTiles paint" };
+        t.Start();
+        return t;
+    }
+
+    private static void Enqueue(Action job) => _pump.Add(job);
+
+    /// <summary>Renders and uploads whatever changed on one device. Only ever runs on the pump
+    /// thread (see <see cref="Enqueue"/>), so every render/upload of this service is serialized
+    /// against itself — two threads writing the same per-key PNG while a third reads it for upload
+    /// is exactly the kind of race the icon pipeline has been bitten by before.</summary>
     private static void PushDevice(int deviceId, DeviceCtx ctx)
     {
         var now = DateTime.Now;
@@ -302,8 +345,9 @@ internal static class DpLiveTileService
                     App.WriteLog($"[LIVE] btn{key.Button} {key.Type} render returned false");
                     continue;
                 }
-                ctx.Client.UploadImage(deviceId, path, key.Button,
-                                       ZcSkipsRotation(key) ? 0 : ctx.Rotation);
+                bool skipRot = ZcSkipsRotation(key);
+                lock (_gate) _lastSkipRot[(deviceId, key.Button)] = skipRot;
+                ctx.Client.UploadImage(deviceId, path, key.Button, skipRot ? 0 : ctx.Rotation);
             }
             catch (Exception ex)
             {
@@ -315,6 +359,16 @@ internal static class DpLiveTileService
     /// <summary>Consecutive ticks a key's content stamp has stayed the same — for the
     /// "unchanged for 30 ticks" diagnostic in <see cref="PushDevice"/>.</summary>
     private static readonly Dictionary<(int Device, int Button), int> _stuckTicks = new();
+
+    /// <summary>Whether the tile CURRENTLY on disk for a key was uploaded without the panel's
+    /// counter-rotation. Written every time <see cref="PushDevice"/> uploads, read by
+    /// <see cref="SkipsRotation"/> so the press-bounce re-uploads that exact image with the same
+    /// rotation it went out with. Re-deriving it live instead raced the page flip: pressing a
+    /// Zero Company scroll arrow flips <c>_zcPage</c> synchronously, but the pump thread has not
+    /// repainted the key yet — so on key-UP the still-on-disk arrow PNG was sent back at
+    /// <c>ctx.Rotation</c> because the key "is no longer an arrow", and the arrow showed
+    /// counter-rotated on a pad mounted vertical (user report 2026-09-07).</summary>
+    private static readonly Dictionary<(int Device, int Button), bool> _lastSkipRot = new();
 
     private static string TilePath(int deviceId, int button) =>
         Path.Combine(CacheDir, $"dev{deviceId}_btn{button}.png");
@@ -544,7 +598,8 @@ internal static class DpLiveTileService
     ///
     /// <para>One value for the whole app rather than one per pad: a profile drives a single
     /// DisplayPad, and a second pad showing the same profile would want the same page.</para></summary>
-    private static int _zcPage;
+    // Set from the dispatcher (ZcScroll, on a key press), read from the pump thread (RenderZcTile).
+    private static volatile int _zcPage;
 
     /// <summary>Actions the bottom row holds: the DisplayPad is six keys by two, so the row is
     /// five actions and the DOWN arrow.</summary>

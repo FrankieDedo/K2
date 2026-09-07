@@ -112,12 +112,21 @@ public partial class ButtonActionDialog
     };
 
     /// <summary>Discord's one list-backed argument: the voice channel to join, populated live
-    /// from the connected Discord client (<see cref="Services.DiscordBridge.ListVoiceChannels"/>)
-    /// exactly like OBS's scene/profile/source names.</summary>
+    /// from the connected Discord client (<see cref="Services.DiscordBridge.ListVoiceChannelChoices"/>)
+    /// exactly like OBS's scene/profile/source names. Unlike OBS, the visible label ("name
+    /// (guild)") is not the wire value — <see cref="_discordVoiceChannelIds"/> maps it back to
+    /// the channel id that actually gets stored.</summary>
     private static readonly System.Collections.Generic.HashSet<string> DiscordListArgCommands = new()
     {
         "join_voice",
     };
+
+    /// <summary>"join voice channel" picker: friendly label ("name (guild)") shown in
+    /// <see cref="CbComboArgList"/> ▸ the <c>"id|name"</c> wire value stored in the action.
+    /// Rebuilt every time the list is fetched; a rename changes the label but the id keeps the
+    /// binding working and the baked-in name keeps the default icon caption readable.</summary>
+    private readonly System.Collections.Generic.Dictionary<string, string> _discordVoiceChannelIds
+        = new(System.StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Built from <see cref="ActionTypeHelper.ClockModes"/>/<c>SysMonMetrics</c>/
     /// <c>SpeedTestMetrics</c> — the live DisplayPad tiles (clock face, PC monitor gauge,
@@ -364,9 +373,32 @@ public partial class ButtonActionDialog
     private void PopulateListArg(string tag, string command, string? preselect)
     {
         int token = ++_obsArgFetchToken;
-        CbComboArgList.Text = preselect ?? "";
 
-        System.Threading.Tasks.Task.Run(() => FetchListArg(tag, command))
+        if (tag == "discord")
+        {
+            // The stored value carries a channel id ("id|name", or a hand-typed / legacy
+            // entry); show its friendly "name (guild)" label once the live list is in.
+            string? wantId = string.IsNullOrEmpty(preselect) ? null : DiscordBridge.ParseChannelId(preselect);
+            CbComboArgList.Text = preselect ?? "";
+
+            System.Threading.Tasks.Task.Run(DiscordBridge.ListVoiceChannelChoices)
+                .ContinueWith(t =>
+                {
+                    if (token != _obsArgFetchToken) return;
+                    _discordVoiceChannelIds.Clear();
+                    foreach (var (id, name, guild) in t.Result)
+                        _discordVoiceChannelIds[$"{name} ({guild})"] = $"{id}|{name}";
+                    CbComboArgList.ItemsSource = t.Result.Select(c => $"{c.Name} ({c.Guild})").ToArray();
+
+                    string? label = wantId is null ? null
+                        : t.Result.Where(c => c.Id == wantId).Select(c => $"{c.Name} ({c.Guild})").FirstOrDefault();
+                    CbComboArgList.Text = label ?? preselect ?? "";
+                }, System.Threading.Tasks.TaskScheduler.FromCurrentSynchronizationContext());
+            return;
+        }
+
+        CbComboArgList.Text = preselect ?? "";
+        System.Threading.Tasks.Task.Run(() => FetchListArg(command))
             .ContinueWith(t =>
             {
                 if (token != _obsArgFetchToken) return;
@@ -375,9 +407,7 @@ public partial class ButtonActionDialog
             }, System.Threading.Tasks.TaskScheduler.FromCurrentSynchronizationContext());
     }
 
-    private static string[] FetchListArg(string tag, string command) => tag == "discord"
-        ? DiscordBridge.ListVoiceChannels()
-        : command switch
+    private static string[] FetchListArg(string command) => command switch
     {
         "Set Current Scene" => ObsBridge.ListSceneNames(),
         "Set Current Profile" => ObsBridge.ListProfileNames(),
@@ -690,8 +720,14 @@ public partial class ButtonActionDialog
         string arg = "";
         if (_comboPanelTag is not null && CommandNeedsArg(_comboPanelTag, cmd))
         {
-            bool listArg = _comboPanelTag == "obs" && ObsListArgCommands.Contains(cmd);
+            bool listArg = IsListArgCommand(_comboPanelTag, cmd);
             arg = (listArg ? CbComboArgList.Text : TxtComboArg.Text)?.Trim() ?? "";
+
+            // Discord's list shows a friendly "name (guild)" label but the wire value is
+            // "id|name" — map it back (a hand-typed id / entry falls through unchanged).
+            if (listArg && _comboPanelTag == "discord" && arg.Length > 0)
+                arg = _discordVoiceChannelIds.TryGetValue(arg, out var wire) ? wire
+                    : DiscordBridge.ParseChannelId(arg) ?? arg;
         }
 
         // Spotify carries a 3rd field: the per-key target Spotify Connect device

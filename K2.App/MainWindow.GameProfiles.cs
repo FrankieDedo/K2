@@ -178,6 +178,7 @@ public partial class MainWindow
     }
 
     private static string EnabledKey(string profileId)    => $"gameprofile.{profileId}.enabled";
+    private static string ActivationKey(string profileId)  => $"gameprofile.{profileId}.activation";
     private static string TargetKey(string profileId)     => $"gameprofile.{profileId}.device";
     private static string ReturnKey(string profileId)     => $"gameprofile.{profileId}.return";
     private static string ReturnSecKey(string profileId)  => $"gameprofile.{profileId}.returnsec";
@@ -228,6 +229,12 @@ public partial class MainWindow
     // for everyone on first run.
     private bool LoadEnabled(string profileId)    => _dpStore.GetSetting(EnabledKey(profileId))    is not "0";
     private bool LoadReturn(string profileId)     => _dpStore.GetSetting(ReturnKey(profileId))     is not "0";
+
+    /// <summary>True when this profile is set to activate only on a manual pick (the "show the
+    /// profile only when selected" mode) rather than when its game's process appears. Absent = the
+    /// shipped default = auto activation, so only an explicit <c>"select"</c> turns it manual.</summary>
+    private bool LoadActivationManual(string profileId) =>
+        _dpStore.GetSetting(ActivationKey(profileId)) is "select";
     private bool LoadForeground(string profileId) => _dpStore.GetSetting(ForegroundKey(profileId)) is not "0";
 
     private int LoadReturnSeconds(string profileId) =>
@@ -378,6 +385,13 @@ public partial class MainWindow
         if (sender is Button { Tag: string id }) ShowGameProfileConfig(id);
     }
 
+    /// <summary>The Game profiles section's own "Guide" button (bottom-right, like every device
+    /// panel). Opens the <c>gameprofile</c> overview block — what a game profile is, how it
+    /// activates and what its keys do. Per-game notes live behind the Guide button in each
+    /// profile's Configure dialog.</summary>
+    private void BtnGameProfilesGuide_Click(object sender, RoutedEventArgs e) =>
+        new GuideWindow("gameprofile", Loc.Get("tab_game_profiles")) { Owner = this }.ShowDialog();
+
     /// <summary>Opens a game profile's settings popup. Reached from the card's gear in the Game
     /// section and from the gear on the pad's own game-profile row, which is the same profile seen
     /// from the device it runs on.</summary>
@@ -408,7 +422,8 @@ public partial class MainWindow
             def.Id, item.Name, item.Enabled, item.TargetDeviceId, devices,
             LoadReturn(id), LoadReturnSeconds(id), LoadForeground(id),
             LoadPages(def), item.IconPath,
-            LoadExeOverride(id), autoExe, def.ExeName)
+            LoadExeOverride(id), autoExe, def.ExeName,
+            LoadActivationManual(id))
         {
             Owner = this
         };
@@ -432,6 +447,7 @@ public partial class MainWindow
         _dpStore.SetSetting(ReturnKey(id), dlg.ResultReturnEnabled ? "1" : "0");
         _dpStore.SetSetting(ReturnSecKey(id), dlg.ResultReturnSeconds.ToString());
         _dpStore.SetSetting(ForegroundKey(id), dlg.ResultForegroundOnly ? "1" : "0");
+        _dpStore.SetSetting(ActivationKey(id), dlg.ResultActivationManual ? "select" : "launch");
         SavePages(id, dlg.ResultPages);
 
         // Changing which executable the profile follows changes both the icon and what the
@@ -449,6 +465,14 @@ public partial class MainWindow
         if (exeChanged) RefreshGameProfiles();
         RefreshGameLaunchRegistrations();
 
+        // "Show only when selected" makes the reserved slot pickable from the pad's own Game
+        // profiles list — rebuild it now so the row appears without needing a tab switch. Only
+        // when the profile's target pad is the one on screen: DpRefreshProfiles rewrites the
+        // visible list for whatever id it is handed.
+        int listDevice = ResolveTargetDevice(def.Id);
+        if (listDevice >= 0 && DpSelectedDeviceId() == listDevice)
+            DpRefreshProfiles(listDevice);
+
         // The call above already rewrote the reserved slot's twelve keys (EnsureGameSlot), but the
         // pad goes on showing the pictures it was last SENT: without an explicit repaint the new
         // icons only appeared at the next profile switch. That switch is what covers the
@@ -456,7 +480,7 @@ public partial class MainWindow
         // repaint is only needed when the gate is off and the pad may be sitting on the game
         // profile right now with nothing about to move it. Same two steps the reset branch above
         // performs, for the same reason.
-        if (!dlg.ResultForegroundOnly)
+        if (dlg.ResultActivationManual || !dlg.ResultForegroundOnly)
         {
             int saveDevice = ResolveTargetDevice(def.Id);
             if (saveDevice >= 0)
@@ -878,6 +902,18 @@ public partial class MainWindow
                 if (deviceId < 0)
                 {
                     GameRegNote($"{def.Id}: enabled but no DisplayPad to put it on — not armed");
+                    continue;
+                }
+
+                // "Show only when selected": the reserved slot is still materialised (so it shows
+                // in the pad's Game profiles list and can be picked by hand), but nothing arms the
+                // launch watcher for it — the stale key it may have left is dropped by the
+                // KeysWithPrefix sweep at the end of this method.
+                if (LoadActivationManual(def.Id))
+                {
+                    EnsureGameSlot(deviceId, def);
+                    PruneStrayGameSlots(def, keepDeviceId: deviceId);
+                    GameRegNote($"{def.Id}: manual activation — slot kept, launch watcher not armed");
                     continue;
                 }
 

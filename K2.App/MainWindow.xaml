@@ -3736,8 +3736,13 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" Text="{loc:Get tab_game_profiles}"
-                                   FontSize="20" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="{loc:Get tab_game_profiles}"
+                                       FontSize="20" FontWeight="Bold"/>
+                            <TextBlock Text="(EXPERIMENTAL)" Foreground="#9A9AA2"
+                                       FontSize="12" FontWeight="Bold"
+                                       VerticalAlignment="Center" Margin="8,2,0,0"/>
+                        </StackPanel>
                         <TextBlock Grid.Row="1" Text="{loc:Get game_profiles_intro}"
                                    Foreground="#9A9AA2" FontSize="12" TextWrapping="Wrap"
                                    Margin="0,0,0,10"/>
@@ -3817,6 +3822,10 @@
                         </ScrollViewer>
                         </Grid>
                     </Grid>
+                    <!-- Same bottom-right "Guide" button as every device panel; opens the
+                         "gameprofile" overview block (how game profiles work). Per-game detail is
+                         behind the Guide button inside each profile's Configure dialog. -->
+                    <Button Style="{StaticResource K2GuideButton}" Click="BtnGameProfilesGuide_Click"/>
                 </Grid>
 
                 <Grid x:Name="PnlMacro" Visibility="Collapsed">

@@ -267,6 +267,14 @@ public static class ActionIconFallback
         if (type == "spotify" && ControlCaptionLocKeys.TryGetValue(value.Split('~')[0].Trim(), out var ctlKey))
             return Loc.Get(ctlKey);
 
+        // "discord -> join voice channel": the tile shows just the voice-channel name (baked
+        // into the value as "id|name") — shorter than the full "Join voice channel — X" summary
+        // and the one thing that identifies which channel this key joins.
+        if (type == "discord" && value.Split('~') is [var dcmd, var darg, ..]
+            && string.Equals(dcmd.Trim(), "join_voice", StringComparison.OrdinalIgnoreCase)
+            && ActionTypeHelper.DiscordVoiceChannelName(darg) is { Length: > 0 } chName)
+            return chName;
+
         string summary = ActionTypeHelper.Summary(actionType, actionValue);
         if (!string.IsNullOrWhiteSpace(summary) && !string.Equals(summary, actionType, StringComparison.Ordinal))
             return summary;

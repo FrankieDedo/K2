@@ -45,6 +45,10 @@ namespace K2.Core;
 /// special to say — <c>{prefix}_{RestingArtColor}_{on|off}.png</c>. Elite's set is keyed on
 /// "orange" and treats green/red as the exceptions; a game whose art is another colour simply
 /// says so here instead of shipping blue pictures named orange.</param>
+/// <param name="AllowExtraPages">Whether the config popup lets the user add pages beyond the ones
+/// the catalogue ships. True for a plain shortcut page that can grow; false for a game whose single
+/// page IS the layout — Zero Company's 2×6 tactical grid has its own on-pad scroll key, so a second
+/// DisplayPad page would be dead rows the pad cannot reach.</param>
 public sealed record GameProfileSpec(
     string Id,
     string ArtFolder,
@@ -52,7 +56,8 @@ public sealed record GameProfileSpec(
     Color Accent,
     bool StyleAllTiles,
     (string LocKey, string Glyph, ActionTypeHelper.GameCommand[] Items)[] CommandFamilies,
-    string RestingArtColor = "orange");
+    string RestingArtColor = "orange",
+    bool AllowExtraPages = true);
 
 /// <summary>The per-game specs K2 ships. One entry per game that has art, colours or commands of
 /// its own; see <see cref="GameProfileSpec"/> for what each field buys.</summary>
@@ -97,7 +102,10 @@ public static class GameProfileSpecs
             Accent: ZeroCompanyBlue,
             StyleAllTiles: true,
             CommandFamilies: ActionTypeHelper.ZeroCompanyCommandFamilies,
-            RestingArtColor: "blue"),
+            RestingArtColor: "blue",
+            // The tactical grid is the whole layout — the sixth soldier and the actions scroll on
+            // the pad itself (Zc("scroll")), there is nowhere for a second page to be reached from.
+            AllowExtraPages: false),
 
         // Art only, no live state: Deadside ships a resting ("orange") pair like the others, and
         // has no state variants because it has no state to report.
@@ -115,6 +123,11 @@ public static class GameProfileSpecs
     public static GameProfileSpec? ById(string? profileId) =>
         profileId is null ? null
         : All.FirstOrDefault(s => string.Equals(s.Id, profileId, StringComparison.Ordinal));
+
+    /// <summary>Whether the config popup offers "add page" for this profile. Default (no spec, or a
+    /// spec that doesn't say) is yes — only a game whose layout is fixed opts out.</summary>
+    public static bool AllowsExtraPages(string? profileId) =>
+        ById(profileId)?.AllowExtraPages ?? true;
 
     /// <summary>The commands a profile's action picker shows beside Input. Empty for a game with
     /// no integration of its own.</summary>

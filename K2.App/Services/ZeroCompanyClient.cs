@@ -73,8 +73,13 @@ internal static class ZeroCompanyClient
     internal readonly record struct Unit(string Path, string Name,
                                          int Hp, int MaxHp, int Ap, int MaxAp, int Armor);
 
-    /// <summary>One ability of the selected soldier, as the tiles need it.</summary>
-    internal readonly record struct Ability(int Handle, string Name, string ClassPath);
+    /// <summary>One ability of the selected soldier, as the tiles need it. <paramref name="GameKey"/>
+    /// is the digit the game itself binds this ability to on the action wheel (1…9, then 0 for a
+    /// tenth), or -1 beyond that. A DisplayPad ability key PRESSES this digit rather than activating
+    /// the ability over the API: going through the wheel's own input is the only path on which the
+    /// game's turn/menu state machine stays consistent — activating it out-of-band left the wheel
+    /// half-drawn and the turn stuck once the action finished (user report 2026-09-07).</summary>
+    internal readonly record struct Ability(int Handle, string Name, string ClassPath, int GameKey);
 
     /// <summary>One reading of the tactical state. <see cref="Valid"/> is false whenever we are
     /// not in a mission (or the API is off): tiles then paint "unknown" rather than claiming a
@@ -272,19 +277,22 @@ internal static class ZeroCompanyClient
         return (cur, base_);
     }
 
-    /// <summary>The wheel for one soldier, re-read only when it can have changed.
+    /// <summary>The wheel for one soldier, read once per selection and then cached until the
+    /// selection changes.
     ///
     /// <para>Reading it costs three calls per wedge plus the ability-system property — around
-    /// forty round trips — which is far too much for the once-a-second tile tick. A soldier's
-    /// wheel only changes when the SELECTION changes, so the answer is cached against the
-    /// selected soldier and refreshed on a slow heartbeat to catch an ability learned or an item
-    /// spent mid-mission.</para></summary>
+    /// forty round trips. It used to also refresh on a slow heartbeat "to catch an ability
+    /// learned mid-mission", but reading the wheel drives the game's own radial menu: the burst
+    /// of <c>Get Wedge by Index</c> calls sweeps the hover across every wedge, and with a soldier
+    /// selected but the wheel closed the game pulled the menu back up on every heartbeat (user
+    /// report 2026-09-07). A soldier's wheel only really changes when the SELECTION changes, so
+    /// that is the only thing that now triggers a re-read; an empty result is retried (the read
+    /// can land while the menu widgets are mid-teardown).</para></summary>
     private static async Task<IReadOnlyList<Ability>> CachedWheelAbilitiesAsync(string characterPath)
     {
         lock (_gate)
         {
-            if (string.Equals(_wheelFor, characterPath, StringComparison.Ordinal) &&
-                DateTime.UtcNow - _wheelReadUtc < WheelCacheLifetime)
+            if (string.Equals(_wheelFor, characterPath, StringComparison.Ordinal) && _wheel.Count > 0)
                 return _wheel;
         }
 
@@ -293,15 +301,12 @@ internal static class ZeroCompanyClient
         lock (_gate)
         {
             _wheelFor = characterPath;
-            _wheelReadUtc = DateTime.UtcNow;
             _wheel = fresh;
         }
         return fresh;
     }
 
-    private static readonly TimeSpan WheelCacheLifetime = TimeSpan.FromSeconds(6);
     private static string? _wheelFor;
-    private static DateTime _wheelReadUtc = DateTime.MinValue;
     private static IReadOnlyList<Ability> _wheel = Array.Empty<Ability>();
 
     /// <summary>The abilities on the soldier's action wheel, in the order the GAME numbers them.
@@ -314,11 +319,12 @@ internal static class ZeroCompanyClient
     /// guess was wrong — it kept mostly passives (user report, 2026-09-06).</para>
     ///
     /// <para><b>So we ask the game's own UI, slice by slice.</b> The radial menu is built from
-    /// four <c>WBP_RadialSlice</c> widgets — utility items, class abilities, the standard
-    /// move/shot/overwatch, and call-for-backup — each of which answers
-    /// <c>Get Wedge by Index</c> with the view model of the ability in that position. Walking the
-    /// slices in <see cref="SliceOrder"/> reproduces the game's own 1…9,0 numbering, verified
-    /// against a live wheel: three standard actions, four class abilities, three utilities.</para>
+    /// <c>WBP_RadialSlice</c> widgets — the standard move/shot/overwatch, the class abilities and
+    /// the utility items — each of which answers <c>Get Wedge by Index</c> with the view model of
+    /// the ability in that position. Walking the slices in <see cref="SliceOrder"/> reproduces the
+    /// game's own 1…9,0 numbering, verified against a live wheel: three standard actions, four
+    /// class abilities, three utilities. The call-for-backup slice is skipped — the game keeps it
+    /// off the numbered wheel (see <see cref="SliceOrder"/>).</para>
     ///
     /// <para><b>The slice order is NOT the order the wedges enumerate in.</b> Asking UMG for every
     /// wedge returns them utility-first, which is the reverse of how the game numbers them — a
@@ -366,30 +372,30 @@ internal static class ZeroCompanyClient
                 string cls = ClassOfAbilityInstance(instance, handles.Keys);
                 if (cls.Length == 0) continue;
 
-                result.Add(new Ability(handles.GetValueOrDefault(cls), AbilityName(cls), cls));
+                // SliceOrder reproduces the game's own 1…9,0 numbering, so this ability's wheel
+                // position IS the digit the game bound it to (10th -> "0", past that -> none).
+                int pos = result.Count + 1;
+                int gameKey = pos <= 9 ? pos : pos == 10 ? 0 : -1;
+                result.Add(new Ability(handles.GetValueOrDefault(cls), AbilityName(cls), cls, gameKey));
             }
         }
-        // Reinforcements jumps the queue: the player wants it under the first action key, and
-        // everything else shifts along by one. Done here rather than by reordering SliceOrder,
-        // which would renumber the whole wheel instead of moving one entry.
-        int backup = result.FindIndex(
+        // Call for Backup / Reinforcements is dropped: the game does NOT bind it to a wheel digit
+        // (it has its own dedicated key), so a tile pressing this slot's number fired whatever the
+        // game actually has on that digit instead — a wrong action, worse than a missing one (user
+        // report 2026-09-07). If it ever needs to come back it wants its real key, not a wheel
+        // position.
+        result.RemoveAll(
             a => a.ClassPath.Contains("CallForBackup", StringComparison.OrdinalIgnoreCase));
-        if (backup > 0)
-        {
-            var reinforcements = result[backup];
-            result.RemoveAt(backup);
-            result.Insert(0, reinforcements);
-        }
 
         return result;
     }
 
     /// <summary>The wheel's slices in the order the game NUMBERS them (1…9,0), which is not the
-    /// order they are laid out or enumerated in. CallForBackup is last because no wheel seen so
-    /// far had one alongside the others, so its number is unverified — better at the end than
-    /// pushing every confirmed ability one place along.</summary>
+    /// order they are laid out or enumerated in. CallForBackupSlice is deliberately absent: the
+    /// game does not put it on the numbered wheel, so walking it only added a mis-keyed tile and
+    /// extra <c>Get Wedge by Index</c> calls to the sweep.</summary>
     private static readonly string[] SliceOrder =
-        { "StandardActionSlice", "ClassAbilitySlice", "UtilitySlice", "CallForBackupSlice" };
+        { "StandardActionSlice", "ClassAbilitySlice", "UtilitySlice" };
 
     /// <summary>Guard on the per-slice walk: the widest slice seen holds six wedges, and the loop
     /// stops on the first index the slice does not have anyway.</summary>
@@ -938,15 +944,17 @@ internal static class ZeroCompanyClient
     /// rather than the pad hammering a key forever.</summary>
     private const int MaxTabSteps = 10;
 
-    /// <summary>Activates the selected soldier's ability in bar slot <paramref name="oneBased"/>.
+    /// <summary>Presses the digit the game binds the selected soldier's ability in bar slot
+    /// <paramref name="oneBased"/> to, as if the player pressed it on the open action wheel.
     ///
-    /// <para><c>TryAndSelectAbility(Index)</c> — the component's own by-index call — does nothing
-    /// from outside the action wheel's input flow. <c>TryActivateAbility</c> on the ability system
-    /// component, given the spec HANDLE read out of <c>ActivatableAbilities</c>, does work
-    /// (verified in a live mission, 2026-09-06): the ability goes active and the game puts up its
-    /// targeting, which the player then confirms as usual. So the key opens the ability; it never
-    /// commits the action on its own.</para></summary>
-    private static async Task<bool> ActivateAbilityAsync(int oneBased, Action<string> log)
+    /// <para>The wheel has to be open for the game to take the key — the player opens it as part of
+    /// normal play. This replaced a <c>TryActivateAbility</c> API call (2026-09-07): that did fire
+    /// the ability, but outside the wheel's input flow, and once the action finished the game was
+    /// left with the menu half-drawn and the turn not advancing (user report). Driving the ability
+    /// through its real key is the only path the game's own state machine stays consistent on.
+    /// <c>TryAndSelectAbility(Index)</c> — the component's by-index call — does nothing from
+    /// outside that flow either.</para></summary>
+    private static Task<bool> ActivateAbilityAsync(int oneBased, Action<string> log)
     {
         Status snapshot;
         lock (_gate) snapshot = _last;
@@ -954,24 +962,19 @@ internal static class ZeroCompanyClient
         if (snapshot.AbilityAt(oneBased - 1) is not { } ability)
         {
             log($"[ZC] ability slot {oneBased} is empty on the selected soldier");
-            return false;
+            return Task.FromResult(false);
+        }
+        if (ability.GameKey < 0)
+        {
+            log($"[ZC] ability {oneBased} ({ability.Name}) has no wheel key to press");
+            return Task.FromResult(false);
         }
 
-        bool ok = await CallBoolAsync(_selComp is null ? "" : AscOfSelected(snapshot),
-                                      "TryActivateAbility",
-                                      new
-                                      {
-                                          AbilityToActivate = new { Handle = ability.Handle },
-                                          bAllowRemoteActivation = true,
-                                      }).ConfigureAwait(false);
-
-        log($"[ZC] ability {oneBased} ({ability.Name}) handle {ability.Handle} -> {(ok ? "activated" : "refused")}");
-        return ok;
+        string digit = ((char)('0' + ability.GameKey)).ToString();
+        bool ok = K2.Core.HotkeySender.TrySend(digit, out string err);
+        log($"[ZC] ability {oneBased} ({ability.Name}) -> key '{digit}' {(ok ? "sent" : "failed: " + err)}");
+        return Task.FromResult(ok);
     }
-
-    /// <summary>The ability system component of whoever is selected in <paramref name="s"/>.</summary>
-    private static string AscOfSelected(Status s) =>
-        s.Selected is { } u ? u.Path + ".AbilitySystemComponent" : "";
 
     /// <summary>Puts squad slot <paramref name="oneBased"/> under the cursor with its action
     /// wheel open — see <see cref="WalkSelectionToAsync"/> for why this is done with the game's

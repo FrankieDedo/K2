@@ -1065,6 +1065,15 @@ public partial class MainWindow
     /// </summary>
     private void DpConfigureScreensaver(int id, bool enabled, int seconds)
     {
+        // A game profile owns the pad live — its tiles track the running game — so a screensaver
+        // blanking it is never wanted while that slot is the active profile (user request
+        // 2026-09-06). Suspended only for as long as the pad sits on the game slot: the repaint
+        // that follows leaving it calls back in here with the new page's own setting.
+        if (enabled && DpIsGameProfileName(_dpStore.GetProfileName(id, _dpStore.GetCurrentProfile(id))))
+        {
+            DpLog($"[FS] device {id}: screensaver suppressed (game profile active)");
+            enabled = false;
+        }
         _dpScreensaverShowing.Remove(id);
         var t = DpGetScreensaverTimer(id);
         t.Configure(enabled, seconds);
@@ -1093,6 +1102,14 @@ public partial class MainWindow
         // Same reason: a live clock/monitor tile would tick right over the screensaver image.
         DpLiveTileService.Stop(id);
         DpSpotifyCoverKeyService.Stop(id);
+        // "Screensaver vince": freeze every live painter, dedicated profiles included, so the
+        // image stays whole until a key press (user request 2026-09-06). The voice page is a
+        // full-panel takeover — drop it WITHOUT repainting (the image is about to own the
+        // panel); DpScreensaverWake's repaint reopens it via DvpRestoreAfterRepaint if the call
+        // is still up, and DpSyncSpotifyCoverService there re-arms the dedicated cover block.
+        DvpAbandon(id);
+        SpotifyCoverService.Stop(id);
+        DiscordVoiceKeyService.Stop(id);
 
         int rotation = _dpStore.GetRotation(id);
         var (path, userRotation) = image.Value;
@@ -1113,6 +1130,10 @@ public partial class MainWindow
         _dpFullscreenByDevice[id] = false;
         DpLog($"[FS] device {id}: screensaver dismissed — restoring page icons");
         DpRequestRepaint(id);
+        // The repaint re-syncs the per-key live overlays (clock/monitor, Discord mute tiles,
+        // album-cover keys) and its continuation puts the voice page back (DvpRestoreAfterRepaint);
+        // the dedicated Spotify cover block has no repaint hook of its own, so re-arm it here.
+        DpSyncSpotifyCoverService(id);
     }
 
     private void DpAutoOffTimeout(int id)
@@ -1388,6 +1409,18 @@ public partial class MainWindow
         if (sel is not int id) return;
         bool isActive = id == DpSelectedDeviceId();
 
+        // A dedicated slot (Spotify/Discord) is a takeover with its own activation path and is
+        // deliberately kept out of the `real` cycle list below — so a "switch profile" action
+        // pointing straight at one would resolve to nothing and do nothing (user report). Route
+        // it to the same entry points the "Dedicated profiles" list uses.
+        if (DpResolveDedicatedTarget(id, target) is (int dedSlot, string dedName))
+        {
+            if (dedName == SpotifyProfileName) DpSpotifySwitchTo(id, dedSlot);
+            else if (dedName == DiscordProfileName) DvpReopen(id);
+            DpLog($"[EXEC] DisplayPad dedicated profile -> {dedName} (device {id})");
+            return;
+        }
+
         // The cycle runs over the device's real slots, ordinary AND game ones, from the store
         // rather than from the UI list: the list leaves reserved slots out (they have their own
         // sections), so an active device cycling from it could never reach a game profile, nor
@@ -1464,6 +1497,25 @@ public partial class MainWindow
         DpLog($"[EXEC] DisplayPad profile -> {slot} (device {id})");
     }
 
+    /// <summary>Resolves a "switch profile" target (a slot number or a profile name) to a
+    /// dedicated slot on <paramref name="id"/>, or null when it does not point at one. Used by
+    /// <see cref="DpSwitchProfile"/> to divert dedicated targets to their own activation path.</summary>
+    private (int Slot, string Name)? DpResolveDedicatedTarget(int id, string? target)
+    {
+        var t = (target ?? "").Trim();
+        if (t.Length == 0) return null;
+        foreach (var slot in _dpStore.GetExistingProfiles(id))
+        {
+            string? name = _dpStore.GetProfileName(id, slot);
+            if (!DpIsDedicatedName(name)) continue;
+            bool hit = int.TryParse(t, out var n)
+                ? n == slot
+                : string.Equals(name, t, StringComparison.OrdinalIgnoreCase);
+            if (hit) return (slot, name!);
+        }
+        return null;
+    }
+
     /// <summary>Reserved profile name that marks a DisplayPad profile as the built-in
     /// "Spotify" one (see <see cref="DpCreateSpotifyProfile"/>/<see cref="DpSyncSpotifyCoverService"/>).
     /// Profile identity is otherwise just an integer slot, so the name is the only
@@ -1513,15 +1565,19 @@ public partial class MainWindow
     private int DpSpotifySlot(int id) => _dpStore.GetExistingProfiles(id)
         .FirstOrDefault(slot => _dpStore.GetProfileName(id, slot) == SpotifyProfileName);
 
+    /// <summary>The pad's ordinary profile slots — neither a dedicated (Spotify/Discord) nor a
+    /// game reserved slot. What "the panel goes back to normal" actually resolves to.</summary>
+    private List<int> DpOrdinaryProfiles(int id) => _dpStore.GetExistingProfiles(id)
+        .Where(slot => !DpIsDedicatedName(_dpStore.GetProfileName(id, slot))
+                    && !DpIsGameProfileName(_dpStore.GetProfileName(id, slot)))
+        .ToList();
+
     /// <summary>The cover tile was pressed: hand the panel back to the profile that was showing
     /// before (or the first ordinary one, e.g. after a restart), and arm the comeback if this pad
     /// is configured for it.</summary>
     private void DpSpotifyLeave(int id)
     {
-        var ordinary = _dpStore.GetExistingProfiles(id)
-            .Where(slot => !DpIsDedicatedName(_dpStore.GetProfileName(id, slot))
-                        && !DpIsGameProfileName(_dpStore.GetProfileName(id, slot)))
-            .ToList();
+        var ordinary = DpOrdinaryProfiles(id);
         if (ordinary.Count == 0) { DpLog($"[SPT] device {id}: nothing to go back to"); return; }
 
         int target = _dpSpotifyPrevProfile.TryGetValue(id, out int prev) && ordinary.Contains(prev)
@@ -1576,9 +1632,9 @@ public partial class MainWindow
     {
         DpSpotifyCancelReturnTimer(id);
         var cfg = DpReadSpotifyCoverConfig(id);
-        if (!cfg.ReturnEnabled || DpSpotifySlot(id) == 0)
+        if (!cfg.ReturnEnabled || cfg.ActivationOnSelect || DpSpotifySlot(id) == 0)
         {
-            DpLog($"[SPT] device {id}: return timer not armed (enabled={cfg.ReturnEnabled}, slot={DpSpotifySlot(id)})");
+            DpLog($"[SPT] device {id}: return timer not armed (enabled={cfg.ReturnEnabled}, manual={cfg.ActivationOnSelect}, slot={DpSpotifySlot(id)})");
             return;
         }
 
@@ -1673,7 +1729,8 @@ public partial class MainWindow
         SpotifyCoverConfig.ParseForegroundOnly(_dpStore.GetSetting($"spotify.{id}.fgOnly")),
         SpotifyCoverConfig.ParsePosition(_dpStore.GetSetting($"spotify.{id}.position")),
         SpotifyCoverConfig.ParseDevice(_dpStore.GetSetting($"spotify.{id}.device")),
-        SpotifyCoverConfig.ParseReturnCondition(_dpStore.GetSetting($"spotify.{id}.returnCond")));
+        SpotifyCoverConfig.ParseReturnCondition(_dpStore.GetSetting($"spotify.{id}.returnCond")),
+        SpotifyCoverConfig.ParseActivationOnSelect(_dpStore.GetSetting($"spotify.{id}.activation")));
 
     internal void DpWriteSpotifyCoverConfig(int id, SpotifyCoverConfig cfg)
     {
@@ -1688,6 +1745,7 @@ public partial class MainWindow
         _dpStore.SetSetting($"spotify.{id}.position", cfg.PositionToken);
         _dpStore.SetSetting($"spotify.{id}.device", cfg.Device);
         _dpStore.SetSetting($"spotify.{id}.returnCond", cfg.ReturnConditionToken);
+        _dpStore.SetSetting($"spotify.{id}.activation", cfg.ActivationOnSelectToken);
     }
 
     /// <summary>Feeds the app's own DisplayPad grid a still preview of the Spotify dedicated
@@ -1743,6 +1801,12 @@ public partial class MainWindow
     private void DpCreateOrSwitchSpotifyProfile()
     {
         if (DpSelectedDeviceId() is not int id) return;
+
+        // The two dedicated profiles are mutually exclusive owners of the panel: a running Discord
+        // voice page would keep repainting its tiles over the Spotify controls (user report
+        // 2026-09-07, both dedicated set to "show only when selected"). Dismiss it so it stays
+        // down until the user picks Discord again from its row (DvpReopen clears the dismissal).
+        if (DpDiscordRoomActive(id)) DvpDismiss(id);
 
         var existing = _dpStore.GetExistingProfiles(id);
         int slot = existing.FirstOrDefault(s => _dpStore.GetProfileName(id, s) == SpotifyProfileName);
@@ -2044,6 +2108,12 @@ public partial class MainWindow
             DpRegisterProfileLaunchWatchers(deviceId, existing);
         }
         finally { _dpSuppressProfile = false; }
+
+        // A pad that has just enumerated (or just gained the Discord dedicated profile) may have
+        // missed the Changed event for a call that was already running — bring the voice page up
+        // now instead of waiting for the reconnect timer. Deferred so DvpOpen/DvpExit can't
+        // re-enter this refresh.
+        Dispatcher.BeginInvoke(new Action(DvpReconcileAll), DispatcherPriority.Background);
     }
 
     /// <summary>Registers this device's profiles with K2.Core.Services.ProfileLaunchWatcher
@@ -2065,7 +2135,8 @@ public partial class MainWindow
             // profile list at all — so its own "only while Spotify is in front" flag synthesizes
             // the very same focus-only registration an ordinary profile would get.
             bool isSpotifySlot = _dpStore.GetProfileName(deviceId, slot) == SpotifyProfileName;
-            if (isSpotifySlot && DpReadSpotifyCoverConfig(deviceId).ForegroundOnly)
+            var spotifyCfg = isSpotifySlot ? DpReadSpotifyCoverConfig(deviceId) : default;
+            if (isSpotifySlot && spotifyCfg.ForegroundOnly && !spotifyCfg.ActivationOnSelect)
             {
                 exe = SpotifyExeName;
                 focusOnly = true;
@@ -3679,20 +3750,23 @@ public partial class MainWindow
     /// active tab reads it.
     ///
     /// <para>The profile list is the answer whenever it has a selection. It does not always have
-    /// one: a game profile's reserved slot is filtered out of that list (it has a section of its
-    /// own, like the dedicated profiles), and the fallback used to be a flat <c>1</c>. So a pad
-    /// that WAS on a game profile repainted profile 1 over it — the page arrived on every
-    /// background pad and never on the one whose tab was open, which is exactly how the user saw
-    /// it: "non mi compare mai sul displaypad 2, se lo metto su displaypad 1 allora ok"
-    /// (2026-09-06; the pad in question was the selected tab). The store knows which slot it is,
-    /// so ask it before falling back.</para></summary>
+    /// one: a game profile's reserved slot — and a dedicated one (Spotify/Discord) — is filtered
+    /// out of that list (each has a section of its own), and the fallback used to be a flat
+    /// <c>1</c>. So a pad that WAS on such a slot repainted profile 1 over it — the page arrived on
+    /// every background pad and never on the one whose tab was open, which is exactly how the user
+    /// saw it: "non mi compare mai sul displaypad 2, se lo metto su displaypad 1 allora ok"
+    /// (2026-09-06; the pad in question was the selected tab) and, for the Spotify dedicated
+    /// profile, "non mostra più i tasti, solo la copertina" (2026-09-07 — profile 1's icons
+    /// landed on the 8 control keys, the 2×2 cover block being re-asserted by SpotifyCoverService).
+    /// The store knows which slot it is, so ask it before falling back.</para></summary>
     private int DpCurrentProfile()
     {
         if (LstDpProfile.SelectedItem is DpProfileItem pi) return pi.Slot;
         if (DpSelectedDeviceId() is int id)
         {
             int current = _dpStore.GetCurrentProfile(id);
-            if (DpIsGameProfileName(_dpStore.GetProfileName(id, current))) return current;
+            string? name = _dpStore.GetProfileName(id, current);
+            if (DpIsGameProfileName(name) || DpIsDedicatedName(name)) return current;
         }
         return 1;
     }

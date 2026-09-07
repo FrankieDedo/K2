@@ -35,6 +35,22 @@ public partial class DiscordProfileConfigWindow : Window
         TxtDiscordReturnSec.Text = DiscordStore.VoicePageReturnSeconds.ToString(CultureInfo.InvariantCulture);
         CkDiscordBackArrow.IsChecked = DiscordStore.VoicePageBackArrow;
         CkDiscordForeground.IsChecked = DiscordStore.VoicePageForegroundOnly;
+
+        RbModeSelect.IsChecked = DiscordStore.VoicePageActivationOnSelect;
+        RbModeLaunch.IsChecked = !DiscordStore.VoicePageActivationOnSelect;
+        ApplyModeVisibility();
+    }
+
+    private void Mode_Changed(object sender, RoutedEventArgs e) => ApplyModeVisibility();
+
+    /// <summary>The return timer and the foreground-only flag are sub-options of "open on a call" —
+    /// hidden when the voice page is set to open only when picked by hand.</summary>
+    private void ApplyModeVisibility()
+    {
+        if (PnlDiscordReturn is null) return;
+        var vis = RbModeSelect.IsChecked == true ? Visibility.Collapsed : Visibility.Visible;
+        PnlDiscordReturn.Visibility = vis;
+        PnlDiscordForeground.Visibility = vis;
     }
 
     private void BtnDiscordAccount_Click(object sender, RoutedEventArgs e)
@@ -151,6 +167,7 @@ public partial class DiscordProfileConfigWindow : Window
         DiscordStore.VoicePageReturnEnabled = CkDiscordReturn.IsChecked == true;
         DiscordStore.VoicePageBackArrow = CkDiscordBackArrow.IsChecked == true;
         DiscordStore.VoicePageForegroundOnly = CkDiscordForeground.IsChecked == true;
+        DiscordStore.VoicePageActivationOnSelect = RbModeSelect.IsChecked == true;
         if (int.TryParse(TxtDiscordReturnSec.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int sec))
             DiscordStore.VoicePageReturnSeconds = sec;   // setter clamps to a sane range
         Close();

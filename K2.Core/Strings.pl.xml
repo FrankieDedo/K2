@@ -1282,6 +1282,8 @@ Polub oraz Dodaj/Usuń z playlisty NIE są dostępne: Spotify blokuje endpointy 
   <string name="settings_game_profiles_needs_dp">Karta wymaga też co najmniej jednego podłączonego DisplayPada — bez niego profil gry nie ma na czym działać.</string>
   <string name="game_profile_config_title">Ustawienia profilu gry</string>
   <string name="game_profile_config_hint">Jak ten profil zachowuje się, gdy jego gra jest uruchomiona, i co robią jego klawisze.</string>
+  <string name="profile_mode_on_launch">Pokaż profil, gdy powiązana aplikacja zostanie otwarta</string>
+  <string name="profile_mode_on_select">Pokaż profil tylko po wybraniu</string>
   <string name="game_profile_device_label">DisplayPad:</string>
   <string name="game_profile_exe_label">Plik wykonywalny gry:</string>
   <string name="file_not_found_fmt">Ten plik już nie istnieje:
