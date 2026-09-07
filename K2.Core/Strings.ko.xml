@@ -1432,9 +1432,11 @@
   <string name="speedtest_provider_label">서버</string>
   <string name="speedtest_provider_cloudflare">Cloudflare (기본값)</string>
   <string name="speedtest_provider_librespeed">LibreSpeed</string>
-  <string name="speedtest_provider_ookla">Ookla (호환 서버)</string>
   <string name="speedtest_provider_testfile">테스트 파일 (다운로드만)</string>
   <string name="speedtest_provider_custom">사용자 지정</string>
+  <string name="speedtest_libre_server_label">LibreSpeed 서버</string>
+  <string name="speedtest_libre_server_custom">사용자 지정 / 수동 URL</string>
+  <string name="speedtest_libre_server_hint">함께 제공되는 공개 목록(librespeed.org)에서 서버를 선택하면 해당 URL이 아래 칸에 채워지며 계속 편집할 수 있습니다.</string>
   <string name="speedtest_down_url_label">다운로드 URL</string>
   <string name="speedtest_down_url_hint">{bytes}는 받아올 바이트 수로, {mb}는 같은 값을 메가바이트 단위로 올림한 값으로 바뀝니다.</string>
   <string name="speedtest_up_url_label">업로드 URL</string>
@@ -1442,7 +1444,7 @@
   <string name="speedtest_down_size_label">다운로드</string>
   <string name="speedtest_up_size_label">업로드</string>
   <string name="speedtest_timeout_label">제한 시간</string>
-  <string name="speedtest_sources_hint">공개 엔드포인트는 온라인에서 쉽게 찾을 수 있습니다: LibreSpeed 서버 목록 (librespeed.org), Ookla 서버 (speedtest.net), 또는 speed.hetzner.de, proof.ovh.net, speedtest.tele2.net 같은 큰 파일도 됩니다.</string>
+  <string name="speedtest_sources_hint">공개 엔드포인트는 온라인에서 쉽게 찾을 수 있습니다: LibreSpeed 서버 목록 (librespeed.org), 또는 speed.hetzner.de, proof.ovh.net, speedtest.tele2.net 같은 큰 파일도 됩니다.</string>
   <string name="speedtest_test_now">지금 테스트</string>
   <string name="speedtest_test_running">진행 중…</string>
   <string name="speedtest_test_ok">OK — 핑 {0} ms, 다운로드 {1} Mbps, 업로드 {2}</string>

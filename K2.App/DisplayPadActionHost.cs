@@ -102,6 +102,15 @@ internal sealed class DisplayPadActionHost : IActionHost
         return dlg.ShowDialog() == true ? dlg.SavedProbeId : null;
     });
 
+    bool IActionHost.SupportsSpeedTestConfig => true;
+
+    void IActionHost.OpenSpeedTestConfig() => _win.Dispatcher.Invoke(() =>
+    {
+        var owner = System.Windows.Application.Current?.Windows
+            .OfType<System.Windows.Window>().FirstOrDefault(w => w.IsActive) ?? _win;
+        _win.DpOpenSpeedTestConfig(owner);
+    });
+
     string? IActionHost.PreviewLiveTile(string? actionType, string? actionValue)
     {
         if (actionType == "dp_screen")

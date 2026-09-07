@@ -478,6 +478,11 @@
                 <Button    x:Name="BtnScreenProbeEdit" Grid.Row="3" Margin="0,8,0,0"
                            Content="{loc:Get screen_probe_edit}" HorizontalAlignment="Left"
                            Visibility="Collapsed" Click="BtnScreenProbeEdit_Click"/>
+                <!-- "dp_speedtest" only: opens the global speed-test endpoint/payload config
+                     window (host callback — K2.App only). -->
+                <Button    x:Name="BtnSpeedTestConfig" Grid.Row="3" Margin="0,8,0,0"
+                           Content="{loc:Get speedtest_config_button}" HorizontalAlignment="Left"
+                           Visibility="Collapsed" Click="BtnSpeedTestConfig_Click"/>
                 <TextBlock x:Name="LblScreenProbePreview" Grid.Row="4" Margin="0,10,0,0"
                            FontSize="13" Foreground="{DynamicResource K2TextMutedBrush}"/>
 

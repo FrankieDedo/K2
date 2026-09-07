@@ -1439,9 +1439,11 @@ Like and Save/Remove-from-playlist are NOT available: Spotify blocks the library
   <string name="speedtest_provider_label">Server</string>
   <string name="speedtest_provider_cloudflare">Cloudflare (default)</string>
   <string name="speedtest_provider_librespeed">LibreSpeed</string>
-  <string name="speedtest_provider_ookla">Ookla (compatible server)</string>
   <string name="speedtest_provider_testfile">Test file (download only)</string>
   <string name="speedtest_provider_custom">Custom</string>
+  <string name="speedtest_libre_server_label">LibreSpeed server</string>
+  <string name="speedtest_libre_server_custom">Custom / manual URLs</string>
+  <string name="speedtest_libre_server_hint">Pick a server from the bundled public list (librespeed.org); its URLs fill the boxes below and stay editable.</string>
   <string name="speedtest_down_url_label">Download URL</string>
   <string name="speedtest_down_url_hint">{bytes} is replaced with the byte count to fetch, {mb} with the same rounded up to whole megabytes.</string>
   <string name="speedtest_up_url_label">Upload URL</string>
@@ -1449,7 +1451,7 @@ Like and Save/Remove-from-playlist are NOT available: Spotify blocks the library
   <string name="speedtest_down_size_label">Download</string>
   <string name="speedtest_up_size_label">Upload</string>
   <string name="speedtest_timeout_label">Timeout</string>
-  <string name="speedtest_sources_hint">Public endpoints are easy to find online: LibreSpeed server list (librespeed.org), Ookla servers (speedtest.net), or a plain large file such as speed.hetzner.de, proof.ovh.net or speedtest.tele2.net.</string>
+  <string name="speedtest_sources_hint">Public endpoints are easy to find online: the LibreSpeed server list (librespeed.org), or a plain large file such as speed.hetzner.de, proof.ovh.net or speedtest.tele2.net.</string>
   <string name="speedtest_test_now">Test now</string>
   <string name="speedtest_test_running">Running…</string>
   <string name="speedtest_test_ok">OK — ping {0} ms, download {1} Mbps, upload {2}</string>

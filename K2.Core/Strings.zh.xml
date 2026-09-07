@@ -1442,9 +1442,11 @@
   <string name="speedtest_provider_label">服务器</string>
   <string name="speedtest_provider_cloudflare">Cloudflare（默认）</string>
   <string name="speedtest_provider_librespeed">LibreSpeed</string>
-  <string name="speedtest_provider_ookla">Ookla（兼容服务器）</string>
   <string name="speedtest_provider_testfile">测试文件（仅下载）</string>
   <string name="speedtest_provider_custom">自定义</string>
+  <string name="speedtest_libre_server_label">LibreSpeed 服务器</string>
+  <string name="speedtest_libre_server_custom">自定义 / 手动 URL</string>
+  <string name="speedtest_libre_server_hint">从随附的公开列表（librespeed.org）中选择一个服务器；它的 URL 会填入下方输入框，且仍可编辑。</string>
   <string name="speedtest_down_url_label">下载 URL</string>
   <string name="speedtest_down_url_hint">{bytes} 会被替换为要获取的字节数，{mb} 则是同一数值向上取整到整数兆字节。</string>
   <string name="speedtest_up_url_label">上传 URL</string>
@@ -1452,7 +1454,7 @@
   <string name="speedtest_down_size_label">下载</string>
   <string name="speedtest_up_size_label">上传</string>
   <string name="speedtest_timeout_label">超时</string>
-  <string name="speedtest_sources_hint">公开端点在网上很容易找到：LibreSpeed 服务器列表（librespeed.org）、Ookla 服务器（speedtest.net），或者干脆用一个大文件，如 speed.hetzner.de、proof.ovh.net 或 speedtest.tele2.net。</string>
+  <string name="speedtest_sources_hint">公开端点在网上很容易找到：LibreSpeed 服务器列表（librespeed.org），或者干脆用一个大文件，如 speed.hetzner.de、proof.ovh.net 或 speedtest.tele2.net。</string>
   <string name="speedtest_test_now">立即测试</string>
   <string name="speedtest_test_running">进行中…</string>
   <string name="speedtest_test_ok">OK —— ping {0} 毫秒，下载 {1} Mbps，上传 {2}</string>

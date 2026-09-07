@@ -1435,9 +1435,11 @@ Mi piace e Aggiungi/Rimuovi dalla playlist NON sono disponibili: Spotify blocca 
   <string name="speedtest_provider_label">Server</string>
   <string name="speedtest_provider_cloudflare">Cloudflare (predefinito)</string>
   <string name="speedtest_provider_librespeed">LibreSpeed</string>
-  <string name="speedtest_provider_ookla">Ookla (server compatibile)</string>
   <string name="speedtest_provider_testfile">File di test (solo download)</string>
   <string name="speedtest_provider_custom">Personalizzato</string>
+  <string name="speedtest_libre_server_label">Server LibreSpeed</string>
+  <string name="speedtest_libre_server_custom">Personalizzato / URL manuali</string>
+  <string name="speedtest_libre_server_hint">Scegli un server dalla lista pubblica inclusa (librespeed.org); i suoi URL riempiono i campi sotto e restano modificabili.</string>
   <string name="speedtest_down_url_label">URL download</string>
   <string name="speedtest_down_url_hint">{bytes} viene sostituito con il numero di byte da scaricare, {mb} con lo stesso valore arrotondato per eccesso a megabyte interi.</string>
   <string name="speedtest_up_url_label">URL upload</string>
@@ -1445,7 +1447,7 @@ Mi piace e Aggiungi/Rimuovi dalla playlist NON sono disponibili: Spotify blocca 
   <string name="speedtest_down_size_label">Download</string>
   <string name="speedtest_up_size_label">Upload</string>
   <string name="speedtest_timeout_label">Timeout</string>
-  <string name="speedtest_sources_hint">Gli endpoint pubblici si trovano facilmente online: lista server LibreSpeed (librespeed.org), server Ookla (speedtest.net), oppure un semplice file grande come speed.hetzner.de, proof.ovh.net o speedtest.tele2.net.</string>
+  <string name="speedtest_sources_hint">Gli endpoint pubblici si trovano facilmente online: la lista server LibreSpeed (librespeed.org), oppure un semplice file grande come speed.hetzner.de, proof.ovh.net o speedtest.tele2.net.</string>
   <string name="speedtest_test_now">Prova adesso</string>
   <string name="speedtest_test_running">In corso…</string>
   <string name="speedtest_test_ok">OK — ping {0} ms, download {1} Mbps, upload {2}</string>

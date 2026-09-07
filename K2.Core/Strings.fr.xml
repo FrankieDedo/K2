@@ -1442,9 +1442,11 @@ J'aime et Ajouter/Retirer de la playlist ne sont PAS disponibles : Spotify bloqu
   <string name="speedtest_provider_label">Serveur</string>
   <string name="speedtest_provider_cloudflare">Cloudflare (par défaut)</string>
   <string name="speedtest_provider_librespeed">LibreSpeed</string>
-  <string name="speedtest_provider_ookla">Ookla (serveur compatible)</string>
   <string name="speedtest_provider_testfile">Fichier de test (téléchargement seul)</string>
   <string name="speedtest_provider_custom">Personnalisé</string>
+  <string name="speedtest_libre_server_label">Serveur LibreSpeed</string>
+  <string name="speedtest_libre_server_custom">Personnalisé / URL manuelles</string>
+  <string name="speedtest_libre_server_hint">Choisissez un serveur dans la liste publique fournie (librespeed.org) ; ses URL remplissent les champs ci-dessous et restent modifiables.</string>
   <string name="speedtest_down_url_label">URL de téléchargement</string>
   <string name="speedtest_down_url_hint">{bytes} est remplacé par le nombre d'octets à récupérer, {mb} par la même valeur arrondie au mégaoctet supérieur.</string>
   <string name="speedtest_up_url_label">URL d'envoi</string>
@@ -1452,7 +1454,7 @@ J'aime et Ajouter/Retirer de la playlist ne sont PAS disponibles : Spotify bloqu
   <string name="speedtest_down_size_label">Téléchargement</string>
   <string name="speedtest_up_size_label">Envoi</string>
   <string name="speedtest_timeout_label">Délai d'attente</string>
-  <string name="speedtest_sources_hint">Les points de terminaison publics se trouvent facilement en ligne : liste des serveurs LibreSpeed (librespeed.org), serveurs Ookla (speedtest.net), ou simplement un gros fichier comme speed.hetzner.de, proof.ovh.net ou speedtest.tele2.net.</string>
+  <string name="speedtest_sources_hint">Les points de terminaison publics se trouvent facilement en ligne : la liste des serveurs LibreSpeed (librespeed.org), ou simplement un gros fichier comme speed.hetzner.de, proof.ovh.net ou speedtest.tele2.net.</string>
   <string name="speedtest_test_now">Tester maintenant</string>
   <string name="speedtest_test_running">En cours…</string>
   <string name="speedtest_test_ok">OK — ping {0} ms, téléchargement {1} Mbps, envoi {2}</string>

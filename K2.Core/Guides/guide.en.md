@@ -1119,3 +1119,48 @@ Fire Mode, Aim Toggle, Auto Run, Crouch, Prone, Emotes, Hood**.
 ## Set-up in the game
 
 Nothing. For bind sync, just launch the game at least once.
+
+@@@ speedtest
+# Speed test — server options
+
+The **Server** dropdown decides where the DisplayPad's speed-test key sends
+its download, upload and latency probes. Every option except Cloudflare also
+shows the **Download / Upload** size fields (how many MB to move each way)
+and a **Timeout** (give up after N seconds). **Test now** applies the form
+and runs a real measurement, so any error shows here.
+
+In a custom URL, `{bytes}` is replaced with the byte count to fetch and
+`{mb}` with the same rounded up to whole megabytes.
+
+## Cloudflare (default)
+
+Zero config — `speed.cloudflare.com`, download + upload + latency. Fixed at
+25 MB down / 8 MB up / 60 s, so the URL and size fields are hidden. Works on
+most connections; only pick another option if pressing the key never returns
+a result (Cloudflare filtered on your network, captive portal, etc.).
+
+## LibreSpeed
+
+Full download + upload + latency against any LibreSpeed backend. The
+**LibreSpeed server** dropdown lists a public server list bundled with K2
+(from **librespeed.org**) — pick one and its URLs fill the two boxes, which
+stay editable. Choose **Custom / manual URLs** to point at your own
+self-hosted backend instead:
+
+- Download URL: `https://HOST/backend/garbage.php?ckSize={mb}`
+- Upload URL: `https://HOST/backend/empty.php`
+
+## Test file (download only)
+
+Any plain large file served over HTTP — no special software on the other end.
+Measures **download and latency only**; the upload box is left empty, so the
+tile's upload figure reads `n/d`. The most robust option when the others are
+blocked and a download number is enough.
+
+Examples: `speed.hetzner.de/100MB.bin`, `proof.ovh.net`,
+`speedtest.tele2.net`.
+
+## Custom
+
+Fill both URL boxes yourself with any endpoint that follows the `{bytes}` /
+`{mb}` rule above. Leave the upload URL empty to skip the upload leg.

@@ -108,6 +108,17 @@
     </Content>
   </ItemGroup>
 
+  <!-- Bundled public LibreSpeed server list for the speed-test config popup's
+       "LibreSpeed server" picker (Services/LibreSpeedServerList.cs). Verbatim copy
+       of librespeed/speedtest's server-list.json. Same PreserveNewest pattern as
+       everest_rgb.json above: end users can edit/extend the copy next to the exe
+       without recompiling. Falls back to the Cloudflare default if missing/invalid. -->
+  <ItemGroup>
+    <Content Include="librespeed-servers.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <!-- Testo dei ringraziamenti mostrato in fondo al tab Settings: vive in
        THANKS.md accanto a K2.sln (non dentro K2.App) cosi' resta visibile/
        editabile insieme agli altri file "meta" del progetto; Link lo porta

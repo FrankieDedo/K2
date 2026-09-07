@@ -26,9 +26,9 @@ namespace K2.App.Services;
 /// the same ones its own speed test uses: <c>__down?bytes=N</c> streams N bytes, <c>__up</c>
 /// accepts a body and discards it. No account, no API key and no third-party library, which is
 /// what makes it usable from an app that must stay a single self-contained x86 build. The user
-/// can point <see cref="Config"/> at any equivalent endpoint (LibreSpeed, an Ookla test server, a
-/// plain test file for download-only) from the config popup — for networks where Cloudflare is
-/// blocked, which is the usual reason a run reaches nothing. The
+/// can point <see cref="Config"/> at any equivalent endpoint (a LibreSpeed backend — including one
+/// picked from the bundled public list — or a plain test file for download-only) from the config
+/// popup, for networks where Cloudflare is blocked, which is the usual reason a run reaches nothing. The
 /// figures are reported in Mbit/s, the unit every speed test quotes (note that
 /// <see cref="SystemMonitor"/>'s live network tiles are in BYTES/s — they measure a different
 /// thing: what the PC is transferring right now, not what the line can do).

@@ -196,13 +196,6 @@ public partial class DpKeyConfigDialog : Window
     /// "use the default icon background" opt-out checkbox for the key.</summary>
     internal string? DefaultBgImagePath { get; set; }
 
-    /// <summary>Set by the caller (MainWindow) for a <c>dp_speedtest</c> key: opens the speed-test
-    /// endpoint/payload configuration popup. Null everywhere else — the button that invokes it
-    /// only shows while the key's action is <c>dp_speedtest</c>.</summary>
-    internal Action? OpenSpeedTestConfig { get; set; }
-
-    private void BtnSpeedTestConfig_Click(object sender, RoutedEventArgs e) => OpenSpeedTestConfig?.Invoke();
-
     private DispatcherTimer? _liveTimer;
 
     private static bool IsLiveActionType(string? type) =>
@@ -294,11 +287,6 @@ public partial class DpKeyConfigDialog : Window
 
     private void UpdateIconControlsAvailability()
     {
-        // Speed-test config button: only meaningful while this key runs a speed test.
-        BtnSpeedTestConfig.Visibility =
-            ActionType == "dp_speedtest" && OpenSpeedTestConfig is not null
-                ? Visibility.Visible : Visibility.Collapsed;
-
         bool isDefault = _spec.DefaultIcon;
 
         BtnLoadImage.IsEnabled   = !isDefault;

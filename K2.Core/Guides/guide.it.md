@@ -1189,3 +1189,50 @@ A terra, Emote, Cappuccio**.
 
 Nessuna. Per la sincronizzazione dei bind, basta avviare il gioco almeno
 una volta.
+
+@@@ speedtest
+# Speed test — opzioni server
+
+Il menu **Server** decide dove il tasto speed-test del DisplayPad manda le
+prove di download, upload e latenza. Ogni opzione tranne Cloudflare mostra
+anche i campi **Download / Upload** (quanti MB spostare in ogni verso) e un
+**Timeout** (rinuncia dopo N secondi). **Prova adesso** applica il modulo ed
+esegue una misura reale, così eventuali errori compaiono qui.
+
+In un URL personalizzato, `{bytes}` viene sostituito col numero di byte da
+scaricare e `{mb}` con lo stesso arrotondato per eccesso a megabyte interi.
+
+## Cloudflare (predefinito)
+
+Nessuna configurazione — `speed.cloudflare.com`, download + upload +
+latenza. Fisso a 25 MB down / 8 MB up / 60 s, quindi i campi URL e
+dimensione sono nascosti. Funziona sulla maggior parte delle connessioni;
+scegli un'altra opzione solo se premendo il tasto non ottieni mai un
+risultato (Cloudflare filtrato sulla tua rete, captive portal, ecc.).
+
+## LibreSpeed
+
+Download + upload + latenza completi verso un backend LibreSpeed qualsiasi.
+Il menu **Server LibreSpeed** elenca una lista pubblica di server inclusa in
+K2 (da **librespeed.org**): scegline uno e i suoi URL riempiono i due campi,
+che restano modificabili. Scegli **Personalizzato / URL manuali** per puntare
+invece a un tuo backend self-hosted:
+
+- URL download: `https://HOST/backend/garbage.php?ckSize={mb}`
+- URL upload: `https://HOST/backend/empty.php`
+
+## File di test (solo download)
+
+Un file grande qualsiasi servito via HTTP — nessun software particolare
+dall'altra parte. Misura **solo download e latenza**; il campo upload resta
+vuoto, quindi il valore di upload della tile è `n/d`. È l'opzione più
+robusta quando le altre sono bloccate e basta un numero di download.
+
+Esempi: `speed.hetzner.de/100MB.bin`, `proof.ovh.net`,
+`speedtest.tele2.net`.
+
+## Personalizzato
+
+Compila tu entrambi i campi URL con un endpoint qualsiasi che segua la
+regola `{bytes}` / `{mb}` qui sopra. Lascia vuoto l'URL di upload per
+saltare la fase di upload.

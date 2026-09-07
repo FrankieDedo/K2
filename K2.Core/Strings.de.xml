@@ -1456,9 +1456,11 @@ Wiedergabe/Pause, Weiter/Zurück, Zufall, Wiederholen und Lautstärke funktionie
   <string name="speedtest_provider_label">Server</string>
   <string name="speedtest_provider_cloudflare">Cloudflare (Standard)</string>
   <string name="speedtest_provider_librespeed">LibreSpeed</string>
-  <string name="speedtest_provider_ookla">Ookla (kompatibler Server)</string>
   <string name="speedtest_provider_testfile">Testdatei (nur Download)</string>
   <string name="speedtest_provider_custom">Benutzerdefiniert</string>
+  <string name="speedtest_libre_server_label">LibreSpeed-Server</string>
+  <string name="speedtest_libre_server_custom">Benutzerdefiniert / manuelle URLs</string>
+  <string name="speedtest_libre_server_hint">Wähle einen Server aus der mitgelieferten öffentlichen Liste (librespeed.org); seine URLs füllen die Felder unten und bleiben bearbeitbar.</string>
   <string name="speedtest_down_url_label">Download-URL</string>
   <string name="speedtest_down_url_hint">{bytes} wird durch die abzurufende Byte-Anzahl ersetzt, {mb} durch denselben Wert, aufgerundet auf ganze Megabyte.</string>
   <string name="speedtest_up_url_label">Upload-URL</string>
@@ -1466,7 +1468,7 @@ Wiedergabe/Pause, Weiter/Zurück, Zufall, Wiederholen und Lautstärke funktionie
   <string name="speedtest_down_size_label">Download</string>
   <string name="speedtest_up_size_label">Upload</string>
   <string name="speedtest_timeout_label">Zeitlimit</string>
-  <string name="speedtest_sources_hint">Öffentliche Endpunkte findest du leicht online: LibreSpeed-Serverliste (librespeed.org), Ookla-Server (speedtest.net) oder einfach eine große Datei wie speed.hetzner.de, proof.ovh.net oder speedtest.tele2.net.</string>
+  <string name="speedtest_sources_hint">Öffentliche Endpunkte findest du leicht online: die LibreSpeed-Serverliste (librespeed.org) oder einfach eine große Datei wie speed.hetzner.de, proof.ovh.net oder speedtest.tele2.net.</string>
   <string name="speedtest_test_now">Jetzt testen</string>
   <string name="speedtest_test_running">Läuft…</string>
   <string name="speedtest_test_ok">OK — Ping {0} ms, Download {1} Mbps, Upload {2}</string>

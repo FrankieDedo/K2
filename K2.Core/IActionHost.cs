@@ -175,4 +175,14 @@ public interface IActionHost
     /// can preview it. Non-blocking; null when the host has no live-tile backend or the value
     /// isn't a live one. Kicks off the sensor backend if it isn't running yet.</summary>
     string? PreviewLiveTile(string? actionType, string? actionValue) => null;
+
+    /// <summary>True on a host that can open the global speed-test endpoint/payload configuration
+    /// window (K2.App's DisplayPad host). When false the "Configure speed test…" button that
+    /// <see cref="ButtonActionDialog"/> shows for a <c>dp_speedtest</c> action is hidden.</summary>
+    bool SupportsSpeedTestConfig => false;
+
+    /// <summary>Opens the speed-test configuration window (modal, owned by the active window),
+    /// persisting and applying whatever the user saves. No-op when
+    /// <see cref="SupportsSpeedTestConfig"/> is false.</summary>
+    void OpenSpeedTestConfig() { }
 }

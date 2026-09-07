@@ -59,15 +59,9 @@
                         Width="150"
                         Click="BtnRemoveAction_Click"/>
             </StackPanel>
-
-            <!-- Speed-test key only: opens the endpoint/payload config popup. Visibility set in
-                 code-behind (UpdateSpeedTestConfigButton). -->
-            <Button x:Name="BtnSpeedTestConfig"
-                    Content="{loc:Get speedtest_config_button}"
-                    HorizontalAlignment="Left"
-                    Margin="0,8,0,0"
-                    Visibility="Collapsed"
-                    Click="BtnSpeedTestConfig_Click"/>
+            <!-- The speed-test endpoint/payload config (a dp_speedtest key) now lives inside the
+                 action picker opened by "Configure action…", not here — it is app-wide config,
+                 not a property of this key. -->
         </StackPanel>
 
         <Border Grid.Row="4" Height="1" Background="#2E2E36"/>

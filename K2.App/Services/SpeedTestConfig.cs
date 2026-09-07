@@ -16,14 +16,14 @@ public enum SpeedTestMode { Cloudflare, Custom }
 /// <c>speedtest.*</c> keys, and consumed by <see cref="SpeedTestService"/>.
 ///
 /// <para>In <see cref="SpeedTestMode.Custom"/> the download URL is a template: the literal
-/// <c>{bytes}</c> is replaced with the byte count to fetch (Cloudflare/Ookla style) and
+/// <c>{bytes}</c> is replaced with the byte count to fetch (Cloudflare style) and
 /// <c>{mb}</c> with the same rounded up to whole megabytes (LibreSpeed <c>ckSize</c> style), so
 /// an endpoint found online drops in without new code. An empty upload URL means "skip the
 /// upload leg" — the tile then reads <c>n/d</c> instead of a number.</para>
 /// </summary>
-/// <param name="Preset">Which dropdown row the popup last showed — cosmetic only, so reopening
-/// lands on the same item; the behaviour is entirely decided by <paramref name="Mode"/> and the
-/// URLs. 0 = Cloudflare, 1 = LibreSpeed, 2 = Ookla, 3 = test file, 4 = fully custom.</param>
+/// <param name="Preset">Which dropdown row the popup last showed — a hint only (on reopen the
+/// row is re-derived from the URLs); the behaviour is entirely decided by <paramref name="Mode"/>
+/// and the URLs. 0 = Cloudflare, 1 = LibreSpeed, 2 = test file, 3 = fully custom.</param>
 public readonly record struct SpeedTestConfig(
     SpeedTestMode Mode = SpeedTestMode.Cloudflare,
     string DownUrl = "",

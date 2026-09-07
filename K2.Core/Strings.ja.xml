@@ -1433,9 +1433,11 @@
   <string name="speedtest_provider_label">サーバー</string>
   <string name="speedtest_provider_cloudflare">Cloudflare（既定）</string>
   <string name="speedtest_provider_librespeed">LibreSpeed</string>
-  <string name="speedtest_provider_ookla">Ookla（互換サーバー）</string>
   <string name="speedtest_provider_testfile">テストファイル（ダウンロードのみ）</string>
   <string name="speedtest_provider_custom">カスタム</string>
+  <string name="speedtest_libre_server_label">LibreSpeed サーバー</string>
+  <string name="speedtest_libre_server_custom">カスタム / URL を手動指定</string>
+  <string name="speedtest_libre_server_hint">同梱の公開リスト (librespeed.org) からサーバーを選ぶと、その URL が下の欄に入り、編集も可能です。</string>
   <string name="speedtest_down_url_label">ダウンロード URL</string>
   <string name="speedtest_down_url_hint">{bytes} は取得するバイト数に、{mb} は同じ値をメガバイト単位に切り上げたものに置き換えられます。</string>
   <string name="speedtest_up_url_label">アップロード URL</string>
@@ -1443,7 +1445,7 @@
   <string name="speedtest_down_size_label">ダウンロード</string>
   <string name="speedtest_up_size_label">アップロード</string>
   <string name="speedtest_timeout_label">タイムアウト</string>
-  <string name="speedtest_sources_hint">公開エンドポイントはネットで簡単に見つかります: LibreSpeed のサーバー一覧 (librespeed.org)、Ookla のサーバー (speedtest.net)、あるいは speed.hetzner.de、proof.ovh.net、speedtest.tele2.net のような大きなファイルでも構いません。</string>
+  <string name="speedtest_sources_hint">公開エンドポイントはネットで簡単に見つかります: LibreSpeed のサーバー一覧 (librespeed.org)、あるいは speed.hetzner.de、proof.ovh.net、speedtest.tele2.net のような大きなファイルでも構いません。</string>
   <string name="speedtest_test_now">今すぐテスト</string>
   <string name="speedtest_test_running">実行中…</string>
   <string name="speedtest_test_ok">OK — ping {0} ms、ダウンロード {1} Mbps、アップロード {2}</string>

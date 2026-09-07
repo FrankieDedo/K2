@@ -2759,7 +2759,6 @@ public partial class MainWindow
         // Pad-wide "default icon background" image (Settings tab): shows the per-key opt-out
         // checkbox and gets baked behind the generated tile unless the key opts out.
         dlg.DefaultBgImagePath = _dpStore.GetDefaultBgImage(id);
-        dlg.OpenSpeedTestConfig = () => DpOpenSpeedTestConfig(dlg);
         if (textTile)
             dlg.TextStyleOnlyRenderer = spec =>
             {
@@ -2838,8 +2837,9 @@ public partial class MainWindow
 
     /// <summary>Opens the speed-test endpoint/payload popup (global config, one for the whole
     /// app), persists it to <see cref="_dpStore"/> and pushes it into the live service. Reached
-    /// from the "Configure speed test…" button on a <c>dp_speedtest</c> key's config dialog.</summary>
-    private void DpOpenSpeedTestConfig(Window owner)
+    /// from the "Configure speed test…" button in the action picker (a <c>dp_speedtest</c>
+    /// action), via <see cref="DisplayPadActionHost"/>'s <c>OpenSpeedTestConfig</c>.</summary>
+    internal void DpOpenSpeedTestConfig(Window owner)
     {
         var win = new SpeedTestConfigWindow(SpeedTestConfig.Load(_dpStore)) { Owner = owner };
         if (win.ShowDialog() != true) return;

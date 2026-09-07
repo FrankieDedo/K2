@@ -289,7 +289,15 @@ public partial class ButtonActionDialog
         BtnDiscordSettings.Visibility = tag == "discord" ? Visibility.Visible : Visibility.Collapsed;
         BtnAudioDeviceRefresh.Visibility = tag == "audiodevice" ? Visibility.Visible : Visibility.Collapsed;
         BtnScreenProbeEdit.Visibility = tag == "dp_screen" ? Visibility.Visible : Visibility.Collapsed;
+        BtnSpeedTestConfig.Visibility =
+            tag == "dp_speedtest" && _host?.SupportsSpeedTestConfig == true
+                ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    /// <summary>"Configure speed test…" (shown only for a <c>dp_speedtest</c> action on a host
+    /// that supports it): opens the global endpoint/payload window via the host — the config is
+    /// app-wide, not per key, so it lives here in the action picker rather than on the key.</summary>
+    private void BtnSpeedTestConfig_Click(object sender, RoutedEventArgs e) => _host?.OpenSpeedTestConfig();
 
     /// <summary>"Choose sensor…" button in the "PC monitor" panel (shown while the "Sensor
     /// selection" card is active) — same effect as clicking the card itself.</summary>

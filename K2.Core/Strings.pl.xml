@@ -1457,9 +1457,11 @@ Polub oraz Dodaj/Usuń z playlisty NIE są dostępne: Spotify blokuje endpointy 
   <string name="speedtest_provider_label">Serwer</string>
   <string name="speedtest_provider_cloudflare">Cloudflare (domyślnie)</string>
   <string name="speedtest_provider_librespeed">LibreSpeed</string>
-  <string name="speedtest_provider_ookla">Ookla (zgodny serwer)</string>
   <string name="speedtest_provider_testfile">Plik testowy (tylko pobieranie)</string>
   <string name="speedtest_provider_custom">Własny</string>
+  <string name="speedtest_libre_server_label">Serwer LibreSpeed</string>
+  <string name="speedtest_libre_server_custom">Własny / ręczne adresy URL</string>
+  <string name="speedtest_libre_server_hint">Wybierz serwer z dołączonej publicznej listy (librespeed.org); jego adresy URL wypełnią pola poniżej i pozostaną edytowalne.</string>
   <string name="speedtest_down_url_label">Adres URL pobierania</string>
   <string name="speedtest_down_url_hint">{bytes} jest zastępowane liczbą bajtów do pobrania, {mb} tą samą wartością zaokrągloną w górę do pełnych megabajtów.</string>
   <string name="speedtest_up_url_label">Adres URL wysyłania</string>
@@ -1467,7 +1469,7 @@ Polub oraz Dodaj/Usuń z playlisty NIE są dostępne: Spotify blokuje endpointy 
   <string name="speedtest_down_size_label">Pobieranie</string>
   <string name="speedtest_up_size_label">Wysyłanie</string>
   <string name="speedtest_timeout_label">Limit czasu</string>
-  <string name="speedtest_sources_hint">Publiczne endpointy łatwo znaleźć w sieci: lista serwerów LibreSpeed (librespeed.org), serwery Ookla (speedtest.net) albo po prostu duży plik, np. speed.hetzner.de, proof.ovh.net czy speedtest.tele2.net.</string>
+  <string name="speedtest_sources_hint">Publiczne endpointy łatwo znaleźć w sieci: lista serwerów LibreSpeed (librespeed.org) albo po prostu duży plik, np. speed.hetzner.de, proof.ovh.net czy speedtest.tele2.net.</string>
   <string name="speedtest_test_now">Testuj teraz</string>
   <string name="speedtest_test_running">Trwa…</string>
   <string name="speedtest_test_ok">OK — ping {0} ms, pobieranie {1} Mb/s, wysyłanie {2}</string>
