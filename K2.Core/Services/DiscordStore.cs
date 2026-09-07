@@ -33,6 +33,8 @@ public static class DiscordStore
         public bool VoicePageReturnEnabled { get; set; } = true;
         public int VoicePageReturnSeconds { get; set; } = DefaultVoicePageReturnSeconds;
         public bool VoicePageBackArrow { get; set; } = true;
+        public bool VoicePageForegroundOnly { get; set; }
+        public bool VoicePageActivationOnSelect { get; set; }
     }
 
     private static Data _data = new();
@@ -102,6 +104,29 @@ public static class DiscordStore
     {
         get { EnsureLoaded(); return _data.VoicePageBackArrow; }
         set { EnsureLoaded(); lock (_lock) { _data.VoicePageBackArrow = value; Save(); } }
+    }
+
+    /// <summary>When true, the DisplayPad Discord voice page is shown only while the Discord
+    /// desktop app owns the foreground window: it drops back to the normal profile the moment
+    /// Discord loses focus and reappears on its own when Discord is focused again (a call must
+    /// still be running for any of it to happen). When false the page stays up for the whole
+    /// call regardless of what is in front. Set in <see cref="DiscordProfileConfigWindow"/>.</summary>
+    public static bool VoicePageForegroundOnly
+    {
+        get { EnsureLoaded(); return _data.VoicePageForegroundOnly; }
+        set { EnsureLoaded(); lock (_lock) { _data.VoicePageForegroundOnly = value; Save(); } }
+    }
+
+    /// <summary>When true, the voice page never opens itself on a call — it behaves like an
+    /// ordinary profile, appearing only when the user picks the Discord row (or a key bound to
+    /// <c>discord ▸ voice page</c>). The foreground-follow and return-timer options above are
+    /// sub-options of the auto behaviour and do nothing in this mode. Off by default (today's
+    /// behaviour: the page opens when a call starts). Set in
+    /// <see cref="DiscordProfileConfigWindow"/>.</summary>
+    public static bool VoicePageActivationOnSelect
+    {
+        get { EnsureLoaded(); return _data.VoicePageActivationOnSelect; }
+        set { EnsureLoaded(); lock (_lock) { _data.VoicePageActivationOnSelect = value; Save(); } }
     }
 
     /// <summary>True once the OAuth flow has produced a token — the voice commands need it.

@@ -980,3 +980,142 @@ your desk. When you rotate:
 ![The same pad and keys at Horizontal (0°)…](dp-rotation-before.png)
 
 ![…and at Vertical (90°): grid and icons turn together.](dp-rotation-after.png)
+
+@@@ gameprofile
+# Game profiles
+
+A game profile is a DisplayPad page K2 builds and keeps in sync for a
+specific game. You don't create it — you turn it on, and it takes over the
+pad while the game runs, then hands the pad back when the game closes.
+
+## How it activates
+
+- **Show the profile when the app opens** (default): it appears by itself
+  when the game's process starts, and the previous profile returns when the
+  game exits.
+  - **Show only while the game is in front** — up only while the game owns
+    the foreground window.
+  - **Bring this profile back after N seconds** — if you switch away while
+    the game is still running, it returns on its own.
+- **Show the profile only when selected**: no auto-switch — it's a reserved
+  slot you pick by hand from the pad's Game profiles list.
+
+## The keys
+
+Each profile ships with a curated layout. Most keys are ordinary game
+shortcuts; some games also light their keys with live state read from the
+game itself (Elite's cockpit toggles, Zero Company's squad). A live key
+still sends its action when pressed.
+
+- Key presses follow **your** in-game bindings when K2 can read them,
+  otherwise the game's shipped defaults.
+- Click a key to remap it — the same action browser as a normal profile,
+  narrowed to input, the game's own commands and live tiles.
+- Every mapped key wears the game's tile art so the page reads as one panel;
+  an empty slot stays dark.
+- **Restore default keys** puts the whole layout back to what shipped.
+
+## Which games show
+
+Cards only appear for games found on this PC. Tick **Show all games** to
+reveal the rest — useful to point a profile at an .exe by hand
+(Configure ▸ Game executable) for a non-Steam or portable install.
+
+## Per-game details
+
+In a profile's **Configure** dialog, the **Guide** button explains what that
+game's keys do, how they behave, the known limits, and anything to enable
+inside the game.
+
+@@@ gameprofile:elite_dangerous
+# Elite Dangerous — flight panel
+
+## What the keys do
+
+- Six annunciators — **Landing Gear, Cargo Scoop, Ship Lights, Hard Points,
+  Flight Assist, Silent Running** — light up with the real cockpit state from
+  the game's Status file, and still send the keystroke when pressed.
+- **Frame Shift**, **Heat Sink** and **Target Ahead** are plain shortcuts.
+
+## How they behave
+
+- The tiles follow the live state; the whole page changes colour with Flight
+  Assist.
+- Key presses follow **your** bindings once you have customised the game's
+  controls at least once (read from its control-scheme files), otherwise the
+  shipped KeyboardMouseOnly defaults.
+
+## Limitations
+
+- A control bound to a HOTAS stays on the keyboard default — K2 only presses
+  keys.
+- The profile arrows and the launcher tile were removed on purpose, so the
+  page reads as a cockpit panel.
+
+## Set-up in the game
+
+Nothing. The Status file is always written. For bind sync, just rebind your
+controls in-game at least once.
+
+@@@ gameprofile:zero_company
+# Star Wars: Zero Company — tactical grid
+
+## What the keys do
+
+- **Top row** — the squad, up to six operatives. Each key is the whole
+  operative (health dial, health number, heart, action points as bars);
+  pressing it selects that soldier in the game for real, through the game's
+  own API.
+- **Bottom row** — the selected operative's six ability slots plus a scroll
+  key.
+
+## How they behave
+
+- The tiles follow the real tactical state read from the game's
+  remote-control server.
+- A squad of fewer than four shows a dash in the empty slots.
+
+## Limitations
+
+- **The ability keys do not fire yet.** The game accepts the ability index
+  but does nothing while the in-game action wheel is closed, and there is no
+  exposed way to open it — they light up correctly but press nothing.
+- Turn, round and the selected soldier's own health / AP are no longer on the
+  page, but are still in the action browser under the game's card.
+- The layout is fixed — no extra pages (the sixth soldier and the actions
+  scroll on the pad itself).
+
+## Set-up in the game
+
+No launch option or Steam launch argument is needed. The remote-control API
+ships with the retail build but stays off until a config line asks for it;
+turning the profile on writes that line (`bAutoStartWebServer=True`) into the
+game's **user** `Engine.ini` — never the install. **Restart the game once**
+for it to take effect. Delete that block to undo it — nothing here depends on
+it, so without it the page still works with "unknown" tiles.
+
+@@@ gameprofile:deadside
+# Deadside — field shortcuts
+
+## What the keys do
+
+Twelve plain keyboard shortcuts: **Inventory, Map, Quests, Build, Reload,
+Fire Mode, Aim Toggle, Auto Run, Crouch, Prone, Emotes, Hood**.
+
+## How they behave
+
+- No status tiles — the game reports nothing back (no status file, no local
+  API, and it runs under BattlEye).
+- Values follow **your** bindings read from the game's Input.ini, otherwise
+  its shipped defaults.
+
+## Limitations
+
+- No movement or aim (they belong on the keyboard), no sprint or walk (bound
+  to bare modifiers K2 cannot send on their own), nothing bound to the mouse.
+- The action browser's own families cover quick slots, vehicle, scopes and
+  squad chat.
+
+## Set-up in the game
+
+Nothing. For bind sync, just launch the game at least once.

@@ -13,6 +13,11 @@ public sealed class ProfileTarget
 
     /// <summary>"Next" | "Previous" | "1".."N".</summary>
     public string Target { get; set; } = "Next";
+
+    /// <summary>User-visible profile name captured at save time for a numeric <see cref="Target"/>
+    /// ("1".."N"), so the key icon/summary can show the profile's name instead of its slot number.
+    /// Empty for "Next"/"Previous" or when the name was unknown.</summary>
+    public string Name { get; set; } = "";
 }
 
 /// <summary>
@@ -28,7 +33,12 @@ public sealed class ProfileTargetPayload
 
     public string ToJson() => JsonSerializer.Serialize(new Dto
     {
-        Targets = Targets.ConvertAll(t => new TargetDto { Key = t.Key, Target = t.Target }),
+        Targets = Targets.ConvertAll(t => new TargetDto
+        {
+            Key = t.Key,
+            Target = t.Target,
+            Name = string.IsNullOrWhiteSpace(t.Name) ? null : t.Name,
+        }),
     });
 
     /// <summary>Decodes the payload; returns null if the JSON is invalid or not this shape.</summary>
@@ -42,7 +52,7 @@ public sealed class ProfileTargetPayload
             if (dto?.Targets is null) return null;
             var result = new ProfileTargetPayload();
             foreach (var t in dto.Targets)
-                result.Targets.Add(new ProfileTarget { Key = t.Key ?? "", Target = t.Target ?? "Next" });
+                result.Targets.Add(new ProfileTarget { Key = t.Key ?? "", Target = t.Target ?? "Next", Name = t.Name ?? "" });
             return result;
         }
         catch (JsonException)
@@ -60,5 +70,6 @@ public sealed class ProfileTargetPayload
     {
         [JsonPropertyName("key")]    public string? Key    { get; set; }
         [JsonPropertyName("target")] public string? Target { get; set; }
+        [JsonPropertyName("name")]   public string? Name   { get; set; }
     }
 }

@@ -19,12 +19,29 @@ public partial class ButtonActionDialog : Window
     /// </summary>
     private readonly IActionHost? _host;
 
-    public ButtonActionDialog(int buttonIndex, string? currentType, string? currentValue, IActionHost? host = null)
+    /// <param name="allowedCategories">Restricts the action PICKER to these categories (see
+    /// <c>ButtonActionDialog.TypePicker</c>). Used by the game profile editor, which offers Input
+    /// and Game controls only. Null keeps the ordinary set.</param>
+    public ButtonActionDialog(int buttonIndex, string? currentType, string? currentValue, IActionHost? host = null,
+        string[]? allowedTypes = null, string[]? allowedCategories = null,
+        GamePickerProfile? gameProfile = null)
     {
         InitializeComponent();
         _host = host;
+        _allowedCategories = allowedCategories;
+        _gameProfile = gameProfile;
         LblHeader.Text = Loc.Get("dlg_button_label").Replace("#?", $"#{buttonIndex}");
         Closed += (_, _) => { _livePreviewTimer?.Stop(); _livePreviewTimer = null; };
+
+        // Restrict the type list to an explicit allow-list (used by the macro-step
+        // picker, which only offers action types that have a real write effect —
+        // no "none"/"disable" and no DisplayPad-visual-only types).
+        if (allowedTypes is { Length: > 0 })
+        {
+            foreach (var item in CbType.Items.OfType<ComboBoxItem>()
+                         .Where(i => Array.IndexOf(allowedTypes, (string?)i.Tag) < 0).ToList())
+                CbType.Items.Remove(item);
+        }
 
         // Hide the "Page" type entirely (not just non-functional/empty like "macro") on
         // hosts with no DisplayPad-page concept — a MacroPad/Everest key can never
@@ -73,7 +90,7 @@ public partial class ButtonActionDialog : Window
                 ?? LegacyProfileSpec(currentValue));
         }
         else if (currentType is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
-                 or "dp_clock" or "dp_sysmon" or "dp_speedtest")
+                 or "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus")
         {
             LoadComboSpec(currentType, currentValue ?? "");
         }
@@ -196,7 +213,8 @@ public partial class ButtonActionDialog : Window
         bool browser = tag == "browser";
         bool profile = tag == "profile";
         bool combo   = tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
-                              or "dp_clock" or "dp_sysmon" or "dp_speedtest";
+                              or "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus"
+                              or "dp_zcstatus";
         bool sysmon  = tag == "dp_sysmon";
         bool keys    = tag == "keys";
         bool hotkeyswitch = tag == "hotkeyswitch";
@@ -318,13 +336,17 @@ public partial class ButtonActionDialog : Window
             ActionValue = SaveProfileSpec().ToJson();
         }
         else if (tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
-                 or "dp_clock" or "dp_speedtest")
+                 or "dp_clock" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus")
         {
             ActionValue = SaveComboSpec();
         }
         else if (tag == "dp_sysmon")
         {
             ActionValue = SaveSysMonSpec();
+        }
+        else if (tag == "dp_screen")
+        {
+            ActionValue = SaveScreenProbeSpec();
         }
         else if (tag == "keys")
         {

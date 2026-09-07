@@ -616,7 +616,15 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBox">
                         <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="4">
-                            <ScrollViewer Background="Transparent" CanContentScroll="False">
+                            <!-- Explicit bar visibility: a bare ScrollViewer defaults to
+                                 VerticalScrollBarVisibility=Visible, so the 11px dark gutter
+                                 (and, once a horizontal bar joins it, the un-themed white
+                                 corner square of the default ScrollViewer template) showed up
+                                 inside the list even when the rows fit. Auto + Disabled keeps
+                                 the list clean until it actually overflows. -->
+                            <ScrollViewer Background="Transparent" CanContentScroll="False"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
                                 <ItemsPresenter/>
                             </ScrollViewer>
                         </Border>
@@ -828,6 +836,7 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TabControl x:Name="TcDevices" Grid.Column="0"
                             SelectionChanged="TcDevices_SelectionChanged">
@@ -855,12 +864,58 @@
                     <TabItem x:Name="TabMacroPad" Tag="macropad" Header="{loc:Get tab_macropad}" Visibility="Collapsed"/>
                 </TabControl>
 
+                <!-- Game profiles: same card as the Macro tab, immediately to its LEFT.
+                     Starts Collapsed and is only shown when BOTH halves of the gate hold —
+                     the Settings > Game profiles master switch is on AND at least one
+                     DisplayPad is connected. RefreshGameTabVisibility
+                     (MainWindow.GameProfiles.cs) is the only thing that sets this. -->
+                <Button x:Name="BtnGameTab" Grid.Column="1" Visibility="Collapsed"
+                        Height="62" MinWidth="140" Margin="0,0,4,0" Padding="12,10"
+                        VerticalAlignment="Center"
+                        Content="{loc:Get tab_game_profiles}"
+                        Background="Transparent" Foreground="{StaticResource K2TextMutedBrush}"
+                        FontWeight="Bold" FontStyle="Italic"
+                        Cursor="Hand" Click="BtnGameTab_Click"
+                        ToolTip="{loc:Get tab_game_profiles}">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="bd" Background="{StaticResource K2SurfaceAltBrush}" CornerRadius="7"
+                                    Padding="{TemplateBinding Padding}">
+                                <Grid>
+                                    <Polygon x:Name="CornerTriangle"
+                                             Points="14,0 14,14 0,14"
+                                             Fill="#54545E"
+                                             HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                             Margin="0,0,-2,-2"/>
+                                    <TextBlock x:Name="Txt"
+                                               Text="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Content, Converter={StaticResource UpperCaseConverter}}"
+                                               Foreground="{TemplateBinding Foreground}"
+                                               FontWeight="{TemplateBinding FontWeight}"
+                                               FontStyle="{TemplateBinding FontStyle}"
+                                               HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                                </Grid>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="bd" Property="Background" Value="{StaticResource K2HoverBrush}"/>
+                                </Trigger>
+                                <Trigger Property="Tag" Value="active">
+                                    <Setter TargetName="bd" Property="Background" Value="{DynamicResource K2AccentBrush}"/>
+                                    <Setter TargetName="Txt" Property="Foreground" Value="{DynamicResource K2AccentTextBrush}"/>
+                                    <Setter TargetName="CornerTriangle" Property="Points" Value="26,0 26,26 0,26"/>
+                                    <Setter TargetName="CornerTriangle" Property="Fill" Value="White"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+
                 <!-- Macro: same card look as the device tabs (K2Theme TabItem template) —
                      K2SurfaceAltBrush tile, decorative bottom-right corner triangle,
                      bold+italic+uppercase title pinned top-left. Height/MinWidth/Padding
                      mirror the TabItem style so it lines up with the tab strip. -->
-                <Button x:Name="BtnMacroTab" Grid.Column="1"
-                        Height="62" MinWidth="140" Margin="8,0,0,0" Padding="12,10"
+                <Button x:Name="BtnMacroTab" Grid.Column="2"
+                        Height="62" MinWidth="140" Margin="0,0,4,0" Padding="12,10"
                         VerticalAlignment="Center"
                         Content="{loc:Get tab_macro}"
                         Background="Transparent" Foreground="{StaticResource K2TextMutedBrush}"
@@ -913,8 +968,8 @@
                      (TemplateBinding), same "contextual color" approach: whatever color
                      this button is themed with (muted gray, matching the profile gear)
                      drives the icon. -->
-                <Button x:Name="BtnSettingsTab" Grid.Column="2"
-                        Width="62" Height="62" Margin="8,0,4,0"
+                <Button x:Name="BtnSettingsTab" Grid.Column="3"
+                        Width="62" Height="62" Margin="0,0,4,0"
                         VerticalAlignment="Center"
                         Background="Transparent" Foreground="{StaticResource K2TextMutedBrush}"
                         Cursor="Hand" Click="BtnSettingsTab_Click"
@@ -949,7 +1004,7 @@
                      it overlays it; IsHitTestVisible=False so the gear still takes the
                      click. DynamicResource, not Static: the accent brush is re-set live
                      by Settings > Accent color. -->
-                <Ellipse x:Name="DotUpdateBadge" Grid.Column="2" Visibility="Collapsed"
+                <Ellipse x:Name="DotUpdateBadge" Grid.Column="3" Visibility="Collapsed"
                          Width="9" Height="9" Margin="0,-24,15,0"
                          HorizontalAlignment="Right" VerticalAlignment="Center"
                          IsHitTestVisible="False"
@@ -3366,6 +3421,24 @@
                                                      LostFocus="TxtDpAutoOffSeconds_LostFocus" Height="25" Text="5" VerticalAlignment="Center" Padding="5,2,5,0"/>
                                                     <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                                 </WrapPanel>
+
+                                                <TextBlock Text="{loc:Get dp_default_bg_group}" FontWeight="SemiBold" Margin="0,14,0,4"/>
+                                                <TextBlock Text="{loc:Get dp_default_bg_hint}" Foreground="#9A9AA2"
+                                                           TextWrapping="Wrap" FontSize="11" Margin="0,0,0,6"/>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Border x:Name="DpDefaultBgThumb" Width="48" Height="48" CornerRadius="6"
+                                                            BorderBrush="#3A3A44" BorderThickness="1" Background="Transparent"
+                                                            VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                                    <TextBlock x:Name="LblDpDefaultBg" Text="{loc:Get dp_default_bg_none}"
+                                                               Foreground="#CCCCCC" VerticalAlignment="Center" Margin="0,0,12,0"
+                                                               MaxWidth="160" TextTrimming="CharacterEllipsis"/>
+                                                    <Button x:Name="BtnDpDefaultBgEdit" Content="{loc:Get dp_default_bg_edit}"
+                                                            Style="{StaticResource K2IconButton}" Tag="&#xE91B;" Height="30"
+                                                            Margin="0,0,6,0" Click="BtnDpDefaultBgEdit_Click"/>
+                                                    <Button x:Name="BtnDpDefaultBgRemove" Content="{loc:Get dp_default_bg_remove}"
+                                                            Style="{StaticResource K2IconButton}" Tag="&#xE74D;" Height="30"
+                                                            Click="BtnDpDefaultBgRemove_Click"/>
+                                                </StackPanel>
                                             </StackPanel>
                                         </ScrollViewer>
 
@@ -3562,8 +3635,27 @@
                                          device actually has one. -->
                                     <StackPanel x:Name="PnlDpDedicated" Visibility="Collapsed">
                                         <TextBlock Text="{loc:Get dp_dedicated_profiles}" Style="{StaticResource K2SideGroupHeader}"/>
+                                        <!-- Auto height, capped at 3 rows (row = 24px gear + 2*7
+                                             padding + 2*1 margin = 40px, plus the list border's
+                                             2*4 padding => 128): the list grows with the first
+                                             three dedicated profiles and only starts scrolling
+                                             from the fourth. -->
                                         <ListBox x:Name="LstDpDedicated" Style="{StaticResource K2SideProfileList}"
-                                             Height="64" SelectionChanged="LstDpDedicated_SelectionChanged"/>
+                                             Height="Auto" MaxHeight="128" VerticalAlignment="Top"
+                                             SelectionChanged="LstDpDedicated_SelectionChanged"/>
+                                    </StackPanel>
+
+                                    <!-- Game profiles reserved on THIS pad. Same idea as the
+                                         dedicated list above and for the same reason: the slot is
+                                         filtered out of the profile list, so without a row of its
+                                         own the pad could be moved off a game profile and never
+                                         back onto it by hand (user report 2026-09-06). Collapsed
+                                         until this device has one. -->
+                                    <StackPanel x:Name="PnlDpGameSlots" Visibility="Collapsed">
+                                        <TextBlock Text="{loc:Get tab_game_profiles}" Style="{StaticResource K2SideGroupHeader}"/>
+                                        <ListBox x:Name="LstDpGameSlots" Style="{StaticResource K2SideProfileList}"
+                                             Height="Auto" MaxHeight="128" VerticalAlignment="Top"
+                                             SelectionChanged="LstDpGameSlots_SelectionChanged"/>
                                     </StackPanel>
 
                                     <Separator Style="{StaticResource K2SideSeparator}" Margin="0,4,0,10"/>
@@ -3632,6 +3724,110 @@
                 <!-- end PnlDisplayPad -->
 
                 <!-- ==================== Macro (top-level section) ==================== -->
+                <!-- Game profiles section. Shown by BtnGameTab_Click; the tab that opens it
+                     only exists when the master switch is on AND a DisplayPad is connected
+                     (RefreshGameTabVisibility). The list is bound to _gameProfiles, filled from
+                     GameProfileCatalog — see MainWindow.GameProfiles.cs. -->
+                <Grid x:Name="PnlGameProfiles" Visibility="Collapsed">
+                    <Grid Margin="24">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="{loc:Get tab_game_profiles}"
+                                       FontSize="20" FontWeight="Bold"/>
+                            <TextBlock Text="(EXPERIMENTAL)" Foreground="#9A9AA2"
+                                       FontSize="12" FontWeight="Bold"
+                                       VerticalAlignment="Center" Margin="8,2,0,0"/>
+                        </StackPanel>
+                        <TextBlock Grid.Row="1" Text="{loc:Get game_profiles_intro}"
+                                   Foreground="#9A9AA2" FontSize="12" TextWrapping="Wrap"
+                                   Margin="0,0,0,10"/>
+                        <!-- View filter only: a hidden profile keeps its settings and still
+                             activates if its game ever shows up. Off by default — see
+                             RefreshGameProfiles in MainWindow.GameProfiles.cs. -->
+                        <CheckBox Grid.Row="2" x:Name="CkGameShowAll"
+                                  Content="{loc:Get game_profiles_show_all}"
+                                  Click="CkGameShowAll_Click"
+                                  FontSize="12" Margin="0,0,0,16"/>
+                        <Grid Grid.Row="3">
+                        <TextBlock x:Name="TxtGameProfilesEmpty"
+                                   Text="{loc:Get game_profiles_none_found}"
+                                   Foreground="#9A9AA2" FontSize="12" TextWrapping="Wrap"
+                                   VerticalAlignment="Top" Visibility="Collapsed"/>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="IcGameProfiles">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{StaticResource K2SurfaceAltBrush}" CornerRadius="8"
+                                                Width="460" Margin="0,0,14,14" Padding="14">
+                                            <StackPanel>
+                                                <!-- Game icon + name. The icon is the executable's
+                                                     own, extracted at runtime (GameExeResolver);
+                                                     it stays blank when the game isn't installed,
+                                                     so the row must survive a null source. -->
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Image Source="{Binding IconPath}" Width="28" Height="28"
+                                                           Margin="0,0,8,0" VerticalAlignment="Center"
+                                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="15"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding TargetDeviceLabel}" Foreground="#9A9AA2"
+                                                           FontSize="11" Margin="0,4,0,0"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <!-- Only ever reached with "show all" ticked: says
+                                                     WHY this card has no icon, so a missing install
+                                                     doesn't read as a broken profile. -->
+                                                <TextBlock Text="{loc:Get game_profile_not_found}"
+                                                           Foreground="#C9A227" FontSize="11"
+                                                           Margin="0,4,0,0" TextWrapping="Wrap">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Installed}" Value="False">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                                    <CheckBox Content="{loc:Get game_profile_active}"
+                                                              IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                                              Click="CkGameProfileEnabled_Click"
+                                                              Tag="{Binding Id}" FontSize="12"
+                                                              VerticalAlignment="Center"/>
+                                                    <Button Content="{loc:Get configure_profile}"
+                                                            Click="BtnGameProfileConfigure_Click"
+                                                            Tag="{Binding Id}"
+                                                            Margin="12,0,0,0" Padding="8,3" FontSize="12"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                        </Grid>
+                    </Grid>
+                    <!-- Same bottom-right "Guide" button as every device panel; opens the
+                         "gameprofile" overview block (how game profiles work). Per-game detail is
+                         behind the Guide button inside each profile's Configure dialog. -->
+                    <Button Style="{StaticResource K2GuideButton}" Click="BtnGameProfilesGuide_Click"/>
+                </Grid>
+
                 <Grid x:Name="PnlMacro" Visibility="Collapsed">
                     <Grid Margin="24">
                         <Grid.RowDefinitions>
@@ -3702,6 +3898,7 @@
                                 <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
                                     <TextBlock Text="{loc:Get macro_name}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <TextBox x:Name="TxtMacroName" Width="220" Height="25"
+                                         Padding="6,2" VerticalContentAlignment="Center"
                                          Background="#2A2A2E" Foreground="White"
                                          TextChanged="TxtMacroName_TextChanged"/>
                                 </WrapPanel>
@@ -3740,8 +3937,11 @@
                                             </StackPanel>
                                         </RadioButton>
                                         <RadioButton x:Name="RbMacroDelayNone" GroupName="MacroDelayGroup"
-                                                 Content="{loc:Get macro_delay_none}" Margin="0,0,0,18"
+                                                 Content="{loc:Get macro_delay_none}" Margin="0,0,0,6"
                                                  Style="{StaticResource MacroOptionRowStyle}" Checked="RbMacroDelay_Checked"/>
+                                        <Button x:Name="BtnMacroDelayApplyAll" Content="{loc:Get macro_delay_apply_all}"
+                                                Margin="0,0,0,18" Padding="10,4" HorizontalAlignment="Left"
+                                                Click="BtnMacroDelayApplyAll_Click"/>
 
                                         <TextBlock Text="{loc:Get macro_playback}" Style="{StaticResource K2SideGroupHeader}"/>
                                         <RadioButton x:Name="RbMacroPlaybackOnce" GroupName="MacroPlaybackGroup"
@@ -3832,10 +4032,36 @@
                                                                        Foreground="#9A9AA2" VerticalAlignment="Center"/>
                                                                 <TextBlock Grid.Column="3" Text="{Binding Label}"
                                                                        VerticalAlignment="Center" Margin="6,0,0,0"/>
-                                                                <TextBlock Grid.Column="4" Text="{Binding DelayMs, StringFormat={}{0} ms}"
-                                                                       Foreground="#68686E" FontSize="11"
-                                                                       VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                                                <StackPanel Grid.Column="4" Orientation="Horizontal"
+                                                                        VerticalAlignment="Center" Margin="10,0,0,0"
+                                                                        ToolTip="{loc:Get macro_edit_delay}">
+                                                                    <TextBox Text="{Binding DelayMs}" Width="50" Height="22"
+                                                                         Padding="4,1" FontSize="11" TextAlignment="Right"
+                                                                         Background="#2A2A2E" Foreground="#C8C8CE"
+                                                                         BorderBrush="{StaticResource K2BorderBrush}"
+                                                                         VerticalContentAlignment="Center"
+                                                                         PreviewTextInput="MacroInputDelay_PreviewTextInput"
+                                                                         LostFocus="MacroInputDelay_LostFocus"
+                                                                         KeyDown="MacroInputDelay_KeyDown"/>
+                                                                    <TextBlock Text="ms" Foreground="#68686E" FontSize="11"
+                                                                           VerticalAlignment="Center" Margin="4,0,0,0"/>
+                                                                </StackPanel>
                                                                 <StackPanel Grid.Column="5" Orientation="Horizontal" Margin="10,0,0,0">
+                                                                    <Button Tag="&#xE710;" Click="BtnMacroInsertMenu_Click"
+                                                                        Style="{StaticResource MacroRowIconButton}" ToolTip="{loc:Get macro_insert_step}">
+                                                                        <Button.ContextMenu>
+                                                                            <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                                                                <MenuItem Header="{loc:Get macro_insert_rec_above}" Tag="rec-above" Click="MacroInsertItem_Click"/>
+                                                                                <MenuItem Header="{loc:Get macro_insert_rec_below}" Tag="rec-below" Click="MacroInsertItem_Click"/>
+                                                                                <Separator/>
+                                                                                <MenuItem Header="{loc:Get macro_insert_k2_above}" Tag="k2-above" Click="MacroInsertItem_Click"/>
+                                                                                <MenuItem Header="{loc:Get macro_insert_k2_below}" Tag="k2-below" Click="MacroInsertItem_Click"/>
+                                                                            </ContextMenu>
+                                                                        </Button.ContextMenu>
+                                                                    </Button>
+                                                                    <Button Tag="&#xE765;" CommandParameter="{Binding}" Click="BtnMacroInputRecordKey_Click"
+                                                                        Visibility="{Binding KeyEditVisibility}"
+                                                                        Style="{StaticResource MacroRowIconButton}" ToolTip="{loc:Get macro_rerecord_key}"/>
                                                                     <Button Tag="&#xE70E;" CommandParameter="{Binding}" Click="BtnMacroInputMoveUp_Click"
                                                                         Style="{StaticResource MacroRowIconButton}" ToolTip="{loc:Get macro_move_up}"/>
                                                                     <Button Tag="&#xE70D;" CommandParameter="{Binding}" Click="BtnMacroInputMoveDown_Click"
@@ -3850,16 +4076,19 @@
                                             </ListView>
                                         </Border>
 
-                                        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
+                                        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,8">
                                             <Button x:Name="BtnMacroRecord" Content="{loc:Get macro_start_recording}"
-                                                Padding="12,6" Margin="0,0,8,0" Click="BtnMacroRecord_Click"
+                                                Height="34" Padding="14,0" Margin="0,0,8,0" Click="BtnMacroRecord_Click"
                                                 Style="{StaticResource K2IconAccentButton}" Tag="&#xE7C8;"/>
                                             <Button x:Name="BtnMacroPlay" Content="{loc:Get macro_play}"
-                                                Padding="10,6" Margin="0,0,8,0" Click="BtnMacroPlay_Click"
+                                                Height="34" Padding="12,0" Margin="0,0,8,0" Click="BtnMacroPlay_Click"
                                                 Style="{StaticResource K2IconButton}" Tag="&#xE768;"/>
                                             <Button x:Name="BtnMacroStop" Content="{loc:Get stop}"
-                                                Padding="10,6" Margin="0,0,8,0" Click="BtnMacroStop_Click"
+                                                Height="34" Padding="12,0" Margin="0,0,8,0" Click="BtnMacroStop_Click"
                                                 Style="{StaticResource K2IconButton}" Tag="&#xE71A;"/>
+                                            <Button x:Name="BtnMacroAddK2Action" Content="{loc:Get macro_add_k2_action}"
+                                                Height="34" Padding="12,0" Margin="0,0,8,0" Click="BtnMacroAddK2Action_Click"
+                                                Style="{StaticResource K2IconButton}" Tag="&#xE945;"/>
                                             <TextBlock x:Name="TblMacroInputCount" Text="0 actions"
                                                    VerticalAlignment="Center" Foreground="#808080" Margin="8,0,0,0"/>
                                         </StackPanel>
@@ -3998,6 +4227,34 @@
                                           Click="CkSyncLightingAcrossDevices_Click" FontSize="14"/>
                                         <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get sync_lighting_across_devices_hint}"/>
                                     </StackPanel>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <!-- Game profiles: master switch for the whole feature. Turning it
+                                 off hides the Game profiles tab AND stops any game profile from
+                                 ever activating (see AppSettings.GameProfilesEnabled). -->
+                            <GroupBox x:Name="GbGameProfiles" Header="{loc:Get settings_game_profiles_group}" Margin="0,0,0,20">
+                                <StackPanel Margin="8">
+                                    <StackPanel Orientation="Horizontal">
+                                        <CheckBox x:Name="CkGameProfilesEnabled" Content="{loc:Get settings_game_profiles_enabled}"
+                                          Click="CkGameProfilesEnabled_Click" FontSize="14"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_game_profiles_enabled_hint}"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{loc:Get settings_game_profiles_needs_dp}" Foreground="#777"
+                                               FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <!-- Device order: opens a popup that reorders the device kinds;
+                                 the saved order drives the top tab strip AND the Home cards
+                                 (MainWindow.DeviceOrder.cs / RefreshHomeTiles). -->
+                            <GroupBox x:Name="GbDeviceOrder" Header="{loc:Get settings_device_order_group}" Margin="0,0,0,20">
+                                <StackPanel Margin="8" Orientation="Horizontal">
+                                    <Button x:Name="BtnDeviceOrder" Content="{loc:Get settings_device_order_btn}"
+                                    Padding="8,4" VerticalAlignment="Center"
+                                    Click="BtnDeviceOrder_Click"
+                                    Style="{StaticResource K2IconButton}" Tag="&#xE8CB;"/>
+                                    <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_device_order_hint}"/>
                                 </StackPanel>
                             </GroupBox>
 

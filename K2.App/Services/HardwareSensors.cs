@@ -164,18 +164,7 @@ public static class HardwareSensors
 
         try
         {
-            c = new Computer
-            {
-                IsCpuEnabled         = true,
-                IsGpuEnabled         = true,
-                IsMemoryEnabled      = true,
-                IsMotherboardEnabled = true,
-                IsStorageEnabled     = true,
-                IsNetworkEnabled     = true,
-                IsBatteryEnabled     = true,
-                // IsControllerEnabled stays OFF: external fan/RGB controllers do slow serial
-                // probing on Open()/Update() and contribute nothing a PC-monitor tile wants.
-            };
+            c = NewComputer();
             c.Open();
         }
         catch (Exception ex)
@@ -203,6 +192,19 @@ public static class HardwareSensors
 
     private static bool _opening;
 
+    private static Computer NewComputer() => new()
+    {
+        IsCpuEnabled         = true,
+        IsGpuEnabled         = true,
+        IsMemoryEnabled      = true,
+        IsMotherboardEnabled = true,
+        IsStorageEnabled     = true,
+        IsNetworkEnabled     = true,
+        IsBatteryEnabled     = true,
+        // IsControllerEnabled stays OFF: external fan/RGB controllers do slow serial probing
+        // on Open()/Update() and contribute nothing a PC-monitor tile wants.
+    };
+
     /// <summary>Stops the poll and unloads the driver. Called from <c>MainWindow.OnWindowClosed</c>;
     /// safe when never started.</summary>
     public static void Stop()
@@ -213,6 +215,7 @@ public static class HardwareSensors
             _timer = null;
             try { _computer?.Close(); } catch { /* ignore */ }
             _computer = null;
+            _reopenedForZeroCpu = false;
         }
     }
 
@@ -325,11 +328,18 @@ public static class HardwareSensors
                 .ToList();
             if (rows.Count == 0) return null;
 
-            var clean = rows.Where(r => !avoid.Any(a => r.Name.Contains(a, StringComparison.OrdinalIgnoreCase))).ToList();
+            // Drop sensors reading 0 °C or below: on a running PC that is never a real
+            // temperature, it's LHM failing to read the source (classically AMD Tctl/Tdie once
+            // the ring0/SMU access has been lost to another monitor). Pick from the sensors
+            // that are actually reporting; only fall back to the bogus ones if none are.
+            var live = rows.Where(r => r.Current is float c && c > 0f).ToList();
+            var pool = live.Count > 0 ? live : rows;
+
+            var clean = pool.Where(r => !avoid.Any(a => r.Name.Contains(a, StringComparison.OrdinalIgnoreCase))).ToList();
             return PreferByName(clean, avoid, prefer)
                 ?? clean.FirstOrDefault()
-                ?? PreferByName(rows, null, prefer)
-                ?? rows[0];
+                ?? PreferByName(pool, null, prefer)
+                ?? pool[0];
         }
     }
 
@@ -384,9 +394,63 @@ public static class HardwareSensors
                 App.WriteLog($"[HWSensors] poll #{_pollCount}: {n} sensors; CPU temps: " +
                              (cpuTemps.Length > 0 ? cpuTemps : "(none reported)"));
             }
+
+            // One-time self-heal: if every CPU temperature sensor is pinned at 0 a few polls
+            // in, LHM opened but never got ring0/SMU access (usually another hardware monitor
+            // holding it). A single Close()/Open() cycle usually re-acquires it.
+            MaybeReopenForZeroCpuTemp();
         }
         catch { /* a flaky provider must not kill the timer */ }
         finally { lock (_gate) _polling = false; }
+    }
+
+    private static bool _reopenedForZeroCpu;
+
+    private static void MaybeReopenForZeroCpuTemp()
+    {
+        lock (_gate)
+        {
+            if (_reopenedForZeroCpu || _computer is null || _pollCount < 3) return;
+            var cpuTemps = _sensors.Values
+                .Where(a => a.Group == Group.Cpu && a.Kind == "Temperature")
+                .ToList();
+            if (cpuTemps.Count == 0 || cpuTemps.Any(a => (a.Last ?? 0f) > 0f)) return;
+            _reopenedForZeroCpu = true;
+        }
+        App.WriteLog("[HWSensors] every CPU temperature reads 0 — LHM has no ring0/SMU access; reopening once");
+        ThreadPool.QueueUserWorkItem(_ => ReopenComputer());
+    }
+
+    private static void ReopenComputer()
+    {
+        Computer? old;
+        lock (_gate) { old = _computer; _computer = null; }
+        try { old?.Close(); } catch { /* ignore */ }
+
+        // Forget the stale CPU-temperature accumulators so the fresh tree re-adds them with
+        // real values (their Min/Max/Average restart; every other sensor is untouched).
+        lock (_gate)
+            foreach (var k in _sensors
+                         .Where(kv => kv.Value.Group == Group.Cpu && kv.Value.Kind == "Temperature")
+                         .Select(kv => kv.Key).ToList())
+                _sensors.Remove(k);
+
+        Computer c;
+        try { c = NewComputer(); c.Open(); }
+        catch (Exception ex)
+        {
+            App.WriteLog($"[HWSensors] LHM reopen failed: {ex.Message}");
+            return;
+        }
+        lock (_gate) _computer = c;
+        Sample();
+
+        string cpuTemps;
+        lock (_gate)
+            cpuTemps = string.Join(", ", _sensors.Values
+                .Where(a => a.Group == Group.Cpu && a.Kind == "Temperature")
+                .Select(a => $"{a.Name}={a.Last?.ToString("0.#") ?? "null"}"));
+        App.WriteLog($"[HWSensors] LHM reopened; CPU temps now: {(cpuTemps.Length > 0 ? cpuTemps : "(none)")}");
     }
 
     private static void VisitHardware(IHardware hw)

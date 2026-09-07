@@ -1042,3 +1042,150 @@ pad è appoggiato sulla scrivania. Quando ruoti:
 ![Lo stesso pad e gli stessi tasti a Orizzontale (0°)…](dp-rotation-before.png)
 
 ![…e a Verticale (90°): griglia e icone ruotano insieme.](dp-rotation-after.png)
+
+@@@ gameprofile
+# Profili gioco
+
+Un profilo gioco è una pagina DisplayPad che K2 costruisce e tiene
+allineata per un gioco specifico. Non lo crei tu: lo attivi, e quando il
+gioco parte prende il controllo del pad, restituendolo alla chiusura.
+
+## Come si attiva
+
+- **Mostra il profilo quando si apre l'applicazione** (predefinito):
+  compare da solo quando parte il processo del gioco, e il profilo
+  precedente torna quando il gioco esce.
+  - **Mostra solo quando il gioco è in primo piano** — attivo solo mentre
+    il gioco possiede la finestra in primo piano.
+  - **Riporta questo profilo dopo N secondi** — se passi ad altro mentre il
+    gioco è ancora in esecuzione, torna da solo.
+- **Mostra il profilo quando viene selezionato**: nessun cambio automatico
+  — è uno slot riservato che scegli a mano dalla lista Profili gioco del
+  pad.
+
+## I tasti
+
+Ogni profilo ha un layout curato. La maggior parte dei tasti sono normali
+scorciatoie di gioco; alcuni giochi accendono anche i tasti con lo stato
+live letto dal gioco stesso (le spie del cockpit di Elite, la squadra di
+Zero Company). Un tasto live invia comunque la sua azione quando premuto.
+
+- Le pressioni seguono i **tuoi** bind di gioco quando K2 riesce a
+  leggerli, altrimenti i default di serie del gioco.
+- Clicca un tasto per rimapparlo — lo stesso browser azioni di un profilo
+  normale, ristretto a input, comandi del gioco e tile live.
+- Ogni tasto mappato indossa la grafica del gioco così la pagina si legge
+  come un unico pannello; uno slot vuoto resta spento.
+- **Ripristina tasti predefiniti** riporta l'intero layout a quello di
+  serie.
+
+## Quali giochi compaiono
+
+Le schede compaiono solo per i giochi trovati su questo PC. Spunta
+**Mostra tutti i giochi** per vedere gli altri — utile per puntare un
+profilo a un .exe a mano (Configura ▸ Eseguibile del gioco) per
+un'installazione non Steam o portatile.
+
+## Dettagli per gioco
+
+Nel dialogo **Configura** di un profilo, il pulsante **Guida** spiega cosa
+fanno i tasti di quel gioco, come si comportano, i limiti noti e cosa
+abilitare nel gioco.
+
+@@@ gameprofile:elite_dangerous
+# Elite Dangerous — pannello di volo
+
+## Cosa fanno i tasti
+
+- Sei spie — **Carrello, Cargo Scoop, Luci nave, Armi, Flight Assist,
+  Silent Running** — si accendono con lo stato reale del cockpit letto dal
+  file Status del gioco, e premendole inviano comunque la scorciatoia.
+- **Frame Shift**, **Heat Sink** e **Bersaglio** sono scorciatoie semplici.
+
+## Come si comportano
+
+- Le tile seguono lo stato live; l'intera pagina cambia colore con il
+  Flight Assist.
+- Le pressioni seguono i **tuoi** bind una volta che hai personalizzato i
+  controlli del gioco almeno una volta (letti dai suoi file degli schemi di
+  controllo), altrimenti i default KeyboardMouseOnly di serie.
+
+## Limitazioni
+
+- Un comando assegnato a un HOTAS resta sul default di tastiera — K2 preme
+  solo tasti.
+- Le frecce profilo e la tile del launcher sono state rimosse apposta, così
+  la pagina si legge come un pannello di cockpit.
+
+## Configurazione nel gioco
+
+Nessuna. Il file Status viene sempre scritto. Per la sincronizzazione dei
+bind, basta riassegnare i controlli in-game almeno una volta.
+
+@@@ gameprofile:zero_company
+# Star Wars: Zero Company — griglia tattica
+
+## Cosa fanno i tasti
+
+- **Riga alta** — la squadra, fino a sei operativi. Ogni tasto è l'operativo
+  intero (quadrante della salute, numero, cuore, punti azione come barre);
+  premendolo seleziona davvero quel soldato nel gioco, tramite l'API del
+  gioco stesso.
+- **Riga bassa** — le sei abilità dell'operativo selezionato più un tasto
+  di scorrimento.
+
+## Come si comportano
+
+- Le tile seguono lo stato tattico reale letto dal server di controllo
+  remoto del gioco.
+- Una squadra di meno di quattro mostra un trattino negli slot vuoti.
+
+## Limitazioni
+
+- **I tasti abilità non attivano ancora nulla.** Il gioco accetta l'indice
+  dell'abilità ma non fa niente mentre la ruota d'azione in-game è chiusa, e
+  non c'è modo esposto di aprirla — si illuminano correttamente ma non
+  premono nulla.
+- Turno, round e la salute / PA dell'operativo selezionato non sono più
+  sulla pagina, ma restano nel browser azioni sotto la scheda del gioco.
+- Il layout è fisso — niente pagine extra (il sesto operativo e le azioni
+  scorrono sul pad stesso).
+
+## Configurazione nel gioco
+
+Non serve nessuna opzione di avvio né argomento di lancio Steam. L'API di
+controllo remoto è inclusa nella build retail ma resta spenta finché una riga
+di configurazione non la richiede; attivare il profilo scrive quella riga
+(`bAutoStartWebServer=True`) nell'`Engine.ini` **utente** del gioco — mai
+nell'installazione. **Riavvia il gioco una volta** perché abbia effetto.
+Cancella quel blocco per annullare — nulla qui ne dipende, quindi senza di
+esso la pagina funziona comunque con tile "sconosciute".
+
+@@@ gameprofile:deadside
+# Deadside — scorciatoie sul campo
+
+## Cosa fanno i tasti
+
+Dodici semplici scorciatoie da tastiera: **Inventario, Mappa, Missioni,
+Costruzione, Ricarica, Modo fuoco, Mira fissa, Corsa auto, Accovacciarsi,
+A terra, Emote, Cappuccio**.
+
+## Come si comportano
+
+- Nessuna tile di stato — il gioco non riporta nulla (niente file di stato,
+  niente API locale, e gira sotto BattlEye).
+- I valori seguono i **tuoi** bind letti da Input.ini del gioco, altrimenti
+  i suoi default di serie.
+
+## Limitazioni
+
+- Niente movimento o mira (vanno sulla tastiera), niente sprint o camminata
+  (assegnati a modificatori nudi che K2 non può inviare da soli), niente di
+  assegnato al mouse.
+- Le famiglie del browser azioni coprono slot rapidi, veicolo, ottiche e
+  chat di squadra.
+
+## Configurazione nel gioco
+
+Nessuna. Per la sincronizzazione dei bind, basta avviare il gioco almeno
+una volta.

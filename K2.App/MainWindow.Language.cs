@@ -24,21 +24,35 @@ public partial class MainWindow
         ("ko", "한국어"),
     };
 
+    // True only while InitLanguageMenu is populating the combo, so the
+    // SelectionChanged handler doesn't treat the initial programmatic
+    // selection as a user choice and clobber K2.lang (which reset the
+    // saved language to English on every restart).
+    private bool _initializingLanguageMenu;
+
     // Called from the MainWindow constructor, after InitializeComponent.
     private void InitLanguageMenu()
     {
-        CmbAppLanguage.Items.Clear();
-        foreach (var (code, name) in LanguageOptions)
-            CmbAppLanguage.Items.Add(new ComboBoxItem { Content = name, Tag = code });
-
-        CmbAppLanguage.SelectedIndex = 0;
-        for (int i = 0; i < CmbAppLanguage.Items.Count; i++)
+        _initializingLanguageMenu = true;
+        try
         {
-            if ((string)((ComboBoxItem)CmbAppLanguage.Items[i]).Tag == Loc.CurrentLang)
+            CmbAppLanguage.Items.Clear();
+            foreach (var (code, name) in LanguageOptions)
+                CmbAppLanguage.Items.Add(new ComboBoxItem { Content = name, Tag = code });
+
+            CmbAppLanguage.SelectedIndex = 0;
+            for (int i = 0; i < CmbAppLanguage.Items.Count; i++)
             {
-                CmbAppLanguage.SelectedIndex = i;
-                break;
+                if ((string)((ComboBoxItem)CmbAppLanguage.Items[i]).Tag == Loc.CurrentLang)
+                {
+                    CmbAppLanguage.SelectedIndex = i;
+                    break;
+                }
             }
+        }
+        finally
+        {
+            _initializingLanguageMenu = false;
         }
 
         Loc.RestartRequested += _ => RestartApp();
@@ -46,6 +60,7 @@ public partial class MainWindow
 
     private void CmbAppLanguage_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_initializingLanguageMenu) return;
         if (CmbAppLanguage.SelectedItem is not ComboBoxItem item) return;
         string code = (string)item.Tag;
         if (code != Loc.CurrentLang)

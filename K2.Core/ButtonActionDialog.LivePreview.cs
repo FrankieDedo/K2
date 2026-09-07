@@ -6,7 +6,9 @@ namespace K2.Core;
 
 /// <summary>
 /// ButtonActionDialog partial: a 1 Hz "this is what the key would show right now" readout for
-/// the "PC monitor" (<c>dp_sysmon</c>) action — its presets and its "pick any sensor" mode. The
+/// the "PC monitor" (<c>dp_sysmon</c>) action — its presets and its "pick any sensor" mode — and
+/// for a "Screen reading" (<c>dp_screen</c>) key, where it is the only way to tell a probe that
+/// is aimed correctly from one that is measuring empty screen. The
 /// value comes from the host (<see cref="IActionHost.PreviewLiveTile"/>) so K2.Core stays free
 /// of any sensor backend; it is non-blocking and simply reads "—" until the backend warms up.
 /// </summary>
@@ -18,7 +20,7 @@ public partial class ButtonActionDialog
     /// Called from <c>UpdatePanels</c>.</summary>
     private void UpdateLivePreview(string tag)
     {
-        if (tag == "dp_sysmon")
+        if (tag is "dp_sysmon" or "dp_screen")
         {
             if (_livePreviewTimer is null)
             {
@@ -33,13 +35,17 @@ public partial class ButtonActionDialog
             _livePreviewTimer?.Stop();
             _livePreviewTimer = null;
             LblSysMonPreview.Text = "";
+            LblScreenProbePreview.Text = "";
         }
     }
 
     private void RefreshLivePreview()
     {
-        if (CurrentTag() != "dp_sysmon") return;
-        LblSysMonPreview.Text = Compose(_host?.PreviewLiveTile("dp_sysmon", SaveSysMonSpec()));
+        string tag = CurrentTag();
+        if (tag == "dp_sysmon")
+            LblSysMonPreview.Text = Compose(_host?.PreviewLiveTile("dp_sysmon", SaveSysMonSpec()));
+        else if (tag == "dp_screen")
+            LblScreenProbePreview.Text = Compose(_host?.PreviewLiveTile("dp_screen", SaveComboSpec()));
     }
 
     private static string Compose(string? reading) =>

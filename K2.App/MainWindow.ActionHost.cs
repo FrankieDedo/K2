@@ -115,6 +115,8 @@ public partial class MainWindow : IActionHost
         foreach (var (id, label) in _dpDeviceLabels)
             list.Add(new ProfileTargetOption($"displaypad:{id}", label,
                 _dpStore.GetExistingProfiles(id)
+                        .OrderBy(slot => DpProfileTargetRank(id, slot))
+                        .ThenBy(slot => slot)
                         .Select(slot => new ProfileChoice(slot, _dpStore.GetProfileName(id, slot) ?? Loc.Get("profile_n", slot)))
                         .ToList()));
 
@@ -131,6 +133,16 @@ public partial class MainWindow : IActionHost
                       .ToList()));
 
         return list;
+    }
+
+    /// <summary>Ordering key for a DisplayPad slot in the "switch profile" picker: ordinary
+    /// profiles first, then dedicated (Spotify/Discord), then game profiles (user request).</summary>
+    private int DpProfileTargetRank(int id, int slot)
+    {
+        string? name = _dpStore.GetProfileName(id, slot);
+        if (DpIsGameProfileName(name)) return 2;
+        if (DpIsDedicatedName(name)) return 1;
+        return 0;
     }
 
     /// <summary>Dispatches a "{kind}:{id}" target key (see <see cref="ListAllProfileTargets"/>) to the right device's switch-profile logic.</summary>

@@ -22,10 +22,13 @@ namespace K2.App.Services;
 /// </para>
 ///
 /// <para>
-/// <b>Endpoint.</b> Cloudflare's public measurement endpoints (<c>speed.cloudflare.com</c>) —
+/// <b>Endpoint.</b> By default Cloudflare's public measurement endpoints (<c>speed.cloudflare.com</c>) —
 /// the same ones its own speed test uses: <c>__down?bytes=N</c> streams N bytes, <c>__up</c>
 /// accepts a body and discards it. No account, no API key and no third-party library, which is
-/// what makes it usable from an app that must stay a single self-contained x86 build. The
+/// what makes it usable from an app that must stay a single self-contained x86 build. The user
+/// can point <see cref="Config"/> at any equivalent endpoint (LibreSpeed, an Ookla test server, a
+/// plain test file for download-only) from the config popup — for networks where Cloudflare is
+/// blocked, which is the usual reason a run reaches nothing. The
 /// figures are reported in Mbit/s, the unit every speed test quotes (note that
 /// <see cref="SystemMonitor"/>'s live network tiles are in BYTES/s — they measure a different
 /// thing: what the PC is transferring right now, not what the line can do).
@@ -33,20 +36,37 @@ namespace K2.App.Services;
 /// </summary>
 internal static class SpeedTestService
 {
-    /// <summary>Bytes pulled/pushed per run. Big enough for a broadband line to reach its
-    /// steady rate, small enough that a slow line still finishes inside
-    /// <see cref="Timeout"/> (a 10 Mbit/s connection downloads 25 MB in ~20 s).</summary>
-    private const int DownloadBytes = 25_000_000;
-    private const int UploadBytes   =  8_000_000;
+    // Default bytes pulled/pushed per run (Cloudflare mode) live in SpeedTestConfig now — big
+    // enough for a broadband line to reach its steady rate, small enough that a slow line still
+    // finishes inside the 60 s timeout (a 10 Mbit/s connection downloads 25 MB in ~20 s). Custom
+    // mode overrides both.
 
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(60);
+    /// <summary>Endpoint / payload / timeout in force, set at startup from <c>DisplayPadStore</c>
+    /// and whenever the config popup saves (<see cref="ApplyConfig"/>). Cloudflare by default —
+    /// identical to the values this class shipped with before it was configurable.</summary>
+    public static SpeedTestConfig Config { get; private set; } = SpeedTestConfig.Default;
 
-    private static readonly HttpClient Http = new(new HttpClientHandler
+    private static HttpClient Http = BuildHttp(SpeedTestConfig.Default);
+
+    private static HttpClient BuildHttp(SpeedTestConfig cfg) => new(new HttpClientHandler
     {
         // A compressed transfer would measure the compressor, not the line.
         AutomaticDecompression = System.Net.DecompressionMethods.None,
+        // Follow the system proxy AND hand it the logged-in user's credentials — an authenticated
+        // corporate proxy is a common reason a run silently reaches nothing.
+        UseProxy = true,
+        DefaultProxyCredentials = System.Net.CredentialCache.DefaultCredentials,
     })
-    { Timeout = Timeout };
+    { Timeout = cfg.EffectiveTimeout };
+
+    /// <summary>Swaps in a new configuration (and a fresh <see cref="HttpClient"/> for its
+    /// timeout/proxy). A run already in flight keeps the old client; the next run uses this one.</summary>
+    public static void ApplyConfig(SpeedTestConfig cfg)
+    {
+        Config = cfg;
+        Http = BuildHttp(cfg);
+        Notify();
+    }
 
     private static int _running;   // 0/1, Interlocked — see IsRunning
 
@@ -93,6 +113,15 @@ internal static class SpeedTestService
 
     public static string? LastError { get; private set; }
 
+    /// <summary>True when the most recent run threw before finishing — lets the tile show "ERR"
+    /// instead of a stale "—" that looks identical to "nothing happened" (the whole point of the
+    /// user-visible failure signal). Cleared when a run completes.</summary>
+    public static bool LastRunFailed { get; private set; }
+
+    /// <summary>Mirrors <see cref="SpeedTestConfig.UploadDisabled"/> — the "up" tile reads "n/d"
+    /// rather than "—" when the current config has no upload endpoint.</summary>
+    public static bool UploadDisabled => Config.UploadDisabled;
+
     /// <summary>Raised whenever a figure changes or the running state flips, so the live tiles
     /// repaint immediately instead of waiting for their next tick.</summary>
     public static event Action? Changed;
@@ -121,15 +150,26 @@ internal static class SpeedTestService
                 DownloadProgress = 1;
                 CurrentPhase = Phase.Upload;
                 Notify();
-                LastUpMbps = await MeasureUploadAsync().ConfigureAwait(false);
+                // Custom mode with no upload URL: skip the leg outright rather than measure
+                // against nothing. LastUpMbps stays null; the tile reads "n/d" (UploadDisabled).
+                if (Config.UploadDisabled)
+                    LastUpMbps = null;
+                else
+                    LastUpMbps = await MeasureUploadAsync().ConfigureAwait(false);
                 UploadProgress = 1;
                 LastRunAt = DateTime.Now;
-                log?.Invoke($"[SPEEDTEST] ping={LastPingMs:F0}ms down={LastDownMbps:F1}Mbps up={LastUpMbps:F1}Mbps");
+                LastRunFailed = false;
+                log?.Invoke($"[SPEEDTEST] ping={LastPingMs:F0}ms down={LastDownMbps:F1}Mbps " +
+                            $"up={(Config.UploadDisabled ? "(off)" : LastUpMbps?.ToString("F1"))}Mbps");
             }
             catch (Exception ex)
             {
                 LastError = ex.Message;
+                LastRunFailed = true;
                 log?.Invoke($"[SPEEDTEST] failed: {ex.Message}");
+                // Must-have diagnostic: the runtime log level is often Off in user reports, so a
+                // silent throw here is exactly the "nothing happens" complaint. See K2 runtime log.
+                App.WriteLog($"[SPEEDTEST] run failed ({Config.Summary}): {ex.Message}");
             }
             finally
             {
@@ -159,11 +199,12 @@ internal static class SpeedTestService
     /// discards the first one's TLS handshake and any single slow sample.</summary>
     private static async Task<double> MeasurePingAsync()
     {
+        string url = Config.BuildPingUrl();
         double best = double.MaxValue;
         for (int i = 0; i < 4; i++)
         {
             var sw = Stopwatch.StartNew();
-            using var resp = await Http.GetAsync("https://speed.cloudflare.com/__down?bytes=0",
+            using var resp = await Http.GetAsync(url,
                 HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
             resp.EnsureSuccessStatusCode();
             sw.Stop();
@@ -176,7 +217,8 @@ internal static class SpeedTestService
 
     private static async Task<double> MeasureDownloadAsync()
     {
-        using var resp = await Http.GetAsync($"https://speed.cloudflare.com/__down?bytes={DownloadBytes}",
+        int want = Config.EffectiveDownBytes;
+        using var resp = await Http.GetAsync(Config.BuildDownloadUrl(want),
             HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
         resp.EnsureSuccessStatusCode();
 
@@ -190,7 +232,7 @@ internal static class SpeedTestService
         while ((read = await stream.ReadAsync(buffer).ConfigureAwait(false)) > 0)
         {
             total += read;
-            DownloadProgress = Math.Clamp((double)total / DownloadBytes, 0, 1);
+            DownloadProgress = Math.Clamp((double)total / want, 0, 1);
             NotifyProgress();
         }
         sw.Stop();
@@ -200,14 +242,15 @@ internal static class SpeedTestService
 
     private static async Task<double> MeasureUploadAsync()
     {
-        var payload = new byte[UploadBytes];
+        int size = Config.EffectiveUpBytes;
+        var payload = new byte[size];
         using var content = new ProgressStreamContent(payload, sent =>
         {
-            UploadProgress = Math.Clamp((double)sent / UploadBytes, 0, 1);
+            UploadProgress = Math.Clamp((double)sent / size, 0, 1);
             NotifyProgress();
         });
         var sw = Stopwatch.StartNew();
-        using var resp = await Http.PostAsync("https://speed.cloudflare.com/__up", content).ConfigureAwait(false);
+        using var resp = await Http.PostAsync(Config.EffectiveUpUrl, content).ConfigureAwait(false);
         resp.EnsureSuccessStatusCode();
         sw.Stop();
         return Mbps(payload.Length, sw.Elapsed);

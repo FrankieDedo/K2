@@ -57,6 +57,49 @@ public static class IconImageGenerator
     /// <inheritdoc cref="TileBackground"/>
     internal static Color TileAccent => AccentColor;
 
+    /// <summary>
+    /// Fills a <paramref name="size"/>×<paramref name="size"/> tile background: the pad-wide
+    /// "default icon background" image (<see cref="IconStyleScope.OverrideBgImage"/>) painted
+    /// cover-fit if one is in scope, otherwise a flat clear with the (possibly overridden)
+    /// background colour — the historical behaviour. Every <c>TryGenerate*</c> here and
+    /// <see cref="LiveTileRenderer"/> route their background fill through this so the image
+    /// takes effect in one place. Call it BEFORE <see cref="ClipToRoundedTile"/>, exactly
+    /// where the old <c>g.Clear(...)</c> sat. A full-bleed Base Camp gallery PNG still covers
+    /// whatever this draws — accepted (see class remarks).
+    /// </summary>
+    internal static void PaintTileBackground(Graphics g, int size)
+        => PaintTileBackground(g, size, FolderBackgroundColor);
+
+    /// <inheritdoc cref="PaintTileBackground(Graphics,int)"/>
+    internal static void PaintTileBackground(Graphics g, int size, Color flatColor)
+    {
+        string? bgPath = IconStyleScope.OverrideBgImage;
+        if (bgPath is null) { g.Clear(flatColor); return; }
+
+        try
+        {
+            g.Clear(DefaultBackgroundColor);   // letterbox guard behind a non-square source
+            byte[] bytes = File.ReadAllBytes(bgPath);
+            using var ms = new MemoryStream(bytes);
+            using var img = Image.FromStream(ms);
+
+            // cover-fit: scale so the shorter side fills, centre-crop the overflow
+            double scale = Math.Max((double)size / img.Width, (double)size / img.Height);
+            int w = (int)Math.Ceiling(img.Width * scale);
+            int h = (int)Math.Ceiling(img.Height * scale);
+            int x = (size - w) / 2, y = (size - h) / 2;
+
+            var oldInterp = g.InterpolationMode;
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.DrawImage(img, x, y, w, h);
+            g.InterpolationMode = oldInterp;
+        }
+        catch
+        {
+            g.Clear(flatColor);
+        }
+    }
+
     /// <summary>Accent color to tint a "full color" Base Camp gallery icon with (see
     /// <see cref="TryGenerateGalleryIcon"/>). White is a fine accent for the hand-drawn glyph
     /// tiles (a light line on the dark tile background) but breaks <see cref="TintBlueHueToAccent"/>:
@@ -131,7 +174,7 @@ public static class IconImageGenerator
             {
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                g.Clear(BackgroundColor);
+                PaintTileBackground(g, size);
                 ClipToRoundedTile(g, size);
 
                 int iconSize = (int)(size * 0.72);
@@ -166,7 +209,7 @@ public static class IconImageGenerator
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                g.Clear(FolderBackgroundColor);
+                PaintTileBackground(g, size);
                 ClipToRoundedTile(g, size);
 
                 DrawFlatFolder(g, size, centered: !showCaption);
@@ -204,7 +247,7 @@ public static class IconImageGenerator
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                g.Clear(FolderBackgroundColor);
+                PaintTileBackground(g, size);
                 ClipToRoundedTile(g, size);
 
                 var (backLeft, backTop, backSize) = IconBox(size, centered: !showCaption);
@@ -238,12 +281,9 @@ public static class IconImageGenerator
             {
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                g.Clear(FolderBackgroundColor);
+                PaintTileBackground(g, size);
                 ClipToRoundedTile(g, size);
-
-                using var brush = new SolidBrush(Color.White);
-                var rect = new RectangleF(size * 0.08f, 0, size * 0.84f, size);
-                DrawWrappedShrunkText(g, caption, rect, size * 0.16f, brush, StringAlignment.Center);
+                DrawCenteredText(g, size, caption);
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
@@ -319,7 +359,7 @@ public static class IconImageGenerator
             {
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                g.Clear(FolderBackgroundColor);
+                PaintTileBackground(g, size);
                 ClipToRoundedTile(g, size);
 
                 if (labelH > 0f) DrawTrackFieldLabel(g, size, fieldLabel!);
@@ -385,7 +425,7 @@ public static class IconImageGenerator
             {
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                g.Clear(FolderBackgroundColor);
+                PaintTileBackground(g, size);
                 ClipToRoundedTile(g, size);
 
                 if (labelH > 0f) DrawTrackFieldLabel(g, size, fieldLabel!);
@@ -445,7 +485,7 @@ public static class IconImageGenerator
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                g.Clear(FolderBackgroundColor);
+                PaintTileBackground(g, size);
                 ClipToRoundedTile(g, size);
 
                 using (var glyph = LoadDetached(glyphPath))
@@ -495,7 +535,7 @@ public static class IconImageGenerator
             {
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                g.Clear(BackgroundColor);
+                PaintTileBackground(g, size);
                 ClipToRoundedTile(g, size);
                 g.DrawImage(tinted, 0, 0, size, size);
             }
@@ -756,7 +796,7 @@ public static class IconImageGenerator
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                g.Clear(FolderBackgroundColor);
+                PaintTileBackground(g, size);
                 ClipToRoundedTile(g, size);
 
                 bool drawCaption = showCaption && !string.IsNullOrEmpty(caption);
@@ -838,7 +878,7 @@ public static class IconImageGenerator
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                g.Clear(FolderBackgroundColor);
+                PaintTileBackground(g, size);
                 ClipToRoundedTile(g, size);
 
                 RectangleF box;
@@ -1143,7 +1183,7 @@ public static class IconImageGenerator
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                g.Clear(FolderBackgroundColor);
+                PaintTileBackground(g, size);
                 ClipToRoundedTile(g, size);
 
                 var (offsetX, offsetY, iconSize) = IconBox(size, centered: !showCaption);
@@ -1168,8 +1208,13 @@ public static class IconImageGenerator
     /// height (default 0.68); live tiles pass a smaller value (a taller strip) plus a
     /// <paramref name="startFontScale"/> &gt; 1 so a captioned reading gets a bigger, up-to-two-line
     /// label. <paramref name="bottomFrac"/> is where the strip ends (default 0.98).</summary>
+    /// <param name="colorOverride">Forces the ink colour, ignoring the per-key "Edit icon"
+    /// colour. Only for a caller that is drawing the SAME caption a second time as an underlay —
+    /// <see cref="LiveTileRenderer"/>'s glow pass — where the layer has to be a flat silhouette
+    /// of the text rather than the text's own colour.</param>
     internal static void DrawCaption(Graphics g, int size, string name, float topFrac = 0.68f,
-                                     float startFontScale = 1f, float bottomFrac = 0.98f)
+                                     float startFontScale = 1f, float bottomFrac = 0.98f,
+                                     Color? colorOverride = null)
     {
         // Both the size and the color can be overridden per key from "Edit icon" — the size
         // acts as a STARTING size, since DrawWrappedShrunkText still shrinks from there when
@@ -1177,12 +1222,29 @@ public static class IconImageGenerator
         // size is respected as-is (not scaled).
         float labelSize = (float)(IconStyleScope.OverrideFontSize
             ?? (Math.Max(9f, size * 0.13f) + 4f) * startFontScale);
-        using var labelBrush = new SolidBrush(IconStyleScope.OverrideText ?? Color.White);
+        using var labelBrush = new SolidBrush(colorOverride ?? IconStyleScope.OverrideText ?? Color.White);
         // The user's own wording wins over whatever the generator derived (folder name,
         // device name, action summary) — see IconStyleScope.OverrideCaption.
         name = IconStyleScope.OverrideCaption ?? name;
         var rect = new RectangleF(size * 0.06f, size * topFrac, size * 0.88f, size * (bottomFrac - topFrac));
         DrawWrappedShrunkText(g, name, rect, labelSize, labelBrush, StringAlignment.Near);
+    }
+
+    /// <summary>Caption centered in the WHOLE tile rather than <see cref="DrawCaption"/>'s
+    /// bottom strip — for a tile with no glyph above it to leave room for (the plain
+    /// caption-only tile, and <c>LiveTileRenderer</c>'s text-only Elite Dangerous tiles, see
+    /// <see cref="KeyIconSpec.TextOnly"/>).</summary>
+    internal static void DrawCenteredText(Graphics g, int size, string text)
+    {
+        using var brush = new SolidBrush(IconStyleScope.OverrideText ?? Color.White);
+        text = IconStyleScope.OverrideCaption ?? text;
+        var rect = new RectangleF(size * 0.08f, 0, size * 0.84f, size);
+        // Same contract as DrawCaption: the size picked in "Edit icon" is a STARTING size that
+        // DrawWrappedShrunkText still shrinks from when the text doesn't fit. Without this the
+        // slider was dead on every text-only tile (the game profiles' backlit labels, the plain
+        // caption tile) — the one place where the caption IS the whole tile.
+        float startSize = (float)(IconStyleScope.OverrideFontSize ?? size * 0.16f);
+        DrawWrappedShrunkText(g, text, rect, startSize, brush, StringAlignment.Center);
     }
 
     /// <summary>
@@ -1244,6 +1306,15 @@ public static class IconImageGenerator
     /// explicit user request: on Windows "Segoe UI Semibold" is a separate FAMILY, not a
     /// <see cref="FontStyle"/>, so the weight can't be asked for through the style flags.
     /// Falls back to Segoe UI Bold (the closest available weight) when it isn't installed.</summary>
+    /// <summary>The stock semibold face at a given size, IGNORING the per-key font chosen in
+    /// "Edit icon". For the one place that needs a specific weight rather than the user's: the
+    /// health number on a squad tile, which has to read as semibold whatever face the rest of
+    /// the key wears.</summary>
+    internal static Font SemiboldFont(float sizePx) =>
+        SemiboldFamily is not null
+            ? new Font(SemiboldFamily, sizePx, FontStyle.Regular, GraphicsUnit.Pixel)
+            : new Font("Segoe UI", sizePx, FontStyle.Bold, GraphicsUnit.Pixel);
+
     internal static Font CaptionFont(float sizePx)
     {
         // Per-key font picked in "Edit icon" (see IconStyleScope); an unusable family name

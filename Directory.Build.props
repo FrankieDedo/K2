@@ -1,0 +1,31 @@
+﻿<Project>
+
+  <PropertyGroup>
+    <!-- Gli stack trace di K2 (log utente, finestra crash) portano il percorso del
+         file sorgente così com'era sulla macchina di BUILD, perché è quello che il
+         compilatore scrive nei .pdb, e i .pdb vengono spediti dentro l'installer
+         (K2Setup.iss copia tutta publish\K2.App). Nelle segnalazioni degli utenti
+         comparivano quindi righe tipo
+             at K2.App.Services.DisplayPadStore.GetExistingProfiles(...) in
+             C:\Users\NOME\Documents\...\K2\K2.App\Services\DisplayPadStore.cs:line 365
+         cioè nome utente e alberatura del PC di sviluppo.
+
+         PathMap riscrive quel prefisso a compile time: i numeri di riga (utili per
+         diagnosticare le segnalazioni) restano, il percorso locale sparisce. Vale
+         per tutti i progetti sotto K2\, che ereditano questo file.
+
+         "/_/" è la destinazione convenzionale delle build deterministiche .NET
+         (SourceLink usa la stessa): una destinazione relativa tipo "K2\" viene
+         invece ignorata in silenzio dal compilatore. -->
+    <PathMap>$(MSBuildThisFileDirectory)=/_/</PathMap>
+
+    <!-- Stesso motivo: SourceLink (attivo di default nell'SDK .NET 8 quando il
+         progetto sta in un repo git) incorpora nel .pdb una mappa JSON
+         "<percorso locale>\* -> https://raw.githubusercontent.com/..." che
+         contiene di nuovo il percorso della macchina di build. Agli utenti non
+         serve — nessuno debugga K2 con Visual Studio attaccato al binario
+         installato — quindi la si disattiva del tutto. -->
+    <EnableSourceLink>false</EnableSourceLink>
+  </PropertyGroup>
+
+</Project>

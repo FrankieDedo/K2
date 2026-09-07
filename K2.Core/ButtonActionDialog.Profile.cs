@@ -78,10 +78,15 @@ public partial class ButtonActionDialog
             if (child.Tag is not ProfileRow row) continue;
             var device = row.CbDevice.SelectedItem as ProfileTargetOption;
             var what = row.CbWhat.SelectedItem as ComboBoxItem;
+            string target = (string?)what?.Tag ?? "Next";
+            // Capture the profile's real name for a numeric target so the key icon/summary shows
+            // the name, not the slot number (Next/Previous carry no name).
+            string name = target is "Next" or "Previous" ? "" : what?.Content as string ?? "";
             payload.Targets.Add(new ProfileTarget
             {
                 Key = device?.Key ?? "",
-                Target = (string?)what?.Tag ?? "Next",
+                Target = target,
+                Name = name,
             });
         }
         if (payload.Targets.Count == 0)

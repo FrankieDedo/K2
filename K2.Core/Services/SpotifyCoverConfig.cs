@@ -26,6 +26,29 @@ public enum SpotifyTextMode { Static, Marquee }
 /// <c>MainWindow.DpSpotifyLayoutFor</c>) rather than a plain reflow of Left's.</summary>
 public enum SpotifyCoverPosition { Left, Center, Right }
 
+/// <summary>Gate on the "come back after N seconds" timer (<see cref="SpotifyCoverConfig.ReturnEnabled"/>)
+/// — WHEN it is actually allowed to switch back, not whether it counts down at all. When the
+/// gate doesn't pass at the moment the timer fires, it re-arms itself for another full interval
+/// instead of giving up (source: <c>MainWindow.DpSpotifyArmReturnTimer</c>), so it just keeps
+/// waiting rather than needing a fresh trigger. User request 2026-09-01.</summary>
+public enum SpotifyReturnCondition
+{
+    /// <summary>No gate — switches back the moment the timer elapses, regardless of whether
+    /// Spotify is even running. The only sane choice for <see cref="SpotifyCoverSource.Local"/>
+    /// (SMTC): if this pad is already showing whatever is playing, there's nothing further to
+    /// wait for.</summary>
+    Always,
+    /// <summary>Only switches back while the Spotify desktop app is running — matched by
+    /// process name, same as <c>ProfileLaunchWatcher</c>'s ordinary focus-only registrations.</summary>
+    SpotifyRunning,
+    /// <summary>Only switches back while the configured <see cref="SpotifyCoverConfig.Device"/>
+    /// (or, when that's "Automatic", ANY Spotify Connect device) shows up in
+    /// <c>GET /me/player/devices</c> — meaningful for <see cref="SpotifyCoverSource.WebApi"/>
+    /// only, where the desktop app doesn't need to be running at all (a phone, a web player, a
+    /// speaker are all valid targets) so <see cref="SpotifyRunning"/> would never pass.</summary>
+    DeviceReachable,
+}
+
 /// <summary>The knobs of the Spotify dedicated profile's configuration popup
 /// (<c>K2.Core.SpotifyProfileConfigWindow</c>), persisted per DisplayPad by
 /// <c>MainWindow.DisplayPad</c> and consumed by <c>K2.App.Services.SpotifyCoverService</c>.</summary>
@@ -58,7 +81,9 @@ public readonly record struct SpotifyCoverConfig(
     bool BackArrow = true,
     bool ForegroundOnly = false,
     SpotifyCoverPosition Position = SpotifyCoverPosition.Left,
-    string Device = "")
+    string Device = "",
+    SpotifyReturnCondition ReturnCondition = SpotifyReturnCondition.Always,
+    bool ActivationOnSelect = false)
 {
     public const int DefaultReturnSeconds = 10;
 
@@ -93,6 +118,12 @@ public readonly record struct SpotifyCoverConfig(
 
     public static bool ParseForegroundOnly(string? s) => s == "1";
 
+    /// <summary>"Show the profile only when selected": the reserved Spotify slot stays an ordinary
+    /// pick, never armed on Spotify's process/foreground. Off by default (absent reads as false),
+    /// so a pad that predates the setting keeps today's auto behaviour.</summary>
+    public string ActivationOnSelectToken => ActivationOnSelect ? "1" : "0";
+    public static bool ParseActivationOnSelect(string? s) => s == "1";
+
     public static SpotifyCoverPosition ParsePosition(string? s) => s switch
     {
         "center" => SpotifyCoverPosition.Center,
@@ -114,4 +145,18 @@ public readonly record struct SpotifyCoverConfig(
         int.TryParse(s, out int n) ? ClampReturnSeconds(n) : DefaultReturnSeconds;
 
     public static string ParseDevice(string? s) => s ?? "";
+
+    public static SpotifyReturnCondition ParseReturnCondition(string? s) => s switch
+    {
+        "running"  => SpotifyReturnCondition.SpotifyRunning,
+        "reachable" => SpotifyReturnCondition.DeviceReachable,
+        _          => SpotifyReturnCondition.Always,
+    };
+
+    public string ReturnConditionToken => ReturnCondition switch
+    {
+        SpotifyReturnCondition.SpotifyRunning   => "running",
+        SpotifyReturnCondition.DeviceReachable  => "reachable",
+        _                                       => "always",
+    };
 }

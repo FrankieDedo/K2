@@ -173,6 +173,15 @@
     </Content>
   </ItemGroup>
 
+  <!-- Game profile background art (Elite Dangerous cockpit-style tile borders). Loose
+       Content so GameProfileTheme can resolve a filesystem path for the GDI+ renderers
+       (KeyIconSpec.BgImagePath), the same way IconGalleryDefaults resolves Assets\IconGallery. -->
+  <ItemGroup>
+    <Content Include="Assets\GameProfiles\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <!-- SignalRGB plugins K2 ships for the Mountain devices. Copied next to the exe and
        installed on demand into Documents\WhirlwindFX\Plugins - see Services\SignalRgbGuard.cs. -->
   <ItemGroup>

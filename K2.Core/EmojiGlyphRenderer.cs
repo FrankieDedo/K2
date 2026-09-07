@@ -51,6 +51,31 @@ public static class EmojiGlyphRenderer
         }
     }
 
+    /// <summary>Fill for the tile square: the pad-wide "default icon background" image
+    /// (<see cref="IconStyleScope.OverrideBgImage"/>) as an <see cref="ImageBrush"/> when one
+    /// is in scope, otherwise a flat <see cref="TileBackground"/>. Stretched to fill (the
+    /// source PNG is already tile-square).</summary>
+    private static Brush TileBackgroundBrush
+    {
+        get
+        {
+            var bgPath = IconStyleScope.OverrideBgImage;
+            if (bgPath is null) return new SolidColorBrush(TileBackground);
+            try
+            {
+                var bi = new BitmapImage();
+                bi.BeginInit();
+                bi.CacheOption = BitmapCacheOption.OnLoad;
+                bi.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+                bi.UriSource = new Uri(bgPath);
+                bi.EndInit();
+                bi.Freeze();
+                return new ImageBrush(bi) { Stretch = Stretch.UniformToFill };
+            }
+            catch { return new SolidColorBrush(TileBackground); }
+        }
+    }
+
     /// <summary>Caption brush — <see cref="IconStyleScope"/>'s text color override, else white.</summary>
     private static Brush CaptionBrush
     {
@@ -161,9 +186,10 @@ public static class EmojiGlyphRenderer
             using (var dc = visual.RenderOpen())
             {
                 // Paint the full square first, then clip to the rounded tile so the corner
-                // pixels themselves carry the background color — same baked-corner look
-                // CropEditor bakes into user-picked images (see IconImageGenerator).
-                dc.DrawRectangle(new SolidColorBrush(TileBackground), null, new Rect(0, 0, size, size));
+                // pixels themselves carry the background — same baked-corner look CropEditor
+                // bakes into user-picked images (see IconImageGenerator). The pad-wide
+                // "default icon background" image wins over the flat colour when in scope.
+                dc.DrawRectangle(TileBackgroundBrush, null, new Rect(0, 0, size, size));
                 dc.PushClip(new RectangleGeometry(new Rect(0, 0, size, size),
                     size * KeyCornerRadiusRatio, size * KeyCornerRadiusRatio));
                 if (string.IsNullOrEmpty(caption))

@@ -31,6 +31,10 @@ namespace K2.Core;
 ///   target, meaningful only while Source is Web API (a "media" key has no device concept at
 ///   all). Same picker/refresh as a single key's own "spotify" action in
 ///   <see cref="ButtonActionDialog"/>.</item>
+/// <item><b>Return condition</b> — sub-setting of "Come back on its own": WHEN it's allowed to
+///   actually switch back (always / only while Spotify.exe is running / only while the
+///   configured device is reachable — see <see cref="SpotifyReturnCondition"/>), not whether it
+///   counts down at all.</item>
 /// </list>
 /// Follows the <see cref="ProfileSettingsDialog"/> value-passing pattern (no K2.App reference):
 /// the caller passes the current config in and reads <see cref="Result"/> back when
@@ -54,6 +58,9 @@ public partial class SpotifyProfileConfigWindow : Window
         InitializeComponent();
         _initialDevice = current.Device;
 
+        RbModeSelect.IsChecked = current.ActivationOnSelect;
+        RbModeLaunch.IsChecked = !current.ActivationOnSelect;
+
         RbSourceWebApi.IsChecked = current.Source == SpotifyCoverSource.WebApi;
         RbSourceLocal.IsChecked = !RbSourceWebApi.IsChecked;
 
@@ -68,6 +75,12 @@ public partial class SpotifyProfileConfigWindow : Window
         CkSpotifyForeground.IsChecked = current.ForegroundOnly;
         TxtSpotifyReturnSec.Text = SpotifyCoverConfig.ClampReturnSeconds(current.ReturnSeconds)
             .ToString(CultureInfo.InvariantCulture);
+        CbSpotifyReturnCondition.SelectedIndex = current.ReturnCondition switch
+        {
+            SpotifyReturnCondition.SpotifyRunning  => 1,
+            SpotifyReturnCondition.DeviceReachable => 2,
+            _                                      => 0,
+        };
 
         CbSpotifyPosition.SelectedIndex = current.Position switch
         {
@@ -78,17 +91,55 @@ public partial class SpotifyProfileConfigWindow : Window
 
         UpdateTextModeEnabled();
         UpdateDeviceRowVisibility();
+        UpdateReturnConditionEnabled();
+        ApplyModeVisibility();
         if (RbSourceWebApi.IsChecked == true) _ = LoadSpotifyDevicesAsync(_initialDevice);
+    }
+
+    private void Mode_Changed(object sender, RoutedEventArgs e) => ApplyModeVisibility();
+
+    /// <summary>The return timer, its condition and the foreground-only flag are sub-options of
+    /// "show when Spotify opens" — hidden when the profile is set to show only when picked by hand.</summary>
+    private void ApplyModeVisibility()
+    {
+        if (PnlSpotifyReturn is null) return;
+        var vis = RbModeSelect.IsChecked == true ? Visibility.Collapsed : Visibility.Visible;
+        PnlSpotifyReturn.Visibility = vis;
+        PnlSpotifyReturnCond.Visibility = vis;
+        CbSpotifyReturnCondition.Visibility = vis;
+        PnlSpotifyForeground.Visibility = vis;
     }
 
     private void Source_Changed(object sender, RoutedEventArgs e)
     {
         UpdateDeviceRowVisibility();
+        UpdateReturnConditionEnabled();
         // First time this pad's popup shows Web API selected, load the account's devices —
         // subsequent toggles back and forth reuse whatever the combo already has (refresh
         // button re-fetches on demand, same as the per-key picker).
         if (RbSourceWebApi.IsChecked == true && CbSpotifyDevice.Items.Count == 0)
             _ = LoadSpotifyDevicesAsync(_initialDevice);
+    }
+
+    private void ReturnEnabled_Changed(object sender, RoutedEventArgs e) => UpdateReturnConditionEnabled();
+
+    /// <summary>The condition combo only means anything while the return timer itself is on, and
+    /// its 3rd item ("only while the device is reachable") only means anything for Web API — a
+    /// "media" key has no device to check reachability for at all (user request 2026-09-01).</summary>
+    private void UpdateReturnConditionEnabled()
+    {
+        if (CbSpotifyReturnCondition is null) return;
+        bool returnOn = CkSpotifyReturn.IsChecked == true;
+        LblSpotifyReturnCondition.IsEnabled = returnOn;
+        LblSpotifyReturnCondition.Opacity = returnOn ? 1.0 : 0.45;
+        CbSpotifyReturnCondition.IsEnabled = returnOn;
+
+        bool webApi = RbSourceWebApi.IsChecked == true;
+        CbiSpotifyReturnConditionReachable.IsEnabled = webApi;
+        // Currently on the now-disabled 3rd option (switched Source away from Web API) — fall
+        // back to "Always" rather than leave an unreachable choice selected.
+        if (!webApi && CbSpotifyReturnCondition.SelectedIndex == 2)
+            CbSpotifyReturnCondition.SelectedIndex = 0;
     }
 
     /// <summary>The device picker only means anything for Web API — a "media" key has no device
@@ -197,7 +248,14 @@ public partial class SpotifyProfileConfigWindow : Window
                 2 => SpotifyCoverPosition.Right,
                 _ => SpotifyCoverPosition.Left,
             },
-            RbSourceWebApi.IsChecked == true ? SelectedSpotifyDeviceId() : "");
+            RbSourceWebApi.IsChecked == true ? SelectedSpotifyDeviceId() : "",
+            CbSpotifyReturnCondition.SelectedIndex switch
+            {
+                1 => SpotifyReturnCondition.SpotifyRunning,
+                2 => SpotifyReturnCondition.DeviceReachable,
+                _ => SpotifyReturnCondition.Always,
+            },
+            RbModeSelect.IsChecked == true);
         Saved = true;
         Close();
     }

@@ -19,6 +19,11 @@ public sealed class MacroPlayer
     public event Action? PlaybackStarted;
     public event Action? PlaybackStopped;
 
+    /// <summary>Raised for a <c>k2action</c> step (args: K2 action type, payload).
+    /// The host marshals to the UI thread and runs it through
+    /// <c>ButtonActionEngine</c> — playback does not wait for it to finish.</summary>
+    public event Action<string, string>? K2ActionRequested;
+
     public void Play(MacroDefinition macro)
     {
         if (IsPlaying) return;
@@ -72,6 +77,12 @@ public sealed class MacroPlayer
                     };
                     if (delay > 0)
                         HoldRepeat(delay, heldKeys, ct);
+
+                    if (input.Type == "k2action")
+                    {
+                        K2ActionRequested?.Invoke(input.K2Type ?? "", input.Text ?? "");
+                        continue;
+                    }
 
                     // Alt+Numpad code (Alt held, numpad digits, Alt released — e.g.
                     // Alt+0192 = "À"): compose the character ourselves and inject it as
@@ -218,6 +229,9 @@ public sealed class MacroPlayer
             case "mouseup":
                 SendMouseClick(input.X, input.Y, input.Key, true);
                 break;
+            case "mousewheel":
+                SendMouseWheel(input.X, input.Y, input.Key);
+                break;
             case "mousemove":
                 SendMouseMove(input.X, input.Y);
                 break;
@@ -299,11 +313,41 @@ public sealed class MacroPlayer
         // of warping it to (-1,-1)/(0,0).
         if (x >= 0 && y >= 0)
             SendMouseMove(x, y);
+
         var input = new INPUT { type = INPUT_MOUSE };
-        if (button == 1) // left
-            input.U.mi.dwFlags = up ? MOUSEEVENTF_LEFTUP : MOUSEEVENTF_LEFTDOWN;
-        else if (button == 2) // right
-            input.U.mi.dwFlags = up ? MOUSEEVENTF_RIGHTUP : MOUSEEVENTF_RIGHTDOWN;
+        switch (button)
+        {
+            case MacroRecorder.MouseLeft:
+                input.U.mi.dwFlags = up ? MOUSEEVENTF_LEFTUP : MOUSEEVENTF_LEFTDOWN;
+                break;
+            case MacroRecorder.MouseRight:
+                input.U.mi.dwFlags = up ? MOUSEEVENTF_RIGHTUP : MOUSEEVENTF_RIGHTDOWN;
+                break;
+            case MacroRecorder.MouseMiddle:
+                input.U.mi.dwFlags = up ? MOUSEEVENTF_MIDDLEUP : MOUSEEVENTF_MIDDLEDOWN;
+                break;
+            case MacroRecorder.MouseX1:
+            case MacroRecorder.MouseX2:
+                input.U.mi.dwFlags = up ? MOUSEEVENTF_XUP : MOUSEEVENTF_XDOWN;
+                input.U.mi.mouseData = button == MacroRecorder.MouseX2 ? XBUTTON2 : XBUTTON1;
+                break;
+            default:
+                return;                       // unknown button — nothing to send
+        }
+        SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+    }
+
+    /// <summary>Replays a wheel scroll. <paramref name="delta"/> is the recorded
+    /// signed WHEEL_DELTA multiple (positive = away from the user).</summary>
+    private static void SendMouseWheel(int x, int y, int delta)
+    {
+        if (delta == 0) return;
+        if (x >= 0 && y >= 0)
+            SendMouseMove(x, y);
+
+        var input = new INPUT { type = INPUT_MOUSE };
+        input.U.mi.dwFlags = MOUSEEVENTF_WHEEL;
+        input.U.mi.mouseData = unchecked((uint)delta);
         SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
     }
 
@@ -319,7 +363,14 @@ public sealed class MacroPlayer
     private const uint MOUSEEVENTF_LEFTUP    = 0x0004;
     private const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
     private const uint MOUSEEVENTF_RIGHTUP   = 0x0010;
+    private const uint MOUSEEVENTF_MIDDLEDOWN= 0x0020;
+    private const uint MOUSEEVENTF_MIDDLEUP  = 0x0040;
+    private const uint MOUSEEVENTF_XDOWN     = 0x0080;
+    private const uint MOUSEEVENTF_XUP       = 0x0100;
+    private const uint MOUSEEVENTF_WHEEL     = 0x0800;
     private const uint MOUSEEVENTF_ABSOLUTE  = 0x8000;
+    private const uint XBUTTON1 = 0x0001;
+    private const uint XBUTTON2 = 0x0002;
     private const int SM_CXSCREEN = 0;
     private const int SM_CYSCREEN = 1;
 
