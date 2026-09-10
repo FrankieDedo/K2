@@ -18,12 +18,12 @@ If you need a more detailed guide, check this out: <a href='https://github.com/F
 <details>
 <summary><strong>Check it out</strong></summary>
 <br>
-  <img src="images/k2_a.jpg?v=2" width="800" alt="K2 screenshot" />
-  <img src="images/k2_b.jpg?v=2" width="800" alt="K2 screenshot" />
-  <img src="images/k2_c.jpg?v=2" width="800" alt="K2 screenshot" />
-  <img src="images/k2_d.jpg?v=2" width="800" alt="K2 screenshot" />
-  <img src="images/k2_e.jpg?v=2" width="800" alt="K2 screenshot" />
-  <img src="images/k2_f.jpg?v=2" width="800" alt="K2 screenshot" />
+  <img src="images/k2_a.jpg?v=3" width="800" alt="K2 screenshot" />
+  <img src="images/k2_b.jpg?v=3" width="800" alt="K2 screenshot" />
+  <img src="images/k2_c.jpg?v=3" width="800" alt="K2 screenshot" />
+  <img src="images/k2_d.jpg?v=3" width="800" alt="K2 screenshot" />
+  <img src="images/k2_e.jpg?v=3" width="800" alt="K2 screenshot" />
+  <img src="images/k2_f.jpg?v=3" width="800" alt="K2 screenshot" />
 <br>
 
 </details>
