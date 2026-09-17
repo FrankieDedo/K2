@@ -1,4 +1,4 @@
-<UserControl x:Class="K2.App.MakaluRgbSettingsPanel"
+﻿<UserControl x:Class="K2.App.MakaluRgbSettingsPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
@@ -94,6 +94,25 @@
                     </WrapPanel>
                 </StackPanel>
 
+                <!-- "Turn off backlight when idle" — a FIRMWARE idle timer (the Makalu has
+                     no host-side activity signal, so the software K2.Core BacklightIdleTimer
+                     every other device uses can't apply here). Lives in Lighting rather than
+                     Settings (user request 2026-09-10). EXPERIMENTAL wire write — see
+                     MakaluDeviceSettingsRecord's doc. -->
+                <TextBlock Text="{loc:Get backlight_auto_off_group}" FontWeight="SemiBold" Margin="0,10,0,6"/>
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <CheckBox x:Name="CkMkBacklightIdle" Content="{loc:Get backlight_auto_off_enable}" Height="25"
+                              VerticalAlignment="Center" Margin="0,0,14,0"
+                              Checked="CkMkBacklightIdle_Changed" Unchecked="CkMkBacklightIdle_Changed"/>
+                    <TextBlock Text="{loc:Get backlight_auto_off_seconds}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                    <TextBox x:Name="TxtMkBacklightIdleSec" Width="70" TextAlignment="Center" Text="60"
+                             Height="25" VerticalAlignment="Center" VerticalContentAlignment="Center"
+                             KeyDown="TxtMkBacklightIdleSec_KeyDown" LostFocus="TxtMkBacklightIdleSec_LostFocus"/>
+                    <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="LblMkBacklightIdleStatus" VerticalAlignment="Center" FontSize="11"
+                               Foreground="{StaticResource K2TextMutedBrush}" Margin="8,0,0,0"/>
+                </WrapPanel>
+
                 <TextBlock x:Name="LblMkRgbStatus" FontSize="11" Foreground="{StaticResource K2TextMutedBrush}"/>
             </StackPanel>
         </Grid>
@@ -178,7 +197,7 @@
                      connect/model-detection (UpdateDeviceInfo -> MkDpiRefreshFromDevice). -->
                 <DockPanel Margin="0,0,0,10">
                     <TextBox x:Name="TxtMkDpi" DockPanel.Dock="Right" Width="70" Margin="8,0,0,0" TextAlignment="Center"
-                             KeyDown="TxtMkDpi_KeyDown" LostFocus="TxtMkDpi_LostFocus" Height="25" Padding="3,2,3,0"/>
+                             KeyDown="TxtMkDpi_KeyDown" LostFocus="TxtMkDpi_LostFocus" Height="25" VerticalContentAlignment="Center"/>
                     <Slider x:Name="SldMkDpi" Minimum="50" Maximum="19000"
                             TickFrequency="50" ValueChanged="SldMkDpi_ValueChanged" VerticalAlignment="Center"/>
                 </DockPanel>

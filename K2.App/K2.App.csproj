@@ -157,6 +157,10 @@
     <Resource Include="Assets\arrow_down.png" />
     <Resource Include="Assets\arrow_left.png" />
     <Resource Include="Assets\arrow_right.png" />
+    <!-- Keycap drawn on the keyboard rows of the macro INPUTS list, in place of
+         Segoe MDL2's E92E. Alpha silhouette tinted at use via OpacityMask, same
+         as K2.Core's delete.png / guide.png. -->
+    <Resource Include="Assets\keycap.png" />
   </ItemGroup>
 
   <!-- Home tab device tiles (Grafiche\png_home, see MainWindow.Home.cs) -->

@@ -101,8 +101,13 @@ public partial class GoogleHomeSetupWindow : Window
         // First time we're actually on home.google.com (not still on accounts.google.com's
         // login page): log in is done. Also re-armed after "Disconnetti" navigates back here —
         // see BtnDisconnect_Click.
+        //
+        // Latched only on a scan that actually saw cards: an empty one means the page wasn't
+        // ready (or wasn't the page we think), and latching there would burn the one automatic
+        // attempt and leave "Forza aggiornamento" — hidden unless connected — as the only way
+        // to retry.
         _autoScanDone = true;
-        await RunAutoImportAsync();
+        if (!await RunAutoImportAsync()) _autoScanDone = false;
     }
 
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -205,14 +210,18 @@ public partial class GoogleHomeSetupWindow : Window
         BtnDisconnect.IsEnabled = false;
         try
         {
-            if (WebGh.CoreWebView2 is not null)
-                await NavigateWebAsync("https://accounts.google.com/Logout");
-
+            // Flip the flag FIRST. The logout navigation is best-effort — it can be slow, and
+            // before this it was unbounded — but the user's intent ("disconnect me") must land
+            // in the store either way, otherwise a navigation that never completes leaves the
+            // account marked connected with the sign-in browser hidden and no way back.
             GoogleHomeStore.Disconnect();
             // Re-arm the post-login auto-import for whenever the user signs back in — see
             // OnNavigationCompleted.
             _autoScanDone = false;
             RefreshBindingsList();
+
+            if (WebGh.CoreWebView2 is not null)
+                await NavigateWebAsync("https://accounts.google.com/Logout");
 
             // Lands back on Google's login page (home.google.com redirects there in-place when
             // signed out) so the user can reconnect without closing/reopening this window.
@@ -240,13 +249,16 @@ public partial class GoogleHomeSetupWindow : Window
     /// asynchronously-fetched device list — scanning immediately would see an empty/half-drawn
     /// page (same reasoning previously applied to the old manual "Scan this page" button).
     /// </summary>
-    private async System.Threading.Tasks.Task RunAutoImportAsync()
+    /// <returns><c>true</c> when the page yielded at least one card — see
+    /// <see cref="OnNavigationCompleted"/>, which only latches the one-shot auto-scan on that.
+    /// </returns>
+    private async System.Threading.Tasks.Task<bool> RunAutoImportAsync()
     {
         await System.Threading.Tasks.Task.Delay(1500);
 
         string rawResult;
         try { rawResult = await WebGh.CoreWebView2.ExecuteScriptAsync("window.__k2gh.scanCards()"); }
-        catch { return; }
+        catch (Exception ex) { GoogleHomeBridge.Say("scan: script failed — " + ex.Message); return false; }
 
         string json;
         try { json = JsonSerializer.Deserialize<string>(rawResult) ?? "[]"; }
@@ -261,11 +273,24 @@ public partial class GoogleHomeSetupWindow : Window
         if (WebGh.CoreWebView2 is not null && Uri.TryCreate(WebGh.CoreWebView2.Source, UriKind.Absolute, out var uri))
             path = uri.PathAndQuery + uri.Fragment;
 
-        GoogleHomeStore.ReconcileScan(items.Select(i => (i.CardText, i.ControlLabel, path, i.IconName)).ToList());
+        var (added, updated, removed) = GoogleHomeStore.ReconcileScan(
+            items.Select(i => (i.CardText, i.ControlLabel, path, i.IconName)).ToList());
+
+        // Removed == -1 is ReconcileScan's "empty scan, refused to reconcile" — the page had no
+        // recognizable cards, which means the list hadn't rendered or Google changed the DOM.
+        // Left silent this was invisible: bindings vanished and the account got force-marked
+        // connected with no trace anywhere.
+        if (removed < 0)
+            GoogleHomeBridge.Say($"scan on \"{path}\" found no device cards — nothing reconciled "
+                                 + "(page not rendered yet, or home.google.com changed layout)");
+        else
+            GoogleHomeBridge.Say($"scan on \"{path}\": {items.Length} card(s) — "
+                                 + $"{added} added, {updated} updated, {removed} removed");
 
         await CacheIconsAsync(items.Select(i => i.IconName));
 
         RefreshBindingsList();
+        return removed >= 0;
     }
 
     /// <summary>
@@ -381,7 +406,11 @@ public partial class GoogleHomeSetupWindow : Window
     {
         bool connected = GoogleHomeStore.IsConnected;
         bool debug = AppSettings.DebugMode;
-        bool showWeb = !connected || debug;
+        // "Connected" with nothing bound means the last scan came up empty — the session may
+        // actually be signed out, or the page may have moved on us. Either way the collapsed
+        // 340px layout offers no browser and no way to fix it, so keep the browser up until
+        // there is at least one binding to show for it.
+        bool showWeb = !connected || debug || GoogleHomeStore.List().Count == 0;
 
         BorderWeb.Visibility = showWeb ? Visibility.Visible : Visibility.Collapsed;
         LblLoginHint.Visibility = !connected ? Visibility.Visible : Visibility.Collapsed;
@@ -396,16 +425,8 @@ public partial class GoogleHomeSetupWindow : Window
         MinWidth = showWeb ? 720 : 300;
     }
 
+    /// <summary>Shares <see cref="GoogleHomeBridge.NavigateAsync"/> so this window gets its
+    /// timeout too — an unbounded wait here is what left "Disconnetti" stuck mid-click.</summary>
     private System.Threading.Tasks.Task NavigateWebAsync(string url)
-    {
-        var tcs = new System.Threading.Tasks.TaskCompletionSource();
-        void OnCompleted(object? s, CoreWebView2NavigationCompletedEventArgs ev)
-        {
-            WebGh.CoreWebView2.NavigationCompleted -= OnCompleted;
-            tcs.TrySetResult();
-        }
-        WebGh.CoreWebView2.NavigationCompleted += OnCompleted;
-        WebGh.CoreWebView2.Navigate(url);
-        return tcs.Task;
-    }
+        => GoogleHomeBridge.NavigateAsync(WebGh, url);
 }

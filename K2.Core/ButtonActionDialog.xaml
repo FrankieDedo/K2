@@ -177,6 +177,12 @@
             <ComboBoxItem Content="{loc:Get act_dp_speedtest}"    Tag="dp_speedtest"/>
             <ComboBoxItem Content="{loc:Get act_dp_edstatus}"     Tag="dp_edstatus"/>
             <ComboBoxItem Content="{loc:Get act_dp_zcstatus}"     Tag="dp_zcstatus"/>
+            <ComboBoxItem Content="{loc:Get act_dp_ksp}"          Tag="dp_ksp"/>
+            <!-- Both are removed in the constructor on a host that can't back them (see
+                 IActionHost.SupportsScreenProbes / SupportsCustomActions): a type whose values
+                 are USER-DEFINED has nothing to offer where they cannot be defined. -->
+            <ComboBoxItem Content="{loc:Get act_dp_screen}"        Tag="dp_screen"/>
+            <ComboBoxItem Content="{loc:Get act_dp_custom}"        Tag="dp_custom"/>
             <ComboBoxItem Content="{loc:Get act_macro}"            Tag="macro"/>
             <ComboBoxItem Content="{loc:Get act_googlehome}"       Tag="googlehome"/>
             <ComboBoxItem Content="{loc:Get act_adobe}"            Tag="adobe"/>
@@ -278,11 +284,16 @@
                                            Foreground="{StaticResource K2TextBrush}"
                                            TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
                                 <Button x:Name="BtnRemove" Grid.Column="1" Padding="6,2"
-                                        FontFamily="Segoe MDL2 Assets" FontSize="13" Content="&#xE74D;"
                                         Background="Transparent" BorderThickness="0" Foreground="#B0B0B8"
                                         Cursor="Hand" Opacity="0" IsHitTestVisible="False"
                                         ToolTip="{loc:Get remove_recent}"
-                                        Click="BtnExecRecentRemove_Click" Tag="{Binding}"/>
+                                        Click="BtnExecRecentRemove_Click" Tag="{Binding}">
+                                    <!-- Tag carries the bound item (the Click handler reads it),
+                                         so the trash can goes in as Content rather than through
+                                         the Tag-driven swap the shared icon styles use. -->
+                                    <Rectangle Style="{StaticResource K2DeleteIcon}" Width="14" Height="14"
+                                               Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                </Button>
                             </Grid>
                             <!-- Opacity (not Visibility) so the button always reserves its layout
                                  space — toggling Visibility made the row grow taller on hover
@@ -349,11 +360,13 @@
                                            Foreground="{StaticResource K2TextBrush}"
                                            TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
                                 <Button x:Name="BtnRemove" Grid.Column="1" Padding="6,2"
-                                        FontFamily="Segoe MDL2 Assets" FontSize="13" Content="&#xE74D;"
                                         Background="Transparent" BorderThickness="0" Foreground="#B0B0B8"
                                         Cursor="Hand" Opacity="0" IsHitTestVisible="False"
                                         ToolTip="{loc:Get remove_recent}"
-                                        Click="BtnFolderRecentRemove_Click" Tag="{Binding}"/>
+                                        Click="BtnFolderRecentRemove_Click" Tag="{Binding}">
+                                    <Rectangle Style="{StaticResource K2DeleteIcon}" Width="14" Height="14"
+                                               Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                </Button>
                             </Grid>
                             <DataTemplate.Triggers>
                                 <Trigger SourceName="RowRoot" Property="IsMouseOver" Value="True">
@@ -478,6 +491,11 @@
                 <Button    x:Name="BtnScreenProbeEdit" Grid.Row="3" Margin="0,8,0,0"
                            Content="{loc:Get screen_probe_edit}" HorizontalAlignment="Left"
                            Visibility="Collapsed" Click="BtnScreenProbeEdit_Click"/>
+                <!-- "dp_custom" only: opens the game studio on the selected action, so it can
+                     be re-calibrated or restyled without leaving the key configuration. -->
+                <Button    x:Name="BtnCustomActionEdit" Grid.Row="3" Margin="0,8,0,0"
+                           Content="{loc:Get studio_edit_action}" HorizontalAlignment="Left"
+                           Visibility="Collapsed" Click="BtnCustomActionEdit_Click"/>
                 <!-- "dp_speedtest" only: opens the global speed-test endpoint/payload config
                      window (host callback — K2.App only). -->
                 <Button    x:Name="BtnSpeedTestConfig" Grid.Row="3" Margin="0,8,0,0"

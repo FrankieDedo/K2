@@ -687,11 +687,20 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="bd" CornerRadius="4" Background="{TemplateBinding Background}">
-                            <TextBlock Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets"
-                                       FontSize="11" Foreground="{TemplateBinding Foreground}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Grid>
+                                <TextBlock x:Name="glyph" Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets"
+                                           FontSize="11" Foreground="{TemplateBinding Foreground}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Rectangle x:Name="trash" Style="{StaticResource K2DeleteIcon}"
+                                           Width="12" Height="12"
+                                           Fill="{TemplateBinding Foreground}" Visibility="Collapsed"/>
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
+                            <Trigger Property="Tag" Value="&#xE74D;">
+                                <Setter TargetName="glyph" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="trash" Property="Visibility" Value="Visible"/>
+                            </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="bd" Property="Background" Value="#333338"/>
                                 <Setter Property="Foreground" Value="White"/>
@@ -700,6 +709,58 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- Macro editor: keycap drawn on the keyboard rows of the INPUTS list,
+             in place of Segoe MDL2's E92E (which read as a whole keyboard, not
+             as "a key"). Same treatment as K2.Core's delete.png: alpha
+             silhouette used as an OpacityMask over a filled Rectangle, decoded
+             once at 64 px (plenty for a ~14 DIP icon even at 400 % scaling)
+             and resampled HighQuality on the way down. -->
+        <ImageBrush x:Key="K2KeycapIconBrush" Stretch="Uniform">
+            <ImageBrush.ImageSource>
+                <BitmapImage UriSource="pack://application:,,,/Assets/keycap.png"
+                             DecodePixelHeight="64"/>
+            </ImageBrush.ImageSource>
+        </ImageBrush>
+
+        <!-- Macro editor: the INPUTS row's "re-record this key" button. Same red
+             dot as the Start-recording button — the keyboard glyph it used to
+             carry read as "keyboard settings", not "record this key again". -->
+        <Style x:Key="MacroRowRecordButton" TargetType="Button">
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Margin" Value="2,0,0,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#E05252"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" CornerRadius="4" Background="{TemplateBinding Background}">
+                            <TextBlock Text="&#xE7C8;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="11" Foreground="{TemplateBinding Foreground}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#333338"/>
+                                <Setter Property="Foreground" Value="#FF6B6B"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Macro editor: the INPUTS row's drag handle. Hold it to reorder the
+             row; the rest of the row is not draggable, so the delay box and the
+             action buttons stay easy to hit. -->
+        <Style x:Key="MacroRowGrip" TargetType="Border">
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Cursor" Value="SizeAll"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
         </Style>
 
         <!-- Macro editor: library list item, styled like the device "SECTIONS"
@@ -735,7 +796,11 @@
             </Setter>
         </Style>
 
-        <!-- Macro editor: press/release chevron indicator on each input row -->
+        <!-- Macro editor: press/release chevron indicator on each input row.
+             Press = the key going DOWN: red arrow pointing down. Release = the
+             key coming back UP: green arrow pointing up. The row's delay is the
+             time that follows that event, so a red row's delay is how long the
+             key stays held and a green row's is the pause before the next step. -->
         <Style x:Key="MacroPressIndicatorStyle" TargetType="TextBlock">
             <Setter Property="Text" Value=""/>
             <Setter Property="Width" Value="14"/>
@@ -747,16 +812,16 @@
                         <Condition Binding="{Binding ShowIndicator}" Value="True"/>
                         <Condition Binding="{Binding IsPress}" Value="True"/>
                     </MultiDataTrigger.Conditions>
-                    <Setter Property="Text" Value="&#x25B2;"/>
-                    <Setter Property="Foreground" Value="#4CAF50"/>
+                    <Setter Property="Text" Value="&#x25BC;"/>
+                    <Setter Property="Foreground" Value="#E05252"/>
                 </MultiDataTrigger>
                 <MultiDataTrigger>
                     <MultiDataTrigger.Conditions>
                         <Condition Binding="{Binding ShowIndicator}" Value="True"/>
                         <Condition Binding="{Binding IsPress}" Value="False"/>
                     </MultiDataTrigger.Conditions>
-                    <Setter Property="Text" Value="&#x25BC;"/>
-                    <Setter Property="Foreground" Value="#E05252"/>
+                    <Setter Property="Text" Value="&#x25B2;"/>
+                    <Setter Property="Foreground" Value="#4CAF50"/>
                 </MultiDataTrigger>
             </Style.Triggers>
         </Style>
@@ -810,6 +875,32 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Narrow "card" that stands in for a tab when the strip overflows: same
+             K2SurfaceAltBrush tile / CornerRadius / height as a TabItem, but only wide
+             enough for the direction triangle (supplied as Content by each button, so
+             one style serves both sides). No corner triangle, no title. -->
+        <Style x:Key="K2TabArrowStyle" TargetType="Button">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="62"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{StaticResource K2SurfaceAltBrush}" CornerRadius="7">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource K2HoverBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="12">
@@ -840,9 +931,33 @@
                 </Grid.ColumnDefinitions>
                 <TabControl x:Name="TcDevices" Grid.Column="0"
                             SelectionChanged="TcDevices_SelectionChanged">
+                    <!-- Single-row, scrollable tab strip. The stock TabPanel wrapped onto a
+                         second row (and stretched the tabs) as soon as too many devices were
+                         connected; DeviceTabPanel instead keeps one row and hides whatever
+                         doesn't fit, revealed through the two narrow arrow cards on either
+                         side. The arrows are collapsed while nothing is hidden on their side
+                         (see WireDeviceTabScroller in MainWindow.xaml.cs, which also feeds the
+                         strip its MaxWidth so the layout stays responsive to window resizing). -->
                     <TabControl.Template>
                         <ControlTemplate TargetType="TabControl">
-                            <TabPanel IsItemsHost="True" HorizontalAlignment="Left" Margin="2,0,0,0"/>
+                            <Grid Margin="2,0,0,0" HorizontalAlignment="Left">
+                                <StackPanel Orientation="Horizontal">
+                                    <local:DeviceTabPanel x:Name="DeviceTabStrip" IsItemsHost="True"/>
+                                    <Button x:Name="BtnTabScrollRight" Style="{StaticResource K2TabArrowStyle}"
+                                            Visibility="Collapsed" Click="BtnTabScrollRight_Click">
+                                        <Polygon Points="0,0 9,8 0,16" Fill="{StaticResource K2TextMutedBrush}"/>
+                                    </Button>
+                                </StackPanel>
+                                <!-- Left arrow: belongs BETWEEN the pinned Home tab and the first
+                                     scrolled tab, i.e. inside the strip. It is overlaid here instead,
+                                     offset by DeviceTabPanel.PinnedWidth into the hole the panel
+                                     reserves for it (see UpdateTabScrollArrows). -->
+                                <Button x:Name="BtnTabScrollLeft" Style="{StaticResource K2TabArrowStyle}"
+                                        HorizontalAlignment="Left" VerticalAlignment="Top"
+                                        Visibility="Collapsed" Click="BtnTabScrollLeft_Click">
+                                    <Polygon Points="9,0 0,8 9,16" Fill="{StaticResource K2TextMutedBrush}"/>
+                                </Button>
+                            </Grid>
                         </ControlTemplate>
                     </TabControl.Template>
                     <!-- Home: icon-only tab, always present (not gated by any device connection) —
@@ -1017,15 +1132,48 @@
                  shown (toggled in TcDevices_SelectionChanged / BtnSettingsTab_Click,
                  same as the Pnl* content panels below). -->
             <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,4,6">
-                <StackPanel x:Name="BrEverest" Orientation="Horizontal" Visibility="Collapsed">
-                    <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <Slider x:Name="SldEvBrightness" Minimum="0" Maximum="100" Value="100"
-                            Width="140" TickFrequency="25" IsSnapToTickEnabled="True"
-                            TickPlacement="BottomRight"
-                            ValueChanged="SldEvBrightness_ValueChanged"
-                            VerticalAlignment="Center"/>
-                    <TextBlock x:Name="LblEvBrightness" Text="100%"
-                               VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="40"/>
+                <StackPanel x:Name="BrEverest" Orientation="Vertical" Visibility="Collapsed">
+                    <!-- Row 1 (Everest Max only, user request 2026-09-11): display brightness —
+                         Display Dial screen + numpad display keys, one value like Base Camp — and
+                         "sync brightness", which locks it to the keyboard's brightness. State and
+                         apply live in MainWindow.DisplayDial.cs (FW_EXTEND_INFO.exBrightness).
+                         No Value= on SldDialDisplayBrightness on purpose: a non-default Value fires
+                         ValueChanged mid-parse (see _PROJECT_MAP, InitializeComponent gotcha);
+                         LoadDialSettings sets it. -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <Slider Grid.Column="1" x:Name="SldEvBrightness" Minimum="0" Maximum="100" Value="100"
+                                Width="140" TickFrequency="25" IsSnapToTickEnabled="True"
+                                TickPlacement="BottomRight"
+                                ValueChanged="SldEvBrightness_ValueChanged"
+                                VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" x:Name="LblEvBrightness" Text="100%"
+                                   VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="40"/>
+
+                        <TextBlock Grid.Row="1" Text="{loc:Get dial_display_brightness}"
+                                   VerticalAlignment="Center" Margin="0,4,8,0"/>
+                        <Slider Grid.Row="1" Grid.Column="1" x:Name="SldDialDisplayBrightness" Minimum="0" Maximum="100"
+                                Width="140" TickFrequency="25" IsSnapToTickEnabled="True"
+                                TickPlacement="BottomRight"
+                                ValueChanged="SldDialDisplayBrightness_ValueChanged"
+                                VerticalAlignment="Center" Margin="0,4,0,0"/>
+                        <TextBlock Grid.Row="1" Grid.Column="2" x:Name="LblDialDisplayBrightness" Text="100%"
+                                   VerticalAlignment="Center" Margin="6,4,0,0" MinWidth="40"/>
+                        <CheckBox Grid.Row="1" Grid.Column="3" x:Name="CkEvSyncBrightness"
+                                  Content="{loc:Get sync_display_brightness}"
+                                  VerticalAlignment="Center" Margin="8,4,0,0"
+                                  Click="CkEvSyncBrightness_Click"/>
+                    </Grid>
                 </StackPanel>
                 <StackPanel x:Name="BrMacroPad" Orientation="Horizontal" Visibility="Collapsed">
                     <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -1534,7 +1682,7 @@
                                                                 Click="CkEvAutoOffEnable_Click" VerticalAlignment="Center" Margin="16,0,10,0"/>
                                                             <TextBlock Text="{loc:Get backlight_auto_off_seconds}" Margin="0,0,6,0" VerticalAlignment="Center"/>
                                                             <TextBox x:Name="TxtEvAutoOffSeconds" Width="60" TextAlignment="Center"
-                                                                LostFocus="TxtEvAutoOffSeconds_LostFocus" VerticalAlignment="Center" Height="25" Padding="3,2,3,0" TextChanged="TxtEvAutoOffSeconds_TextChanged"/>
+                                                                LostFocus="TxtEvAutoOffSeconds_LostFocus" VerticalAlignment="Center" Height="25" TextChanged="TxtEvAutoOffSeconds_TextChanged"/>
                                                             <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                                         </StackPanel>
                                                         <!-- Position comes entirely from K2SyncCheckBox (see
@@ -1801,7 +1949,7 @@
                                                                   Content="{loc:Get dial_screensaver}" VerticalAlignment="Center"
                                                                   ToolTip="{loc:Get dial_screensaver_enable_tip}"
                                                                   Click="CkDialScreenSaverEnable_Click" HorizontalAlignment="Left"/>
-                                                                <TextBox  Grid.Row="0" Grid.Column="1" x:Name="TxtDialScreenSaver" Width="38" Height="25" Padding="3,0,3,0" VerticalContentAlignment="Center"
+                                                                <TextBox  Grid.Row="0" Grid.Column="1" x:Name="TxtDialScreenSaver" Width="38" Height="25" VerticalContentAlignment="Center"
                                                                   TextChanged="TxtDialScreenSaver_TextChanged" TextAlignment="Center" Text="5"/>
                                                                 <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Get unit_seconds}" VerticalAlignment="Center" HorizontalAlignment="Left"/>
 
@@ -1809,7 +1957,7 @@
                                                                   Content="{loc:Get dial_autooff}" VerticalAlignment="Center"
                                                                   ToolTip="{loc:Get dial_turnoff_enable_tip}"
                                                                   Click="CkDialTurnOffEnable_Click" HorizontalAlignment="Left"/>
-                                                                <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtDialTurnOff" Width="38" Height="25" Padding="3,0,3,0" VerticalContentAlignment="Center"
+                                                                <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtDialTurnOff" Width="38" Height="25" VerticalContentAlignment="Center"
                                                                   VerticalAlignment="Center"
                                                                   TextChanged="TxtDialTurnOff_TextChanged"  HorizontalAlignment="Center" TextAlignment="Center"/>
                                                                 <TextBlock Grid.Row="1" Grid.Column="2" Text="{loc:Get unit_seconds}"
@@ -2960,7 +3108,7 @@
       Click="CkMacroAutoOffEnable_Click" VerticalAlignment="Center" Margin="16,0,10,0"/>
                                                         <TextBlock Text="{loc:Get backlight_auto_off_seconds}" Margin="0,0,6,0" VerticalAlignment="Center"/>
                                                         <TextBox x:Name="TxtMacroAutoOffSeconds" Width="60" TextAlignment="Center"
-     LostFocus="TxtMacroAutoOffSeconds_LostFocus" Text="5" VerticalAlignment="Center" Height="25" Padding="3,2,3,0"/>
+     LostFocus="TxtMacroAutoOffSeconds_LostFocus" Text="5" VerticalAlignment="Center" Height="25"/>
                                                         <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                                     </StackPanel>
 
@@ -3418,7 +3566,7 @@
                                                       Click="CkDpAutoOffEnable_Click" VerticalAlignment="Center" Margin="0,0,14,0"/>
                                                     <TextBlock Text="{loc:Get backlight_auto_off_seconds}" Margin="0,0,6,0" VerticalAlignment="Center"/>
                                                     <TextBox x:Name="TxtDpAutoOffSeconds" Width="70" TextAlignment="Center"
-                                                     LostFocus="TxtDpAutoOffSeconds_LostFocus" Height="25" Text="5" VerticalAlignment="Center" Padding="5,2,5,0"/>
+                                                     LostFocus="TxtDpAutoOffSeconds_LostFocus" Height="25" Text="5" VerticalAlignment="Center"/>
                                                     <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                                 </WrapPanel>
 
@@ -3749,10 +3897,60 @@
                         <!-- View filter only: a hidden profile keeps its settings and still
                              activates if its game ever shows up. Off by default — see
                              RefreshGameProfiles in MainWindow.GameProfiles.cs. -->
-                        <CheckBox Grid.Row="2" x:Name="CkGameShowAll"
-                                  Content="{loc:Get game_profiles_show_all}"
-                                  Click="CkGameShowAll_Click"
-                                  FontSize="12" Margin="0,0,0,16"/>
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,16">
+                            <CheckBox x:Name="CkGameShowAll"
+                                      Content="{loc:Get game_profiles_show_all}"
+                                      Click="CkGameShowAll_Click"
+                                      FontSize="12" VerticalAlignment="Center"/>
+                            <!-- The authoring side of the section: profiles and actions the user
+                                 builds themselves, in their own window (GameStudioWindow).
+                                 Same card language as the Game profiles tab above (BtnGameTab):
+                                 rounded surface, corner triangle, uppercase bold-italic title —
+                                 but filled with the accent instead of the muted surface, and NOT
+                                 tab-sized. The tab pins its title to the top of a 62px card; here
+                                 the text is centred and the card takes its height from the padding,
+                                 so the gap above and below the text is the same number. The extra
+                                 right padding is the triangle's room: without it the title runs
+                                 under it on a short label.
+                                 The explicit Height is not decoration: the theme's implicit Button
+                                 style sets Height=25, which beats padding and clipped both the
+                                 title and the triangle. A local value on the element wins over a
+                                 style setter, so this is where the card's real height is decided. -->
+                            <Button Content="{loc:Get game_profiles_studio}"
+                                    Click="BtnGameStudio_Click"
+                                    Margin="20,0,0,0" Padding="14,9,30,9" FontSize="12"
+                                    MinWidth="150" Height="36" VerticalAlignment="Center"
+                                    Background="Transparent"
+                                    Foreground="{DynamicResource K2AccentTextBrush}"
+                                    FontWeight="Bold" FontStyle="Italic" Cursor="Hand"
+                                    ToolTip="{loc:Get game_profiles_studio}">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="bd" CornerRadius="7"
+                                                Background="{DynamicResource K2AccentBrush}"
+                                                Padding="{TemplateBinding Padding}">
+                                            <Grid>
+                                                <Polygon x:Name="CornerTriangle"
+                                                         Points="14,0 14,14 0,14" Fill="White"
+                                                         HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                         Margin="0,0,-18,-3"/>
+                                                <TextBlock Text="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Content, Converter={StaticResource UpperCaseConverter}}"
+                                                           Foreground="{TemplateBinding Foreground}"
+                                                           FontWeight="{TemplateBinding FontWeight}"
+                                                           FontStyle="{TemplateBinding FontStyle}"
+                                                           FontSize="{TemplateBinding FontSize}"
+                                                           HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="bd" Property="Opacity" Value="0.88"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                        </StackPanel>
                         <Grid Grid.Row="3">
                         <TextBlock x:Name="TxtGameProfilesEmpty"
                                    Text="{loc:Get game_profiles_none_found}"
@@ -3897,8 +4095,7 @@
 
                                 <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
                                     <TextBlock Text="{loc:Get macro_name}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBox x:Name="TxtMacroName" Width="220" Height="25"
-                                         Padding="6,2" VerticalContentAlignment="Center"
+                                    <TextBox x:Name="TxtMacroName" Width="220" Height="25" VerticalContentAlignment="Center"
                                          Background="#2A2A2E" Foreground="White"
                                          TextChanged="TxtMacroName_TextChanged"/>
                                 </WrapPanel>
@@ -3930,8 +4127,7 @@
                                                  Style="{StaticResource MacroOptionRowStyle}" Checked="RbMacroDelay_Checked">
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="{loc:Get macro_delay_custom}" VerticalAlignment="Center"/>
-                                                <TextBox x:Name="TxtMacroCustomDelay" Width="66" Height="25" Margin="8,0,4,0"
-                                                     Padding="5,2" Background="#2A2A2E" Foreground="White"
+                                                <TextBox x:Name="TxtMacroCustomDelay" Width="66" Height="25" Margin="8,0,4,0" Background="#2A2A2E" Foreground="White"
                                                      TextChanged="TxtMacroCustomDelay_TextChanged"/>
                                                 <TextBlock Text="ms" VerticalAlignment="Center" Opacity="0.7"/>
                                             </StackPanel>
@@ -3954,8 +4150,7 @@
                                                  Style="{StaticResource MacroOptionRowStyle}" Checked="RbMacroPlayback_Checked">
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="{loc:Get macro_repeat_short}" VerticalAlignment="Center"/>
-                                                <TextBox x:Name="TxtMacroRepeatN" Width="66" Height="25" Margin="8,0,4,0"
-                                                     Padding="5,2" Background="#2A2A2E" Foreground="White"
+                                                <TextBox x:Name="TxtMacroRepeatN" Width="66" Height="25" Margin="8,0,4,0" Background="#2A2A2E" Foreground="White"
                                                      TextChanged="TxtMacroRepeatN_TextChanged"/>
                                                 <TextBlock Text="{loc:Get macro_times_suffix}" VerticalAlignment="Center" Opacity="0.7"/>
                                             </StackPanel>
@@ -3989,7 +4184,8 @@
                                         <Border Grid.Row="1" Background="#18181C" BorderBrush="{StaticResource K2BorderBrush}"
                                             BorderThickness="1" CornerRadius="6" MinHeight="260">
                                             <ListView x:Name="LvMacroInputs" Background="Transparent" BorderThickness="0"
-                                                  ScrollViewer.CanContentScroll="False">
+                                                  ScrollViewer.CanContentScroll="False" AllowDrop="True"
+                                                  DragOver="LvMacroInputs_DragOver" Drop="LvMacroInputs_Drop">
                                                 <ListView.Template>
                                                     <ControlTemplate TargetType="ListView">
                                                         <ScrollViewer Background="Transparent" Padding="4">
@@ -4014,9 +4210,10 @@
                                                 </ListView.ItemContainerStyle>
                                                 <ListView.ItemTemplate>
                                                     <DataTemplate>
-                                                        <Border Background="#232328" CornerRadius="6" Margin="4,3" Padding="10,8">
+                                                        <Border Background="#232328" CornerRadius="6" Margin="4,3" Padding="6,8,10,8">
                                                             <Grid>
                                                                 <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto"/>
                                                                     <ColumnDefinition Width="24"/>
                                                                     <ColumnDefinition Width="16"/>
                                                                     <ColumnDefinition Width="22"/>
@@ -4024,19 +4221,32 @@
                                                                     <ColumnDefinition Width="Auto"/>
                                                                     <ColumnDefinition Width="Auto"/>
                                                                 </Grid.ColumnDefinitions>
-                                                                <TextBlock Grid.Column="0" Text="{Binding Number}"
+                                                                <Border Grid.Column="0" Style="{StaticResource MacroRowGrip}"
+                                                                    ToolTip="{loc:Get macro_drag_row}"
+                                                                    PreviewMouseLeftButtonDown="MacroInputRow_PreviewMouseLeftButtonDown"
+                                                                    PreviewMouseMove="MacroInputRow_PreviewMouseMove">
+                                                                    <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets"
+                                                                           FontSize="10" Foreground="#5A5A62"
+                                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                </Border>
+                                                                <TextBlock Grid.Column="1" Text="{Binding Number}"
                                                                        Foreground="#68686E" VerticalAlignment="Center"/>
-                                                                <TextBlock Grid.Column="1" Style="{StaticResource MacroPressIndicatorStyle}"/>
-                                                                <TextBlock Grid.Column="2" Text="{Binding Glyph}"
-                                                                       FontFamily="Segoe MDL2 Assets" FontSize="13"
-                                                                       Foreground="#9A9AA2" VerticalAlignment="Center"/>
-                                                                <TextBlock Grid.Column="3" Text="{Binding Label}"
+                                                                <TextBlock Grid.Column="2" Style="{StaticResource MacroPressIndicatorStyle}"/>
+                                                                <Grid Grid.Column="3">
+                                                                    <TextBlock Text="{Binding Glyph}" Visibility="{Binding GlyphVisibility}"
+                                                                           FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                                                           Foreground="#9A9AA2" VerticalAlignment="Center"/>
+                                                                    <Rectangle Width="14" Height="14" Visibility="{Binding KeycapVisibility}"
+                                                                           Fill="#9A9AA2" OpacityMask="{StaticResource K2KeycapIconBrush}"
+                                                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                                                           HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                                                </Grid>
+                                                                <TextBlock Grid.Column="4" Text="{Binding Label}"
                                                                        VerticalAlignment="Center" Margin="6,0,0,0"/>
-                                                                <StackPanel Grid.Column="4" Orientation="Horizontal"
+                                                                <StackPanel Grid.Column="5" Orientation="Horizontal"
                                                                         VerticalAlignment="Center" Margin="10,0,0,0"
                                                                         ToolTip="{loc:Get macro_edit_delay}">
-                                                                    <TextBox Text="{Binding DelayMs}" Width="50" Height="22"
-                                                                         Padding="4,1" FontSize="11" TextAlignment="Right"
+                                                                    <TextBox Text="{Binding DelayMs}" Width="50" Height="22" FontSize="11" TextAlignment="Right"
                                                                          Background="#2A2A2E" Foreground="#C8C8CE"
                                                                          BorderBrush="{StaticResource K2BorderBrush}"
                                                                          VerticalContentAlignment="Center"
@@ -4046,7 +4256,7 @@
                                                                     <TextBlock Text="ms" Foreground="#68686E" FontSize="11"
                                                                            VerticalAlignment="Center" Margin="4,0,0,0"/>
                                                                 </StackPanel>
-                                                                <StackPanel Grid.Column="5" Orientation="Horizontal" Margin="10,0,0,0">
+                                                                <StackPanel Grid.Column="6" Orientation="Horizontal" Margin="10,0,0,0">
                                                                     <Button Tag="&#xE710;" Click="BtnMacroInsertMenu_Click"
                                                                         Style="{StaticResource MacroRowIconButton}" ToolTip="{loc:Get macro_insert_step}">
                                                                         <Button.ContextMenu>
@@ -4059,9 +4269,9 @@
                                                                             </ContextMenu>
                                                                         </Button.ContextMenu>
                                                                     </Button>
-                                                                    <Button Tag="&#xE765;" CommandParameter="{Binding}" Click="BtnMacroInputRecordKey_Click"
+                                                                    <Button CommandParameter="{Binding}" Click="BtnMacroInputRecordKey_Click"
                                                                         Visibility="{Binding KeyEditVisibility}"
-                                                                        Style="{StaticResource MacroRowIconButton}" ToolTip="{loc:Get macro_rerecord_key}"/>
+                                                                        Style="{StaticResource MacroRowRecordButton}" ToolTip="{loc:Get macro_rerecord_key}"/>
                                                                     <Button Tag="&#xE70E;" CommandParameter="{Binding}" Click="BtnMacroInputMoveUp_Click"
                                                                         Style="{StaticResource MacroRowIconButton}" ToolTip="{loc:Get macro_move_up}"/>
                                                                     <Button Tag="&#xE70D;" CommandParameter="{Binding}" Click="BtnMacroInputMoveDown_Click"
@@ -4146,21 +4356,43 @@
                                     <StackPanel x:Name="PnlAppUpdateAvailable" Visibility="Collapsed" Margin="0,12,0,0">
                                         <TextBlock x:Name="TxtAppUpdateNotes" Foreground="#C8C8CE"
                                            TextWrapping="Wrap" FontSize="12"/>
-                                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                        <WrapPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                            <Button x:Name="BtnAppUpdateSelfInstall" Content="{loc:Get settings_update_selfupdate_btn}"
+                                            Padding="10,6" Margin="0,0,8,8" Visibility="Collapsed"
+                                            Click="BtnAppUpdateSelfInstall_Click"
+                                            Style="{StaticResource K2IconAccentButton}" Tag="&#xE72C;"/>
                                             <Button x:Name="BtnAppUpdateInstall" Content="{loc:Get settings_update_install_btn}"
-                                            Padding="10,6" Margin="0,0,8,0" Visibility="Collapsed"
+                                            Padding="10,6" Margin="0,0,8,8" Visibility="Collapsed"
                                             Click="BtnAppUpdateInstall_Click"
-                                            Style="{StaticResource K2IconAccentButton}" Tag="&#xE896;"/>
+                                            Style="{StaticResource K2IconButton}" Tag="&#xE896;"/>
                                             <Button x:Name="BtnAppUpdateZip" Content="{loc:Get settings_update_zip_btn}"
-                                            Padding="10,6" Margin="0,0,8,0" Visibility="Collapsed"
+                                            Padding="10,6" Margin="0,0,8,8" Visibility="Collapsed"
                                             Click="BtnAppUpdateZip_Click"
                                             Style="{StaticResource K2IconAccentButton}" Tag="&#xE896;"/>
                                             <Button x:Name="BtnAppUpdateViewRelease" Content="{loc:Get settings_update_view_release_btn}"
-                                            Padding="8,4"
+                                            Padding="8,4" Margin="0,0,0,8"
                                             Click="BtnAppUpdateViewRelease_Click"
                                             Style="{StaticResource K2IconButton}" Tag="&#xE8A7;"/>
-                                        </StackPanel>
+                                        </WrapPanel>
                                     </StackPanel>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <!-- Debug-only (ApplyDebugModeToAllDevices): self-update from a local ZIP -->
+                            <GroupBox x:Name="GbAppDebug" Header="{loc:Get debug_group}" Margin="0,0,0,20" Visibility="Collapsed">
+                                <StackPanel Margin="8">
+                                    <CheckBox x:Name="CkDebugLocalUpdate" Content="{loc:Get settings_debug_update_local}"
+                                      Click="CkDebugLocalUpdate_Click"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                        <Button x:Name="BtnDebugLocalUpdateBrowse" Content="{loc:Get settings_debug_update_browse}"
+                                        Padding="8,4" VerticalAlignment="Center"
+                                        Click="BtnDebugLocalUpdateBrowse_Click"
+                                        Style="{StaticResource K2IconButton}" Tag="&#xE8E5;"/>
+                                        <Path Style="{StaticResource K2HintIcon}"
+                                           ToolTip="{loc:Get settings_debug_update_hint}"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtDebugLocalUpdateZip" Foreground="#9A9AA2"
+                                       TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
                                 </StackPanel>
                             </GroupBox>
 
@@ -4187,7 +4419,8 @@
 
                                     <RadioButton x:Name="RbBcDllManual" Content="{loc:Get settings_bc_dll_radio_manual}"
                                          GroupName="BcDllMode" Margin="0,4" Checked="RbBcDllMode_Checked"/>
-                                    <TextBox x:Name="TxtBcDllFolder" IsReadOnly="True" Margin="20,4,0,8"/>
+                                    <TextBox x:Name="TxtBcDllFolder" IsReadOnly="True" Height="25"
+                                     VerticalContentAlignment="Center" Margin="20,4,0,8"/>
                                     <Button x:Name="BtnBcDllFolderBrowse" Content="{loc:Get settings_bc_dll_browse}"
                                     Padding="8,4" HorizontalAlignment="Left" Margin="20,0,0,0"
                                     Click="BtnBcDllFolderBrowse_Click"

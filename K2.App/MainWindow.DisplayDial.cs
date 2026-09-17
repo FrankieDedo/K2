@@ -56,11 +56,17 @@
 //                      tripped fine.
 //   MMDockColor       = menu color
 //
-// Clock STYLE (analog/digital) is still NOT confirmed against a device field:
-// GetSStype/SetDispalyDialDatatoHW never reference ClockStyle/analog/digital
-// at all — Base Camp's own decompiled apply logic simply doesn't send it
-// anywhere. Left UI + persisted-only, per the project's "don't guess the
-// bit-layout" rule (there's nothing to guess here: it's confirmed unsent).
+// Clock STYLE (analog/digital) is NOT in FW_EXTEND_INFO — an earlier version of
+// this comment concluded from that that Base Camp never sends it at all, and so
+// K2 left the setting UI+persisted-only. That was wrong: it rides on the clock
+// call instead. CONFIRMED 2026-09-09 by decompiling BaseCamp.Service.exe
+// (ilspycmd): the real export is
+//   SetClockInfo(iMonth, iDay, iHour, iMin, iSec, bool isDigitalClock, bool is12hr)
+// and BaseCampLinux's raw packet agrees (`11 84 00 01 00 00 M D h m s <style>`,
+// style 0=analog / 1=digital — devices/everest_max/controller.py). K2's P/Invoke
+// had those two bools named `clockEnabled`/`format24h` and passed `clockEnabled:
+// true`, i.e. it forced the DIGITAL face on every clock push — which is why the
+// "Analog" button never did anything. Both names and the hardcode are fixed now.
 
 using System;
 using System.Windows;
@@ -101,7 +107,7 @@ public partial class MainWindow
     /// method's remarks (real Base Camp carries the 12h/24h format on the clock call
     /// itself, not via SetExtendInfo). Runs for the app's lifetime; the Tick handler
     /// no-ops if the driver isn't open, same tolerance as other pollers in this
-    /// codebase. Always carries <see cref="_dialAppliedFormat24h"/>, which is
+    /// codebase. Always carries <see cref="_dialAppliedDigital"/> + <see cref="_dialApplied12h"/>, which are
     /// refreshed by <see cref="SaveAndApplyDial"/> whenever a Display Dial control
     /// changes (every field applies on change since 2026-08-28).
     /// <para>
@@ -124,7 +130,13 @@ public partial class MainWindow
 
     /// <summary>Clock format last pushed to the device (on any Display Dial change,
     /// or loaded at startup) — see <see cref="_dialClockTimer"/>.</summary>
-    private bool _dialAppliedFormat24h = true;
+    private bool _dialApplied12h = true;
+
+    /// <summary>Clock face last applied: true = digital, false = analog. Carried on every
+    /// clock push for the same reason as <see cref="_dialApplied12h"/> — the style is a
+    /// parameter of SetClockInfo, so a push that guessed it would silently overwrite the
+    /// user's choice (K2 hardcoded it to digital until 2026-09-09; see the file header).</summary>
+    private bool _dialAppliedDigital = true;
 
     // Bit mapping for byMMDockShowMenu — confirmed order (see file header):
     // Clock/Profile/Lighting/Volume/Brightness/PCInfo/APM/Custom.
@@ -162,6 +174,23 @@ public partial class MainWindow
         ("dial_pcinfo_ram",      "pcinfo_ram",      13),
         ("dial_apm",             "apm",             14),
     };
+
+    /// <summary>Resting values for the two timeout fields, and the floor below which they
+    /// are never sent.
+    ///
+    /// <para>A ZERO turn-off timeout kills the screensaver too. The firmware runs both
+    /// timeouts off one idle state machine, and <c>wMMDockTurnOff = 0</c> puts the whole
+    /// thing out of action — the screensaver enable bit is set, the seconds value is
+    /// right, <c>SetExtendInfo</c> returns true, and the dial simply never blanks (user
+    /// report 2026-09-10: "se il turn-off timer è a zero non funziona nemmeno il timer
+    /// screensaver"). Base Camp never hits this because it never writes a zero: every one
+    /// of its exported profiles carries <c>&lt;IsTurnOffAfter&gt;false&lt;/IsTurnOffAfter&gt;</c>
+    /// next to <c>&lt;TurnOffAfter&gt;0:0:10&lt;/TurnOffAfter&gt;</c> — "disabled" is carried by
+    /// the enable bit alone (see this file's header), and the seconds field always keeps a
+    /// plausible resting value. K2 used to default the box to "0", so a user who never
+    /// touched turn-off had the screensaver silently dead.</para></summary>
+    private const ushort DefaultTurnOffSeconds = 10;
+    private const ushort DefaultScreenSaverSeconds = 30;
 
     /// <summary>Packs the selected screensaver-content code with the
     /// screensaver/turn-off enable bits into the byte Base Camp actually
@@ -203,25 +232,26 @@ public partial class MainWindow
         {
             _dialLoading = false;
         }
-        // Inverted on purpose: real hardware test (2026-07-16) showed
-        // SetClockInfo's format24h parameter behaves opposite to its name —
-        // the "24h" button only produces a 24-hour clock on the device when
-        // format24h is sent as false (DialClockTypeIndex==1, i.e. what the UI
-        // calls "12h"). Trusting the hardware result over the SDK's own
-        // parameter name.
-        _dialAppliedFormat24h = DialClockTypeIndex == 1;
+        // The 2026-07-16 hardware test that found this argument "inverted" was reading a
+        // wrong parameter name: it is `is12hr`, not `format24h` (see the file header), so
+        // "true when the UI says 12h" was right all along and is simply correctly named now.
+        _dialApplied12h = DialClockTypeIndex == 1;
+        _dialAppliedDigital = DialClockStyleIndex == 0;
 
         if (_dialClockTimer is null)
         {
             // 30 min, same as Base Camp's own Clock_timer — see _dialClockTimer's docs
             // for why a 1s tick broke the dock screensaver.
             _dialClockTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };
-            _dialClockTimer.Tick += (_, _) => PushDialClock();
+            _dialClockTimer.Tick += (_, _) => PushDialClock("timer");
             _dialClockTimer.Start();
             // First sync now: with a 30-minute period the first Tick is far too late
             // to put the right time on the dock at startup (Base Camp does the same
             // one-shot push when the service starts / the Display Dial page opens).
-            PushDialClock();
+            // This one usually no-ops — the driver opens later, in EvAutoOpen, which
+            // does its own push right after Open() succeeds; keep it for the case where
+            // the panel is re-initialised with the driver already up.
+            PushDialClock("startup");
 
             // Base Camp also re-pushes the clock on session logon/unlock; the dock's RTC
             // can drift or lose the time across a long lock or a suspend/resume, and with
@@ -234,24 +264,36 @@ public partial class MainWindow
     }
 
     /// <summary>Pushes the current wall-clock time to the Media Dock (no-op if the driver
-    /// isn't open). Always carries <see cref="_dialAppliedFormat24h"/>.</summary>
-    private void PushDialClock()
+    /// isn't open). Always carries <see cref="_dialAppliedDigital"/> and
+    /// <see cref="_dialApplied12h"/>: both are SetClockInfo parameters, so a push that
+    /// left them at a default would undo the user's Display Dial choice every 30 minutes.
+    /// (Base Camp solves the same problem the other way round — its resync calls
+    /// GetClockInfo first and echoes back whatever the firmware reports.)</summary>
+    private void PushDialClock(string reason = "")
     {
+        // Logged even when the driver is shut: a silent no-op here and a timer that never
+        // ticked look identical in the log otherwise, and that is exactly the pair a
+        // "dock clock is drifting" report has to tell apart (user report 2026-09-10).
         if (_everest is { IsOpen: true })
-            _everest.UpdateClock(format24h: _dialAppliedFormat24h);
+        {
+            App.WriteLog($"[Dial.PushDialClock] resync ({reason})");
+            _everest.UpdateClock(isDigitalClock: _dialAppliedDigital, is12hr: _dialApplied12h);
+        }
+        else
+            App.WriteLog($"[Dial.PushDialClock] skipped ({reason}): Everest driver not open");
     }
 
     private void OnDialSessionSwitch(object sender, SessionSwitchEventArgs e)
     {
         if (e.Reason is SessionSwitchReason.SessionUnlock or SessionSwitchReason.SessionLogon
                      or SessionSwitchReason.ConsoleConnect or SessionSwitchReason.RemoteConnect)
-            Dispatcher.BeginInvoke(new Action(PushDialClock));
+            Dispatcher.BeginInvoke(new Action(() => PushDialClock("session-switch")));
     }
 
     private void OnDialPowerModeChanged(object sender, PowerModeChangedEventArgs e)
     {
         if (e.Mode == PowerModes.Resume)
-            Dispatcher.BeginInvoke(new Action(PushDialClock));
+            Dispatcher.BeginInvoke(new Action(() => PushDialClock("resume")));
     }
 
     /// <summary>Detaches the SystemEvents handlers — those are rooted by a process-wide
@@ -322,8 +364,12 @@ public partial class MainWindow
 
         CkDialScreenSaverEnable.IsChecked = ParseBool(GetDialSetting("screenSaverEnable"), true);
         CkDialTurnOffEnable.IsChecked     = ParseBool(GetDialSetting("turnOffEnable"), false);
-        TxtDialScreenSaver.Text = GetDialSetting("screenSaver") ?? "30";
-        TxtDialTurnOff.Text     = GetDialSetting("turnOff") ?? "0";
+        // Defaults match what Base Camp leaves in its own profiles — in particular turn-off
+        // rests at 10, never 0 (see DefaultTurnOffSeconds). A stored 0 is healed to the
+        // resting value rather than merely clamped on the wire, so the box never shows a
+        // number the device is not actually being given.
+        TxtDialScreenSaver.Text = DialTimeout(GetDialSetting("screenSaver"), DefaultScreenSaverSeconds).ToString();
+        TxtDialTurnOff.Text     = DialTimeout(GetDialSetting("turnOff"), DefaultTurnOffSeconds).ToString();
 
         string menuColor = GetDialSetting("menuColor") ?? "#F3CC23";
         try
@@ -332,10 +378,79 @@ public partial class MainWindow
                 (Color)ColorConverter.ConvertFromString(menuColor));
         }
         catch { /* fallback: keep XAML default */ }
+
+        CkEvSyncBrightness.IsChecked = ParseBool(GetDialSetting("syncBrightness"), false);
+        UpdateDisplayBrightnessSyncUi();
+        SetDisplayBrightnessUi(ParseInt(GetDialSetting("displayBrightness"), DefaultDisplayBrightness));
+    }
+
+    /// <summary>Display brightness default: what an untouched Base Camp profile holds
+    /// (<c>KeyboardSettings.DisplayBrightness</c> = 100, 0xE4 on the wire).</summary>
+    private const int DefaultDisplayBrightness = 100;
+
+    /// <summary>Wire format of the dial screen / numpad display keys brightness:
+    /// <c>0x80 | percent</c> — bit 7 marks the value as set, the low 7 bits are 0..100
+    /// (Base Camp capture, see <c>EverestSdkNative.FW_EXTEND_BRIGHTNESS</c>).</summary>
+    private static byte EncodeDisplayBrightness(int pct) => (byte)(0x80 | Math.Clamp(pct, 0, 100));
+
+    /// <summary>Inverse of <see cref="EncodeDisplayBrightness"/>; null when that firmware
+    /// profile never had a value (bit 7 clear — the 0 of a profile Base Camp never set).</summary>
+    private static int? DecodeDisplayBrightness(byte raw) =>
+        (raw & 0x80) != 0 ? Math.Min(raw & 0x7F, 100) : null;
+
+    /// <summary>Sets slider and label together: ValueChanged doesn't fire when the value
+    /// is unchanged, so the label can't be left to the handler.</summary>
+    private void SetDisplayBrightnessUi(int pct)
+    {
+        pct = Math.Clamp(pct, 0, 100);
+        SldDialDisplayBrightness.Value = pct;
+        LblDialDisplayBrightness.Text = $"{pct}%";
+    }
+
+    private void SldDialDisplayBrightness_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (LblDialDisplayBrightness != null) LblDialDisplayBrightness.Text = $"{(int)e.NewValue}%";
+        SaveAndApplyDial();
+    }
+
+    /// <summary>True while <c>ReloadEverestProfile</c> brings the panels up to date with a
+    /// new profile — see <see cref="MirrorDisplayBrightness"/>.</summary>
+    private bool _evProfileReloading;
+
+    /// <summary>"Sync brightness" (Everest Max, per profile like Base Camp's
+    /// <c>KeyboardSettings.IsSyncDisplay</c>): the display slider follows the keyboard's
+    /// and can't be moved on its own.</summary>
+    private void UpdateDisplayBrightnessSyncUi() =>
+        SldDialDisplayBrightness.IsEnabled = CkEvSyncBrightness.IsChecked != true;
+
+    private void CkEvSyncBrightness_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateDisplayBrightnessSyncUi();
+        if (CkEvSyncBrightness.IsChecked == true &&
+            (int)SldDialDisplayBrightness.Value != (int)SldEvBrightness.Value)
+            SldDialDisplayBrightness.Value = SldEvBrightness.Value;   // its handler saves + applies
+        else
+            SaveAndApplyDial();                                       // persist the flag
+    }
+
+    /// <summary>
+    /// With "sync brightness" on, copies the keyboard's lighting brightness onto the display
+    /// brightness; the slider's own handler then saves and writes it. Called from
+    /// <c>SldEvBrightness_ValueChanged</c>, which also runs when the Display Dial's knob
+    /// changed the brightness (SyncUiEffectFromDevice sets that slider). Null-safe because
+    /// SldEvBrightness's XAML Value fires it mid-InitializeComponent, before these controls
+    /// exist. Skipped during a profile reload (<see cref="_evProfileReloading"/>).
+    /// </summary>
+    private void MirrorDisplayBrightness(double value)
+    {
+        if (_evProfileReloading) return;
+        if (CkEvSyncBrightness?.IsChecked != true || SldDialDisplayBrightness is null) return;
+        SldDialDisplayBrightness.Value = value;
     }
 
     /// <summary>Analog clocks have no 12h/24h digit format — hide the format
-    /// segmented control while "Analog" is selected.</summary>
+    /// segmented control while "Analog" is selected. (Purely cosmetic: the style itself
+    /// reaches the device through <see cref="PushDialClock"/>.)</summary>
     private void UpdateDialClockFormatVisibility()
     {
         PnlDialClockFormat.Visibility = RbDialClockAnalog.IsChecked == true
@@ -356,6 +471,8 @@ public partial class MainWindow
         _evStore.SetSetting(prefix + "screenSaver", TxtDialScreenSaver.Text.Trim());
         _evStore.SetSetting(prefix + "turnOff", TxtDialTurnOff.Text.Trim());
         _evStore.SetSetting(prefix + "menuColor", FormatColor(BtnDialMenuColor));
+        _evStore.SetSetting(prefix + "displayBrightness", ((int)SldDialDisplayBrightness.Value).ToString());
+        _evStore.SetSetting(prefix + "syncBrightness", CkEvSyncBrightness.IsChecked == true ? "1" : "0");
     }
 
     /// <summary>
@@ -411,8 +528,8 @@ public partial class MainWindow
         // byMMDockScreenSetup's low bits now, not in zeroed seconds fields.
         info.byMMDockShowMenu = BuildPageByte();
         info.byMMDockScreenSetup = BuildScreenSetupByte();
-        info.wMMDockScreenSaver = ParseUshort(TxtDialScreenSaver.Text, 30);
-        info.wMMDockTurnOff = ParseUshort(TxtDialTurnOff.Text, 0);
+        info.wMMDockScreenSaver = DialTimeout(TxtDialScreenSaver.Text, DefaultScreenSaverSeconds);
+        info.wMMDockTurnOff = DialTimeout(TxtDialTurnOff.Text, DefaultTurnOffSeconds);
 
         // Menu color → FWColor
         try
@@ -422,22 +539,30 @@ public partial class MainWindow
         }
         catch { /* keep the color read from device */ }
 
+        // Display brightness (dial screen + numpad display keys) lives in the active
+        // firmware profile's exBrightness pair, both bytes with the same value — exactly
+        // what Base Camp writes (see EncodeDisplayBrightness).
+        int fwProfile = _everest.CurrentProfile();
+        if (fwProfile is >= 1 and <= 5 && info.exBrightness is { Length: 5 })
+        {
+            byte raw = EncodeDisplayBrightness((int)SldDialDisplayBrightness.Value);
+            info.exBrightness[fwProfile - 1].byMMDockBrightness = raw;
+            info.exBrightness[fwProfile - 1].byNumpadBrightness = raw;
+            LogEverest($"[DIAL] display brightness p{fwProfile} = 0x{raw:X2}");
+        }
+
         bool ok = _everest.SetExtendInfo(info);
         LogEverest($"[DIAL] SetExtendInfo -> {ok}  pages=0x{info.byMMDockShowMenu:X2} " +
                    $"screenSetup=0x{info.byMMDockScreenSetup:X2} " +
                    $"ss={info.wMMDockScreenSaver} off={info.wMMDockTurnOff}");
 
-        // Clock format doesn't live in FW_EXTEND_INFO (see file header) — push
-        // it separately, on the same "Apply to device" trigger as everything else.
-        // Inverted on purpose: real hardware test (2026-07-16) showed
-        // SetClockInfo's format24h parameter behaves opposite to its name —
-        // the "24h" button only produces a 24-hour clock on the device when
-        // format24h is sent as false (DialClockTypeIndex==1, i.e. what the UI
-        // calls "12h"). Trusting the hardware result over the SDK's own
-        // parameter name.
-        _dialAppliedFormat24h = DialClockTypeIndex == 1;
-        LogEverest($"[DIAL] UpdateClock(format24h={_dialAppliedFormat24h}) -> " +
-                   $"{_everest.UpdateClock(_dialAppliedFormat24h)}");
+        // Clock face AND digit format don't live in FW_EXTEND_INFO (see file header) —
+        // both are SetClockInfo parameters, so push them separately on the same
+        // "Apply to device" trigger as everything else.
+        _dialApplied12h = DialClockTypeIndex == 1;
+        _dialAppliedDigital = DialClockStyleIndex == 0;
+        App.WriteLog($"[DIAL] UpdateClock(digital={_dialAppliedDigital}, 12h={_dialApplied12h}) -> " +
+                     $"{_everest.UpdateClock(_dialAppliedDigital, _dialApplied12h)}");
 
         SaveDialSettings();
     }
@@ -480,8 +605,19 @@ public partial class MainWindow
             byte enableBits = (byte)(screenSetup & 0x03);
             CkDialScreenSaverEnable.IsChecked = (enableBits & 0x01) != 0;
             CkDialTurnOffEnable.IsChecked     = (enableBits & 0x02) != 0;
-            TxtDialScreenSaver.Text = info.wMMDockScreenSaver.ToString();
-            TxtDialTurnOff.Text     = info.wMMDockTurnOff.ToString();
+            // Same zero-healing as LoadDialSettings: a device that still holds the 0 an
+            // older K2 wrote must not put it back into the box (see DefaultTurnOffSeconds).
+            TxtDialScreenSaver.Text = (info.wMMDockScreenSaver == 0
+                ? DefaultScreenSaverSeconds : info.wMMDockScreenSaver).ToString();
+            TxtDialTurnOff.Text     = (info.wMMDockTurnOff == 0
+                ? DefaultTurnOffSeconds : info.wMMDockTurnOff).ToString();
+
+            // Display brightness of the active firmware profile — only when that profile
+            // actually has one (bit 7 set); an unset 0 keeps K2's own value.
+            int fwProfile = _everest.CurrentProfile();
+            if (fwProfile is >= 1 and <= 5 && info.exBrightness is { Length: 5 } &&
+                DecodeDisplayBrightness(info.exBrightness[fwProfile - 1].byMMDockBrightness) is int dispPct)
+                SetDisplayBrightnessUi(dispPct);
 
             var c = info.MMDockColor;
             BtnDialMenuColor.Background = new SolidColorBrush(
@@ -621,6 +757,15 @@ public partial class MainWindow
     private static ushort ParseUshort(string? s, ushort fallback)
     {
         return ushort.TryParse(s?.Trim(), out var v) ? v : fallback;
+    }
+
+    /// <summary>Parses one of the two Display Dial timeout boxes into the seconds value to
+    /// put on the wire, NEVER letting a zero through — see
+    /// <see cref="DefaultTurnOffSeconds"/>.</summary>
+    private static ushort DialTimeout(string? text, ushort fallback)
+    {
+        ushort v = ParseUshort(text, fallback);
+        return v == 0 ? fallback : v;
     }
 
     private static int ParseInt(string? s, int fallback)

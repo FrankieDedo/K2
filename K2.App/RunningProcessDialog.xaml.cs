@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -15,7 +17,7 @@ namespace K2.App;
 /// Small picker listing currently-running applications that own a visible main window,
 /// opened from <see cref="ProfileSettingsDialog"/>'s "from a running app" button as an
 /// alternative to browsing for an .exe by hand. Returns the selected process's full
-/// executable path when readable (a 32-bit host cannot read a 64-bit process's module),
+/// executable path when readable (see <see cref="FullImagePath"/>),
 /// falling back to "<ProcessName>.exe" — either form is enough for
 /// <see cref="K2.Core.Services.ProfileLaunchWatcher"/>, which matches on the file name
 /// without extension.
@@ -48,9 +50,7 @@ public partial class RunningProcessDialog : Window
                 string title = p.MainWindowTitle;
                 if (string.IsNullOrWhiteSpace(title)) continue;
 
-                string pathOrName;
-                try { pathOrName = p.MainModule?.FileName ?? p.ProcessName + ".exe"; }
-                catch { pathOrName = p.ProcessName + ".exe"; }
+                string pathOrName = FullImagePath(p) ?? p.ProcessName + ".exe";
 
                 rows.Add(new ProcRow(title, p.ProcessName + ".exe", pathOrName, TryGetIcon(pathOrName)));
             }
@@ -64,6 +64,33 @@ public partial class RunningProcessDialog : Window
             .OrderBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
     }
+
+    /// <summary>The process's executable path. <c>MainModule</c> throws when this 32-bit host looks
+    /// at a 64-bit process, so the kernel's image name is asked for instead — it only needs
+    /// limited-query access and works across bitness. Null when even that is denied.</summary>
+    private static string? FullImagePath(Process p)
+    {
+        IntPtr h = OpenProcess(ProcessQueryLimitedInformation, false, p.Id);
+        if (h == IntPtr.Zero) return null;
+        try
+        {
+            var sb = new StringBuilder(1024);
+            int size = sb.Capacity;
+            return QueryFullProcessImageName(h, 0, sb, ref size) ? sb.ToString() : null;
+        }
+        finally { CloseHandle(h); }
+    }
+
+    private const int ProcessQueryLimitedInformation = 0x1000;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(int access, bool inherit, int pid);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool QueryFullProcessImageName(IntPtr process, int flags, StringBuilder name, ref int size);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr handle);
 
     /// <summary>Small (typically 32×32) shell icon for an executable, as a frozen
     /// ImageSource. Best-effort: returns null for a bare "name.exe" with no readable

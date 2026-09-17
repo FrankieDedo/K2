@@ -20,6 +20,13 @@ internal static class MakaluProtocol
     private const byte CmdDpi         = 0x0B; // GET (sub 0x07 = Read_profile_data)
     private const byte CmdRemap       = 0x0A;
 
+    // Note (2026-09-10): "backlight off when idle" has NO firmware command on the Makalu
+    // 67. A sensor-RAM write via CMD 0xDE at address 4013 (the OG wireless Makalu's
+    // Mem_Sleep_Time, from Makalu.cs) was tried on real hardware — HidD_SetFeature ok, LEDs
+    // never went off. K2 does it in software instead: MainWindow.Makalu.cs runs a
+    // BacklightIdleTimer fed by RawMouseActivityWatcher and calls SetLighting(Off) / the
+    // stored effect on timeout/wake. Don't re-add a mem-write here on a guess (CLAUDE.md).
+
     public enum Effect : byte
     {
         Off          = 0,
@@ -263,6 +270,25 @@ internal static class MakaluProtocol
             levels[i] = Math.Clamp(dpi, dpiMin, DpiMax);
         }
         return (levels, active, count);
+    }
+
+    /// <summary>Cheap "is this the HID collection the firmware actually services?" probe,
+    /// for <see cref="MakaluHidNative"/>'s device search. Interface 1 (mi_01) exposes
+    /// several top-level collections and more than one can declare a 64-byte Feature
+    /// Report, but only ONE is wired to the vendor firmware — the others accept
+    /// <c>HidD_SetFeature</c> at the OS level while the write goes nowhere (root cause of
+    /// "SetLighting -> True but nothing lights up", real hardware 2026-09-10, after a
+    /// reconnect shuffled Windows' enumeration order). Sends the DPI GET — the one vendor
+    /// command with a real reply (lighting <c>0x0C</c> is write-only) — and checks the
+    /// response opens with <see cref="RespId"/>. A wrong same-sized collection returns
+    /// null or a zero-filled buffer, so this cleanly tells the right one apart without a
+    /// fresh USB capture. Read-only: safe to fire at each candidate.</summary>
+    public static bool IsVendorCollection(SafeFileHandle h)
+    {
+        var buf = NewBuf();
+        buf[1] = CmdDpi; buf[2] = 0x07; buf[5] = 0x01;
+        var resp = MakaluHidNative.SendFeature(h, buf);
+        return resp is { Length: > 0 } && resp[0] == RespId;
     }
 
     /// <summary>Writes all 5 DPI level slots + active level (1-based) + how many

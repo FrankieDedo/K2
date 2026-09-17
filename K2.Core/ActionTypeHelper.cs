@@ -43,7 +43,7 @@ public static class ActionTypeHelper
     /// "dp_folder".</summary>
     public static readonly string[] PageOnlyActionTypes =
         { "dp_folder", "dp_back", "dp_emojibrowser", "dp_clock", "dp_sysmon", "dp_speedtest",
-          "dp_edstatus", "dp_zcstatus", "dp_screen" };
+          "dp_edstatus", "dp_zcstatus", KspTelemachus.ActionType, "dp_screen", CustomActionType.Tag };
 
     /// <summary>
     /// True for a "macro" (Play Macro) action with no playable macro assigned — either no
@@ -217,6 +217,10 @@ public static class ActionTypeHelper
         ("volume_up",        "spotify_cmd_volume_up"),
         ("volume_down",      "spotify_cmd_volume_down"),
         ("volume_set",       "spotify_cmd_volume_set"),
+        // Windows per-app volume (Volume Mixer) — no account/Premium needed, see AppAudioVolume.
+        ("app_volume_up",    "spotify_cmd_app_volume_up"),
+        ("app_volume_down",  "spotify_cmd_app_volume_down"),
+        ("app_mute_toggle",  "spotify_cmd_app_mute_toggle"),
         ("save_playlist",    "spotify_cmd_save_playlist"),
         ("remove_playlist",  "spotify_cmd_remove_playlist"),
     };
@@ -789,6 +793,19 @@ public static class ActionTypeHelper
             }
         }
 
+        // A custom action names itself too — the name captured when the key was assigned, so a
+        // key whose action was deleted in the studio still says what it used to show.
+        if (actionType == CustomActionType.Tag)
+        {
+            string label = CustomActionType.Parse(value) is { } custom && custom.Label.Length > 0
+                ? custom.Label
+                : Loc.Get("act_dp_custom");
+            // A tile that also presses something says so, the way an Elite tile with an optional
+            // keystroke does: the key list is where the user checks what a key will DO.
+            string keys = CustomActionType.KeysOf(value);
+            return keys.Length > 0 ? $"{label} \u00b7 {keys}" : label;
+        }
+
         // A screen probe names itself: the label captured when the probe was picked.
         if (actionType == "dp_screen")
             return ParseScreenValue(value) is { } probe && probe.Label.Length > 0
@@ -804,6 +821,7 @@ public static class ActionTypeHelper
             "dp_speedtest" => SpeedTestMetrics,
             "dp_edstatus"  => Array.ConvertAll(EdStatusItems, i => (i.Value, i.LocKey)),
             "dp_zcstatus"  => Array.ConvertAll(ZcStatusItems, i => (i.Value, i.LocKey)),
+            KspTelemachus.ActionType => KspTelemachus.AllItems().Select(i => (i.Value, i.LocKey)).ToArray(),
             _              => Array.Empty<(string Value, string LocKey)>(),
         };
         foreach (var (v, locKey) in table)
@@ -865,7 +883,7 @@ public static class ActionTypeHelper
             "pyscript" => Loc.Get("act_pyscript"),
             "dp_emojibrowser" => Loc.Get("act_emojibrowser"),
             "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus"
-                or "dp_screen"
+                or KspTelemachus.ActionType or "dp_screen" or CustomActionType.Tag
                        => LiveTileSummary(actionType, actionValue),
             _          => IsUnrecognized(actionType) ? Loc.Get("act_unrecognized") : actionType ?? "",
         };

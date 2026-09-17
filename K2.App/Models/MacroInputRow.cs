@@ -25,4 +25,11 @@ public sealed class MacroInputRow
     public bool IsCapturing { get; set; }
 
     public Visibility KeyEditVisibility => IsKeyboard ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Keyboard rows draw the keycap image (Assets/keycap.png) in the
+    /// icon column; every other row keeps its Segoe MDL2 <see cref="Glyph"/>.
+    /// The two are mutually exclusive.</summary>
+    public Visibility KeycapVisibility => IsKeyboard ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility GlyphVisibility => IsKeyboard ? Visibility.Collapsed : Visibility.Visible;
 }

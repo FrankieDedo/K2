@@ -34,10 +34,12 @@ namespace K2.Core;
 /// </summary>
 public static class EmojiGlyphRenderer
 {
-    /// <summary>Tile background of every generated key PNG — same value as
-    /// <see cref="IconImageGenerator"/>'s (that one is a GDI+ <c>System.Drawing.Color</c>,
-    /// this one a WPF <c>Media.Color</c>, hence the duplicate rather than a shared constant).</summary>
-    private static readonly Color DefaultTileBackground = Color.FromRgb(0x1A, 0x1A, 0x1E);
+    /// <summary>Tile background of every generated key PNG — must stay the same value as
+    /// <see cref="IconImageGenerator"/>'s <c>DefaultBackgroundColor</c> (black), otherwise an
+    /// emoji tile reads grey next to the black ones the GDI+ generators draw. That one is a
+    /// GDI+ <c>System.Drawing.Color</c>, this one a WPF <c>Media.Color</c>, hence the
+    /// duplicate rather than a shared constant.</summary>
+    private static readonly Color DefaultTileBackground = Colors.Black;
 
     /// <summary>Tile background, honouring the per-key override pushed by
     /// <see cref="IconStyleScope"/> ("Edit icon" &gt; background color) — the WPF-side twin of
@@ -220,6 +222,31 @@ public static class EmojiGlyphRenderer
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Renders <paramref name="emoji"/> into a cached PNG under
+    /// <c>%LocalAppData%\K2\{cacheSubdir}</c> and returns its path (null when the emoji has no
+    /// color art — see <see cref="TryGenerateEmojiIcon"/>).
+    ///
+    /// This is the "emoji as the key's PICTURE" path: the key config dialogs call it when the
+    /// user picks an emoji instead of loading an image file, whatever the key's action is. The
+    /// other callers of <see cref="TryGenerateEmojiIcon"/> render the icon an <c>emoji</c>
+    /// ACTION implies, into the key's own default-icon file.
+    ///
+    /// Cached by codepoint+size, so the same emoji on ten keys is one file on disk; the tile is
+    /// rendered OUTSIDE any <see cref="IconStyleScope"/> (flat background, no caption), which is
+    /// what makes that sharing safe — a hand-picked picture doesn't take the pad-wide default
+    /// icon background, exactly like a loaded PNG doesn't.
+    /// </summary>
+    public static string? RenderToCache(string? emoji, int size, string cacheSubdir)
+    {
+        int? cp = SingleCodepoint(emoji);
+        if (cp is null || size <= 0) return null;
+
+        string dest = Path.Combine(K2Paths.Root, cacheSubdir, $"emoji_{cp.Value:x}_{size}.png");
+        if (File.Exists(dest)) return dest;
+        return TryGenerateEmojiIcon(emoji, size, dest) ? dest : null;
     }
 
     /// <summary>Scales <paramref name="drawing"/> to fit <paramref name="box"/> and centers

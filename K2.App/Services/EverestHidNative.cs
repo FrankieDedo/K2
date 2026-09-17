@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
 
 namespace K2.App.Services;
@@ -132,14 +133,21 @@ internal static class EverestHidNative
         return h;
     }
 
+    /// <summary>How long to wait for a cancelled transfer to be reaped before giving up
+    /// on it and abandoning its buffer (see <see cref="AbandonedHidIo"/>).</summary>
+    private const int CancelReapTimeoutMs = 2000;
+
     /// <summary>Overlapped Read/WriteFile with a hard timeout (see DpHidNative.Transfer).</summary>
     internal static bool Transfer(SafeFileHandle h, byte[] buf, int len, bool write,
                                   int timeoutMs, out int done)
     {
         done = 0;
-        using var evt = new ManualResetEvent(false);
+        var evt = new ManualResetEvent(false);
         IntPtr ovl = Marshal.AllocHGlobal(Marshal.SizeOf<NativeOverlapped>());
         var pin = GCHandle.Alloc(buf, GCHandleType.Pinned);
+        // Set when the kernel still owns buf/ovl on the way out: freeing them then would
+        // corrupt the managed heap, so they are leaked instead — see AbandonedHidIo.
+        bool abandoned = false;
         try
         {
             var no = new NativeOverlapped { EventHandle = evt.SafeWaitHandle.DangerousGetHandle() };
@@ -154,7 +162,14 @@ internal static class EverestHidNative
                 if (!evt.WaitOne(timeoutMs))
                 {
                     CancelIoEx(h, ovl);
-                    evt.WaitOne(2000);
+                    // CancelIoEx is asynchronous: the request is only really gone once the
+                    // event signals. If it never does we must NOT unpin/free below.
+                    if (!evt.WaitOne(CancelReapTimeoutMs))
+                    {
+                        abandoned = true;
+                        return false;
+                    }
+                    // If the transfer actually completed in the race window, keep the data.
                     return GetOverlappedResult(h, ovl, out done, false) && done > 0;
                 }
             }
@@ -162,8 +177,16 @@ internal static class EverestHidNative
         }
         finally
         {
-            pin.Free();
-            Marshal.FreeHGlobal(ovl);
+            if (abandoned)
+            {
+                AbandonedHidIo.Keep($"EvNative.{(write ? "write" : "read")}", pin, ovl, evt);
+            }
+            else
+            {
+                pin.Free();
+                Marshal.FreeHGlobal(ovl);
+                evt.Dispose();
+            }
         }
     }
 
@@ -173,15 +196,29 @@ internal static class EverestHidNative
 
     internal sealed class Pad : IDisposable
     {
-        private readonly string _path;
+        private string _path;
         private readonly Action<string> _log;
         private SafeFileHandle _cmd = null!;
         private Thread? _reader;
         private volatile bool _stop;
+        /// <summary>Set only by <see cref="Dispose"/>. Separate from <see cref="_stop"/>, which
+        /// <see cref="TryReopen"/> also raises to tear the old reader down: the watchdog used
+        /// to loop on <c>!_stop</c>, so a single failed reopen (keyboard still re-enumerating)
+        /// left <c>_stop</c> true and the watchdog quit after ONE attempt — "gave up" 3s after
+        /// the loss, with the keyboard back a second later (log 2026-09-11 11:21).</summary>
+        private volatile bool _disposed;
         private readonly object _ioLock = new();
         private readonly ConcurrentQueue<byte[]> _resp = new();
         private readonly SemaphoreSlim _respSignal = new(0);
         private byte _prevNumpadBits;
+
+        /// <summary>Guards <see cref="TryReopen"/> against re-entry and against hammering
+        /// SetupDi enumeration when the keyboard is really unplugged.</summary>
+        private bool _reopening;
+        private long _lastReopenTicks;
+        private bool _watchdogRunning;
+        private const int ReopenCooldownMs = 3000;
+        private const int ReopenWatchdogAttempts = 20;
 
         /// <summary>Caps how many "rx" lines <see cref="ReaderLoop"/> writes at Verbose.
         /// The device streams unsolicited telemetry (report ids 02-0A, ~10/sec) on this
@@ -194,6 +231,10 @@ internal static class EverestHidNative
         /// <summary>(buttonIndex 0-3 = D1-D4, pressed). See class remarks: the full
         /// 171-key matrix is NOT covered yet — only the 4 numpad display buttons.</summary>
         public event Action<int, bool>? NumpadButtonChanged;
+
+        /// <summary>Raised (on a pool thread) after <see cref="TryReopen"/> swapped in a fresh
+        /// handle — i.e. the keyboard came back from a USB re-enumeration.</summary>
+        public event Action? Reopened;
 
         // Wire byte 42 (see BaseCampLinux emax_controller.py BTN_LOOKUP), bits for D1-D4.
         private static readonly (int WireByte, byte Mask)[] BtnMap =
@@ -209,7 +250,7 @@ internal static class EverestHidNative
         {
             _cmd = OpenHandle(_path, throwOnFail: true)!;
             _reader = new Thread(ReaderLoop) { IsBackground = true, Name = "EvNativeReader" };
-            _reader.Start();
+            _reader.Start(_cmd);
             Init(attempts: 2);
         }
 
@@ -736,23 +777,187 @@ internal static class EverestHidNative
             // Windows HID buffer = report-ID byte (0, unnumbered) + wire data.
             var buf = new byte[PktSize + 1];
             Buffer.BlockCopy(wire64, 0, buf, 1, Math.Min(wire64.Length, PktSize));
-            if (!Transfer(_cmd, buf, buf.Length, write: true, 2000, out _))
+            if (TryWrite(buf, out int err)) return true;
+
+            _log($"[EvNative] cmd write failed/timeout (win32={err})");
+            if (!IsDeviceLost(err) || !TryReopen(err)) return false;
+
+            // Second chance on the fresh handle. Only ONE retry: TryReopen already
+            // rate-limits itself, so a genuinely absent keyboard costs one extra write
+            // per command instead of a re-enumeration storm.
+            if (TryWrite(buf, out err))
             {
-                _log($"[EvNative] cmd write failed/timeout (win32={Marshal.GetLastWin32Error()})");
-                return false;
+                _log("[EvNative] cmd write OK after handle reopen");
+                return true;
             }
-            return true;
+            _log($"[EvNative] cmd write still failing after reopen (win32={err})");
+            return false;
         }
 
-        private void ReaderLoop()
+        /// <summary>One write on the current handle. A reopen that failed leaves
+        /// <c>_cmd</c> disposed until the next successful one, and <c>Transfer</c> then throws
+        /// <see cref="ObjectDisposedException"/> from the P/Invoke marshaller — which used to
+        /// escape every Everest command as an unhandled UI error (e.g. picking an effect after
+        /// a USB hub reset, 2026-09-11). Reported as ERROR_INVALID_HANDLE instead, which
+        /// <see cref="IsDeviceLost"/> already treats as "reopen and retry".</summary>
+        private bool TryWrite(byte[] buf, out int win32)
         {
+            win32 = 0;
+            try
+            {
+                if (Transfer(_cmd, buf, buf.Length, write: true, 2000, out _)) return true;
+                win32 = Marshal.GetLastWin32Error();
+            }
+            catch (ObjectDisposedException) { win32 = 6; }   // ERROR_INVALID_HANDLE
+            return false;
+        }
+
+        /// <summary>Keeps trying to get the handle back after the reader thread died on a
+        /// lost device, so a keyboard that is replugged (or comes back from a firmware
+        /// update / USB suspend) starts delivering display-key presses again on its own —
+        /// without one, recovery would wait for the next command the user happens to send.
+        /// One watchdog at a time; it gives up after <see cref="ReopenWatchdogAttempts"/>
+        /// tries so an unplugged keyboard doesn't leave a thread polling SetupDi forever.</summary>
+        private void StartReopenWatchdog(int win32)
+        {
+            lock (_ioLock)
+            {
+                if (_watchdogRunning || _disposed) return;
+                _watchdogRunning = true;
+            }
+            Task.Run(() =>
+            {
+                try
+                {
+                    for (int i = 0; i < ReopenWatchdogAttempts && !_disposed; i++)
+                    {
+                        if (TryReopen(win32)) return;
+                        Thread.Sleep(ReopenCooldownMs);
+                    }
+                    _log("[EvNative] reopen watchdog gave up — keyboard still unreachable");
+                }
+                catch (Exception ex) { _log($"[EvNative] reopen watchdog threw: {ex.Message}"); }
+                finally { lock (_ioLock) _watchdogRunning = false; }
+            });
+        }
+
+        /// <summary>Win32 errors that mean "this handle will never work again" rather than
+        /// "the device was busy". 1167 ERROR_DEVICE_NOT_CONNECTED is what the Everest Max
+        /// actually returns after the keyboard re-enumerates (a firmware update, a USB
+        /// suspend/resume, the numpad or Media Dock being re-seated): the HID device path
+        /// K2 opened at startup is gone and every command times out from then on, silently,
+        /// for the whole session — user report 2026-09-10 ("restore defaults didn't reset
+        /// the icons, and the display-key actions still don't work"): the K2 store was
+        /// wiped correctly but not one byte reached the keyboard.</summary>
+        private static bool IsDeviceLost(int win32) => win32 is
+            1167 or   // ERROR_DEVICE_NOT_CONNECTED
+            6    or   // ERROR_INVALID_HANDLE
+            1168 or   // ERROR_NOT_FOUND
+            22   or   // ERROR_BAD_COMMAND
+            31   or   // ERROR_GEN_FAILURE
+            433;      // ERROR_NO_SUCH_DEVICE
+
+        /// <summary>Re-enumerates MI_03 and swaps in a fresh handle + reader thread, so a
+        /// keyboard that came back on a new device path is usable again without restarting
+        /// K2. Callers already hold <see cref="_ioLock"/> (Monitor is reentrant).
+        ///
+        /// <para>Rate-limited to one attempt per <see cref="ReopenCooldownMs"/> and guarded
+        /// against re-entry, because <see cref="Init"/> itself goes through
+        /// <see cref="WriteCmd"/>: without the guard a dead device would recurse
+        /// reopen → init → write-fail → reopen.</para></summary>
+        private bool TryReopen(int win32)
+        {
+            lock (_ioLock)
+            {
+                if (_reopening || _disposed) return false;
+                long now = Environment.TickCount64;
+                if (now - _lastReopenTicks < ReopenCooldownMs) return false;
+                _lastReopenTicks = now;
+                _reopening = true;
+                try
+                {
+                    _log($"[EvNative] handle lost (win32={win32}) — re-enumerating MI_03");
+                    string? path = FindCommandInterfacePath(_log) ?? _path;
+
+                    // Tear the old reader down first: it is blocked on ReadFile against the
+                    // dead handle and must not outlive it.
+                    _stop = true;
+                    try { if (_cmd is { IsInvalid: false, IsClosed: false }) CancelIoEx(_cmd, IntPtr.Zero); } catch { }
+                    try { _reader?.Join(500); } catch { }
+                    try { _cmd?.Dispose(); } catch { }
+
+                    var fresh = OpenHandle(path, throwOnFail: false);
+                    if (fresh is null)
+                    {
+                        _log($"[EvNative] reopen failed — MI_03 not openable (win32={Marshal.GetLastWin32Error()})");
+                        return false;
+                    }
+
+                    _path = path;
+                    _cmd = fresh;
+                    DrainResponses();
+                    _stop = false;
+                    _reader = new Thread(ReaderLoop) { IsBackground = true, Name = "EvNativeReader" };
+                    _reader.Start(fresh);
+
+                    // The keyboard that came back is a freshly enumerated device: redo the
+                    // 11 12 / 11 14 handshake, best effort. A failure here is not fatal —
+                    // the caller's retry may still go through — and cannot recurse into
+                    // another reopen because _reopening is still set.
+                    try { Init(attempts: 2); }
+                    catch (Exception ex) { _log($"[EvNative] re-init after reopen failed: {ex.Message}"); }
+
+                    _log("[EvNative] handle reopened");
+                    // Off this thread: we may be inside a WriteCmd issued under the service's
+                    // _sdkLock, and the listener takes that same lock to revive SDKDLL.
+                    var reopened = Reopened;
+                    if (reopened is not null)
+                        Task.Run(() =>
+                        {
+                            try { reopened(); }
+                            catch (Exception ex) { _log($"[EvNative] Reopened handler threw: {ex.Message}"); }
+                        });
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    _log($"[EvNative] reopen threw: {ex.Message}");
+                    return false;
+                }
+                finally { _reopening = false; }
+            }
+        }
+
+        /// <summary>Reader thread body. Takes the handle it was started on as an argument
+        /// (rather than reading <c>_cmd</c>) so that a reader left behind by
+        /// <see cref="TryReopen"/> — Join can time out while it sits in ReadFile — exits on
+        /// its own instead of racing the new thread on a disposed handle.</summary>
+        private void ReaderLoop(object? state)
+        {
+            var h = (SafeFileHandle)state!;
             var buf = new byte[PktSize + 1];
-            while (!_stop)
+            while (!_stop && ReferenceEquals(_cmd, h))
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                if (!Transfer(_cmd, buf, buf.Length, write: false, 1000, out int read) || read < 2)
+                bool got;
+                int read;
+                try { got = Transfer(h, buf, buf.Length, write: false, 1000, out read); }
+                catch (ObjectDisposedException) { return; }
+                if (!got || read < 2)
                 {
-                    if (_stop) return;
+                    if (_stop || !ReferenceEquals(_cmd, h)) return;
+                    // A dead handle fails instantly and forever, and nothing else would
+                    // notice until the user happens to send a command — meanwhile display
+                    // key presses (which arrive on THIS thread) are lost. Hand the reopen
+                    // to the pool and step aside: TryReopen joins this thread before
+                    // swapping the handle, so it must not run here.
+                    int rerr = Marshal.GetLastWin32Error();
+                    if (IsDeviceLost(rerr))
+                    {
+                        _log($"[EvNative] reader lost the handle (win32={rerr}) — scheduling reopen");
+                        StartReopenWatchdog(rerr);
+                        return;
+                    }
                     if (sw.ElapsedMilliseconds < 100) Thread.Sleep(200);
                     continue;
                 }
@@ -859,6 +1064,7 @@ internal static class EverestHidNative
 
         public void Dispose()
         {
+            _disposed = true;
             _stop = true;
             try { if (_cmd is { IsInvalid: false, IsClosed: false }) CancelIoEx(_cmd, IntPtr.Zero); } catch { }
             try { _reader?.Join(500); } catch { }

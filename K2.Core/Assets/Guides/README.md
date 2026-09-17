@@ -36,6 +36,11 @@ in the session that made them.
 | ✓ `dp-profile-exe.png`        | `profiles`, `highlights:displaypad` | Configure-profile dialog: linked program + focus-only + restore-on-close |
 | ✓ `dp-rotation-before.png`    | `displaypad:settings`, `highlights:displaypad` | the pad grid at Horizontal (0°) |
 | ✓ `dp-rotation-after.png`     | same | the same grid at Vertical (90°), icons re-rotated |
+| ✓ `gamestudio-nav.png`       | `gamestudio` | the studio's left list: your profiles, the built-in ones, the open profile's actions |
+| ✓ `gamestudio-profile.png`   | `gamestudio:profile` | a profile open on the pad, with a key selected so the key bar shows |
+| ✓ `gamestudio-settings.png`  | `gamestudio:profile` | Profile settings of a built-in profile, incl. the Categories chips |
+| ✓ `gamestudio-look.png`      | `gamestudio:action` | Name/Category/Keys + "How it looks" open with a Value element selected (Show as) |
+| ✓ `gamestudio-read.png`      | `gamestudio:sources` | step 1 open: Source / Link / Value + Scale with an end read from the game |
 | — `ev60-appearance.png`       | `everest60:appearance` | same as Everest — needs an Everest 60 connected |
 | — `keymap-catalog.png`        | `highlights` | action-picker category grid (level 1) |
 | — `dp-emoji-browser.png`      | `picker:act:dp_emojibrowser`, `highlights:displaypad` | emoji browser category screen |

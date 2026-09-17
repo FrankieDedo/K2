@@ -74,6 +74,11 @@ public sealed class EverestService : IDisposable
     /// <summary>Keyboard key pressed or released.</summary>
     public event EventHandler<EverestKeyEventArgs>? KeyEvent;
 
+    /// <summary>The keyboard came back after a USB re-enumeration and both transports are
+    /// usable again (see <see cref="OnNativeReopened"/>). Raised on a pool thread; the
+    /// firmware state (lighting, settings) may have been reset, so the UI re-applies it.</summary>
+    public event EventHandler? Reconnected;
+
     /// <summary>Profiles stored on the keyboard.</summary>
     public const int ProfileCount = EverestSdkNative.FW_NUM_PROFILE;
 
@@ -172,6 +177,7 @@ public sealed class EverestService : IDisposable
                 try { KeyEvent?.Invoke(this, new EverestKeyEventArgs(0, (ushort)usage, pressed, fromNativeKeyReport: true)); }
                 catch (Exception ex) { App.WriteLog("[Everest.KeyUsageChanged] threw: " + ex); }
             };
+            pad.Reopened += OnNativeReopened;
             _nativePad = pad;
             _opened = true;
             App.WriteLog("[Everest.Open] (native) OK");
@@ -219,6 +225,41 @@ public sealed class EverestService : IDisposable
             _nativePad = null;
             return false;
         }
+    }
+
+    /// <summary>
+    /// The native pad got its MI_03 handle back after a USB re-enumeration. The same event
+    /// usually kills SDKDLL.dll's own handle too — after the hub reset of 2026-09-11 11:21
+    /// every GetExtendInfo failed for the rest of the session, i.e. Dial, Media Dock and
+    /// every effect sent through SDKDLL were dead until K2 was restarted. Probe it and, if
+    /// it no longer answers, close and reopen the DLL's driver and redo BC's post-open init.
+    /// </summary>
+    private void OnNativeReopened()
+    {
+        if (!_opened) return;
+        lock (_sdkLock)
+        {
+            bool alive = false;
+            try
+            {
+                var probe = new EverestSdkNative.FW_EXTEND_INFO();
+                alive = EverestSdkNative.GetExtendInfo(ref probe);
+            }
+            catch (Exception ex) { App.WriteLog("[Everest.Reconnect] probe threw: " + ex); }
+
+            if (!alive)
+            {
+                try { EverestSdkNative.CloseUSBDriver(); }
+                catch (Exception ex) { App.WriteLog("[Everest.Reconnect] CloseUSBDriver threw: " + ex); }
+                bool sdkOpen = false;
+                try { sdkOpen = EverestSdkNative.OpenUSBDriver(HostWindow); }
+                catch (Exception ex) { App.WriteLog("[Everest.Reconnect] OpenUSBDriver threw: " + ex); }
+                App.WriteLog($"[Everest.Reconnect] SDKDLL was dead -> reopened: {sdkOpen}");
+                if (sdkOpen) InitDllState();
+            }
+            else App.WriteLog("[Everest.Reconnect] SDKDLL still answering — native handle only");
+        }
+        Reconnected?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
@@ -297,31 +338,21 @@ public sealed class EverestService : IDisposable
         }
         catch (Exception ex) { App.WriteLog("[Everest.Init] EnableKeyFunc threw: " + ex); }
 
-        // Forces the firmware out of AP mode (it may have been left in AP
-        // from a previous K2/BC session). Without this, ChangeEffect may
-        // cause a transient rainbow flash before the effect.
+        // AP mode is NOT touched here any more (2026-09-11). This used to force it off
+        // unconditionally — but K2 and Base Camp both leave the keyboard in AP mode, so
+        // at every launch that was an AP transition, i.e. a visible LED flicker, even
+        // when K2 then found the keyboard already running the right effect and sent
+        // nothing. The state is unknown, so treat it as ON: the next SetEffect's guard
+        // forces it off (confirmed-success only, 150ms settle) right before
+        // ChangeEffect, exactly as it does for every effect change once K2 runs. When
+        // the startup sequence does need an apply, MainWindow.EvAutoOpen turns AP off
+        // explicitly first, as this call did.
         //
-        // This call is made right after Open() — on the native-engine path
-        // (see OpenNative's comment) SDKDLL.dll is not necessarily loaded/ready
-        // yet, so it can (and on a fast machine reliably does, per a 2026-08-17
-        // hardware report: captured log showed this exact call returning False
-        // ~1ms after native open) fail here. _apEnabled must only be cleared on
-        // a CONFIRMED success: if we assumed AP was off anyway, the first
-        // SetEffect() call right after would skip its own AP-off guard (it also
-        // only fires "if (_apEnabled)"), the firmware would still be in AP mode,
-        // and ChangeEffect/ChangeBlockEffect would be silently ignored — the
-        // keyboard keeps showing whatever AP mode was rendering (observed as
-        // wrong speed / effect off / an unrelated "rainbow"-looking pattern)
-        // instead of the effect K2 just "successfully" sent. Leaving _apEnabled
-        // true on failure makes SetEffect's own guard retry the disable right
-        // before the real ChangeEffect call, by which point the DLL is up.
-        try
-        {
-            bool ap = EverestSdkNative.APEnable(false);
-            _apEnabled = !ap;
-            App.WriteLog($"[Everest.Init] APEnable(false) -> {ap}");
-        }
-        catch (Exception ex) { App.WriteLog("[Everest.Init] APEnable(false) threw: " + ex); }
+        // (History worth keeping: an AP-off that fails must NOT be treated as done —
+        // on 2026-08-17 it returned False ~1ms after the native open, _apEnabled was
+        // cleared anyway, the SetEffect guard was skipped and ChangeEffect was silently
+        // ignored. Assuming ON is the safe side of that same rule.)
+        _apEnabled = true;
     }
 
     /// <summary>Closes the USB driver.</summary>
@@ -460,6 +491,7 @@ public sealed class EverestService : IDisposable
     public bool APEnable(bool enable)
     {
         lock (_sdkLock)
+        using (KeyboardQuietGate.Enter($"APEnable({enable})"))
         try
         {
             bool ok = EverestSdkNative.APEnable(enable);
@@ -512,6 +544,7 @@ public sealed class EverestService : IDisposable
             // change on its own thread — leaves the keyboard mute for seconds, so raw-HID
             // commands issued in that window time out. See FlushSaveFlash.
             lock (_sdkLock)
+            using (KeyboardQuietGate.Enter("SwitchProfile"))
             {
                 bool nok = _nativePad.SwitchProfile(profile, menu);
                 if (nok) _cachedProfile = profile;   // keeps AckKeyPress's profile byte honest
@@ -521,6 +554,7 @@ public sealed class EverestService : IDisposable
         }
 
         lock (_sdkLock)
+        using (KeyboardQuietGate.Enter("SwitchProfile"))
         try
         {
             // The DLL's second parameter is the same EffMenuIndex byte the native wire
@@ -551,10 +585,14 @@ public sealed class EverestService : IDisposable
     /// applied "soft" by the PC are accepted by the firmware. <c>EnableKeyFunc(true)</c>
     /// is called right after to avoid losing key function during AP.
     /// </summary>
-    public bool EnsureApMode()
+    /// <param name="force">Send it even if K2 believes AP is already on — for when that
+    /// belief is only an assumption (see InitDllState). A redundant APEnable(true) is free:
+    /// Base Camp sends it 20 times at startup and never flickers.</param>
+    public bool EnsureApMode(bool force = false)
     {
-        if (_apEnabled) return true;
+        if (_apEnabled && !force) return true;
         lock (_sdkLock)
+        using (KeyboardQuietGate.Enter("EnsureApMode"))
         try
         {
             bool ap = EverestSdkNative.APEnable(true);
@@ -686,6 +724,16 @@ public sealed class EverestService : IDisposable
         if (SignalRgbGuard.BlockLighting("Everest.SetEffect")) return true;
       lock (_sdkLock)
       {
+        // AP mode is turned OFF below for the duration of the effect apply and put back
+        // afterwards (the finally at the end of this lock). K2 keeps the keyboard in AP
+        // mode so the Display Dial's clock stays latched to the firmware RTC — see
+        // MainWindow.Everest.cs's EvScheduleStartupEffectResend — so leaving it off here
+        // would mean the clock starts drifting again at the user's first effect change.
+        // The apply itself still runs with AP off: that requirement is unchanged (see the
+        // note right below).
+        bool apWasOn = _apEnabled;
+        try
+        {
         // 2026-05-29 — HYPOTHESIS TEST: AP mode was WRONG. AP mode (= Software
         // mode) is only for ChangeSWEffect / per-key streaming, where the host PC
         // sends all 171 colors to the firmware every frame. For firmware presets
@@ -697,10 +745,14 @@ public sealed class EverestService : IDisposable
         //
         // So: NO AP mode around ChangeEffect. If the device was
         // already in AP from a previous session, we force it OFF first.
+        // Every firmware step below is gated on its own (KeyboardQuietGate), not the apply
+        // as a whole: a key pressed between two steps comes out when the first ends, and the
+        // next step must not start under it.
         if (_apEnabled)
         {
             try
             {
+                using var gate = KeyboardQuietGate.Enter("SetEffect.APEnable(false)");
                 bool offOk = EverestSdkNative.APEnable(false);
                 App.WriteLog($"[Everest.SetEffect] forcing APEnable(false) before ChangeEffect -> {offOk}");
                 // Only trust a confirmed success (see InitDllState's APEnable comment) —
@@ -778,6 +830,7 @@ public sealed class EverestService : IDisposable
             {
                 // Diagnostic hex dump of the struct BEFORE sending
                 App.WriteLog("[Everest.SetEffect] DUMP BlockData(62B): " + DumpBlockData(block));
+                using var gate = KeyboardQuietGate.Enter("SetEffect.ChangeBlockEffect");
                 bool okB = EverestSdkNative.ChangeBlockEffect(block);
                 App.WriteLog($"[Everest.SetEffect] BLOCK eff={effect} dir={dirB} speed={spdB} " +
                              $"rainbow={rainbowB} -> {okB}  (P/Invoke by-value)");
@@ -824,6 +877,7 @@ public sealed class EverestService : IDisposable
             forceRandColor16: isMatrix2);
         try
         {
+            using var gate = KeyboardQuietGate.Enter("SetEffect.ChangeEffect");
             bool ok = EverestSdkNative.ChangeEffect(data);
             App.WriteLog($"[Everest.SetEffect] eff={effect} speed={speed} bright={bright} -> {ok}");
             App.WriteLog("[Everest.SetEffect] DUMP EffData(62B): " + DumpEffData(data));
@@ -837,6 +891,34 @@ public sealed class EverestService : IDisposable
         {
             App.WriteLog("[Everest.SetEffect] threw: " + ex);
             return false;
+        }
+        }
+        finally
+        {
+            // Only when AP was on coming in: an apply that found the keyboard in normal
+            // mode leaves it there. Failures are logged and ignored — the effect has
+            // already been sent at this point, and a missed AP re-enable costs the clock
+            // its live sync, not the lighting.
+            if (apWasOn && !_apEnabled)
+            {
+                try
+                {
+                    // Same 150ms settle as the AP-off path above, for the same reason:
+                    // the firmware needs a moment to finish the mode transition, and the
+                    // effect command it just received is still working its way through.
+                    Thread.Sleep(150);
+                    using var gate = KeyboardQuietGate.Enter("SetEffect.APEnable(true)");
+                    bool apOn = EverestSdkNative.APEnable(true);
+                    _apEnabled = apOn;
+                    // EnableKeyFunc(true) alongside it, exactly as EnsureApMode does: in AP
+                    // mode the board can stop transmitting keys without it.
+                    bool keyFn = false;
+                    try { keyFn = EverestSdkNative.EnableKeyFunc(true); }
+                    catch (Exception exK) { App.WriteLog("[Everest.SetEffect] EnableKeyFunc threw: " + exK); }
+                    App.WriteLog($"[Everest.SetEffect] restoring APEnable(true) -> {apOn}  EnableKeyFunc={keyFn}");
+                }
+                catch (Exception exAp) { App.WriteLog("[Everest.SetEffect] AP restore threw: " + exAp); }
+            }
         }
       } // lock (_sdkLock)
     }
@@ -874,6 +956,7 @@ public sealed class EverestService : IDisposable
         {
             try
             {
+                using var gate = KeyboardQuietGate.Enter("FlushSaveFlash");
                 bool ok = EverestSdkNative.SaveFlash(slot);
                 App.WriteLog($"[Everest] SaveFlash(menu={slot}) flushed -> {ok}");
             }
@@ -901,10 +984,16 @@ public sealed class EverestService : IDisposable
             }
             catch (TaskCanceledException) { return; }
 
+            // Longest write of all (~300ms of flash) and on a pool thread, so it can afford
+            // to wait longer for a gap in the typing than the UI-side calls — outside the
+            // lock, so the wait doesn't hold up anyone else; the gate inside re-checks.
+            KeyboardQuietGate.Wait("SaveFlash(debounced)", maxWaitMs: 1500);
+            if (cts.IsCancellationRequested) return;   // FlushSaveFlash took over meanwhile
             lock (_sdkLock)
             {
                 try
                 {
+                    using var gate = KeyboardQuietGate.Enter("SaveFlash(debounced)");
                     bool ok = EverestSdkNative.SaveFlash(slot);
                     App.WriteLog($"[Everest] SaveFlash(menu={slot}) debounced -> {ok}");
 
@@ -980,6 +1069,7 @@ public sealed class EverestService : IDisposable
         lock (_sdkLock)
         try
         {
+            using var gate = KeyboardQuietGate.Enter("SetSyncAcrossProfiles");
             bool ok = EverestSdkNative.SetSyncAcrossProfiles(enable);
             App.WriteLog($"[Everest.SetSyncAcrossProfiles] enable={enable} -> {ok}");
             return ok;
@@ -1017,6 +1107,7 @@ public sealed class EverestService : IDisposable
         lock (_sdkLock)
         try
         {
+            using var gate = KeyboardQuietGate.Enter("SetGameMode");
             bool ok = EverestSdkNative.SetGameMode(mode);
             App.WriteLog($"[Everest.SetGameMode] mode=0x{mode:X2} -> {ok}");
             return ok;
@@ -1037,6 +1128,7 @@ public sealed class EverestService : IDisposable
         lock (_sdkLock)
         try
         {
+            using var gate = KeyboardQuietGate.Enter("SetGameModeStatus");
             bool ok = EverestSdkNative.SetGameModeStatus(enable);
             App.WriteLog($"[Everest.SetGameModeStatus] enable={enable} -> {ok}");
             return ok;
@@ -1075,6 +1167,7 @@ public sealed class EverestService : IDisposable
         lock (_sdkLock)
         try
         {
+            using var gate = KeyboardQuietGate.Enter("SetIndicatorLed");
             bool ok = EverestSdkNative.SetIndicatorLed(enable);
             App.WriteLog($"[Everest.SetIndicatorLed] enable={enable} -> {ok}");
             return ok;
@@ -1210,6 +1303,7 @@ public sealed class EverestService : IDisposable
         if (SignalRgbGuard.BlockLighting("Everest.SaveFlash")) return true;
         try
         {
+            using var gate = KeyboardQuietGate.Enter("SaveFlash");
             bool ok = EverestSdkNative.SaveFlash(effMenuIndex);
             App.WriteLog($"[Everest.SaveFlash] menu={effMenuIndex} -> {ok}");
             return ok;
@@ -1280,6 +1374,7 @@ public sealed class EverestService : IDisposable
         lock (_sdkLock)
         try
         {
+            using var gate = KeyboardQuietGate.Enter("SetBacklight");
             bool ok = EverestSdkNative.SetMainBrightness(on);
             App.WriteLog($"[Everest.SetBacklight] on={on} -> {ok}");
             return ok;
@@ -1295,7 +1390,7 @@ public sealed class EverestService : IDisposable
     /// Quantizes a percentage 0..100 to the 5 firmware brightness steps
     /// (0/25/50/75/100) — the firmware only accepts these values.
     /// </summary>
-    private static EverestSdkNative.BrightT QuantizeBrightness(int pct)
+    internal static EverestSdkNative.BrightT QuantizeBrightness(int pct)
     {
         if (pct <= 12)  return EverestSdkNative.BrightT.B0;
         if (pct <= 37)  return EverestSdkNative.BrightT.B25;
@@ -1658,15 +1753,37 @@ public sealed class EverestService : IDisposable
     /// desired format explicitly and forces the clock on, since nothing else in
     /// K2 ever sets it true.
     /// </remarks>
-    public bool UpdateClock(bool format24h)
+    /// <param name="isDigitalClock">Clock face: <c>true</c> = digital, <c>false</c> =
+    /// analog. This used to be hardcoded to <c>true</c> under the wrong name
+    /// (<c>clockEnabled</c>) — see <see cref="EverestSdkNative.SetClockInfo"/>'s remarks
+    /// for how the real signature was confirmed — which forced the digital face back on
+    /// every 30 minutes and made the Display Dial's "Analog" option a no-op.</param>
+    /// <param name="is12hr"><c>true</c> = 12-hour digits, <c>false</c> = 24-hour.</param>
+    public bool UpdateClock(bool isDigitalClock, bool is12hr)
     {
         lock (_sdkLock)
         try
         {
+            // Base Camp's Common.SetClockInfoInHW prologue, minus the AP toggle. The USB
+            // capture of BC's startup (_reference/usb_dumps/evclock_startup.pcapng) shows
+            // `80 00 00 01` (APEnable true) and `84 00 00 00` (GetClockInfo) before the
+            // `84 00 01 ...` write, so K2 tried the full sequence — it did NOT make the
+            // dial pick up the time, and each APEnable(true)/APEnable(false) pair visibly
+            // flashed the numpad LEDs (user report 2026-09-10: "4 scatti all'avvio").
+            // BC can hold AP on permanently because it drives the LEDs in software; for
+            // K2 the toggle is pure cost, so only the harmless read-back is kept.
+            bool fwDigital = false, fwIs12hr = false;
+            try { EverestSdkNative.GetClockInfo(ref fwDigital, ref fwIs12hr); }
+            catch (Exception exGet) { App.WriteLog("[Everest.UpdateClock] GetClockInfo threw: " + exGet); }
+
+            using var gate = KeyboardQuietGate.Enter("UpdateClock");
             var now = DateTime.Now;
             bool ok = EverestSdkNative.SetClockInfo(
                 now.Month, now.Day, now.Hour, now.Minute, now.Second,
-                clockEnabled: true, format24h);
+                isDigitalClock, is12hr);
+            App.WriteLog($"[Everest.UpdateClock] -> {ok} at {now:HH:mm:ss} "
+                       + $"(digital={isDigitalClock}, 12h={is12hr}; fw read back "
+                       + $"digital={fwDigital}, 12h={fwIs12hr})");
             return ok;
         }
         catch (Exception ex)
@@ -1842,6 +1959,7 @@ public sealed class EverestService : IDisposable
             // persist carries slot 6 explicitly. Keep _cachedMenuIndex in sync for
             // DebouncedSaveFlash without emitting the switch.
             _cachedMenuIndex = MenuIndexFor(Effect.Custom);
+            using var gate = KeyboardQuietGate.Enter("SetSideLedColors");
             bool ok = _nativePad.EnableCustomLighting(brightness);
             ok &= _nativePad.SendSideLedColors(wireColors, brightness);
             if (persist) ok &= _nativePad.PersistCustomLighting();
@@ -1887,6 +2005,9 @@ public sealed class EverestService : IDisposable
             // persist carries slot 6 explicitly. Keep _cachedMenuIndex in sync for
             // DebouncedSaveFlash without emitting the switch.
             _cachedMenuIndex = MenuIndexFor(Effect.Custom);
+            // One gate for the whole sequence: gating each of its packets would add the
+            // settle time to every one of them.
+            using var gate = KeyboardQuietGate.Enter("CustomLighting");
             bool ok = _nativePad.EnableCustomLighting(brightness);
             ok &= _nativePad.SendKeycapColors(keycapWireColors, brightness);
 
@@ -1968,6 +2089,9 @@ public sealed class EverestService : IDisposable
             // "14 00 00 00 <profile> 06" switch made the firmware display stored slot 6
             // and ignore the live frames, so DiagonalWave showed a red wave; 2026-09-01).
             _cachedMenuIndex = MenuIndexFor(Effect.Custom);
+            // One gate for the whole sequence: gating each of its packets would add the
+            // settle time to every one of them.
+            using var gate = KeyboardQuietGate.Enter("CustomLighting");
             bool ok = _nativePad.EnableCustomLighting(brightness);
             ok &= _nativePad.SendKeycapColors(keycapWireColors, brightness);
             // Wipe any dynamic-effect region left in flash slot 6 by an earlier static

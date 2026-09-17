@@ -8,6 +8,8 @@
 // copy is an installed vs. portable build is a separate concern, see InstallDetector.
 
 using System;
+using System.IO;
+using System.IO.Compression;
 using System.Net.Http;
 using System.Reflection;
 using System.Text.Json;
@@ -104,6 +106,52 @@ public static class UpdateChecker
             return new UpdateCheckResult { Success = false, Error = ex.Message };
         }
     }
+
+    /// <summary>Debug stand-in for <see cref="CheckAsync"/> (Settings &gt; Debug): treats a local
+    /// K2-X.Y.Z.zip as if it were the latest GitHub release, so the Settings tab shows the
+    /// same "update available" panel and the update button runs the same download -&gt; stage
+    /// -&gt; apply path (UpdateInstaller.DownloadAsync copies file:// URLs). The version is read
+    /// from the K2.App.exe inside the archive. <paramref name="force"/> reports the update as
+    /// available even when that version is not newer — a manual check always offers it, the
+    /// silent startup check only when it would really be an upgrade.</summary>
+    public static Task<UpdateCheckResult> CheckLocalZipAsync(string zipPath, bool force) => Task.Run(() =>
+    {
+        try
+        {
+            if (!File.Exists(zipPath))
+                return new UpdateCheckResult { Success = false, Error = $"'{zipPath}' not found" };
+
+            Version version;
+            using (var zip = ZipFile.OpenRead(zipPath))
+            {
+                var entry = zip.GetEntry("K2.App.exe")
+                    ?? throw new InvalidOperationException($"'{Path.GetFileName(zipPath)}' is not a K2 package (no K2.App.exe at its root)");
+                string tmp = Path.Combine(Path.GetTempPath(), $"K2-update-probe-{Guid.NewGuid():N}.exe");
+                try
+                {
+                    entry.ExtractToFile(tmp, overwrite: true);
+                    version = SelfUpdate.FileVersion(tmp);
+                }
+                finally
+                {
+                    try { File.Delete(tmp); } catch { }
+                }
+            }
+
+            return new UpdateCheckResult
+            {
+                Success = true,
+                UpdateAvailable = force || version > CurrentVersion,
+                LatestVersion = $"{version.Major}.{version.Minor}.{Math.Max(version.Build, 0)}",
+                ReleaseNotes = $"[Debug] {zipPath}",
+                PortableZipAsset = new UpdateAsset(Path.GetFileName(zipPath), new Uri(zipPath).AbsoluteUri, new FileInfo(zipPath).Length),
+            };
+        }
+        catch (Exception ex)
+        {
+            return new UpdateCheckResult { Success = false, Error = ex.Message };
+        }
+    });
 
     /// <summary>Pulls "1.0.3" out of tags like "v1.0.3-beta" or a bare "1.0.3".</summary>
     private static string? ExtractVersion(string tag)

@@ -10,6 +10,14 @@ using System.Windows.Controls;
 using K2.Core;
 using K2.Core.Services;
 
+// The catalogue's own types moved to K2.Core (GameProfileCatalogTypes.cs) so an external
+// game-profile module can declare a profile without referencing K2.App. Aliased back to their
+// old short names here because this file IS the catalogue: the shipped pages below are hundreds
+// of `new Tile(...)` literals and renaming them would bury the move in noise.
+using Tile = K2.Core.GameProfileTile;
+using Page = K2.Core.GameProfilePage;
+using Definition = K2.Core.GameProfileDefinition;
+
 namespace K2.App;
 
 /// <summary>
@@ -98,11 +106,68 @@ public partial class MainWindow
                   $"back to slot {(fallback == 0 ? 1 : fallback)}; the watcher decides from here");
         }
 
+        PruneOrphanGameSlots();
+
         // Pads were just moved behind the watcher's back. If it had already polled — the timer
         // runs from the first registration, which can be a call or two before this one — it may
         // have seen a pad sitting on the game profile, decided there was nothing to do and stood
         // down for the run. It has to look again.
         ProfileLaunchWatcher.Instance.Rearm("Game:");
+    }
+
+    /// <summary>Removes reserved slots whose game no longer exists — a studio profile the user
+    /// deleted, or one that was renamed while its slot kept the old name.
+    ///
+    /// <para><see cref="ForgetGameProfile"/> takes the slot away when a profile is deleted from
+    /// here on, but a slot orphaned BEFORE that existed had nothing to remove it: it sat in the
+    /// pad's Game profiles list with a gear that opened nothing, and there was no button anywhere
+    /// that could get rid of it. This is the sweep for those, run once per launch alongside the
+    /// rest of the startup cleanup.</para>
+    ///
+    /// <para>Matching is by NAME, like everything else about reserved slots: a slot is orphaned
+    /// when no definition in the catalogue would produce its name. The catalogue includes the
+    /// studio's own profiles, so this cannot mistake a user-made game for a dead one.</para></summary>
+    private void PruneOrphanGameSlots()
+    {
+        var live = GameProfileCatalog.All.Select(GameSlotName).ToHashSet(StringComparer.Ordinal);
+
+        foreach (int deviceId in _dpStore.GetKnownDeviceIds())
+        {
+            foreach (int slot in _dpStore.GetExistingProfiles(deviceId))
+            {
+                string? name = _dpStore.GetProfileName(deviceId, slot);
+                if (!DpIsGameProfileName(name) || live.Contains(name!)) continue;
+
+                // The startup sweep above has already moved every pad off a game slot, so this
+                // cannot be the current profile — but a pad plugged in mid-run could be, and
+                // deleting the profile under it would leave the device pointing at nothing.
+                if (_dpStore.GetCurrentProfile(deviceId) == slot)
+                {
+                    int fallback = _dpStore.GetExistingProfiles(deviceId)
+                        .FirstOrDefault(sl => sl != slot &&
+                                              !DpIsGameProfileName(_dpStore.GetProfileName(deviceId, sl)));
+                    GameSwitchTo(deviceId, fallback == 0 ? 1 : fallback);
+                }
+
+                _dpStore.DeleteProfile(deviceId, slot);
+                DpLog($"[GAME] device {deviceId}: removed orphan slot {slot} \"{name}\" — " +
+                      "no game profile answers to that name any more");
+                DpRequestRepaint(deviceId);
+            }
+        }
+
+        // The settings side of the same orphans: the rows are keyed by ID, not by name, so they
+        // survive a rename and only a missing id makes them dead weight.
+        var liveIds = GameProfileCatalog.All.Select(d => d.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (string id in _dpStore.GetSettingsWithPrefix("gameprofile.").Keys
+                     .Select(rest => rest.Split('.')[0])
+                     .Distinct(StringComparer.Ordinal)
+                     .Where(id => id.Length > 0 && !liveIds.Contains(id))
+                     .ToList())
+        {
+            _dpStore.DeleteSettingsWithPrefix($"gameprofile.{id}.");
+            DpLog($"[GAME] dropped settings of \"{id}\" — no such game profile any more");
+        }
     }
 
     /// <summary>See <see cref="LeaveGameProfilesOnStartup"/>: the cleanup is a startup action, not
@@ -124,7 +189,11 @@ public partial class MainWindow
         foreach (var def in GameProfileCatalog.All)
         {
             string? exe = ResolveGameExe(def);
-            if (exe is null && !_gameShowAll) continue;
+            // A profile the user BUILT is always listed, found or not: the catalogue's "hide what
+            // isn't installed" rule exists because most of a shared catalogue is about games this
+            // PC doesn't have — but a profile made on this machine, ten seconds ago in the studio,
+            // must not vanish because its process name is still blank.
+            if (exe is null && !_gameShowAll && !CustomGameProfile.IsCustomId(def.Id)) continue;
 
             int target = ResolveTargetDevice(def.Id);
             _gameProfiles.Add(new GameProfileItem
@@ -204,19 +273,23 @@ public partial class MainWindow
     /// <summary>What the launch watcher arms on. A pinned path wins over the catalogue's name —
     /// the watcher takes the file name off it itself — so a non-Steam, portable or renamed
     /// install follows the program the user actually runs.</summary>
-    private string EffectiveExeTarget(GameProfileCatalog.Definition def) =>
+    private string EffectiveExeTarget(GameProfileDefinition def) =>
         LoadExeOverride(def.Id) ?? def.ExeName;
 
     /// <summary>Where this profile's game lives on this machine, or null when it can't be found —
     /// which is also what decides whether the card is shown at all. Costs nothing on later
     /// refreshes: the path is stored and the icon PNG is cached.</summary>
-    private string? ResolveGameExe(GameProfileCatalog.Definition def)
+    private string? ResolveGameExe(GameProfileDefinition def)
     {
         // A pinned executable is the whole answer: no detection, and no falling back to a guessed
         // install when the pinned file is missing — silently showing another program's icon would
         // hide the fact that the pin is broken.
         if (LoadExeOverride(def.Id) is { } pinned)
             return System.IO.File.Exists(pinned) ? pinned : null;
+
+        // A profile built in the studio is never auto-detected (no running-process or Steam
+        // lookup): it follows what the user pinned, or just waits for its process name.
+        if (CustomGameProfile.IsCustomId(def.Id)) return null;
 
         string? remembered = _dpStore.GetSetting(ExePathKey(def.Id));
         string? exe = Services.GameExeResolver.Resolve(def.ExeName, def.SteamAppId, remembered);
@@ -251,21 +324,25 @@ public partial class MainWindow
     /// already persist one key per slot.</summary>
     private static string PageCountKey(string profileId) => $"gameprofile.{profileId}.pages";
 
-    private int LoadPageCount(GameProfileCatalog.Definition def) =>
+    private int LoadPageCount(GameProfileDefinition def) =>
         int.TryParse(_dpStore.GetSetting(PageCountKey(def.Id)), out int n)
             ? Math.Clamp(n, def.Pages.Count, 20)
             : def.Pages.Count;
 
-    private IReadOnlyList<IReadOnlyList<GameProfileCatalog.Tile>> LoadPages(GameProfileCatalog.Definition def)
+    /// <summary>Reads a profile's pages as they stand: the catalogue's tiles with the user's
+    /// per-key overrides on top. <c>internal</c> because the game studio edits a SHIPPED profile's
+    /// keys through this same pair — writing them anywhere else would give the studio and the
+    /// Configure popup two different ideas of what is on the pad.</summary>
+    internal IReadOnlyList<IReadOnlyList<GameProfileTile>> LoadPages(GameProfileDefinition def)
     {
-        var pages = new List<IReadOnlyList<GameProfileCatalog.Tile>>();
+        var pages = new List<IReadOnlyList<GameProfileTile>>();
         int pageCount = LoadPageCount(def);
         for (int p = 0; p < pageCount; p++)
         {
             // A page past the shipped ones has no curated content to fall back to: its slots start
             // blank and are filled in entirely from the stored overrides below.
             var shipped = p < def.Pages.Count ? def.Pages[p].Tiles : GameProfileCatalog.EmptyPage();
-            var tiles = new List<GameProfileCatalog.Tile>();
+            var tiles = new List<GameProfileTile>();
             for (int k = 0; k < shipped.Count; k++)
             {
                 string? raw = _dpStore.GetSetting(TileKey(def.Id, p, k));
@@ -280,14 +357,15 @@ public partial class MainWindow
                 double fontSize = parts.Length >= 5 &&
                     double.TryParse(parts[4], NumberStyles.Float, CultureInfo.InvariantCulture, out double fs)
                         ? fs : 0;
-                tiles.Add(new GameProfileCatalog.Tile(parts[0], parts[1], parts[2], isLocKey, fontSize));
+                tiles.Add(new GameProfileTile(parts[0], parts[1], parts[2], isLocKey, fontSize));
             }
             pages.Add(tiles);
         }
         return pages;
     }
 
-    private void SavePages(string profileId, IReadOnlyList<IReadOnlyList<GameProfileCatalog.Tile>> pages)
+    /// <summary>Counterpart of <see cref="LoadPages"/> — see there for why it is internal.</summary>
+    internal void SavePages(string profileId, IReadOnlyList<IReadOnlyList<GameProfileTile>> pages)
     {
         _dpStore.SetSetting(PageCountKey(profileId), pages.Count.ToString());
         for (int p = 0; p < pages.Count; p++)
@@ -301,7 +379,7 @@ public partial class MainWindow
             }
     }
 
-    private void ClearPageOverrides(GameProfileCatalog.Definition def)
+    private void ClearPageOverrides(GameProfileDefinition def)
     {
         // Clears the pages the user ADDED too, not just the shipped ones — otherwise "restore
         // default keys" would leave orphan pages behind that the catalogue knows nothing about.
@@ -385,6 +463,34 @@ public partial class MainWindow
         if (sender is Button { Tag: string id }) ShowGameProfileConfig(id);
     }
 
+    /// <summary>Opens the game studio — where a profile and its actions are BUILT, as opposed to
+    /// the Configure popup, which sets up one that already exists.
+    ///
+    /// <para>The card list is rebuilt on the way out: the studio publishes straight into the
+    /// catalogue (<see cref="GameProfileCatalog.All"/>), so a profile created in there is a card
+    /// here the moment the window closes.</para></summary>
+    private void BtnGameStudio_Click(object sender, RoutedEventArgs e) => OpenGameStudio();
+
+    /// <param name="focusProfileId">Profile to open on — the Configure popup's "Edit in game
+    /// studio" button hands its own profile over; null keeps the studio's default selection.</param>
+    private void OpenGameStudio(string? focusProfileId = null)
+    {
+        new GameStudioWindow(null, focusProfileId) { Owner = this }.ShowDialog();
+        RefreshGameProfiles();
+        RefreshGameLaunchRegistrations();
+        RepaintPadsAfterStudio();
+    }
+
+    /// <summary>Repaints what every connected DisplayPad is showing, once the studio closes. The
+    /// studio edits tiles, colours and key assignments that may be on a pad right now, and a pad
+    /// only re-renders its keys on a repaint — without this the old look stayed until the next
+    /// page or profile change. A pad on its screensaver is left alone: it repaints on wake.</summary>
+    internal void RepaintPadsAfterStudio()
+    {
+        foreach (int id in _dpDeviceIds.ToList())
+            if (!_dpScreensaverShowing.Contains(id)) DpRequestRepaint(id);
+    }
+
     /// <summary>The Game profiles section's own "Guide" button (bottom-right, like every device
     /// panel). Opens the <c>gameprofile</c> overview block — what a game profile is, how it
     /// activates and what its keys do. Per-game notes live behind the Guide button in each
@@ -415,8 +521,9 @@ public partial class MainWindow
 
         // The hint under the path box needs what AUTO would find, which is not necessarily what
         // the card is showing: with a pin set, the card's icon comes from the pinned file.
-        string? autoExe = Services.GameExeResolver.Resolve(
-            def.ExeName, def.SteamAppId, _dpStore.GetSetting(ExePathKey(id)));
+        string? autoExe = CustomGameProfile.IsCustomId(id)
+            ? null
+            : Services.GameExeResolver.Resolve(def.ExeName, def.SteamAppId, _dpStore.GetSetting(ExePathKey(id)));
 
         var dlg = new GameProfileConfigDialog(
             def.Id, item.Name, item.Enabled, item.TargetDeviceId, devices,
@@ -427,7 +534,11 @@ public partial class MainWindow
         {
             Owner = this
         };
-        if (dlg.ShowDialog() != true) return;
+        if (dlg.ShowDialog() != true)
+        {
+            if (dlg.EditInStudioRequested) OpenGameStudio(focusProfileId: id);
+            return;
+        }
 
         // Reset: drop the per-tile overrides AND re-materialise the slot straight away. Without
         // the refresh the pad kept whatever it was last given — the reset looked like it had
@@ -520,7 +631,7 @@ public partial class MainWindow
     /// this name — no extra table, and the keys are ordinary keys.</summary>
     private const string GameProfileNamePrefix = "Game: ";
 
-    private static string GameSlotName(GameProfileCatalog.Definition def) =>
+    private static string GameSlotName(GameProfileDefinition def) =>
         GameProfileNamePrefix + def.Name;
 
     /// <summary>True for a reserved game-profile slot, i.e. one that belongs in the Game profiles
@@ -607,6 +718,20 @@ public partial class MainWindow
         return DpIsGameProfileName(_dpStore.GetProfileName(deviceId, current)) ? current : null;
     }
 
+    /// <summary>The game behind the slot <paramref name="deviceId"/>'s panel is currently showing,
+    /// as the action picker's own descriptor — null when the panel is on an ordinary profile.
+    /// Lets the pad's key grid offer the same game card the profile popup does.</summary>
+    private ButtonActionDialog.GamePickerProfile? DpGamePickerFor(int deviceId)
+    {
+        if (DpActiveGameSlot(deviceId) is not int slot) return null;
+        string? name = _dpStore.GetProfileName(deviceId, slot);
+        var def = GameProfileCatalog.All.FirstOrDefault(d => GameSlotName(d) == name);
+        if (def is null) return null;
+
+        return new ButtonActionDialog.GamePickerProfile(
+            def.Id, def.Name, Services.GameExeResolver.IconPngFor(ResolveGameExe(def)));
+    }
+
     private void LstDpGameSlots_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_dpSuppressGameSlot) return;
@@ -662,7 +787,7 @@ public partial class MainWindow
     /// instead of the keyboard, a key K2 has no way to press, and a tile whose value already
     /// carries an explicit <c>"state|shortcut"</c> override, which is the pilot pinning that key
     /// by hand and outranks the game.</para></summary>
-    private static string? SyncedBind(GameProfileCatalog.Definition def, GameProfileCatalog.Tile t)
+    private static string? SyncedBind(GameProfileDefinition def, GameProfileTile t)
     {
         if (def.Id == "deadside") return DeadsideSyncedBind(t);
         if (def.Id != "elite_dangerous") return null;
@@ -719,7 +844,7 @@ public partial class MainWindow
     /// would be guessing: a tile the user re-captioned or re-mapped by hand, a player who has
     /// never run the game, an action bound to the mouse or to a bare modifier, and any tile that
     /// isn't one of the curated twelve.</summary>
-    private static string? DeadsideSyncedBind(GameProfileCatalog.Tile t)
+    private static string? DeadsideSyncedBind(GameProfileTile t)
     {
         if (t.ActionType != "keys" || !t.CaptionIsLocKey) return null;
 
@@ -732,7 +857,29 @@ public partial class MainWindow
             : null;
     }
 
-    /// <summary>Deletes this profile's reserved slot from every pad EXCEPT the one it targets.
+    /// <summary>Everything a game profile leaves on the pads once it stops existing: the slot it
+    /// reserved on every device, and every settings row keyed on its id. Called by the game studio
+    /// BEFORE the profile is deleted from its store — the reserved slot is named after the
+    /// profile, so it can only be found while the catalogue still knows it.
+    ///
+    /// <para>Without this a deleted profile went on living on the hardware: its "Game: name" slot
+    /// stayed in the pad's list with a gear that opened nothing (the id it maps back to no longer
+    /// exists), and its <c>gameprofile.&lt;id&gt;.*</c> rows — enabled, target device, per-key
+    /// overrides — stayed in the store for good.</para></summary>
+    internal void ForgetGameProfile(GameProfileDefinition def)
+    {
+        // keepDeviceId -1 keeps the slot nowhere: the profile is not moving to another pad, it is
+        // going away.
+        PruneStrayGameSlots(def, keepDeviceId: -1);
+        _dpStore.DeleteSettingsWithPrefix($"gameprofile.{def.Id}.");
+        DpLog($"[GAME] \"{def.Name}\" deleted: reserved slots and settings removed");
+
+        RefreshGameProfiles();
+        if (DpSelectedDeviceId() is { } shown && shown >= 0) DpRefreshProfiles(shown);
+    }
+
+    /// <summary>Deletes this profile's reserved slot from every pad EXCEPT the one it targets
+    /// (<paramref name="keepDeviceId"/> -1 keeps it nowhere — see <see cref="ForgetGameProfile"/>).
     ///
     /// <para><b>The bug this exists for.</b> <see cref="EnsureGameSlot"/> only ever creates, and
     /// the device it creates on is whatever <see cref="ResolveTargetDevice"/> answered at that
@@ -744,7 +891,7 @@ public partial class MainWindow
     ///
     /// <para>A pad currently SHOWING the stray slot is moved off it first — deleting the profile
     /// under it would leave the device pointing at a slot that no longer exists.</para></summary>
-    private void PruneStrayGameSlots(GameProfileCatalog.Definition def, int keepDeviceId)
+    private void PruneStrayGameSlots(GameProfileDefinition def, int keepDeviceId)
     {
         string reserved = GameSlotName(def);
 
@@ -770,14 +917,15 @@ public partial class MainWindow
                 }
 
                 _dpStore.DeleteProfile(deviceId, slot);
-                DpLog($"[GAME] device {deviceId}: removed stray \"{def.Name}\" slot {slot} " +
-                      $"(profile targets device {keepDeviceId})");
+                DpLog($"[GAME] device {deviceId}: removed \"{def.Name}\" slot {slot} " +
+                      (keepDeviceId >= 0 ? $"(profile targets device {keepDeviceId})"
+                                         : "(profile deleted)"));
                 DpRequestRepaint(deviceId);
             }
         }
     }
 
-    private int EnsureGameSlot(int deviceId, GameProfileCatalog.Definition def)
+    private int EnsureGameSlot(int deviceId, GameProfileDefinition def)
     {
         string reserved = GameSlotName(def);
         var existing = _dpStore.GetExistingProfiles(deviceId);
@@ -914,6 +1062,17 @@ public partial class MainWindow
                     EnsureGameSlot(deviceId, def);
                     PruneStrayGameSlots(def, keepDeviceId: deviceId);
                     GameRegNote($"{def.Id}: manual activation — slot kept, launch watcher not armed");
+                    continue;
+                }
+
+                // A studio profile whose process has not been filled in yet: the slot is still
+                // materialised (it can be picked by hand on the pad) but there is nothing to arm
+                // the watcher on, and an empty target would match the first process it saw.
+                if (string.IsNullOrWhiteSpace(EffectiveExeTarget(def)))
+                {
+                    EnsureGameSlot(deviceId, def);
+                    PruneStrayGameSlots(def, keepDeviceId: deviceId);
+                    GameRegNote($"{def.Id}: no process name — slot kept, launch watcher not armed");
                     continue;
                 }
 
@@ -1071,40 +1230,12 @@ public sealed class GameProfileItem : INotifyPropertyChanged
 /// </summary>
 public static class GameProfileCatalog
 {
-    /// <summary>One key of a game profile page. Icons are NOT shipped as images: the action
-    /// itself is enough for K2's own default-icon renderer to draw the tile (and for
-    /// <c>dp_edstatus</c> keys that renderer already draws the cockpit-style annunciator), so a
-    /// profile stays a few lines of data instead of a folder of PNGs.</summary>
-    /// <summary><paramref name="Caption"/> is a LOCALISATION KEY for every tile the catalogue
-    /// ships (<paramref name="CaptionIsLocKey"/> true), so a curated profile reads in the user's
-    /// language instead of whatever language it was authored in. A tile the user edited stores
-    /// their literal text with the flag false — their wording is never sent through Loc.</summary>
-    /// <summary><paramref name="FontSize"/> is the caption's size in pixels as picked in the key's
-    /// "Edit icon" dialog, 0 = the renderer's own shrink-to-fit default. Stored per tile because
-    /// a game page's label IS the tile (see <c>KeyIconSpec.TextOnly</c>): one long legend among
-    /// short ones is the case the slider exists for.</summary>
-    public sealed record Tile(string ActionType, string ActionValue, string Caption,
-                              bool CaptionIsLocKey = true, double FontSize = 0);
-
     /// <summary>The text a tile actually shows.</summary>
-    public static string CaptionOf(Tile t) =>
+    public static string CaptionOf(GameProfileTile t) =>
         t.CaptionIsLocKey ? Loc.Get(t.Caption) : t.Caption;
 
-    /// <summary>Twelve tiles — one DisplayPad page. A profile can have several: the config
-    /// window pages through them, and a profile that needs more than 12 keys navigates with
-    /// arrow keys or sub-pages built out of these same slots.</summary>
-    public sealed record Page(string Name, IReadOnlyList<Tile> Tiles);
-
-    /// <summary><paramref name="ExeName"/> is the process the profile follows — no extension, no
-    /// path, because that is what the launch watcher matches on. Verified against the real
-    /// installs rather than guessed.</summary>
-    /// <param name="SteamAppId">Only so the icon resolver can ask Steam where the game lives
-    /// (see <c>GameExeResolver</c>); null for a game that isn't a Steam install.</param>
-    public sealed record Definition(string Id, string Name, string ExeName, int? SteamAppId,
-                                    IReadOnlyList<Page> Pages);
-
-    private static Tile Keys(string k, string locKey) => new("keys", k, locKey);
-    private static Tile Ed(string state, string locKey) => new("dp_edstatus", state, locKey);
+    private static GameProfileTile Keys(string k, string locKey) => new("keys", k, locKey);
+    private static GameProfileTile Ed(string state, string locKey) => new("dp_edstatus", state, locKey);
 
     /// <summary>A slot the profile deliberately leaves unconfigured: no action type at all, so
     /// <c>EnsureGameSlot</c> stores a null action and the key stays blank instead of showing a
@@ -1235,7 +1366,43 @@ public static class GameProfileCatalog
         Keys("H", "gp_ds_hood"),
     });
 
-    public static IReadOnlyList<Definition> All { get; } = new List<Definition>
+    /// <summary>A Kerbal Space Program tile. No stored caption, for the same reason as
+    /// <see cref="Zc"/>: the painter names it from the Telemachus catalogue, in the UI language.</summary>
+    private static Tile Ksp(string api) => new(KspTelemachus.ActionType, api, "", CaptionIsLocKey: false);
+
+    /// <summary>Kerbal Space Program, through the Telemachus Reborn mod — the only way K2 talks to
+    /// the game, and the reason this profile does nothing without it: every key both reads its
+    /// state and runs its command through the mod's local API (see <c>TelemachusClient</c>), so
+    /// nothing depends on the player's key bindings or on the game having focus.
+    ///
+    /// <para>Top row: the controls a pilot reaches for mid-flight, each lit with the craft's real
+    /// state. Bottom row: the readings that decide when to reach for them. Everything else the mod
+    /// documents — SAS modes, action groups, orbit, maneuver, target, career — is in the picker
+    /// under the game's own card.</para>
+    ///
+    /// <para>Telemachus only answers the flight-control family while the craft carries a powered
+    /// Telemachus antenna part; without one the top row reads "unknown" and its presses are
+    /// ignored by the mod, while the readings below keep working.</para></summary>
+    private static readonly Page KspPage1 = new("Flight", new[]
+    {
+        Ksp("f.stage"),
+        Ksp("f.sas"),
+        Ksp("f.rcs"),
+        Ksp("f.gear"),
+        Ksp("f.light"),
+        Ksp("f.brake"),
+
+        Ksp("v.altitude"),
+        Ksp("v.verticalSpeed"),
+        Ksp("o.ApA"),
+        Ksp("o.PeA"),
+        Ksp("r.resource[LiquidFuel]"),
+        Ksp("r.resource[ElectricCharge]"),
+    });
+
+    /// <summary>The profiles K2 ships. Kept apart from <see cref="All"/> because that one also
+    /// carries the user's own — see there.</summary>
+    private static readonly IReadOnlyList<Definition> Builtins = new List<Definition>
     {
         new("elite_dangerous", "Elite Dangerous", "EliteDangerous64", 359320, new[] { ElitePage1 }),
         new("zero_company", "Star Wars: Zero Company", "SWZeroCompany", null, new[] { ZeroCompanyPage1 }),
@@ -1243,7 +1410,109 @@ public static class GameProfileCatalog
         // root: BattlEye starts Deadside.exe, which starts this one and exits, so a watcher armed
         // on the launcher would fire once and then see the game "close" while it is still running.
         new("deadside", "Deadside", "Deadside-Win64-Shipping", 895400, new[] { DeadsidePage1 }),
+        // KSP_x64 is the game itself; Launcher.exe beside it is Squad's launcher, which exits
+        // once the game is up — the same trap as Deadside's.
+        new(GameProfileSpecs.KspId, "Kerbal Space Program", "KSP_x64", 220200, new[] { KspPage1 }),
     };
+
+    /// <summary>Every profile there is: the shipped ones, the ones an external game-profile module
+    /// contributes (see <see cref="GameProfileModules"/>), and the ones the user built in the game
+    /// studio.
+    ///
+    /// <para><b>Why they are merged here rather than handled as a separate list.</b> Activation,
+    /// the reserved device slot, the config popup, the card grid and the launch watcher all read
+    /// the catalogue. A parallel list would have meant teaching every one of them about a second
+    /// kind of profile; publishing the studio's profiles as ordinary definitions means none of
+    /// them has to know the difference. What is user-made is recoverable from the id alone
+    /// (<see cref="CustomGameProfile.IsCustomId"/>) for the two places that DO care — the
+    /// studio's own list and the card's Delete.</para>
+    ///
+    /// <para>Recomputed on every read: the list is a handful of entries and the studio can change
+    /// it at any moment, so a cached copy would be a stale card grid one edit out of date.</para></summary>
+    public static IReadOnlyList<Definition> All =>
+        Builtins
+            .Concat(GameProfileModules.Definitions)
+            .Concat(Services.CustomGameStore.Profiles().Select(ToDefinition))
+            .ToList();
+
+    /// <summary>A studio profile as an ordinary catalogue definition. Captions are the user's own
+    /// words, so they are stored as literals (<c>CaptionIsLocKey: false</c>) and never sent
+    /// through <see cref="Loc"/>.</summary>
+    private static Definition ToDefinition(CustomGameProfile p) =>
+        new(p.Id, p.Name, p.ExeName, p.SteamAppId,
+            (p.Pages.Count > 0 ? p.Pages : new[] { new CustomGamePage() })
+                .Select(page => new Page(page.Name,
+                    Enumerable.Range(0, 12)
+                        .Select(i => i < page.Tiles.Count
+                            ? new Tile(page.Tiles[i].ActionType, page.Tiles[i].ActionValue,
+                                       page.Tiles[i].Caption, CaptionIsLocKey: false)
+                            : Empty())
+                        .ToList()))
+                .ToList());
+
+    /// <summary>The spec of a studio profile — its accent, and its actions as the one command
+    /// family the key picker offers under the game's card. Wired into
+    /// <see cref="GameProfileSpecs.CustomSpecProvider"/> by <see cref="PublishCustomProfiles"/>.
+    ///
+    /// <para><c>StyleAllTiles</c> is false on purpose: a custom tile paints its own background,
+    /// colours and indicator, so laying the profile's art over it would overwrite exactly the
+    /// thing the user built.</para></summary>
+    private static GameProfileSpec? CustomSpecFor(string profileId)
+    {
+        var profile = Services.CustomGameStore.ProfileById(profileId);
+        if (profile is null) return null;
+
+        return new GameProfileSpec(
+            Id: profile.Id,
+            ArtFolder: "",
+            ArtPrefix: "",
+            Accent: System.Drawing.Color.FromArgb(
+                CustomTileRenderer.ParseColor(profile.Accent, System.Drawing.Color.Orange).ToArgb()),
+            StyleAllTiles: false,
+            // The studio's actions are NOT listed here: they are contributed to every profile,
+            // shipped ones included, through CustomFamiliesProvider below.
+            CommandFamilies: Array.Empty<(string, string, ActionTypeHelper.GameCommand[])>());
+    }
+
+    /// <summary>The studio's actions for a profile, as the one extra command family its key picker
+    /// shows. Works for a shipped profile as well as a studio one — an action written to read a
+    /// game's HUD belongs in that game's picker whoever wrote the profile.</summary>
+    private static (string LocKey, string Glyph, ActionTypeHelper.GameCommand[] Items)[]
+        CustomFamiliesFor(string profileId)
+    {
+        // Grouped by the family the user filed each action under. A family key that matches one of
+        // the GAME's own (Deadside's "Movement", Elite's "Cockpit toggles") is merged into it by
+        // GameProfileSpecs.FamiliesFor, so a custom reading sits among the game's own commands
+        // instead of in a bucket of its own.
+        return Services.CustomGameStore.ActionsFor(profileId)
+            .GroupBy(a => a.Category.Length > 0 ? a.Category : GenericCategoryKey)
+            .Select(g => (
+                LocKey: g.Key,
+                Glyph: "🎨",
+                Items: g.Select(a => new ActionTypeHelper.GameCommand(
+                    CustomActionType.Tag, a.KeyValue, "!" + a.Name)).ToArray()))
+            .ToArray();
+    }
+
+    /// <summary>Category an action with no category of its own is filed under. A literal name (the
+    /// "!" prefix — see <see cref="Loc.Get"/>) because it is a heading the studio owns, not one of
+    /// the game's.</summary>
+    public static string GenericCategoryKey => "!" + Loc.Get("studio_category_generic");
+
+    /// <summary>Hands K2.Core the studio's profiles. Called once at startup: the action dialog
+    /// lives in K2.Core and cannot reach the store on its own, and a profile whose spec is
+    /// missing shows an action browser with no game card at all.</summary>
+    public static void PublishCustomProfiles()
+    {
+        GameProfileSpecs.CustomSpecProvider = CustomSpecFor;
+        // Kerbal Space Program's pickers offer, beyond the curated entries, everything the
+        // Telemachus mod lists about itself — cached on disk, refreshed when the mod answers.
+        Services.TelemachusApi.Install();
+        GameProfileSpecs.CustomFamiliesProvider = CustomFamiliesFor;
+        // What a studio tile PRESSES. Core runs the key press but the definitions live here, so it
+        // asks; see CustomGameAction.Keys.
+        CustomActionType.KeysProvider = id => Services.CustomGameStore.ActionById(id)?.Keys ?? "";
+    }
 
     public static Definition? ById(string id) =>
         All.FirstOrDefault(d => string.Equals(d.Id, id, StringComparison.Ordinal));

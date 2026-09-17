@@ -49,6 +49,50 @@ public sealed class MacroInput
     [JsonIgnore]
     public bool OnOwnWindow { get; set; }
 
+    /// <summary>
+    /// Converts a list from the ON-DISK convention (<c>DelayMs</c> = pause
+    /// BEFORE this step, which is what both K2's own JSON and BaseCamp's
+    /// recorder store) to the IN-MEMORY one (<c>DelayMs</c> = pause AFTER this
+    /// step). In memory a keydown row's delay is therefore how long the key
+    /// stays held and a keyup row's delay is the gap before the next step —
+    /// which is what the INPUTS list shows and what the user edits there.
+    /// The head delay (dead time between pressing Record and the first key) is
+    /// dropped in the process; the last step gets 0. Mutates in place.
+    /// </summary>
+    public static void ShiftToDelayAfter(List<MacroInput> inputs)
+    {
+        for (int i = 0; i < inputs.Count - 1; i++)
+            inputs[i].DelayMs = inputs[i + 1].DelayMs;
+        if (inputs.Count > 0) inputs[^1].DelayMs = 0;
+    }
+
+    /// <summary>Deep copy of <paramref name="inputs"/> converted to the
+    /// "delay after" convention — for the live INPUTS preview, which reads the
+    /// recorder's own still-growing list (raw "delay before") and must not
+    /// touch it.</summary>
+    public static List<MacroInput> ToDelayAfterCopy(IReadOnlyList<MacroInput> inputs)
+    {
+        var list = new List<MacroInput>(inputs.Count);
+        foreach (var i in inputs) list.Add(i.Clone());
+        ShiftToDelayAfter(list);
+        return list;
+    }
+
+    /// <summary>Inverse of <see cref="ShiftToDelayAfter"/> — returns a shallow
+    /// copy of the list in the on-disk "delay before" convention, leaving the
+    /// caller's own (in-memory) list untouched.</summary>
+    public static List<MacroInput> ToDelayBefore(List<MacroInput> inputs)
+    {
+        var outList = new List<MacroInput>(inputs.Count);
+        for (int i = 0; i < inputs.Count; i++)
+        {
+            var copy = inputs[i].Clone();
+            copy.DelayMs = i == 0 ? 0 : inputs[i - 1].DelayMs;
+            outList.Add(copy);
+        }
+        return outList;
+    }
+
     /// <summary>Independent copy — so editing a duplicated macro's inputs
     /// (reorder/delete) never touches the source macro's list.</summary>
     public MacroInput Clone() => new()
@@ -119,6 +163,7 @@ public sealed class MacroInput
         {
             return new List<MacroInput>();
         }
+        ShiftToDelayAfter(result);   // BC stores "delay before"; K2 works in "delay after"
         return result;
     }
 
@@ -179,9 +224,10 @@ public sealed class MacroDefinition
     public int Order { get; set; }
     public DateTime ModifiedAt { get; set; } = DateTime.Now;
 
-    /// <summary>Serializes Inputs to JSON (for saving to the DB).</summary>
+    /// <summary>Serializes Inputs to JSON (for saving to the DB). Written in the
+    /// on-disk "delay before" convention — see <see cref="MacroInput.ShiftToDelayAfter"/>.</summary>
     public string InputsToJson() =>
-        JsonSerializer.Serialize(Inputs, _jsonOpts);
+        JsonSerializer.Serialize(MacroInput.ToDelayBefore(Inputs), _jsonOpts);
 
     /// <summary>Independent copy under <paramref name="newName"/> — <c>Id</c> is
     /// left at 0 (the caller inserts it and gets a fresh one back), Inputs is a
@@ -203,11 +249,17 @@ public sealed class MacroDefinition
         ModifiedAt = DateTime.Now
     };
 
-    /// <summary>Deserializes Inputs from JSON (for loading from the DB).</summary>
+    /// <summary>Deserializes Inputs from JSON (for loading from the DB) and
+    /// converts them to the in-memory "delay after" convention.</summary>
     public static List<MacroInput> InputsFromJson(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return new();
-        try { return JsonSerializer.Deserialize<List<MacroInput>>(json, _jsonOpts) ?? new(); }
+        try
+        {
+            var list = JsonSerializer.Deserialize<List<MacroInput>>(json, _jsonOpts) ?? new();
+            MacroInput.ShiftToDelayAfter(list);
+            return list;
+        }
         catch { return new(); }
     }
 

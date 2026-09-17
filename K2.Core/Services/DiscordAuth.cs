@@ -116,17 +116,20 @@ public static class DiscordAuth
 
         try
         {
-            using var http = new HttpClient();
+            // Bounded timeout + ConfigureAwait(false): a key press waits on this refresh
+            // (DiscordBridge.EnsureReady), so it must never hang the caller for the 100s
+            // HttpClient default, nor try to resume on a captured UI context.
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
             var resp = await http.PostAsync("https://discord.com/api/oauth2/token", new FormUrlEncodedContent(new[]
             {
                 new KeyValuePair<string, string>("client_id", DiscordStore.ClientId),
                 new KeyValuePair<string, string>("client_secret", DiscordStore.ClientSecret),
                 new KeyValuePair<string, string>("grant_type", "refresh_token"),
                 new KeyValuePair<string, string>("refresh_token", DiscordStore.RefreshToken),
-            }));
+            })).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode) return false;
 
-            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync().ConfigureAwait(false));
             string accessToken = doc.RootElement.GetProperty("access_token").GetString() ?? "";
             string refreshToken = doc.RootElement.TryGetProperty("refresh_token", out var rt)
                 ? rt.GetString() ?? DiscordStore.RefreshToken : DiscordStore.RefreshToken;

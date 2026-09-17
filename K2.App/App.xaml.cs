@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using K2.Core;
 using K2.Core.Services;
 
@@ -219,6 +220,14 @@ public partial class App : Application
 
     public App()
     {
+        // FIRST thing in the process: the self-updater switches (--apply-update /
+        // --test-update). They must run before the single-instance mutex, the log
+        // reset and any UI — in --apply-update mode the K2 being replaced is still
+        // running, and this process is only here to swap its files and relaunch it.
+        // Never returns when it handles a switch (Environment.Exit inside).
+        if (Services.SelfUpdate.TryRunEarlySwitches(Environment.GetCommandLineArgs()))
+            return;
+
         // Just record whether we got the lock — do NOT show the MessageBox here.
         // MessageBox.Show() pumps the dispatcher, which at this point (still inside
         // the App constructor, before Main() calls InitializeComponent()/Run()) can
@@ -245,6 +254,15 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandled;
         AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
         TaskScheduler.UnobservedTaskException += OnUnobservedTask;
+
+        // A K2 that went down with the machine and a K2 that vanished on its own read EXACTLY
+        // the same in the log: both end on whatever line happened to be last, with no
+        // ProcessExit (a forced session end never reaches it either). Stamping the shutdown and
+        // the sleep/resume transitions is what lets the next "K2 disappeared" report be told
+        // apart from an ordinary power-off without asking the user to remember. Static handlers
+        // on purpose: SystemEvents holds instance targets weakly.
+        SystemEvents.SessionEnding += OnSessionEnding;
+        SystemEvents.PowerModeChanged += OnPowerModeChanged;
 
         // Initialize localization before any UI is created.
         Core.Loc.Init();
@@ -284,6 +302,20 @@ public partial class App : Application
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+        // If we just came back from an in-place update, the staged tree + backup are
+        // still on disk (the updater could not delete the folder it was running from).
+        // Best effort, on a background thread — see SelfUpdate.CleanupAfterUpdate.
+        Services.SelfUpdate.CleanupAfterUpdate();
+
+        // Before any window: the action dialog asks K2.Core for a game profile's spec, and for a
+        // profile the user built that answer can only come from K2.App's studio store.
+        GameProfileCatalog.PublishCustomProfiles();
+
+        // The game-profile module ships and updates separately from K2 (see
+        // K2.Core/GameProfileModule.cs), so it has to be in before anything reads the catalogue.
+        var moduleHost = new Services.GameProfileModuleHost();
+        Services.GameProfileModuleLoader.LoadAll(moduleHost, moduleHost.Log);
+
         // Apply the user's saved UI font before any window is created (see
         // AppSettings.AppFontFamily / Settings > Font). Safe here: App.xaml's
         // K2Theme.xaml merge (which declares the K2AppFontFamily resource this
@@ -298,6 +330,11 @@ public partial class App : Application
         // a settings window, not from ButtonActionEngine) — give it the app log so a failed
         // connection leaves a trace instead of only a message on screen.
         Core.Services.DiscordBridge.Log = WriteLog;
+
+        // Same for the Google Home setup window: its page scan runs from the window, not from
+        // ButtonActionEngine, so without this a scan that finds nothing (Google reshuffled the
+        // page) is completely silent — see GoogleHomeBridge.Log.
+        Core.Services.GoogleHomeBridge.Log = WriteLog;
 
         if (!_singleInstanceGranted)
         {
@@ -388,6 +425,17 @@ public partial class App : Application
         Marshal.WriteByte(_exitThreadStub, off++, 0xD0);
     }
 
+    /// <summary>Windows is logging the user off or shutting down — everything after this line
+    /// in the log belongs to a planned exit, not to a crash.</summary>
+    private static void OnSessionEnding(object sender, SessionEndingEventArgs e) =>
+        WriteLog($"[Session] Windows is ending the session (reason={e.Reason}) — " +
+                 "K2 is going down with it; an abrupt end to this log is NOT a crash");
+
+    /// <summary>Suspend/resume. A log that stops at a Suspend and picks up in a new process is a
+    /// sleeping machine, not a crash — and a resume is where stale USB handles turn up.</summary>
+    private static void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e) =>
+        WriteLog($"[Power] {e.Mode}");
+
     private void OnDispatcherUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         WriteLog("[DispatcherUnhandled] " + e.Exception);
@@ -454,7 +502,15 @@ public partial class App : Application
             // informational codes (< 0x80000000) — those are internal CLR control-flow.
             if (code >= 0xC0000000u && code != 0xC000008Cu /* guard-page AV, benign */
                 && code != 0xE0434352u /* COMPLUS_EXCEPTION: SEH used by every managed throw/catch, not fatal */
-                && code != 0xE0434F4Du /* CLR notification exception (e.g. debugger), not fatal */)
+                && code != 0xE0434F4Du /* CLR notification exception (e.g. debugger), not fatal */
+                // 0xE06D7363 = 0xE0'msc' — the MSVC C++ `throw`, raised via RaiseException and
+                // caught inside the very DLL that threw it. Every vendor DLL we load (SDKDLL,
+                // Everest360_USB, MacroPadSDK) throws a handful of these during AutoOpen when its
+                // device simply isn't plugged in, and the process runs on perfectly afterwards —
+                // logging them as "process will terminate" filled users' crash logs with alarms
+                // for a machine that never crashed, and buried the real entries. Same reasoning
+                // as the two CLR codes above: a first-chance C++ throw is control flow.
+                && code != 0xE06D7363u)
             {
                 string codeStr = code switch {
                     0xC00000FDu => "STATUS_STACK_OVERFLOW",

@@ -103,6 +103,13 @@
                         Content="{loc:Get dp_load_image}"
                         Click="BtnLoadImage_Click"/>
 
+                <!-- "Emoji as image": the same emoji picker the "Emoji" action uses, but here
+                     the emoji is ONLY the key's picture — the action stays whatever it is. -->
+                <Button x:Name="BtnEmojiImage"
+                        Content="{loc:Get dp_emoji_image}"
+                        Margin="0,6,0,0"
+                        Click="BtnEmojiImage_Click"/>
+
                 <Button x:Name="BtnRemoveImage"
                         Content="{loc:Get dp_remove_image}"
                         Margin="0,6,0,0"

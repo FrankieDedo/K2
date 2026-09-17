@@ -124,7 +124,7 @@ If you need a more detailed guide, check this out: <a href='https://github.com/F
   <li>Backlight auto-off after N idle seconds</li>
   <li>Spotify profile — a dedicated profile whose 2×2 block shows the live album cover (or cover plus scrolling Song/Artist/Album text), with play/pause, shuffle and repeat keys that follow the real playback state, a configurable block position, an auto-return timer and a "show only while Spotify is in front" option</li>
   <li>PC Monitor key — pick any hardware sensor (live HWiNFO-style list with current/min/max/average) to display on a key</li>
-  <li>Game profiles — ready-made per-game profiles (Elite Dangerous, Deadside, Zero Company) that take over while the game is running, with keys that follow the live in-game state, multiple pages, an auto-return timer and a "show only while the game is in front" option</li>
+  <li>Game profiles — ready-made per-game profiles (Elite Dangerous, Deadside, Zero Company, Kerbal Space Program) that take over while the game is running, with keys that follow the live in-game state, multiple pages, an auto-return timer and a "show only while the game is in front" option</li>
   <li>Default key background — one background image reused by every key that has no picture of its own</li>
 </ul>
 </details>

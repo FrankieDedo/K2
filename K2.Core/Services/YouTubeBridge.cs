@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -79,7 +79,9 @@ public static class YouTubeBridge
         if (!YouTubeStore.Connected) { log("[EXEC] youtube: not connected"); return false; }
         try
         {
-            var service = GetServiceAsync().GetAwaiter().GetResult();
+            // Task.Run first — GetServiceAsync awaits without ConfigureAwait(false) and this
+            // runs on the UI thread; blocking on it directly dead-locks the app.
+            var service = System.Threading.Tasks.Task.Run(() => GetServiceAsync()).GetAwaiter().GetResult();
             if (service is null) { log("[EXEC] youtube: authorization failed"); return false; }
 
             var liveChatId = ResolveActiveLiveChatId(service);

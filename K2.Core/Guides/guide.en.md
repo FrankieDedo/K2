@@ -1120,6 +1120,55 @@ Fire Mode, Aim Toggle, Auto Run, Crouch, Prone, Emotes, Hood**.
 
 Nothing. For bind sync, just launch the game at least once.
 
+@@@ gameprofile:kerbal_space_program
+# Kerbal Space Program — Telemachus
+
+## What the keys do
+
+- **Top row**: Stage, SAS, RCS, Gear, Lights, Brakes. Each key runs the
+  command in the game and lights up with the craft's real state.
+- **Bottom row**: Altitude, Vertical speed, Apoapsis, Periapsis, Liquid fuel
+  and Electric charge, updated twice a second.
+
+## Picking other entries
+
+Click a key and open **Kerbal Space Program** in the action browser: the
+entries are grouped like the Telemachus documentation — flight controls,
+throttle, SAS modes, action groups 1–10, flight data, orbit, maneuver & Δv,
+resources, target, mission status, time & warp, career. Pick one by name:
+K2 builds the Telemachus request by itself, there is no address or variable
+to type.
+
+Below those, the **Telemachus · …** families list everything else the mod
+says it can answer or do (vessel, orbit, target, thermal, MechJeb, ...), in
+the mod's own English names. K2 fetches that list from the game the first
+time Telemachus answers and keeps a copy, so it is there with the game closed
+too.
+
+## Tiles made in the game studio
+
+For a Kerbal Space Program action the reading's **Source** can be
+**Telemachus**: no link to set up. The browse button beside **Value** opens
+the list of Telemachus entries with a search box and what the game answers
+for each one right now; **Update list from the game** fetches the mod's list
+again. New actions of this profile start on this source.
+
+## How they behave
+
+- Commands go through the mod, not the keyboard: the game does not need to be
+  in front and your key bindings do not matter.
+- A key reads "—" / stays dim when the value is not known: game or mod not
+  running, no maneuver node, no target, a resource the craft does not carry.
+
+## Set-up in the game
+
+- Install **Telemachus Reborn** (CKAN or SpaceDock). It serves on port
+  **8085** — keep the default.
+- Controls, action groups, SAS, throttle, landing and heat entries only work
+  while the craft carries a **powered Telemachus antenna** part. Without one
+  those keys stay unknown and their presses are ignored by the mod; orbit,
+  flight data and resources keep working.
+
 @@@ speedtest
 # Speed test — server options
 
@@ -1164,3 +1213,252 @@ Examples: `speed.hetzner.de/100MB.bin`, `proof.ovh.net`,
 
 Fill both URL boxes yourself with any endpoint that follows the `{bytes}` /
 `{mb}` rule above. Leave the upload URL empty to skip the upload leg.
+
+@@@ gamestudio
+# Game studio
+
+The studio is where you BUILD a game profile and the tiles that go on it,
+instead of only configuring one K2 ships. A profile you make here behaves
+like any other from then on: it appears in the pad's Game profiles list, it
+takes over the pad when its game starts, and its tiles are offered by the
+action browser.
+
+Two things live in it, and the list on the left holds both:
+
+- A **profile** is a game: a name, the process that starts it, its colours,
+  and the pages of keys it puts on the pad.
+- An **action** is one tile: what it measures, what it draws, and the keys
+  it presses. Actions sit under the profile they belong to — open a profile
+  and its actions appear underneath it, with **+ New action** at the end.
+
+![The list on the left: your profiles, K2's below them, and the open profile's actions](gamestudio-nav.png)
+
+## Three things to know before you start
+
+- **Everything saves as you go.** There is no OK button — an edit is written
+  the moment you make it, the way a document editor works. The one thing
+  that IS a decision, deleting a profile, an action or a reading, asks first.
+- **Profiles K2 ships are here too**, with their name, process and Steam id
+  locked. Everything else about them is yours: their keys, their colours,
+  their frame art, and your own actions, which you can file under the game's
+  own categories or under ones you add.
+- **Every field carries a "?" dot.** Hover it and it explains that one field;
+  on a list of choices it describes every choice. This guide explains the
+  job; the dots explain the controls.
+
+## Making one from nothing
+
+- **One** — **+ New profile** at the bottom of the list, then a name and the
+  game's process. The **Running** button lists what is open right now, so you
+  don't have to go hunting for the .exe.
+- **Two** — **+ New action** under it, and pick a starting point: bar,
+  number, on/off, square capture. K2 creates the reading and the pieces that
+  show it, then asks you to draw the rectangle it has to watch.
+- **Three** — back on the profile, **click a key** on the pad and give it the
+  action you just made.
+- **Four** — start the game. The profile comes up on its own, and the tile
+  starts following what it measures. When you close the studio, the pads
+  redraw straight away with whatever you changed.
+
+## Where it is all kept
+
+Profiles, actions and the pictures they use live with K2's own data, not in
+the game. **Export** writes one profile — actions, categories and images
+included — to a single file, and the button at the top of the list imports
+one back, which is how a profile travels to another PC or to someone else.
+Right-click a row of the list for the same commands the buttons carry.
+
+@@@ gamestudio:profile
+# The profile view
+
+Opening a profile shows the pad itself, with the keys as they will be on the
+device. Everything above and below the pad is about this profile only.
+
+![A profile: its pages of keys, and the bar for the key you clicked](gamestudio-profile.png)
+
+## Its settings
+
+**Profile settings** folds open the panel you fill in once and leave alone:
+
+![Profile settings of a game K2 ships: name and process locked, its own categories](gamestudio-settings.png)
+
+- **Name** and **Process** — the process is the profile's trigger: when that
+  program starts, this page takes the pad.
+- **Steam app id** is optional; it only helps K2 find the game and its art.
+- **Accent colour** tints the page: arrows, header, and any tile with nothing
+  of its own.
+- **Default tile style** is the starting colour of every tile of this
+  profile. A tile keeps following it until it overrides a colour itself, so
+  changing the style here reaches every tile that never argued.
+- **Background image** is the frame art drawn behind the tiles. It is never
+  an element: it does not move, and everything else is drawn on top.
+- **Categories** are the cards this profile's actions are grouped under in
+  the action browser. **Generic** is always there, and a game K2 ships brings
+  its own — those carry a lock. Type a name and **Add** for a new one; one you
+  added can be deleted, and its actions move back to Generic.
+
+## Its keys
+
+- One **page** is one padful of keys; add as many as you need, and on the pad
+  they turn with the arrow keys like any profile.
+- **Click a key** and the bar under the pad says what it is showing. From
+  there, **Edit action** opens that tile in the studio, **Change** puts a
+  different action on the key, and the bin empties it. Double-clicking a key
+  is the same as Change.
+- A profile K2 ships keeps its fields locked, but its keys are yours to
+  change — and they are written to the same place the Configure popup uses,
+  so the two never disagree.
+
+@@@ gamestudio:action
+# An action: the three steps
+
+An action is one tile, and it belongs to the profile it sits under in the
+list. The editor asks the three questions in the order they have to be
+answered, and each step remembers whether you left it open.
+
+![Name, category and keys on top; step 2 open: the tile as it will be drawn, and the pieces it is made of](gamestudio-look.png)
+
+## Above the steps
+
+- **Name** is what the tile is called in the list and in the action browser.
+- **Category** is the card of the action browser it is filed under — the
+  profile's categories, added from its settings.
+- **Keys pressed** is what the key sends when it is pressed. It is optional
+  and independent of the reading: a tile can show something and press
+  something, show without pressing, or press without showing anything at
+  all.
+
+## 1 — What to read
+
+A **reading** is one thing the tile knows how to measure: health, ammo, a
+lamp that is on or off. A tile can carry several — health AND hunger — and
+each piece you draw later points at one of them.
+
+For each reading you choose the **type**:
+
+- **Value** / **Number on screen** — a number, printed as text; give a
+  number a scale and it fills an indicator too.
+- **Value range** — a value over a full scale, drawn as a bar or a ring.
+- **On / off** — two states, using the on and off halves of the style.
+- **Several states** — named states (Pistol, Rifle, Grenade), each with its
+  own rectangle or value and its own image.
+- **Text on screen** — a word printed in the rectangle: the current weapon,
+  mode or zone.
+- **Square capture** — measures nothing: it copies the rectangle onto the
+  key, like a tiny live screenshot. Show it with a Picture piece.
+
+## 2 — How it looks
+
+The big square is the tile as the pad will draw it. Around it are the pieces:
+
+- A tile is made of any number of **pieces** — Picture, Indicator, Value,
+  Label — each pointing at a reading, with its own colour, lettering and
+  place. The list IS the drawing order: the last row is in front.
+- **Drag the outlines** on the tile to move a piece; the corner grip resizes
+  it. Purple is the picture, blue the indicator, orange the value, green the
+  label. **Reset layout** puts them all back.
+- For a finer touch, click a piece and use the **arrow keys**: each press
+  moves it by one pixel of the real key. A snapped piece is unsnapped first,
+  right where it is drawn, so it does not jump.
+- A piece snaps to one of nine positions unless you untick **Snap** under
+  Advanced, where **Edge** also says how far a snapped piece is kept from the
+  border.
+- A **Value** piece also chooses how it prints its reading, under
+  **Show as**: the **Number** itself, a **Percentage** of the scale, or
+  **Value/Max** (84/107). The last two need a scale — without one the number
+  is printed.
+
+## 3 — Colours
+
+By default the tile follows the profile's style. Tick **Use its own colours
+instead of the profile's** and it keeps its own pair (on / off) and its own
+background picture, which the profile's style can no longer reach.
+
+## The rest of the bar
+
+**Copy** puts the tile on another profile, **Duplicate** makes a second copy
+on this one — for a variant that differs by a colour or a rectangle, without
+laying it out again.
+
+@@@ gamestudio:sources
+# Where a reading comes from
+
+Every reading answers the same two questions separately: WHAT it is (its
+type), and WHERE it is obtained. The type does not change with the source —
+"a value from 0 to 100" is the same reading either way.
+
+![A reading from a mod link: the value, and the top of its scale read from the game too](gamestudio-read.png)
+
+## The screen
+
+A **screen area** is a rectangle on your screen that K2 watches, capture
+after capture. **Edit** draws it over a fresh capture of the game, so you can
+see what you are aiming at; the folder button reuses a rectangle already made
+for another tile, which is what you want when several tiles read the same
+corner of the HUD.
+
+- A bar or a lamp is read from the pixels themselves — nothing to install.
+- A **number** or a **word** has to be recognised, which needs Windows' own
+  text recognition for your language. If it is missing, the studio says so on
+  the spot instead of quietly reading nothing.
+- The game has to be visible for the pixels to exist: a minimised window or a
+  rectangle behind another window reads whatever is actually on screen.
+
+## A link to the game
+
+Some games publish their own state, and then nothing has to be measured at
+all. A **link** is one address that answers with the game's data; the reading
+picks one **value** out of that answer, written as a dotted path
+(`player.health`, `squad[0].name`). The arrows next to it ask the game again
+right away.
+
+- A **native link** is the game's own server — nothing to install, but it is
+  silent while the game is not running.
+- A **mod link** needs a mod installed in the game. When one is set up, the
+  studio offers **Get the mod** right next to it, because the moment the game
+  answers nothing is the moment you need it.
+- A link is polled only while a tile is actually reading it, and it stops on
+  its own a few seconds after the last read.
+
+## Finding the value you want
+
+The magnifier opens the link's answer as a tree, grouped the way the game's
+own data is. While K2 stays open it remembers where you were on each link —
+the search, the rows you opened — and picks up from there.
+
+- **Search** asks the game itself, so it finds a value even when there are
+  far too many to list.
+- A search shows only what matched. Right-click a row and
+  **Show all elements** loads everything next to it, in place: finding "health" is
+  usually how you find out "food" and "water" sit beside it.
+- **Export JSON** saves the whole answer as a file. When the names come from
+  the game's own code and mean nothing at a glance, hand that file to an AI
+  assistant and ask which values are the ones you want.
+
+## The scale
+
+A number becomes a bar or a ring once it has a **scale**: **From** is the
+value read as empty, **to** the value read as full. Each end can be a fixed
+number, or — for a link — a value picked from the game with the magnifier
+next to it, for a top that moves, like a maximum health that grows with
+level. While an end follows the game, its box shows the value it is reading
+right now; the cross next to it goes back to a plain number. Leave both empty
+to print the number with no indicator.
+
+## Kerbal Space Program
+
+An action of the Kerbal Space Program profile has one more source,
+**Telemachus**, the mod the built-in profile already talks to. There is no
+link to set up and no path to write: the browse button lists the mod's
+entries by name, grouped and with their current value, and
+**Update list from the game** adds everything the mod offers beyond K2's own selection.
+Flight, landing and heat entries need a powered Telemachus antenna on the
+craft.
+
+## Limits worth knowing
+
+- A path published by a link can contain a name from your own game session
+  (a player name, for instance). If that name changes, a reading saved on it
+  stops resolving and has to be pointed again.
+- A capture reading is a picture, not a number: it can be shown, but nothing
+  can be compared against it.

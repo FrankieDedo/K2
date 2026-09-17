@@ -85,9 +85,14 @@ if errorlevel 1 (
     exit /b 0
 )
 REM Direct force kill + retry with wait (up to 5 attempts)
+REM NO /T. That flag kills the process TREE, and K2 launches other programs as
+REM children - Steam, above all, which drags the game running under it down too.
+REM Killing K2 twice in one session that way cost a live game session (2026-09-14,
+REM and it had already happened once before). What this needs is only to release
+REM the file locks on bin, which is K2's own process and nothing below it.
 set "_KP_TRIES=0"
 :kp_loop
-taskkill /F /IM "%PROC%" /T >nul 2>&1
+taskkill /F /IM "%PROC%" >nul 2>&1
 timeout /t 1 /nobreak >nul 2>&1
 tasklist /FI "IMAGENAME eq %PROC%" 2>nul | find /I "%PROC%" >nul
 if errorlevel 1 (

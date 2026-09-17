@@ -1,4 +1,4 @@
-// MainWindow.MediaDock.cs — partial: the Media Dock's live data feed.
+﻿// MainWindow.MediaDock.cs — partial: the Media Dock's live data feed.
 //
 // The dock's own pages (Volume, PC Info: CPU/GPU/HDD/Internet/RAM, APM) hold no
 // data of their own — the host has to push a number into them, and only into the
@@ -109,7 +109,7 @@ public partial class MainWindow
             if (info.byMMDockMenuIndex != DockPageVolume) return;
 
             _dockFeedActiveSince = DateTime.UtcNow;   // a real volume change is dock activity
-            int vol = SystemMonitor.VolumePercent();
+            int vol = SystemMonitor.VolumePercentFresh();
             if (vol == _dockLastVolumePushed) return;
             _everest.SetVolume(vol);
             _dockLastVolumePushed = vol;
@@ -142,6 +142,19 @@ public partial class MainWindow
             _dockPageSince = DateTime.UtcNow;
             _dockFeedActiveSince = DateTime.UtcNow;
         }
+
+        // A volume delta is dock activity even when Core Audio never told us about it.
+        // Without this the back-off below is a trap: once it engages, the ONLY thing that
+        // used to revive the feed on the Volume page was the VolumeChanged event — which
+        // is bound to the endpoint that was default at startup and dies silently when the
+        // user switches audio output (see SystemMonitor.StartVolumeNotifications). The
+        // dock's Volume page then stayed frozen on a stale number until K2 restarted, and
+        // that is the "volume sync between dial and PC gets lost" report. Base Camp has no
+        // back-off at all here: PcInfo_timer re-samples and pushes every second, page 65
+        // or not idle. Sampling fresh matters too — the 700 ms metric cache would hand
+        // back the level the user has already turned past.
+        if (page == DockPageVolume && SystemMonitor.VolumePercentFresh() != _dockLastVolumePushed)
+            _dockFeedActiveSince = DateTime.UtcNow;
 
         if (!DockShouldStopFeeding(info))
             FeedDockPage(page);
@@ -204,7 +217,7 @@ public partial class MainWindow
             case DockPageRam:    _everest.SetPCInfo(PcInfoRam,  SystemMonitor.RamPercent());        break;
             case DockPageApm:    _everest.SetPCInfo(PcInfoApm,  ApmLastMinute());                   break;
             case DockPageVolume:
-                int vol = SystemMonitor.VolumePercent();
+                int vol = SystemMonitor.VolumePercentFresh();
                 _everest.SetVolume(vol);
                 _dockLastVolumePushed = vol;
                 break;
@@ -300,6 +313,11 @@ public partial class MainWindow
             SldEvBrightness.Value = bright;
         }
         finally { _evRgbSuppress = prev; }
+        // Selecting the effect restored its speed into SldEvSpeed, whose handler only
+        // ARMS a 200 ms debounce — that tick fired after the suppression above was over
+        // and wrote the effect back to the keyboard (log 2026-09-11 00:31:19: sync ->
+        // "apply eff=Static" 207 ms later). The device already has this state.
+        _evSpeedApplyTimer?.Stop();
         // Suppression also blocks the save inside ApplyCurrentEffect, so persist here:
         // the device's state is now K2's state and must survive a restart.
         SaveEverestRgbToStore();

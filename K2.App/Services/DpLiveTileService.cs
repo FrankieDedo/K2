@@ -42,7 +42,7 @@ namespace K2.App.Services;
 /// page goes through a repaint, and a repaint calls <see cref="Sync"/>.
 /// </para>
 /// </summary>
-internal static class DpLiveTileService
+internal static partial class DpLiveTileService
 {
     /// <summary>One live key: which button, what it shows, and the key's own icon style (so the
     /// tile is drawn with the colors/font/"with text" choice made for that key —
@@ -67,7 +67,7 @@ internal static class DpLiveTileService
     /// <summary>True for the action types this service paints.</summary>
     public static bool IsLiveType(string? actionType) =>
         actionType is "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus"
-                   or "dp_screen";
+                   or KspTelemachus.ActionType or "dp_screen" or "dp_custom";
 
     /// <summary>Registers (or refreshes, or stops) the live keys of one device from the page rows
     /// being painted — called from every repaint path, so the live set always matches the page
@@ -176,9 +176,11 @@ internal static class DpLiveTileService
         return ZcSkipsRotation(key);
     }
 
-    /// <summary>Handles a press on a live key. Only the speed-test keys DO anything (they start a
-    /// measurement); a clock or monitor key is a readout and deliberately ignores the press
-    /// rather than running some unrelated action. Returns true when the press was consumed.</summary>
+    /// <summary>Handles a press on a live key. Most of them DO something — a speed-test key starts a
+    /// measurement, an Elite or Zero Company tile talks to the game, a studio tile sends the
+    /// keystroke the user gave it; a clock or monitor key is a readout and deliberately ignores the
+    /// press rather than running some unrelated action. Returns true when the press was
+    /// consumed.</summary>
     public static bool HandlePress(int deviceId, int buttonIndex, Action<string> log)
     {
         LiveKey key;
@@ -192,6 +194,8 @@ internal static class DpLiveTileService
 
         if (key.Type == "dp_speedtest") SpeedTestService.Start(log);
         if (key.Type == "dp_edstatus") EdSendToggle(key.Value, log);
+        if (key.Type == CustomActionType.Tag) CustomSendKeys(key.Value, log);
+        if (key.Type == KspTelemachus.ActionType) KspPress(key.Value, log);
         if (key.Type == "dp_zcstatus")
         {
             string zcValue = ZcState(key.Value);
@@ -411,9 +415,14 @@ internal static class DpLiveTileService
                           // re-uploads it.
                           + (ParseEdValue(key.Value).Blink ? ":b" + (BlinkOnPhase(now) ? 1 : 0) : ""),
         "dp_zcstatus"  => "z:" + ZcStamp(key.Value),
+        KspTelemachus.ActionType => "k:" + KspStamp(key.Value),
         // The probe's own reading, rounded exactly as the tile draws it: a health bar that
         // wobbles by a fraction of a percent must not cost an upload a second.
         "dp_screen"    => "p:" + ScreenValue(key.Value).Text,
+        // Same idea for a custom tile, plus the ICON: a multi-state action changes picture
+        // without its text necessarily changing, and a stamp built on the text alone would
+        // leave the pad showing the previous state's icon.
+        "dp_custom"    => "u:" + CustomStamp(key.Value),
         _              => "",
     } + "|" + Caption(key) + "|bg:" + (EffectiveBg(key.Spec, defaultBg) ?? "");
 
@@ -477,8 +486,12 @@ internal static class DpLiveTileService
                 }
                 case "dp_zcstatus":
                     return RenderZcTile(key.Value, caption, DpHidNative.IconSize, path);
+                case KspTelemachus.ActionType:
+                    return RenderKspTile(key.Value, caption, DpHidNative.IconSize, path);
                 case "dp_screen":
                     return RenderScreenTile(key.Value, caption, DpHidNative.IconSize, path);
+                case "dp_custom":
+                    return CustomActionTile.Render(key.Value, caption, DpHidNative.IconSize, path);
                 default:
                     return false;
             }
@@ -1009,6 +1022,26 @@ internal static class DpLiveTileService
     internal static (string State, string? Keys, ActionTypeHelper.EdTileColor Color, bool Blink) ParseEdValue(string? value) =>
         ActionTypeHelper.SplitEdStatusValue(value);
 
+    /// <summary>Sends the keystroke a game-studio tile carries (<see cref="CustomGameAction.Keys"/>),
+    /// if it carries one. A studio tile is a READING first — most send nothing, and that is not a
+    /// failure worth logging on every press.
+    ///
+    /// <para>Same SendInput-first path as every other shortcut in K2 (see
+    /// <see cref="EdSendToggle"/>): a game reading scan codes must see an ordinary keystroke.</para></summary>
+    private static void CustomSendKeys(string value, Action<string> log)
+    {
+        string keys = CustomActionType.KeysOf(value);
+        if (keys.Length == 0) return;
+
+        if (HotkeySender.TrySend(keys, out _))
+            log($"[STUDIO] btn press -> keys \"{keys}\" (SendInput)");
+        else
+        {
+            System.Windows.Forms.SendKeys.SendWait(SendKeysTranslator.Translate(keys));
+            log($"[STUDIO] btn press -> keys \"{keys}\" (sendkeys)");
+        }
+    }
+
     private static void EdSendToggle(string value, Action<string> log)
     {
         var (state, overrideKeys, _, _) = ParseEdValue(value);
@@ -1176,6 +1209,10 @@ internal static class DpLiveTileService
             // The name the user gave the probe, captured in the value when the key was assigned
             // (so a deleted probe still leaves a captioned key rather than a blank one).
             "dp_screen" => ActionTypeHelper.ParseScreenValue(value)?.Label ?? "",
+            // The action's CURRENT name, falling back to the one captured in the value — so a
+            // key keeps a caption even after the action behind it is deleted.
+            "dp_custom" => CustomActionTile.Caption(value),
+            KspTelemachus.ActionType => KspCaption(value),
             // A "Choose sensor…" pick: its captured name, left for the renderer's shrink-to-fit
             // (the user can shorten it in "Edit icon").
             "dp_sysmon" => ActionTypeHelper.ParseSensorValue(value) is { } sensor
@@ -1303,8 +1340,26 @@ internal static class DpLiveTileService
         "dp_sysmon"    => SysMonValue(value ?? ""),
         "dp_speedtest" => SpeedTestValue(value ?? ""),
         "dp_screen"    => ScreenValue(value ?? ""),
+        "dp_custom"    => CustomActionTile.Value(value ?? ""),
         _              => ("", null),
     };
+
+    /// <summary>Change stamp of a custom tile: the reading AND the picture it is drawn with.
+    /// See the "dp_custom" arm of <see cref="StampOf"/> for why the icon has to be in it.</summary>
+    private static string CustomStamp(string? value)
+    {
+        var action = CustomGameStore.ActionById(CustomActionType.Parse(value)?.Id);
+        if (action is null) return "-";
+
+        // Every reading the tile carries, in order. A tile can now show two of them, and a stamp
+        // built on one would leave the pad showing yesterday's number for the other.
+        return string.Join('|', action.Readings.Select(r =>
+        {
+            var read = CustomActionTile.Read(r);
+            return $"{read.Text}:{(read.Fraction is { } f ? (int)(f * 1000) : -1)}:" +
+                   $"{(read.On ? 1 : 0)}:{read.IconPath}:{read.Stamp}";
+        }));
+    }
 
     // ─────────────────── User-defined screen probes (dp_screen) ───────────────────
 

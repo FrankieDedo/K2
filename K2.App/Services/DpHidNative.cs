@@ -162,6 +162,12 @@ internal static class DpHidNative
     }
 
     /// <summary>
+    /// How long to wait for a cancelled transfer to be reaped before giving up on it and
+    /// abandoning its buffer (see <see cref="AbandonedHidIo"/>).
+    /// </summary>
+    private const int CancelReapTimeoutMs = 2000;
+
+    /// <summary>
     /// Overlapped Read/WriteFile with a hard timeout. Returns false on timeout or error;
     /// a transfer that completes while being cancelled is still treated as success.
     /// The buffer is pinned for the whole operation (the kernel writes into it after the
@@ -171,10 +177,13 @@ internal static class DpHidNative
                                   int timeoutMs, out int done)
     {
         done = 0;
-        using var evt = new ManualResetEvent(false);
+        var evt = new ManualResetEvent(false);
         IntPtr ovl = Marshal.AllocHGlobal(Marshal.SizeOf<NativeOverlapped>());
         var pin = System.Runtime.InteropServices.GCHandle.Alloc(buf,
             System.Runtime.InteropServices.GCHandleType.Pinned);
+        // Set when the kernel still owns buf/ovl on the way out: freeing them then would
+        // corrupt the managed heap, so they are leaked instead — see AbandonedHidIo.
+        bool abandoned = false;
         try
         {
             var no = new NativeOverlapped { EventHandle = evt.SafeWaitHandle.DangerousGetHandle() };
@@ -189,7 +198,13 @@ internal static class DpHidNative
                 if (!evt.WaitOne(timeoutMs))
                 {
                     CancelIoEx(h, ovl);
-                    evt.WaitOne(2000);   // wait for the cancellation (or late completion) to be reaped
+                    // CancelIoEx is asynchronous: the request is only really gone once the
+                    // event signals. If it never does we must NOT unpin/free below.
+                    if (!evt.WaitOne(CancelReapTimeoutMs))
+                    {
+                        abandoned = true;
+                        return false;
+                    }
                     // If the transfer actually completed in the race window, keep the data.
                     return GetOverlappedResult(h, ovl, out done, false) && done > 0;
                 }
@@ -198,8 +213,16 @@ internal static class DpHidNative
         }
         finally
         {
-            pin.Free();
-            Marshal.FreeHGlobal(ovl);
+            if (abandoned)
+            {
+                AbandonedHidIo.Keep($"DpNative.{(write ? "write" : "read")}", pin, ovl, evt);
+            }
+            else
+            {
+                pin.Free();
+                Marshal.FreeHGlobal(ovl);
+                evt.Dispose();
+            }
         }
     }
 

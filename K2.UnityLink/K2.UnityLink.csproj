@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- BepInEx 5 plugin (Mono backend only — see UnityLinkPlugin.cs's class comment for why IL2CPP
+       is out of scope). Targets net472, the framework BepInEx 5/Unity's Mono runtime actually
+       loads; NOT part of K2.sln/K2.DisplayPad.sln or build-check.bat, since it ships INTO other
+       games, not into K2 itself — build it on its own with `dotnet build` from this folder.
+       UnityEngine.Modules gives reference assemblies to compile against without owning a Unity
+       install; BepInEx.Core gives BaseUnityPlugin/BepInPlugin/ConfigFile. Both are reference-only
+       at compile time (CopyLocalLockFileAssemblies=false): the real DLLs already exist inside
+       whatever game this loads into, and shipping mismatched copies would be worse than shipping
+       none. -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>K2.UnityLink</AssemblyName>
+    <RootNamespace>K2.UnityLink</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Core" Version="5.4.21" />
+    <PackageReference Include="BepInEx.PluginInfoProps" Version="2.1.0" />
+    <!-- Only 2021.3.33 is published, but these reference assemblies only need to describe stable
+         Unity API (GameObject/Transform/MonoBehaviour/SceneManager/Vector3...) that hasn't changed
+         across the Mono-era Unity versions this mod targets — the actual DLLs used at runtime are
+         always whatever the target game ships, never these. -->
+    <PackageReference Include="UnityEngine.Modules" Version="2021.3.33" />
+  </ItemGroup>
+
+</Project>

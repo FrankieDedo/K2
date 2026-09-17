@@ -23,18 +23,32 @@ public static class UpdateInstaller
     /// known size from the GitHub API when it doesn't).</summary>
     public static async Task DownloadAsync(UpdateAsset asset, string destPath, IProgress<double>? progress, CancellationToken ct = default)
     {
+        // file:// = the Settings > Debug local package (UpdateChecker.CheckLocalZipAsync):
+        // same copy loop and progress reporting, just no HTTP.
+        if (Uri.TryCreate(asset.Url, UriKind.Absolute, out var uri) && uri.IsFile)
+        {
+            await using var src = new FileStream(uri.LocalPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            await CopyWithProgressAsync(src, destPath, src.Length, progress, ct).ConfigureAwait(false);
+            return;
+        }
+
         using var resp = await _http.GetAsync(asset.Url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
         resp.EnsureSuccessStatusCode();
 
         long total = resp.Content.Headers.ContentLength ?? asset.Size;
 
         await using var httpStream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        await CopyWithProgressAsync(httpStream, destPath, total, progress, ct).ConfigureAwait(false);
+    }
+
+    private static async Task CopyWithProgressAsync(Stream source, string destPath, long total, IProgress<double>? progress, CancellationToken ct)
+    {
         await using var fileStream = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None);
 
         var buffer = new byte[81920];
         long readSoFar = 0;
         int read;
-        while ((read = await httpStream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+        while ((read = await source.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
         {
             await fileStream.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
             readSoFar += read;

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -118,6 +118,18 @@ internal static class NativeDependencyResolver
     /// <summary>True if the DLL is reachable at at least one candidate path.</summary>
     public static bool IsResolvable(string libraryName) =>
         CandidatePaths(libraryName).Any(File.Exists);
+
+    /// <summary>
+    /// True if <paramref name="dll"/> would be loaded from <paramref name="folder"/> (or
+    /// from next to K2.App.exe, which always wins over it — see
+    /// <see cref="CandidatePaths"/>). Used by the Settings &gt; "Base Camp DLL folder"
+    /// status line, which must report the folder the user actually picked: plain
+    /// <see cref="IsResolvable"/> also counts the auto-detected Base Camp install and
+    /// the env-var override, so it kept saying "found" for a folder holding no DLL at all.
+    /// </summary>
+    public static bool IsResolvableIn(string dll, string? folder) =>
+        File.Exists(Path.Combine(AppContext.BaseDirectory, dll)) ||
+        (!string.IsNullOrWhiteSpace(folder) && File.Exists(Path.Combine(folder.Trim(), dll)));
 
     /// <summary>
     /// Paths to search for <paramref name="dll"/>, in priority order.

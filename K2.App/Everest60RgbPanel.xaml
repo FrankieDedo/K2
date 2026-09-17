@@ -1,4 +1,4 @@
-<UserControl x:Class="K2.App.Everest60RgbPanel"
+﻿<UserControl x:Class="K2.App.Everest60RgbPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core">
@@ -55,7 +55,7 @@
                       Click="CkEv60AutoOffEnable_Click" VerticalAlignment="Center" Margin="0,0,14,0"/>
                     <TextBlock Text="{loc:Get backlight_auto_off_seconds}" Margin="0,0,6,0" VerticalAlignment="Center"/>
                     <TextBox x:Name="TxtEv60AutoOffSeconds" Width="70" TextAlignment="Center"
-                     LostFocus="TxtEv60AutoOffSeconds_LostFocus" VerticalAlignment="Center" Height="25" Padding="8,2,8,0" Text="60"/>
+                     LostFocus="TxtEv60AutoOffSeconds_LostFocus" VerticalAlignment="Center" Height="25" Text="60"/>
                     <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
                 </WrapPanel>
                 <!-- Normal-effect controls (Row 2 direction + Row 3 color mode) vs.

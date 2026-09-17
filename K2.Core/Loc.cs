@@ -58,9 +58,30 @@ public static class Loc
     public static string Get(string key, params object[] args)
     {
         EnsureInit();
+        // A key that starts with "!" is not a key at all: it is text the USER wrote (a custom
+        // action's name, the family it sits in — see K2.App's game studio), passed through the
+        // same call so every picker/breadcrumb can keep saying Loc.Get without having to know
+        // whether the label it is about to draw came from Strings.xml or from the store.
+        if (key.Length > 1 && key[0] == '!') return key[1..];
         if (!_strings.TryGetValue(key, out var value))
             return $"[{key}]";
         return args.Length > 0 ? string.Format(value, args) : value;
+    }
+
+    /// <summary>
+    /// Folds an external game-profile module's own strings into the table, so a profile shipped
+    /// outside K2 can still caption its tiles with <c>{loc:Get key}</c> like any other.
+    ///
+    /// <para>A key K2 already has is NEVER overwritten: a module contributes its own vocabulary,
+    /// it does not get to reword the app around it. Which also means a module can ship a key that
+    /// later lands in Strings.xml for real without the two fighting.</para>
+    /// </summary>
+    public static void AddStrings(IReadOnlyDictionary<string, string>? strings)
+    {
+        if (strings is null) return;
+        EnsureInit();
+        foreach (var (key, value) in strings)
+            _strings.TryAdd(key, value);
     }
 
     /// <summary>

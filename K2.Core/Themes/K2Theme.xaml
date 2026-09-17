@@ -129,6 +129,38 @@
         </Setter>
     </Style>
 
+    <!-- ===== Delete (trash can) icon =====
+         Replaces Segoe MDL2's E74D everywhere a button deletes something. The
+         PNG is an alpha silhouette, so it is used as an OPACITY MASK over a
+         Rectangle filled with the button's own Foreground: one asset serves
+         every button, follows hover/disabled colouring, and needs no per-theme
+         variant. Stretch=Uniform keeps the can's proportions (it is taller than
+         it is wide) inside whatever square box the caller gives it.
+
+         DPI: the source is ~724x1020, far more than any button needs, so it is
+         decoded once at 64 px tall — enough for a ~16 DIP icon at 400 % scaling,
+         instead of holding a 3 MB bitmap resident — and every use asks for
+         HighQuality (Fant) resampling, which is what keeps the edges clean when
+         that 64 px is scaled down to the 12-14 DIP a button actually draws. -->
+    <ImageBrush x:Key="K2DeleteIconBrush" Stretch="Uniform">
+        <ImageBrush.ImageSource>
+            <BitmapImage UriSource="pack://application:,,,/K2.Core;component/Assets/delete.png"
+                         DecodePixelHeight="64"/>
+        </ImageBrush.ImageSource>
+    </ImageBrush>
+
+    <!-- The Rectangle that paints the icon above. Fill is deliberately NOT set
+         here: inside a ControlTemplate it wants a TemplateBinding to Foreground,
+         outside one a RelativeSource binding, so each use supplies its own. -->
+    <Style x:Key="K2DeleteIcon" TargetType="Rectangle">
+        <Setter Property="Width" Value="13"/>
+        <Setter Property="Height" Value="13"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="OpacityMask" Value="{StaticResource K2DeleteIconBrush}"/>
+        <Setter Property="RenderOptions.BitmapScalingMode" Value="HighQuality"/>
+    </Style>
+
     <!-- ===== Icon button (Tag = Segoe MDL2 Assets glyph) =====
          Allows `<Button Style="{StaticResource K2IconButton}"
                           Tag="&#xE72C;" Content="Refresh"/>`.
@@ -140,8 +172,8 @@
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource K2BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Height" Value="25"/>
-        <Setter Property="Padding" Value="12,0"/>
+        <Setter Property="MinHeight" Value="25"/>
+        <Setter Property="Padding" Value="12,4"/>
         <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
@@ -156,13 +188,23 @@
                                     HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                     VerticalAlignment="Center"
                                     Margin="{TemplateBinding Padding}">
-                            <TextBlock Text="{TemplateBinding Tag}"
+                            <TextBlock x:Name="glyph" Text="{TemplateBinding Tag}"
                                        FontFamily="Segoe MDL2 Assets" FontSize="12"
                                        VerticalAlignment="Center" Margin="0,0,7,0"/>
+                            <!-- Swapped in for the E74D glyph by the trigger below,
+                                 so every existing Tag="&#xE74D;" button picks up the
+                                 drawn trash can without touching its markup. -->
+                            <Rectangle x:Name="trash" Style="{StaticResource K2DeleteIcon}"
+                                       Fill="{TemplateBinding Foreground}"
+                                       Margin="0,0,7,0" Visibility="Collapsed"/>
                             <ContentPresenter VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="Tag" Value="&#xE74D;">
+                            <Setter TargetName="glyph" Property="Visibility" Value="Collapsed"/>
+                            <Setter TargetName="trash" Property="Visibility" Value="Visible"/>
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="bd" Property="Background" Value="{StaticResource K2HoverBrush}"/>
                             <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource K2AccentBrush}"/>
@@ -182,8 +224,8 @@
     <Style x:Key="K2IconAccentButton" TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource K2AccentBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource K2AccentTextBrush}"/>
-        <Setter Property="Height" Value="25"/>
-        <Setter Property="Padding" Value="14,0"/>
+        <Setter Property="MinHeight" Value="25"/>
+        <Setter Property="Padding" Value="14,4"/>
         <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Cursor" Value="Hand"/>
@@ -612,13 +654,18 @@
         </Setter>
     </Style>
 
-    <!-- ===== TextBox ===== -->
+    <!-- ===== TextBox =====
+         RULE: every text entry in K2 looks the same, and its text starts CLOSE to the
+         border — 4,0. Do not set Padding on an individual TextBox/PasswordBox (or on a
+         keyed style based on these): a field with an inset of its own is a field that no
+         longer lines up with the one under it. Height and vertical alignment are still
+         the instance's business. -->
     <Style TargetType="TextBox">
         <Setter Property="Background" Value="{StaticResource K2SurfaceAltBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource K2BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Padding" Value="8,0"/>
+        <Setter Property="Padding" Value="4,0"/>
         <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="CaretBrush" Value="{DynamicResource K2AccentBrush}"/>
         <Setter Property="SelectionBrush" Value="{DynamicResource K2AccentBrush}"/>
@@ -650,14 +697,14 @@
     <!-- ===== PasswordBox =====
          Mirrors the TextBox style above so client-secret / password fields in
          the service settings popups match the plain text fields next to them
-         (same dark surface, 7px radius, 8,0 padding). Without this, PasswordBox
+         (same dark surface, 7px radius, 4,0 padding). Without this, PasswordBox
          falls back to the OS default (white bg, wide left inset). -->
     <Style TargetType="PasswordBox">
         <Setter Property="Background" Value="{StaticResource K2SurfaceAltBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource K2BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Padding" Value="8,0"/>
+        <Setter Property="Padding" Value="4,0"/>
         <Setter Property="FontSize" Value="{DynamicResource K2AppFontSize}"/>
         <Setter Property="CaretBrush" Value="{DynamicResource K2AccentBrush}"/>
         <Setter Property="SelectionBrush" Value="{DynamicResource K2AccentBrush}"/>

@@ -38,7 +38,7 @@ public partial class GameProfileConfigDialog : Window
     /// <summary>Default for the return timer, matching the Discord voice page's own default.</summary>
     public const int DefaultReturnSeconds = 10;
 
-    private readonly List<List<GameProfileCatalog.Tile>> _pages;
+    private readonly List<List<GameProfileTile>> _pages;
     private readonly string _profileId;
     private readonly ButtonActionDialog.GamePickerProfile _pickerProfile;
     private int _pageIndex;
@@ -59,7 +59,7 @@ public partial class GameProfileConfigDialog : Window
     public string? ResultExePath { get; private set; }
 
     /// <summary>The edited pages, only meaningful once the dialog returned true.</summary>
-    public IReadOnlyList<IReadOnlyList<GameProfileCatalog.Tile>> ResultPages => _pages;
+    public IReadOnlyList<IReadOnlyList<GameProfileTile>> ResultPages => _pages;
 
     public GameProfileConfigDialog(string profileId,
                                    string profileName,
@@ -69,7 +69,7 @@ public partial class GameProfileConfigDialog : Window
                                    bool returnEnabled,
                                    int returnSeconds,
                                    bool foregroundOnly,
-                                   IReadOnlyList<IReadOnlyList<GameProfileCatalog.Tile>> pages,
+                                   IReadOnlyList<IReadOnlyList<GameProfileTile>> pages,
                                    string? gameIconPath = null,
                                    string? exePathOverride = null,
                                    string? autoResolvedExe = null,
@@ -99,7 +99,7 @@ public partial class GameProfileConfigDialog : Window
 
         // Working copy: the dialog must be cancellable without having mutated the catalogue.
         _pages = pages.Select(p => p.ToList()).ToList();
-        if (_pages.Count == 0) _pages.Add(new List<GameProfileCatalog.Tile>());
+        if (_pages.Count == 0) _pages.Add(new List<GameProfileTile>());
 
         // One pad => no choice to present. See the class remarks.
         if (devices.Count > 1)
@@ -124,6 +124,16 @@ public partial class GameProfileConfigDialog : Window
     /// and same window as the Discord / Spotify config popups.</summary>
     private void BtnGuide_Click(object sender, RoutedEventArgs e) =>
         new GuideWindow("gameprofile:" + _profileId, TxtTitle.Text) { Owner = this }.ShowDialog();
+
+    /// <summary>Set when the user asked to continue in the game studio: the dialog closes like
+    /// Cancel (nothing here is saved) and the caller opens the studio on this profile.</summary>
+    public bool EditInStudioRequested { get; private set; }
+
+    private void BtnEditInStudio_Click(object sender, RoutedEventArgs e)
+    {
+        EditInStudioRequested = true;
+        DialogResult = false;
+    }
 
     // ─────────────────────────── Activation mode ───────────────────────────
 
@@ -151,8 +161,18 @@ public partial class GameProfileConfigDialog : Window
     private void UpdateExeAutoHint()
     {
         bool overridden = !string.IsNullOrWhiteSpace(TxtExePath.Text);
-        TxtExeAuto.Visibility = overridden ? Visibility.Collapsed : Visibility.Visible;
-        if (overridden) return;
+        // A profile built in the studio is never auto-detected: with the box empty it just waits
+        // for its own process name, so that is all the hint says (nothing at all without one).
+        bool custom = CustomGameProfile.IsCustomId(_profileId);
+        TxtExeAuto.Visibility = overridden || (custom && _autoExeName.Length == 0)
+            ? Visibility.Collapsed : Visibility.Visible;
+        if (TxtExeAuto.Visibility != Visibility.Visible) return;
+
+        if (custom)
+        {
+            TxtExeAuto.Text = string.Format(Loc.Get("game_profile_exe_wait_fmt"), _autoExeName);
+            return;
+        }
 
         TxtExeAuto.Text = _autoResolvedExe is { Length: > 0 }
             ? string.Format(Loc.Get("game_profile_exe_auto_fmt"), _autoResolvedExe)
@@ -182,8 +202,14 @@ public partial class GameProfileConfigDialog : Window
         TxtExePath.Text = dlg.FileName;
     }
 
-    /// <summary>Back to "let K2 find it" — an empty box IS the auto mode, there is no third state.</summary>
-    private void BtnExeClear_Click(object sender, RoutedEventArgs e) => TxtExePath.Text = "";
+    /// <summary>Pins the profile to an app that is running right now — the same picker the normal
+    /// profiles' settings use, so the user points at the game instead of hunting for its .exe.</summary>
+    private void BtnExeRunning_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new RunningProcessDialog { Owner = this };
+        if (dlg.ShowDialog() != true || string.IsNullOrEmpty(dlg.SelectedPath)) return;
+        TxtExePath.Text = dlg.SelectedPath;
+    }
 
     // Key geometry of the real device, mirrored from DpRebuildKeyGrid so the preview lines up
     // with the picture behind it. Kept as plain constants rather than shared: MainWindow's are
@@ -249,7 +275,7 @@ public partial class GameProfileConfigDialog : Window
     /// <summary>One key of the preview: the very picture the pad will show, drawn by the same
     /// default-icon renderer the hardware path uses, with the caption underneath as a fallback
     /// for an action that has no icon to generate (an unset key, say).</summary>
-    private Button BuildKeyButton(int index, GameProfileCatalog.Tile? tile)
+    private Button BuildKeyButton(int index, GameProfileTile? tile)
     {
         var content = new Grid();
 
@@ -347,20 +373,20 @@ public partial class GameProfileConfigDialog : Window
     // ── Drag & drop + clipboard, mirroring MainWindow.DisplayPad's key grid ──────────────
 
     private const string TileDragFormat = "K2.GameProfileTile";
-    private static readonly GameProfileCatalog.Tile BlankTile = new("", "", "", CaptionIsLocKey: false);
+    private static readonly GameProfileTile BlankTile = new("", "", "", CaptionIsLocKey: false);
 
     private Point _dragStart;
     private int _dragIndex = -1;
 
     /// <summary>The tile at that slot on the current page, or null when the slot is past the end
     /// (a page shorter than twelve) — the grid always draws twelve buttons regardless.</summary>
-    private GameProfileCatalog.Tile? TileAt(int index)
+    private GameProfileTile? TileAt(int index)
     {
         var page = _pages[_pageIndex];
         return index >= 0 && index < page.Count ? page[index] : null;
     }
 
-    private static bool IsMapped(GameProfileCatalog.Tile? t) => !string.IsNullOrEmpty(t?.ActionType);
+    private static bool IsMapped(GameProfileTile? t) => !string.IsNullOrEmpty(t?.ActionType);
 
     /// <summary>The label a freshly chosen action writes on its own tile — these keys carry no
     /// glyph, so the name IS the icon and it has to read like the shipped ones rather than like a
@@ -517,7 +543,7 @@ public partial class GameProfileConfigDialog : Window
             ? label!.Trim()
             : DefaultCaptionFor(ActionClipboard.ActionType, ActionClipboard.ActionValue);
 
-        page[index] = new GameProfileCatalog.Tile(
+        page[index] = new GameProfileTile(
             ActionClipboard.ActionType ?? "", ActionClipboard.ActionValue ?? "",
             caption, CaptionIsLocKey: false,
             FontSize: KeyIconSpec.FromJson(ActionClipboard.IconSpecJson)?.FontSize ?? 0);
@@ -544,7 +570,7 @@ public partial class GameProfileConfigDialog : Window
         if (sender is not Button { Tag: int index }) return;
 
         var page = _pages[_pageIndex];
-        while (page.Count <= index) page.Add(new GameProfileCatalog.Tile("", "", ""));
+        while (page.Count <= index) page.Add(new GameProfileTile("", "", ""));
         var current = page[index];
 
         // Seed the key dialog's own caption field with what the tile shows today, so its "Edit
@@ -582,7 +608,7 @@ public partial class GameProfileConfigDialog : Window
         // blank (dark, no lit frame), not carrying a "none" action that still reads as mapped.
         if (string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none")
         {
-            page[index] = new GameProfileCatalog.Tile("", "", "", CaptionIsLocKey: false);
+            page[index] = new GameProfileTile("", "", "", CaptionIsLocKey: false);
             ShowPage(_pageIndex);
             return;
         }

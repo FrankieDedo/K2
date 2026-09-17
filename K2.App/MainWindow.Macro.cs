@@ -9,7 +9,10 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Media;
 using K2.App.Models;
 using K2.App.Services;
 using K2.Core;
@@ -257,6 +260,11 @@ public partial class MainWindow
     {
         if (_macroRecorder is null) return;
         var captured = _macroRecorder.Stop();
+        // The recorder times each event against the previous one ("delay
+        // before"); everything from here on works in "delay after", where a
+        // keydown's delay is its hold time. Also drops the dead time between
+        // clicking Record and the first keystroke.
+        MacroInput.ShiftToDelayAfter(captured);
         var m = _recordingMacro ?? SelectedMacro;
         int at = _macroInsertAt;
         _macroInsertAt = -1;
@@ -547,6 +555,126 @@ public partial class MainWindow
         SaveCurrentMacro();
     }
 
+    // ─────────── Drag & drop reorder (INPUTS list, Base Camp-style) ───────────
+
+    private Point _macroDragStart;
+    private MacroInputRow? _macroDragRow;
+
+    /// <summary>Arms a possible drag. Wired to the row's grip handle only (the
+    /// ⠿ icon at the far left), not to the whole row: the row body holds a
+    /// delay box and five buttons, and a drag that could start anywhere on it
+    /// made those fiddly to hit.</summary>
+    private void MacroInputRow_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _macroDragRow = null;
+        if (_macroRecorder?.IsRecording == true) return;
+        if (sender is not FrameworkElement { DataContext: MacroInputRow row }) return;
+
+        _macroDragStart = e.GetPosition(null);
+        _macroDragRow = row;
+    }
+
+    private void MacroInputRow_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_macroDragRow is null || e.LeftButton != MouseButtonState.Pressed) return;
+        if (sender is not FrameworkElement grip) return;
+
+        var pos = e.GetPosition(null);
+        if (Math.Abs(pos.X - _macroDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(pos.Y - _macroDragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+
+        var row = _macroDragRow;
+        _macroDragRow = null;
+
+        // The row lifts off: a ghost copy follows the cursor and the original is
+        // dimmed in place, so the drag reads as physically moving the row rather
+        // than as a bare cursor change (all WPF gives on its own).
+        var container = FindAncestor<ListViewItem>(grip);
+        try
+        {
+            if (container is not null)
+            {
+                _macroDragAdorner = new MacroRowDragAdorner(
+                    LvMacroInputs, container, e.GetPosition(container));
+                AdornerLayer.GetAdornerLayer(LvMacroInputs)?.Add(_macroDragAdorner);
+                _macroDragAdorner.Update(e.GetPosition(LvMacroInputs), null);
+                container.Opacity = 0.35;
+            }
+            DragDrop.DoDragDrop(grip, row, DragDropEffects.Move);
+        }
+        finally
+        {
+            EndMacroRowDrag();
+            if (container is not null) container.Opacity = 1.0;
+        }
+    }
+
+    /// <summary>Ghost + insertion line shown while a row is being dragged;
+    /// null when no drag is in flight.</summary>
+    private MacroRowDragAdorner? _macroDragAdorner;
+
+    private void EndMacroRowDrag()
+    {
+        if (_macroDragAdorner is null) return;
+        AdornerLayer.GetAdornerLayer(LvMacroInputs)?.Remove(_macroDragAdorner);
+        _macroDragAdorner = null;
+    }
+
+    private void LvMacroInputs_DragOver(object sender, DragEventArgs e)
+    {
+        bool ours = e.Data.GetDataPresent(typeof(MacroInputRow));
+        e.Effects = ours ? DragDropEffects.Move : DragDropEffects.None;
+        e.Handled = true;
+        if (!ours || _macroDragAdorner is null) return;
+
+        // The drop always inserts BEFORE the row under the cursor (see
+        // LvMacroInputs_Drop), or at the very end when the cursor is past the
+        // last one — so the line goes on that row's top edge, or the last row's
+        // bottom edge.
+        var over = FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject);
+        double? insertY = null;
+        if (over is not null)
+            insertY = over.TranslatePoint(new Point(0, 0), LvMacroInputs).Y;
+        else if (LvMacroInputs.Items.Count > 0
+                 && LvMacroInputs.ItemContainerGenerator.ContainerFromIndex(LvMacroInputs.Items.Count - 1)
+                    is ListViewItem last)
+            insertY = last.TranslatePoint(new Point(0, last.RenderSize.Height), LvMacroInputs).Y;
+
+        _macroDragAdorner.Update(e.GetPosition(LvMacroInputs), insertY);
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? d) where T : DependencyObject
+    {
+        while (d is not null and not T) d = VisualTreeHelper.GetParent(d);
+        return d as T;
+    }
+
+    /// <summary>Drops the dragged row's underlying <see cref="MacroInput"/> at
+    /// the target row's position (dropping past the last row moves it to the
+    /// end).</summary>
+    private void LvMacroInputs_Drop(object sender, DragEventArgs e)
+    {
+        if (_macroRecorder?.IsRecording == true) return;
+        if (e.Data.GetData(typeof(MacroInputRow)) is not MacroInputRow source) return;
+        var m = SelectedMacro;
+        if (m is null || source.SourceIndex < 0 || source.SourceIndex >= m.Inputs.Count) return;
+
+        var targetRow = FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject)
+            ?.DataContext as MacroInputRow;
+
+        int to = targetRow is null ? m.Inputs.Count - 1 : targetRow.SourceIndex;
+        int from = source.SourceIndex;
+        if (to == from) return;
+
+        var item = m.Inputs[from];
+        m.Inputs.RemoveAt(from);
+        if (to > from) to--;
+        m.Inputs.Insert(Math.Clamp(to, 0, m.Inputs.Count), item);
+
+        RebuildInputRows();
+        SaveCurrentMacro();
+    }
+
     // ─────────── Insert a step above / below a row (Base Camp-style) ───────────
 
     /// <summary>The row "+" button just opens its context menu on a left click
@@ -686,7 +814,9 @@ public partial class MainWindow
         var m = SelectedMacro;
         if (_macroRecorder?.IsRecording == true)
         {
-            var live = _macroRecorder.Inputs;
+            // The recorder's own list is still in the raw "delay before"
+            // convention — show it the way the finished macro will read.
+            var live = MacroInput.ToDelayAfterCopy(_macroRecorder.Inputs);
             if (_macroInsertAt >= 0 && m is not null)
             {
                 // Existing inputs with the live capture spliced at the target

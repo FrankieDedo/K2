@@ -47,6 +47,13 @@ public static class DiscordVoiceRoom
     private static readonly object _gate = new();
     private static Participant[] _participants = Array.Empty<Participant>();
     private static readonly HashSet<string> _speaking = new();
+
+    /// <summary>Users this client is muting locally — see <see cref="IsLocallyMuted"/>.</summary>
+    private static readonly HashSet<string> _localMutes = new();
+
+    /// <summary>Membership of the roster the local mutes were last read for, so the one-RPC-call-
+    /// per-member sweep runs on a join/leave and not on every mute/volume/speaking refresh.</summary>
+    private static string? _localMuteRoster;
     private static string? _subscribedChannel;
     private static Task _worker = Task.CompletedTask;
 
@@ -107,6 +114,30 @@ public static class DiscordVoiceRoom
     public static bool IsSpeaking(string userId)
     {
         lock (_gate) return _speaking.Contains(userId);
+    }
+
+    /// <summary>True while the local client is silencing <paramref name="userId"/> for itself
+    /// only — Discord's per-user "Mute" (RPC <c>SET_USER_VOICE_SETTINGS</c>), which is also what
+    /// pressing somebody's circle on the voice page does.
+    ///
+    /// <para>Kept in a map here instead of being read off the roster because it is NOT part of a
+    /// voice state: it is a setting of YOUR client about them, so Discord neither reports it in
+    /// <c>GET_CHANNEL</c> nor pushes any event when it changes. Two feeds, which is as close to
+    /// live as the RPC surface allows: <see cref="NoteLocalMute"/> the moment K2 writes one, and
+    /// <see cref="SyncLocalMutes"/> once per roster change, which is the only way a mute set
+    /// inside the client is ever picked up.</para></summary>
+    public static bool IsLocallyMuted(string userId)
+    {
+        lock (_gate) return _localMutes.Contains(userId);
+    }
+
+    /// <summary>Records the per-user mute K2 has just written, so the participant tile takes the
+    /// badge straight away rather than at the next roster change (nothing else would tell it).</summary>
+    internal static void NoteLocalMute(string userId, bool muted)
+    {
+        lock (_gate)
+            if (muted ? !_localMutes.Add(userId) : !_localMutes.Remove(userId)) return;
+        Raise(Changed);
     }
 
     /// <summary>Channel / roster / mute-state change — re-render everything.</summary>
@@ -332,6 +363,16 @@ public static class DiscordVoiceRoom
         // below/above are worth a line.
         if (!unchanged) Raise(Changed);
 
+        // Per-user local mutes live outside the voice states and are never pushed, so the only
+        // moment worth asking Discord about them is when who is in the call changes.
+        string[] others = ordered.Where(p => !p.Self).Select(p => p.Id).ToArray();
+        string rosterIds = string.Join(",", others);
+        if (rosterIds != _localMuteRoster)
+        {
+            _localMuteRoster = rosterIds;
+            if (others.Length > 0) Post(ipc2 => SyncLocalMutes(ipc2, others));
+        }
+
         // A brand-new join often returns before Discord has added the local user's OWN voice
         // state to the channel: GET_CHANNEL then lists everyone but you, so the roster shows no
         // "me" tile until the next unrelated change (user report — "on the first join my face
@@ -349,6 +390,26 @@ public static class DiscordVoiceRoom
         {
             _selfWaitRetries = 0;
         }
+    }
+
+    /// <summary>Asks Discord for the per-user mute of everyone else in the call — the only way
+    /// to see one that was set inside the client, which sends no event for it. Runs on its own
+    /// worker pass (a round trip per member) and raises <see cref="Changed"/> once, only if it
+    /// actually found something the tiles don't already show.</summary>
+    private static void SyncLocalMutes(DiscordIpc ipc, string[] userIds)
+    {
+        bool changed = false;
+        foreach (string id in userIds)
+        {
+            // There is no GET_USER_VOICE_SETTINGS: a SET carrying only the user id changes
+            // nothing and returns that user's current per-user settings.
+            var data = ipc.Send("SET_USER_VOICE_SETTINGS", new { user_id = id }, Timeout, out var error);
+            if (error is not null || data is not JsonElement settings) continue;
+            bool muted = Flag(settings, "mute");
+            lock (_gate)
+                changed |= muted ? _localMutes.Add(id) : _localMutes.Remove(id);
+        }
+        if (changed) Raise(Changed);
     }
 
     /// <summary>Everything the voice page actually draws, as one comparable string: channel,
@@ -384,7 +445,9 @@ public static class DiscordVoiceRoom
         {
             _participants = Array.Empty<Participant>();
             _speaking.Clear();
+            _localMutes.Clear();
         }
+        _localMuteRoster = null;
         _subscribedChannel = null;
         _targetChannel = null;
         _lastSignature = null;

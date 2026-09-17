@@ -1190,6 +1190,57 @@ A terra, Emote, Cappuccio**.
 Nessuna. Per la sincronizzazione dei bind, basta avviare il gioco almeno
 una volta.
 
+@@@ gameprofile:kerbal_space_program
+# Kerbal Space Program — Telemachus
+
+## Cosa fanno i tasti
+
+- **Riga in alto**: Stadio, SAS, RCS, Carrello, Luci, Freni. Ogni tasto esegue
+  il comando nel gioco e si accende con lo stato reale del veicolo.
+- **Riga in basso**: Altitudine, Velocità verticale, Apoapside, Periapside,
+  Carburante liquido e Carica elettrica, aggiornati due volte al secondo.
+
+## Scegliere altre voci
+
+Clicca un tasto e apri **Kerbal Space Program** nel browser azioni: le voci
+sono raggruppate come nella documentazione di Telemachus — comandi di volo,
+manetta, modalità SAS, gruppi azione 1–10, dati di volo, orbita, manovra e
+Δv, risorse, bersaglio, stato missione, tempo e warp, carriera. La scegli per
+nome: K2 compone da solo la richiesta a Telemachus, non c'è nessun indirizzo
+o variabile da scrivere.
+
+Sotto quelle, le famiglie **Telemachus · …** elencano tutto il resto che la
+mod dichiara di saper leggere o fare (veicolo, orbita, bersaglio, temperature,
+MechJeb, ...), con i nomi inglesi della mod. K2 scarica l'elenco dal gioco la
+prima volta che Telemachus risponde e ne tiene una copia, quindi c'è anche a
+gioco chiuso.
+
+## Tile creati nello studio giochi
+
+Per un'azione di Kerbal Space Program la **Sorgente** della lettura può essere
+**Telemachus**: nessun collegamento da configurare. Il pulsante sfoglia accanto
+a **Valore** apre l'elenco delle voci di Telemachus, con la ricerca e quello
+che il gioco risponde adesso per ciascuna; **Aggiorna elenco dal gioco**
+riscarica l'elenco della mod. Le nuove azioni di questo profilo partono già su
+questa sorgente.
+
+## Come si comportano
+
+- I comandi passano dalla mod, non dalla tastiera: il gioco non deve essere in
+  primo piano e i tuoi tasti assegnati non contano.
+- Un tasto mostra "—" / resta spento quando il valore non è noto: gioco o mod
+  non avviati, nessun nodo di manovra, nessun bersaglio, una risorsa che il
+  veicolo non ha.
+
+## Configurazione nel gioco
+
+- Installa **Telemachus Reborn** (CKAN o SpaceDock). Risponde sulla porta
+  **8085** — lascia quella predefinita.
+- Comandi, gruppi azione, SAS, manetta, atterraggio e temperature funzionano
+  solo se il veicolo monta un'**antenna Telemachus alimentata**. Senza, quei
+  tasti restano sconosciuti e la mod ignora la pressione; orbita, dati di volo
+  e risorse continuano a funzionare.
+
 @@@ speedtest
 # Speed test — opzioni server
 
@@ -1236,3 +1287,264 @@ Esempi: `speed.hetzner.de/100MB.bin`, `proof.ovh.net`,
 Compila tu entrambi i campi URL con un endpoint qualsiasi che segua la
 regola `{bytes}` / `{mb}` qui sopra. Lascia vuoto l'URL di upload per
 saltare la fase di upload.
+
+@@@ gamestudio
+# Studio giochi
+
+Lo studio è il posto dove COSTRUISCI un profilo gioco e i tile che ci vanno,
+invece di limitarti a configurare uno di quelli di serie. Un profilo fatto
+qui, da quel momento in poi, si comporta come tutti gli altri: compare nella
+lista Profili gioco del pad, prende il pad quando il suo gioco parte, e i
+suoi tile sono offerti dal browser delle azioni.
+
+Dentro ci stanno due cose, e la lista a sinistra le tiene entrambe:
+
+- Un **profilo** è un gioco: un nome, il processo che lo avvia, i suoi
+  colori e le pagine di tasti che mette sul pad.
+- Un'**azione** è un tile: cosa misura, cosa disegna e i tasti che preme. Le
+  azioni stanno sotto il profilo a cui appartengono — apri un profilo e le
+  sue azioni compaiono sotto di lui, con **+ Nuova azione** in fondo.
+
+![La lista a sinistra: i tuoi profili, sotto quelli di K2, e le azioni del profilo aperto](gamestudio-nav.png)
+
+## Tre cose da sapere prima di cominciare
+
+- **Si salva tutto mentre lavori.** Non c'è nessun pulsante OK — una modifica
+  viene scritta nel momento in cui la fai, come in un editor di testo.
+  L'unica cosa che è davvero una decisione — cancellare un profilo,
+  un'azione o una lettura — te lo chiede prima.
+- **Ci sono anche i profili di serie di K2**, con nome, processo e id Steam
+  bloccati. Tutto il resto è tuo: i loro tasti, i loro colori, la loro
+  cornice, e le tue azioni, che puoi archiviare nelle categorie del gioco o
+  in altre che aggiungi tu.
+- **Ogni campo ha il suo pallino "?".** Passaci sopra e ti spiega quel campo;
+  su un elenco di scelte le descrive tutte. Questa guida spiega il lavoro; i
+  pallini spiegano i controlli.
+
+## Farne uno da zero
+
+- **Uno** — **+ Nuovo profilo** in fondo alla lista, poi un nome e il
+  processo del gioco. Il pulsante **In esecuzione** elenca quello che è
+  aperto adesso, così non devi andare a caccia dell'.exe.
+- **Due** — **+ Nuova azione** sotto di lui, e scegli un punto di partenza:
+  barra, numero, acceso/spento, cattura quadrata. K2 crea già la lettura e i
+  pezzi che la mostrano, poi ti chiede di disegnare il rettangolo da guardare.
+- **Tre** — torna sul profilo, **clicca un tasto** sul pad e dagli l'azione
+  che hai appena creato.
+- **Quattro** — avvia il gioco. Il profilo sale da solo, e il tile comincia a
+  seguire quello che misura. Quando chiudi lo studio, i pad si ridisegnano
+  subito con quello che hai cambiato.
+
+## Dove finisce tutto
+
+Profili, azioni e le immagini che usano stanno insieme ai dati di K2, non nel
+gioco. **Esporta** scrive un profilo — azioni, categorie e immagini comprese —
+in un unico file, e il pulsante in cima alla lista ne importa uno: è così che
+un profilo viaggia su un altro PC o verso qualcun altro. Col tasto destro su
+una riga della lista trovi gli stessi comandi dei pulsanti.
+
+@@@ gamestudio:profile
+# La vista del profilo
+
+Aprendo un profilo compare il pad stesso, coi tasti come saranno sul
+dispositivo. Tutto quello che sta sopra e sotto il pad riguarda solo questo
+profilo.
+
+![Un profilo: le sue pagine di tasti, e la barra del tasto che hai cliccato](gamestudio-profile.png)
+
+## Le sue impostazioni
+
+**Impostazioni profilo** apre il pannello che si riempie una volta e poi si
+lascia stare:
+
+![Impostazioni di un profilo di serie: nome e processo bloccati, le sue categorie](gamestudio-settings.png)
+
+- **Nome** e **Processo** — il processo è il grilletto del profilo: quando
+  quel programma parte, questa pagina prende il pad.
+- **Id app Steam** è facoltativo; serve solo a K2 per trovare il gioco e la
+  sua grafica.
+- **Colore d'accento** tinge la pagina: frecce, intestazione e ogni tile che
+  non ne ha uno suo.
+- **Stile predefinito dei tile** è il colore di partenza di ogni tile di
+  questo profilo. Un tile continua a seguirlo finché non ne sovrascrive uno
+  suo, quindi cambiarlo qui raggiunge tutti i tile che non hanno obiettato.
+- **Immagine di sfondo** è la cornice disegnata dietro i tile. Non è mai un
+  elemento: non si sposta, e tutto il resto viene disegnato sopra.
+- **Categorie** sono le schede del browser delle azioni in cui sono
+  raggruppate le azioni di questo profilo. **Generica** c'è sempre, e un
+  gioco di serie porta le sue — quelle hanno il lucchetto. Scrivi un nome e
+  **Aggiungi** per crearne una; quelle aggiunte da te si possono eliminare, e
+  le loro azioni tornano in Generica.
+
+## I suoi tasti
+
+- Una **pagina** è un pad pieno di tasti; aggiungine quante ne servono, e sul
+  pad si girano con le frecce come in qualsiasi profilo.
+- **Clicca un tasto** e la barra sotto il pad dice cosa sta mostrando. Da lì,
+  **Modifica azione** apre quel tile nello studio, **Cambia** mette un'altra
+  azione sul tasto, e il cestino lo svuota. Un doppio clic sul tasto equivale
+  a Cambia.
+- Un profilo di serie tiene i campi bloccati, ma i suoi tasti sono tuoi da
+  cambiare — e vengono scritti nello stesso posto che usa il popup Configura,
+  quindi i due non si contraddicono mai.
+
+@@@ gamestudio:action
+# Un'azione: i tre passi
+
+Un'azione è un tile, e appartiene al profilo sotto cui sta nella lista.
+L'editor fa le tre domande nell'ordine in cui vanno risposte, e ogni passo si
+ricorda se l'hai lasciato aperto.
+
+![Nome, categoria e tasti in alto; passo 2 aperto: il tile come verrà disegnato, e i pezzi di cui è fatto](gamestudio-look.png)
+
+## Sopra i passi
+
+- **Nome** è come si chiama il tile nella lista e nel browser delle azioni.
+- **Categoria** è la scheda del browser delle azioni in cui è archiviato —
+  le categorie del profilo, che si aggiungono dalle sue impostazioni.
+- **Tasti premuti** è quello che il tasto invia quando viene premuto. È
+  facoltativo e indipendente dalla lettura: un tile può mostrare e premere,
+  mostrare senza premere, o premere senza mostrare niente.
+
+## 1 — Cosa leggere
+
+Una **lettura** è una cosa che il tile sa misurare: vita, munizioni, una spia
+accesa o spenta. Un tile può portarne più d'una — vita E fame — e ogni pezzo
+che disegnerai dopo punta a una di loro.
+
+Per ogni lettura scegli il **tipo**:
+
+- **Valore** / **Numero a schermo** — un numero, stampato come testo; dai
+  a un numero una scala e riempie anche un indicatore.
+- **Intervallo di valori** — un valore su una scala piena, disegnato come barra
+  o come anello.
+- **Acceso / spento** — due stati, che usano le metà acceso e spento dello
+  stile.
+- **Più stati** — stati con un nome (Pistola, Fucile, Granata), ognuno col
+  suo rettangolo o valore e la sua immagine.
+- **Scritta a schermo** — una parola scritta nel rettangolo: l'arma, la
+  modalità o la zona attuale.
+- **Cattura quadrata** — non misura niente: copia il rettangolo sul tasto,
+  come un minuscolo screenshot dal vivo. Mostrala con un pezzo Immagine.
+
+## 2 — Come appare
+
+Il quadrato grande è il tile come lo disegnerà il pad. Intorno ci sono i
+pezzi:
+
+- Un tile è fatto di quanti **pezzi** vuoi — Immagine, Indicatore, Valore,
+  Etichetta — ognuno puntato a una lettura, con colore, carattere e posizione
+  propri. La lista È l'ordine di disegno: l'ultima riga sta davanti.
+- **Trascina i riquadri** sul tile per spostare un pezzo; la maniglia
+  nell'angolo lo ridimensiona. Viola è l'immagine, blu l'indicatore, arancio
+  il valore, verde l'etichetta. **Ripristina disposizione** li rimette tutti
+  a posto.
+- Per un ritocco fine, clicca un pezzo e usa le **frecce della tastiera**:
+  ogni pressione lo sposta di un pixel del tasto vero. Un pezzo agganciato
+  viene prima sganciato lì dove è disegnato, così non salta.
+- Un pezzo si aggancia a una delle nove posizioni, a meno che tu non tolga la
+  spunta a **Aggancia** sotto Avanzate, dove **Bordo** dice anche quanto un
+  pezzo agganciato viene tenuto lontano dal bordo.
+- Un pezzo **Valore** sceglie anche come stampare la sua lettura, in
+  **Mostra come**: il **Numero** stesso, la **Percentuale** sulla scala, oppure
+  **Valore/Max** (84/107). Gli ultimi due richiedono una scala — senza, viene
+  stampato il numero.
+
+## 3 — Colori
+
+Di default il tile segue lo stile del profilo. Spunta **Usa colori propri
+invece di quelli del profilo** e si tiene la sua coppia (acceso / spento) e
+la sua immagine di sfondo, che lo stile del profilo non raggiunge più.
+
+## Il resto della barra
+
+**Copia** mette il tile su un altro profilo, **Duplica** ne fa una seconda
+copia su questo — per una variante che cambia un colore o un rettangolo,
+senza rifare tutta la disposizione.
+
+@@@ gamestudio:sources
+# Da dove arriva una lettura
+
+Ogni lettura risponde a due domande separate: COSA è (il suo tipo) e DOVE
+viene presa. Il tipo non cambia con la sorgente — "un valore da 0 a 100" è la
+stessa lettura in entrambi i casi.
+
+![Una lettura da un mod link: il valore, e il massimo della scala letto anch'esso dal gioco](gamestudio-read.png)
+
+## Lo schermo
+
+Un'**area sullo schermo** è un rettangolo che K2 guarda, cattura dopo
+cattura. **Modifica** lo disegna su una cattura fresca del gioco, così vedi
+cosa stai inquadrando; il pulsante con la cartella riusa un rettangolo già
+fatto per un altro tile, che è quello che serve quando più tile leggono lo
+stesso angolo dell'HUD.
+
+- Una barra o una spia si leggono dai pixel stessi — niente da installare.
+- Un **numero** o una **parola** vanno riconosciuti, e serve il
+  riconoscimento testo di Windows per la tua lingua. Se manca, lo studio te
+  lo dice subito invece di leggere niente in silenzio.
+- Il gioco deve essere visibile perché i pixel esistano: una finestra
+  minimizzata o un rettangolo coperto da un'altra finestra legge quello che
+  c'è davvero sullo schermo.
+
+## Un collegamento al gioco
+
+Certi giochi pubblicano il proprio stato, e allora non c'è niente da
+misurare. Un **collegamento** è un indirizzo che risponde coi dati del gioco;
+la lettura sceglie un **valore** dentro quella risposta, scritto come
+percorso puntato (`player.health`, `squad[0].name`). Le frecce lì accanto
+richiedono subito i valori al gioco.
+
+- Un **collegamento nativo** è il server del gioco stesso — niente da
+  installare, ma resta muto finché il gioco non è avviato.
+- Un **collegamento di una mod** richiede una mod installata nel gioco.
+  Quando ce n'è una, lo studio offre **Scarica la mod** lì accanto: il
+  momento in cui il gioco non risponde è esattamente il momento in cui
+  serve.
+- Un collegamento viene interrogato solo mentre un tile lo sta leggendo
+  davvero, e si spegne da solo pochi secondi dopo l'ultima lettura.
+
+## Trovare il valore che cerchi
+
+La lente apre la risposta del collegamento ad albero, raggruppata come sono
+organizzati i dati del gioco. Finché K2 resta aperto si ricorda dove eri
+arrivato su ogni collegamento — la ricerca, le righe aperte — e riparte da lì.
+
+- **Cerca** lo chiede al gioco stesso, quindi trova un valore anche quando
+  ce ne sono troppi per elencarli.
+- Una ricerca mostra solo quello che corrisponde. Tasto destro su una riga e
+  **Mostra tutti gli elementi** carica sul posto tutto quello che le sta
+  accanto: trovare "health" di solito è il modo per scoprire che "food" e
+  "water" sono lì vicino.
+- **Esporta JSON** salva l'intera risposta in un file. Quando i nomi vengono
+  dal codice del gioco e a colpo d'occhio non dicono niente, dai quel file a
+  un assistente IA e chiedigli quali sono i valori che ti servono.
+
+## La scala
+
+Un numero diventa una barra o un anello quando ha una **scala**: **Da** è il
+valore letto come vuoto, **a** quello letto come pieno. Ogni estremo può
+essere un numero fisso oppure — per un collegamento — un valore preso dal
+gioco con la lente lì accanto, per un massimo che cambia, come la vita
+massima che cresce col livello. Mentre un estremo segue il gioco, la sua
+casella mostra il valore che sta leggendo in quel momento; la X accanto torna
+a un numero fisso. Lasciali vuoti entrambi per stampare il numero senza
+indicatore.
+
+## Kerbal Space Program
+
+Un'azione del profilo Kerbal Space Program ha una sorgente in più,
+**Telemachus**, la mod con cui parla già il profilo di serie. Non c'è nessun
+collegamento da impostare né percorso da scrivere: il pulsante sfoglia elenca
+le voci della mod per nome, raggruppate e col loro valore attuale, e
+**Aggiorna elenco dal gioco** aggiunge tutto quello che la mod offre oltre
+alla selezione di K2. Le voci di volo, atterraggio e calore richiedono
+un'antenna Telemachus alimentata sul veicolo.
+
+## Limiti da tenere a mente
+
+- Un percorso pubblicato da un collegamento può contenere un nome della tua
+  partita (per esempio il nome del giocatore). Se quel nome cambia, una
+  lettura salvata su quel percorso smette di risolversi e va ripuntata.
+- Una lettura di tipo cattura è un'immagine, non un numero: si può mostrare,
+  ma non ci si può confrontare niente.

@@ -95,6 +95,11 @@
        Used by K2.App's per-section buttons and by ButtonActionDialog. -->
   <ItemGroup>
     <Resource Include="Assets\guide.png" />
+    <!-- Trash can for every "delete" button, in K2.Core (not K2.App) because
+         ButtonActionDialog needs it too. Alpha silhouette like guide.png:
+         tinted at use via OpacityMask, so it follows each button's Foreground
+         instead of carrying a baked-in colour. -->
+    <Resource Include="Assets\delete.png" />
   </ItemGroup>
 
   <!-- Cropped UI screenshots shown inside the guides via "![caption](file.png)"

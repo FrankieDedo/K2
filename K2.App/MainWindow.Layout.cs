@@ -138,12 +138,20 @@ public partial class MainWindow
 
         bool dockConnected = dockPos != 0;
         bool numpadConnected = numpadPos != 0;
+        bool dockJustAttached = dockConnected && !_evDockConnected;
         if (dockConnected != _evDockConnected || numpadConnected != _evNumpadConnected)
         {
             _evDockConnected = dockConnected;
             _evNumpadConnected = numpadConnected;
             RefreshHomeTiles();
         }
+        // A dock that was just plugged in comes up with whatever its RTC held (or none at
+        // all), and the next scheduled resync can be up to 30 minutes away — push the time
+        // now, the same way EvAutoOpen does when the driver opens (user report 2026-09-10:
+        // Display Dial clock out of sync with the PC).
+        // Not during the startup sequence: the "driver-open" and "ap-on" pushes follow
+        // within seconds, and each push keeps the keyboard busy (see _evStartupSequence).
+        if (dockJustAttached && !_evStartupSequence) PushDialClock("dock-attached");
 
         // ---- Dock (overlaid on the top edge of the keyboard) ----
         // GrdEvDock carries both the artwork (ImgEvDock) and the clickable

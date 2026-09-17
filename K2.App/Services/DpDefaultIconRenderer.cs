@@ -79,7 +79,8 @@ internal static class DpDefaultIconRenderer
             // internally (see LiveTileRenderer.TryRenderEdStatus), keyed off their live state
             // rather than the static caption alone.
             if (spec.TextOnly && actionType is not ("dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus"
-                                                   or "dp_zcstatus" or "dp_screen"))
+                                                   or "dp_zcstatus" or KspTelemachus.ActionType
+                                                   or "dp_screen" or "dp_custom"))
             {
                 ok = IconImageGenerator.TryGenerateCaptionIcon(userText ?? caption ?? actionValue ?? "", iconSize, work);
                 return Commit(ok, work, dest);
@@ -134,8 +135,21 @@ internal static class DpDefaultIconRenderer
                             showCaption ? userText ?? DpLiveTileService.TileCaption(actionType, actionValue) : "",
                             iconSize, work);
                     break;
+                case KspTelemachus.ActionType:
+                    ok = DpLiveTileService.RenderKspTile(actionValue,
+                            showCaption ? userText ?? DpLiveTileService.TileCaption(actionType, actionValue) : "",
+                            iconSize, work);
+                    break;
                 case "dp_screen":
                     ok = DpLiveTileService.RenderScreenTile(actionValue,
+                            showCaption ? userText ?? DpLiveTileService.TileCaption(actionType, actionValue) : "",
+                            iconSize, work);
+                    break;
+                // A custom tile paints its OWN background, colours and indicator: it is the one
+                // live type that ignores the profile's art entirely, because its whole point is
+                // that the user chose what it looks like.
+                case "dp_custom":
+                    ok = CustomActionTile.Render(actionValue,
                             showCaption ? userText ?? DpLiveTileService.TileCaption(actionType, actionValue) : "",
                             iconSize, work);
                     break;
@@ -204,7 +218,7 @@ internal static class DpDefaultIconRenderer
     /// cache key is built from the action and its style, neither of which moves when the drawing
     /// code does — dropping the Elite annunciator square (2026-09-05) left every already-rendered
     /// tile showing it.</summary>
-    private const int RendererVersion = 2;
+    private const int RendererVersion = 3;
 
     private static string CachePath(string kind, string sourceValue)
     {

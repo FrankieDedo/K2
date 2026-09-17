@@ -1910,10 +1910,28 @@ public partial class MainWindow
         foreach (var (btn, control) in ControlLayout[position])
         {
             if (control == SpotifyControl.Repeat) { yield return (btn, "spotify", Spotify("repeat_cycle")); continue; }
+            // Volume/Mute on the Local source drive Spotify's OWN Windows volume-mixer slider
+            // (AppAudioVolume), not the system master volume the media keys move: the profile is
+            // a Spotify remote, so turning it down shouldn't quieten the whole PC (user request
+            // 2026-09-08). No account or Premium involved, unlike the Web API commands.
+            if (!webApi && LocalAppVolumeCommand.TryGetValue(control, out string? appCmd))
+            {
+                yield return (btn, "spotify", appCmd);
+                continue;
+            }
             var (media, spotify) = ControlValues[control];
             yield return webApi ? (btn, "spotify", Spotify(spotify)) : (btn, "media", media);
         }
     }
+
+    /// <summary>The three controls whose Local-source seed is a per-app-volume "spotify" command
+    /// instead of a system media key — see <see cref="DpSpotifySeedsFor"/>.</summary>
+    private static readonly Dictionary<SpotifyControl, string> LocalAppVolumeCommand = new()
+    {
+        [SpotifyControl.VolumeUp]   = "app_volume_up",
+        [SpotifyControl.VolumeDown] = "app_volume_down",
+        [SpotifyControl.Mute]       = "app_mute_toggle",
+    };
 
     /// <summary>Writes one seeded key with the SAME auto-icon a single key of that action type
     /// gets in the key-config dialog (the per-action glyph tile) and, crucially, marks it as a
@@ -1937,14 +1955,40 @@ public partial class MainWindow
         var byIndex = _dpStore.LoadPage(deviceId, slot, 0)
             .ToDictionary(b => b.ButtonIndex);
         var cfg = DpReadSpotifyCoverConfig(deviceId);
+        bool local = cfg.Source != SpotifyCoverSource.WebApi;
         foreach (var (btn, type, value) in DpSpotifySeedsFor(cfg.Source, cfg.Position, cfg.Device))
         {
             if (!byIndex.TryGetValue(btn, out var rec)) continue;
+            bool stock = string.Equals(rec.ActionType, type, StringComparison.OrdinalIgnoreCase)
+                         && string.Equals(rec.ActionValue, value, StringComparison.OrdinalIgnoreCase);
+            // Profiles seeded before 2026-09-08 have the system media key on Volume/Mute; the
+            // Local source seeds Spotify's own volume-mixer slider now (see DpSpotifySeedsFor).
+            // Upgrade it in place — but only while the key still holds the media action this
+            // profile itself put there, never one the user chose. Runs even WITH a stored icon
+            // spec (unlike the icon refresh below): restyling a key doesn't mean the user asked
+            // for the whole-PC volume.
+            if (!stock && local && LegacyLocalVolumeValue(btn, cfg.Position) is string legacy
+                && string.Equals(rec.ActionType, "media", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rec.ActionValue, legacy, StringComparison.OrdinalIgnoreCase))
+            {
+                _dpStore.SaveButton(deviceId, slot, btn, rec.ImagePath, type, value);
+                DpLog($"[SPT] device {deviceId}: key #{btn} media '{legacy}' -> spotify '{value}' (per-app volume)");
+                continue;
+            }
+            if (!stock) continue;
             if (!string.IsNullOrWhiteSpace(rec.IconSpec)) continue;
-            if (!string.Equals(rec.ActionType, type, StringComparison.OrdinalIgnoreCase)) continue;
-            if (!string.Equals(rec.ActionValue, value, StringComparison.OrdinalIgnoreCase)) continue;
             DpSeedSpotifyKey(deviceId, slot, btn, type, value);
         }
+    }
+
+    /// <summary>The "media" value a Local-source Volume/Mute key was seeded with before the
+    /// per-app-volume switch, for the in-place upgrade in <see cref="DpMigrateSpotifyIcons"/>.
+    /// Null for every other key of the layout.</summary>
+    private static string? LegacyLocalVolumeValue(int btn, SpotifyCoverPosition position)
+    {
+        var control = ControlLayout[position].FirstOrDefault(t => t.Btn == btn).Control;
+        return LocalAppVolumeCommand.ContainsKey(control) && ControlValues.TryGetValue(control, out var v)
+            ? v.Media : null;
     }
 
     /// <summary>Overwrites the 8 control keys with the seed set for <paramref name="source"/>/
@@ -2740,6 +2784,7 @@ public partial class MainWindow
         bool wasSpotifyCover = KeyIconSpec.FromJson(key.IconSpecJson) is { SpotifyCover: true };
         string? oldActionType  = key.ActionType;
         string? oldActionValue = key.ActionValue;
+        string? oldIconSpec    = key.IconSpecJson;
 
         // A Spotify block key shows a live tile and has no action: its "Edit icon" opens the
         // restricted text-style popup (font + text color) instead of reporting "none", and its
@@ -2752,8 +2797,13 @@ public partial class MainWindow
                         && spotifyCfg.Layout == SpotifyCoverLayout.Single
                         && SpotifyCoverService.FieldIndexOf(_dpStore.GetRotation(id), spotifyCfg.Position, key.Index) >= 0;
 
+        // A key on a reserved GAME slot gets that game's card in the action picker, exactly as
+        // it does inside the game-profile popup: without this the profile's own commands (and the
+        // studio actions written for it) were unreachable from the pad's own grid, and a key
+        // already bound to one reopened under the generic "live tiles" category instead of under
+        // the game (user report 2026-09-08).
         var dlg = new DpKeyConfigDialog(key.Index, key.ImagePath, key.ActionType, key.ActionValue,
-            key.IconSpecJson) { Owner = this };
+            key.IconSpecJson, gameProfile: DpGamePickerFor(id)) { Owner = this };
         // Cover tile (and every tile of the 4-tile layout): album art, nothing to style.
         dlg.EditIconDisabled = liveOverlay && !textTile;
         // Pad-wide "default icon background" image (Settings tab): shows the per-key opt-out
@@ -2824,9 +2874,12 @@ public partial class MainWindow
         // in-memory copy of each live key that only refreshes on a repaint's Sync(). Without
         // this, changing e.g. the sensor on a "PC monitor" key uploads the new tile once (via
         // DpUploadAndPersist above) and then the 1 Hz timer paints the STALE key back over it.
+        // The icon spec counts too: its caption/style is part of that in-memory copy, so editing
+        // only the text of a live tile got repainted with the old text on the next value change.
         bool liveInvolved = DpLiveTileService.IsLiveType(key.ActionType)
                             || DpLiveTileService.IsLiveType(oldActionType);
-        bool actionChanged = key.ActionType != oldActionType || key.ActionValue != oldActionValue;
+        bool actionChanged = key.ActionType != oldActionType || key.ActionValue != oldActionValue
+                             || key.IconSpecJson != oldIconSpec;
 
         if (isSpotifyCover || wasSpotifyCover || (liveInvolved && actionChanged))
             DpRequestRepaint(id);

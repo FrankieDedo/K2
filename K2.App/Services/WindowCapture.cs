@@ -39,6 +39,13 @@ internal static class WindowCapture
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
     [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
+    [DllImport("user32.dll")] private static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    /// <summary>PrintWindow flag that renders the whole window, composited layers included. The
+    /// documented flag (PW_CLIENTONLY = 1) predates DWM and comes back blank for most modern
+    /// windows; 2 is what actually works.</summary>
+    private const uint PW_RENDERFULLCONTENT = 0x00000002;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT { public int Left, Top, Right, Bottom; }
@@ -47,7 +54,7 @@ internal static class WindowCapture
     private struct POINT { public int X, Y; }
 
     /// <summary>Main window of the first running process with this name (no extension, the same
-    /// spelling <c>GameProfileCatalog.Definition.ExeName</c> uses), or zero when the program isn't
+    /// spelling <c>GameProfileDefinition.ExeName</c> uses), or zero when the program isn't
     /// running or has no window yet.</summary>
     public static IntPtr FindWindow(string? processName)
     {
@@ -120,6 +127,13 @@ internal static class WindowCapture
         var origin = new POINT { X = 0, Y = 0 };
         if (!ClientToScreen(hwnd, ref origin)) return null;
 
+        // A window that is NOT required to be in front is very likely behind K2 itself — that is
+        // the studio's and the calibration dialog's whole situation. Copying from the screen there
+        // would return K2's own pixels, so the window is asked to draw itself instead. Falls back
+        // to the screen copy when it comes back blank, which is what a game rendering through
+        // DirectX usually does.
+        if (!requireForeground && TryPrintWindow(hwnd, size) is { } printed) return printed;
+
         Bitmap? bmp = null;
         try
         {
@@ -135,5 +149,62 @@ internal static class WindowCapture
             bmp?.Dispose();
             return null;
         }
+    }
+
+    /// <summary>Asks the window to render itself into a bitmap — works while it is covered, which
+    /// <see cref="Graphics.CopyFromScreen"/> cannot do. Returns null when the window refuses (the
+    /// call fails) or draws nothing at all, so the caller can fall back.
+    ///
+    /// <para>The result is the WINDOW, frame and all, so it is cropped down to the client area to
+    /// match what the screen copy returns — a probe's rectangle is relative to the client area and
+    /// the two paths must agree about what it is relative to.</para></summary>
+    private static Bitmap? TryPrintWindow(IntPtr hwnd, Size clientSize)
+    {
+        Bitmap? full = null;
+        try
+        {
+            if (!GetWindowRect(hwnd, out var wr)) return null;
+            int w = wr.Right - wr.Left, h = wr.Bottom - wr.Top;
+            if (w <= 0 || h <= 0) return null;
+
+            full = new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(full))
+            {
+                IntPtr hdc = g.GetHdc();
+                try { if (!PrintWindow(hwnd, hdc, PW_RENDERFULLCONTENT)) return null; }
+                finally { g.ReleaseHdc(hdc); }
+            }
+
+            if (IsBlank(full)) return null;
+
+            // Client area inside the window rectangle.
+            var origin = new POINT { X = 0, Y = 0 };
+            if (!ClientToScreen(hwnd, ref origin)) return null;
+            var crop = new Rectangle(origin.X - wr.Left, origin.Y - wr.Top,
+                                     clientSize.Width, clientSize.Height);
+            crop.Intersect(new Rectangle(0, 0, w, h));
+            if (crop.Width <= 0 || crop.Height <= 0) return null;
+
+            var client = new Bitmap(clientSize.Width, clientSize.Height,
+                                    System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(client))
+                g.DrawImage(full, new Rectangle(0, 0, crop.Width, crop.Height), crop, GraphicsUnit.Pixel);
+            return client;
+        }
+        catch { return null; }
+        finally { full?.Dispose(); }
+    }
+
+    /// <summary>True when the bitmap is entirely one colour — how a window that ignored
+    /// PrintWindow comes back. Sampled on a coarse grid: proving it exactly would cost more than
+    /// the capture it is guarding.</summary>
+    private static bool IsBlank(Bitmap bmp)
+    {
+        int stepX = Math.Max(1, bmp.Width / 32), stepY = Math.Max(1, bmp.Height / 32);
+        int first = bmp.GetPixel(0, 0).ToArgb();
+        for (int y = 0; y < bmp.Height; y += stepY)
+            for (int x = 0; x < bmp.Width; x += stepX)
+                if (bmp.GetPixel(x, y).ToArgb() != first) return false;
+        return true;
     }
 }

@@ -65,6 +65,8 @@ public static class AppSettings
         public string IconGalleryStyle { get; set; } = "color";
         public bool BcImportPromptShown { get; set; }
         public string? BaseCampDllFolder { get; set; }
+        public bool DebugLocalUpdateEnabled { get; set; }
+        public string? DebugLocalUpdateZip { get; set; }
         public List<string> SavedPickerColors { get; set; } = new();
         public List<string> DeviceOrder { get; set; } = new();
     }
@@ -504,6 +506,45 @@ public static class AppSettings
         {
             if (_data.BaseCampDllFolder == value) return;
             _data.BaseCampDllFolder = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>Debug-only (Settings &gt; Debug): when on, the update check reads
+    /// <see cref="DebugLocalUpdateZip"/> instead of GitHub's latest release, so the whole
+    /// self-update flow can be exercised against a local K2-X.Y.Z.zip. Ignored unless
+    /// <see cref="DebugMode"/> is on.</summary>
+    public static bool DebugLocalUpdateEnabled
+    {
+        get { EnsureLoaded(); return _data.DebugLocalUpdateEnabled; }
+    }
+
+    public static void SetDebugLocalUpdateEnabled(bool value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.DebugLocalUpdateEnabled == value) return;
+            _data.DebugLocalUpdateEnabled = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>Local release ZIP used when <see cref="DebugLocalUpdateEnabled"/> is on.</summary>
+    public static string? DebugLocalUpdateZip
+    {
+        get { EnsureLoaded(); return _data.DebugLocalUpdateZip; }
+    }
+
+    public static void SetDebugLocalUpdateZip(string? value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.DebugLocalUpdateZip == value) return;
+            _data.DebugLocalUpdateZip = value;
             Save();
         }
         Changed?.Invoke();

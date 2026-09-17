@@ -176,6 +176,21 @@ public interface IActionHost
     /// isn't a live one. Kicks off the sensor backend if it isn't running yet.</summary>
     string? PreviewLiveTile(string? actionType, string? actionValue) => null;
 
+    /// <summary>True on a host that can define CUSTOM ACTIONS — the ones the user builds in the
+    /// game studio (K2.App, backed by <c>K2.App.Services.CustomGameStore</c>). When false the
+    /// "Custom action" type is hidden entirely: there would be nothing to offer and no way to
+    /// create anything.</summary>
+    bool SupportsCustomActions => false;
+
+    /// <summary>The custom actions defined on this machine, as <c>(Id, Name)</c> — the picker's
+    /// list for a <c>dp_custom</c> key. Empty on a host with no studio.</summary>
+    IReadOnlyList<(string Id, string Name)> ListCustomActions() => System.Array.Empty<(string, string)>();
+
+    /// <summary>Opens the game studio on <paramref name="actionId"/>, or on a NEW action when it
+    /// is null/empty. Returns the id of the action that was saved, "" when it was deleted, or
+    /// null when the user cancelled (or the host has no studio).</summary>
+    string? EditCustomAction(string? actionId) => null;
+
     /// <summary>True on a host that can open the global speed-test endpoint/payload configuration
     /// window (K2.App's DisplayPad host). When false the "Configure speed test…" button that
     /// <see cref="ButtonActionDialog"/> shows for a <c>dp_speedtest</c> action is hidden.</summary>

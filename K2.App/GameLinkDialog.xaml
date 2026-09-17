@@ -1,0 +1,105 @@
+﻿<Window x:Class="K2.App.GameLinkDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+        Title="{loc:Get link_title}"
+        SizeToContent="Height" Width="620" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="{DynamicResource K2AppFontFamily}"
+        Style="{DynamicResource K2WindowStyle}">
+
+    <Window.Resources>
+        <Style x:Key="LinkLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource K2TextBrush}"/>
+            <Setter Property="Margin" Value="0,12,0,3"/>
+        </Style>
+        <Style x:Key="LinkHint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource K2TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,3,0,0"/>
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="16">
+
+        <TextBlock Text="{loc:Get link_intro}" Style="{StaticResource LinkHint}" Margin="0,0,0,6"/>
+
+        <TextBlock Text="{loc:Get link_preset}" Style="{StaticResource LinkLabel}"/>
+        <ComboBox x:Name="CbPreset" SelectionChanged="CbPreset_SelectionChanged"/>
+        <!-- Per-preset extra line, hidden unless the chosen preset actually has one (today: only
+             K2 Unity Link, which needs BepInEx installed in the game BEFORE the mod page is any
+             use). -->
+        <TextBlock x:Name="LblPresetHint" Style="{StaticResource LinkHint}" Visibility="Collapsed"/>
+
+        <!-- Which kind of link this is was decided before this window opened, by the Source the
+             reading is on. It is stated, not asked again. -->
+        <TextBlock x:Name="LblKindHint" Style="{StaticResource LinkHint}" Margin="0,10,0,0"/>
+
+        <!-- Only for a mod link: where the thing that answers on that address comes from. A LINK,
+             not a box — the address is something to follow, and nine times out of ten it arrived
+             with a preset and there is nothing to type. The pencil is for the tenth. -->
+        <StackPanel x:Name="PnlMod" Visibility="Collapsed">
+            <TextBlock Text="{loc:Get link_mod_url}" Style="{StaticResource LinkLabel}"/>
+            <TextBlock x:Name="LblModUrl" Height="26" VerticalAlignment="Center"
+                       Padding="0,4,0,0" TextTrimming="CharacterEllipsis"
+                       Foreground="{DynamicResource K2TextMutedBrush}">
+                <Hyperlink x:Name="LnkModUrl" Click="LnkModUrl_Click"
+                           Foreground="{DynamicResource K2AccentBrush}"><Run x:Name="RunModUrl"/></Hyperlink>
+            </TextBlock>
+        </StackPanel>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="150"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="{loc:Get link_name}" Style="{StaticResource LinkLabel}"/>
+                <TextBox x:Name="TxtName" Height="26" VerticalContentAlignment="Center"/>
+            </StackPanel>
+            <StackPanel Grid.Column="2">
+                <TextBlock Text="{loc:Get link_poll}" Style="{StaticResource LinkLabel}"/>
+                <TextBox x:Name="TxtPoll" Height="26" VerticalContentAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+
+        <TextBlock Text="{loc:Get link_url}" Style="{StaticResource LinkLabel}"/>
+        <TextBox x:Name="TxtUrl" Height="26" VerticalContentAlignment="Center"/>
+        <TextBlock Text="{loc:Get link_url_hint}" Style="{StaticResource LinkHint}"/>
+
+        <CheckBox x:Name="ChkInsecure" Content="{loc:Get link_insecure}" Margin="0,12,0,0"/>
+        <TextBlock Text="{loc:Get link_insecure_hint}" Style="{StaticResource LinkHint}"/>
+
+        <!-- The test is the whole point of this window: a link the user cannot try is a link they
+             will only find out about when a key on the pad shows a dash. -->
+        <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+            <Button x:Name="BtnTest" Style="{StaticResource K2IconAccentButton}" Tag="&#xE895;"
+                    Content="{loc:Get link_test}" Click="BtnTest_Click"/>
+            <TextBlock x:Name="LblTest" VerticalAlignment="Center" Margin="10,0,0,0"
+                       Foreground="{DynamicResource K2TextMutedBrush}"
+                       TextTrimming="CharacterEllipsis"/>
+        </StackPanel>
+
+        <Border Margin="0,10,0,0" BorderThickness="1" CornerRadius="4"
+                BorderBrush="{DynamicResource K2BorderBrush}"
+                Background="{DynamicResource K2SurfaceBrush}">
+            <ListBox x:Name="LstValues" Height="150" BorderThickness="0" Background="Transparent"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
+        </Border>
+
+        <Grid Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="1" x:Name="BtnOk" Content="{loc:Get ok}" MinWidth="90"
+                    Style="{StaticResource K2IconAccentButton}" Click="BtnOk_Click"/>
+            <Button Grid.Column="2" Content="{loc:Get cancel}" MinWidth="90" IsCancel="True"
+                    Margin="8,0,0,0" Style="{StaticResource K2IconButton}"/>
+        </Grid>
+    </StackPanel>
+</Window>

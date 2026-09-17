@@ -101,6 +101,7 @@ public partial class ButtonActionDialog
     private static readonly System.Collections.Generic.HashSet<string> SpotifyCommandsNeedingArg = new()
     {
         "volume_up", "volume_down", "volume_set", "save_playlist", "remove_playlist",
+        "app_volume_up", "app_volume_down",
     };
 
     /// <summary>Discord commands that take an argument: a volume (absolute "70" or relative
@@ -152,6 +153,11 @@ public partial class ButtonActionDialog
     private static readonly ComboOption[] ZcStatusOptions =
         ActionTypeHelper.ZcStatusItems.Select(m => new ComboOption(m.Value, m.LocKey)).ToArray();
 
+    /// <summary>Kerbal Space Program's Telemachus entries — the curated ones, then everything the
+    /// mod's own API listing offers. Built on every call: the listing can arrive while the app runs.</summary>
+    private static ComboOption[] KspOptions() =>
+        KspTelemachus.AllItems().Select(i => new ComboOption(i.Value, i.LocKey)).ToArray();
+
     private static ComboOption[] OptionsFor(string tag) => tag switch
     {
         "dp_clock"     => ClockOptions,
@@ -159,6 +165,7 @@ public partial class ButtonActionDialog
         "dp_speedtest" => SpeedTestOptions,
         "dp_edstatus"  => EdStatusOptions,
         "dp_zcstatus"  => ZcStatusOptions,
+        KspTelemachus.ActionType => KspOptions(),
         "oscmd"   => OsCmdOptions,
         "media"   => MediaOptions,
         "mouse"   => MouseOptions,
@@ -185,8 +192,10 @@ public partial class ButtonActionDialog
         "dp_sysmon"    => "act_dp_sysmon",
         "dp_speedtest" => "act_dp_speedtest",
         "dp_screen"    => "act_dp_screen",
+        "dp_custom"    => "act_dp_custom",
         "dp_edstatus"  => "act_dp_edstatus",
         "dp_zcstatus"  => "act_dp_zcstatus",
+        KspTelemachus.ActionType => "act_dp_ksp",
         _            => "dlg_value",
     };
 
@@ -289,6 +298,9 @@ public partial class ButtonActionDialog
         BtnDiscordSettings.Visibility = tag == "discord" ? Visibility.Visible : Visibility.Collapsed;
         BtnAudioDeviceRefresh.Visibility = tag == "audiodevice" ? Visibility.Visible : Visibility.Collapsed;
         BtnScreenProbeEdit.Visibility = tag == "dp_screen" ? Visibility.Visible : Visibility.Collapsed;
+        BtnCustomActionEdit.Visibility =
+            tag == CustomActionType.Tag && _host?.SupportsCustomActions == true
+                ? Visibility.Visible : Visibility.Collapsed;
         BtnSpeedTestConfig.Visibility =
             tag == "dp_speedtest" && _host?.SupportsSpeedTestConfig == true
                 ? Visibility.Visible : Visibility.Collapsed;
@@ -573,6 +585,35 @@ public partial class ButtonActionDialog
                 Tag = ScreenProbeNewTag,
             });
         }
+        else if (tag == CustomActionType.Tag)
+        {
+            // Same shape as "dp_screen" above and for the same reason: the values are the
+            // actions the USER built, they live in K2.App's studio store, and the Tag carries
+            // the whole wire "<id>|<name>" so the label travels with the key.
+            foreach (var (id, name) in _host?.ListCustomActions() ?? System.Array.Empty<(string, string)>())
+                CbComboValue.Items.Add(new ComboBoxItem { Content = name, Tag = $"{id}|{name}" });
+
+            // A key bound to an action that has since been DELETED keeps its binding, flagged,
+            // rather than being silently rebound to whatever sits at index 0. Matched on the id
+            // alone: a RENAMED action is still the same action.
+            if (CustomActionType.Parse(selectValue) is { } boundAction &&
+                !CbComboValue.Items.OfType<ComboBoxItem>().Any(
+                    i => CustomActionType.Parse((string?)i.Tag)?.Id == boundAction.Id))
+            {
+                CbComboValue.Items.Add(new ComboBoxItem
+                {
+                    Content = (boundAction.Label.Length > 0 ? boundAction.Label : boundAction.Id)
+                              + "  (" + Loc.Get("studio_action_missing") + ")",
+                    Tag = selectValue,
+                });
+            }
+
+            CbComboValue.Items.Add(new ComboBoxItem
+            {
+                Content = Loc.Get("studio_action_new"),
+                Tag = CustomActionNewTag,
+            });
+        }
         else if (tag == "audiodevice")
         {
             // Dynamic list too, but sourced live from Windows itself (not a stored
@@ -638,6 +679,13 @@ public partial class ButtonActionDialog
             ActionTypeHelper.ParseScreenValue(selectValue) is { } wantedProbe)
             match = CbComboValue.Items.OfType<ComboBoxItem>().FirstOrDefault(
                 i => ActionTypeHelper.ParseScreenValue((string?)i.Tag)?.Id == wantedProbe.Id);
+
+        // Same rule for a custom action whose stored label is stale (renamed in the studio):
+        // match on the id, and saving refreshes the label.
+        if (match is null && tag == CustomActionType.Tag &&
+            CustomActionType.Parse(selectValue) is { } wantedAction)
+            match = CbComboValue.Items.OfType<ComboBoxItem>().FirstOrDefault(
+                i => CustomActionType.Parse((string?)i.Tag)?.Id == wantedAction.Id);
 
         // A "PC monitor" value that's a full sensor wire selects the "Sensor selection" card.
         if (match is null && tag == "dp_sysmon" && ActionTypeHelper.ParseSensorValue(selectValue) is not null)

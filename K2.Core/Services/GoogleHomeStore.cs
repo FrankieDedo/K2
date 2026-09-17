@@ -164,11 +164,22 @@ public static class GoogleHomeStore
     /// <paramref name="found"/> is removed outright — "device removed from Google Home" case.
     /// "foyer" bindings are never touched here: they are explicit per-action recordings, not
     /// tied 1:1 to a scanned card. Also marks the account as connected (a scan only runs
-    /// against a live, signed-in home.google.com session).</summary>
+    /// against a live, signed-in home.google.com session).
+    ///
+    /// An EMPTY <paramref name="found"/> is treated as a failed scan, not as "the account has
+    /// no devices": it no-ops entirely (nothing removed, connection flag untouched) and returns
+    /// <c>Removed = -1</c> to say so. A scan comes back empty for two reasons that look
+    /// identical from here — the Angular list wasn't rendered yet, or Google reshuffled the DOM
+    /// so <c>scanCards()</c> matches nothing — and in BOTH the old behaviour was catastrophic:
+    /// every dom binding wiped (keys left pointing at deleted ids) AND the account force-marked
+    /// connected, which hides the sign-in browser and leaves the window with no way back.
+    /// Confirmed 2026-09-10 on a real signed-in session.</summary>
     public static (int Added, int Updated, int Removed) ReconcileScan(
         IReadOnlyList<(string CardText, string ControlLabel, string PagePath, string IconName)> found)
     {
         EnsureLoaded();
+        if (found.Count == 0) return (0, 0, -1);
+
         int added = 0, updated = 0, removed;
         bool wasConnected;
         lock (_lock)
