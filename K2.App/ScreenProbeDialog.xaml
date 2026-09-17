@@ -1,10 +1,11 @@
-<Window x:Class="K2.App.ScreenProbeDialog"
+﻿<Window x:Class="K2.App.ScreenProbeDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
         Title="{loc:Get screen_probe_title}"
-        Width="1000" Height="700" MinWidth="820" MinHeight="560"
+        Width="920" Height="660" MinWidth="780" MinHeight="520"
         WindowStartupLocation="CenterOwner"
+        PreviewKeyDown="Window_PreviewKeyDown"
         ShowInTaskbar="False"
         FontFamily="{DynamicResource K2AppFontFamily}"
         Style="{DynamicResource K2WindowStyle}"
@@ -19,7 +20,7 @@
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="290"/>
+            <ColumnDefinition Width="360"/>
         </Grid.ColumnDefinitions>
 
         <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="{loc:Get screen_probe_hint}"
@@ -29,16 +30,41 @@
         <!-- Which window to read, and the capture itself. The countdown exists because the
              capture is a copy of the screen: K2's own window is in front of the game right now,
              so the user needs a moment to bring the game back up before the frame is taken. -->
-        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,10">
-            <TextBlock Text="{loc:Get screen_probe_process}" VerticalAlignment="Center"
-                       Foreground="{DynamicResource K2TextBrush}" Margin="0,0,8,0"/>
-            <ComboBox x:Name="CbProcess" Width="260" IsEditable="True" Height="26"
-                      VerticalContentAlignment="Center"/>
-            <Button x:Name="BtnCapture" Content="{loc:Get screen_probe_capture}" Margin="10,0,0,0"
-                    Padding="12,3" Click="BtnCapture_Click"/>
-            <TextBlock x:Name="LblCaptureState" VerticalAlignment="Center" Margin="12,0,0,0"
-                       Foreground="{DynamicResource K2TextMutedBrush}"
-                       TextTrimming="CharacterEllipsis"/>
+        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,10">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{loc:Get screen_probe_process}" VerticalAlignment="Center"
+                           Foreground="{DynamicResource K2TextBrush}" Margin="0,0,8,0"/>
+                <ComboBox x:Name="CbProcess" Width="260" IsEditable="True" Height="26"
+                          VerticalContentAlignment="Center"
+                          SelectionChanged="CbProcess_SelectionChanged"
+                          LostFocus="CbProcess_LostFocus"/>
+                <Button x:Name="BtnCapture" Content="{loc:Get screen_probe_capture}" Margin="10,0,0,0"
+                        Padding="12,3" Click="BtnCapture_Click"/>
+                <TextBlock x:Name="LblCaptureState" VerticalAlignment="Center" Margin="12,0,0,0"
+                           Foreground="{DynamicResource K2TextMutedBrush}"
+                           TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+
+            <!-- The saved screenshots. Separate from the capture above because they answer a
+                 different question: not "show me the game now" but "put that other moment back
+                 on screen" — the full health bar against the empty one. Nothing here happens on
+                 its own: a shot exists because Save was pressed. -->
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <TextBlock Text="{loc:Get screen_shot_browser}" VerticalAlignment="Center"
+                           Foreground="{DynamicResource K2TextBrush}" Margin="0,0,8,0"/>
+                <ComboBox x:Name="CbShots" Width="260" Height="26"
+                          VerticalContentAlignment="Center"
+                          ToolTip="{loc:Get screen_shot_browser_tip}"
+                          SelectionChanged="CbShots_SelectionChanged"/>
+                <Button x:Name="BtnShotSave" Content="{loc:Get screen_shot_save}" Margin="10,0,0,0"
+                        Padding="12,3" ToolTip="{loc:Get screen_shot_save_tip}"
+                        Click="BtnShotSave_Click"/>
+                <Button x:Name="BtnShotDelete" Content="{loc:Get screen_shot_delete}" Margin="6,0,0,0"
+                        Padding="12,3" Click="BtnShotDelete_Click"/>
+                <TextBlock x:Name="LblShotState" VerticalAlignment="Center" Margin="12,0,0,0"
+                           Foreground="{DynamicResource K2TextMutedBrush}"
+                           TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
         </StackPanel>
 
         <!-- The frame, with the selection drawn on top of it. The Canvas is the input surface:
@@ -46,11 +72,20 @@
         <Border Grid.Row="2" Grid.Column="0" Margin="0,0,14,0" BorderThickness="1"
                 BorderBrush="{DynamicResource K2BorderBrush}" Background="#101010">
             <Grid x:Name="FrameHost" ClipToBounds="True">
-                <Image x:Name="ImgFrame" Stretch="Uniform" SnapsToDevicePixels="True"/>
-                <Canvas x:Name="OverlayCanvas" Background="Transparent"
+                <!-- Placed by hand (Fill + Width/Height/offset from DisplayRect), NOT letterboxed by
+                     the Image itself: a Uniform stretch centres the bitmap inside the element, so a
+                     zoom about the canvas centre would scale about a different point than the
+                     selection does and the rectangle would drift off the pixels it was drawn on. -->
+                <Image x:Name="ImgFrame" Stretch="Fill" SnapsToDevicePixels="True"
+                       HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                <Canvas x:Name="OverlayCanvas" Background="Transparent" Cursor="Cross"
+                        Focusable="True"
                         MouseLeftButtonDown="Overlay_MouseLeftButtonDown"
                         MouseMove="Overlay_MouseMove"
-                        MouseLeftButtonUp="Overlay_MouseLeftButtonUp">
+                        MouseLeftButtonUp="Overlay_MouseLeftButtonUp"
+                        MouseRightButtonDown="Overlay_MouseRightButtonDown"
+                        MouseRightButtonUp="Overlay_MouseRightButtonUp"
+                        MouseWheel="Overlay_MouseWheel">
                     <Rectangle x:Name="SelRect" Visibility="Collapsed"
                                Stroke="#FF3B30" StrokeThickness="2" StrokeDashArray="4 3"/>
                 </Canvas>
@@ -58,18 +93,78 @@
                            HorizontalAlignment="Center" VerticalAlignment="Center"
                            Foreground="{DynamicResource K2TextMutedBrush}" TextWrapping="Wrap"
                            TextAlignment="Center" MaxWidth="420" IsHitTestVisible="False"/>
+
+                <!-- Zoom controls and the mouse legend, over the frame itself: the frame is the
+                     one place the user is looking at while aiming, so what the mouse can do there
+                     is written there. -->
+                <Grid VerticalAlignment="Bottom" Margin="6">
+                    <TextBlock x:Name="LblViewHint" Text="{loc:Get screen_probe_view_hint}"
+                               HorizontalAlignment="Left" VerticalAlignment="Center" FontSize="10"
+                               Foreground="#B0FFFFFF" TextWrapping="Wrap" MaxWidth="420"
+                               IsHitTestVisible="False"/>
+                    <StackPanel x:Name="PnlZoomBar" Orientation="Horizontal"
+                                HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <TextBlock x:Name="LblZoomLevel" VerticalAlignment="Center" FontSize="10"
+                                   Foreground="#B0FFFFFF" Margin="0,0,6,0" IsHitTestVisible="False"/>
+                        <Button x:Name="BtnZoomOut" Content="&#x2212;" Width="24" Padding="0,1"
+                                Click="BtnZoomOut_Click"/>
+                        <Button x:Name="BtnZoomIn" Content="+" Width="24" Padding="0,1"
+                                Margin="4,0,0,0" Click="BtnZoomIn_Click"/>
+                        <Button x:Name="BtnZoomFit" Content="{loc:Get screen_probe_fit}"
+                                Padding="8,1" Margin="4,0,0,0" Click="BtnZoomFit_Click"/>
+                    </StackPanel>
+                </Grid>
             </Grid>
         </Border>
 
         <!-- Everything about the probe itself. -->
         <ScrollViewer Grid.Row="2" Grid.Column="1" VerticalScrollBarVisibility="Auto">
             <StackPanel>
-                <TextBlock Text="{loc:Get screen_probe_name}" Margin="0,0,0,3"
+                <TextBlock Text="{loc:Get screen_probe_name}" Margin="0,0,0,3" FontWeight="SemiBold"
                            Foreground="{DynamicResource K2TextBrush}"/>
                 <TextBox x:Name="TxtName" Height="26" VerticalContentAlignment="Center"/>
 
-                <TextBlock Text="{loc:Get screen_probe_mode}" Margin="0,12,0,3"
-                           Foreground="{DynamicResource K2TextBrush}"/>
+                <!-- The "?" carries the whole menu of reading types, each with the very string
+                     the dropdown and the line under it already use: one definition, two places
+                     it can be read, no chance of the two drifting apart. -->
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,3">
+                    <TextBlock Text="{loc:Get screen_probe_mode}" VerticalAlignment="Center"
+                               FontWeight="SemiBold" Foreground="{DynamicResource K2TextBrush}"/>
+                    <Path Style="{DynamicResource K2HintIcon}">
+                        <Path.ToolTip>
+                            <ToolTip MaxWidth="380">
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Get screen_probe_mode_types}" FontWeight="SemiBold"
+                                               Margin="0,0,0,8"/>
+
+                                    <TextBlock Text="{loc:Get screen_probe_mode_fill}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{loc:Get screen_probe_mode_fill_hint}"
+                                               Foreground="{DynamicResource K2TextMutedBrush}" Margin="0,1,0,8"/>
+
+                                    <TextBlock Text="{loc:Get screen_probe_mode_edge}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{loc:Get screen_probe_mode_edge_hint}"
+                                               Foreground="{DynamicResource K2TextMutedBrush}" Margin="0,1,0,8"/>
+
+                                    <TextBlock Text="{loc:Get screen_probe_mode_color}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{loc:Get screen_probe_mode_color_hint}"
+                                               Foreground="{DynamicResource K2TextMutedBrush}" Margin="0,1,0,8"/>
+
+                                    <TextBlock Text="{loc:Get screen_probe_mode_number}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{loc:Get screen_probe_mode_number_hint}"
+                                               Foreground="{DynamicResource K2TextMutedBrush}" Margin="0,1,0,8"/>
+
+                                    <TextBlock Text="{loc:Get screen_probe_mode_text}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{loc:Get screen_probe_mode_text_hint}"
+                                               Foreground="{DynamicResource K2TextMutedBrush}" Margin="0,1,0,8"/>
+
+                                    <TextBlock Text="{loc:Get screen_probe_mode_capture}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{loc:Get screen_probe_mode_capture_hint}"
+                                               Foreground="{DynamicResource K2TextMutedBrush}" Margin="0,1,0,0"/>
+                                </StackPanel>
+                            </ToolTip>
+                        </Path.ToolTip>
+                    </Path>
+                </StackPanel>
                 <ComboBox x:Name="CbMode" Height="26" SelectionChanged="CbMode_SelectionChanged"/>
                 <TextBlock x:Name="LblModeHint" Margin="0,4,0,0" FontSize="11" TextWrapping="Wrap"
                            Foreground="{DynamicResource K2TextMutedBrush}"/>
@@ -80,24 +175,100 @@
                     <ComboBox x:Name="CbDir" Height="26" SelectionChanged="Field_Changed"/>
                 </StackPanel>
 
-                <TextBlock Text="{loc:Get screen_probe_color}" Margin="0,12,0,3"
-                           Foreground="{DynamicResource K2TextBrush}"/>
-                <StackPanel Orientation="Horizontal">
-                    <Border x:Name="ColorSwatch" Width="40" Height="26" BorderThickness="1"
-                            BorderBrush="{DynamicResource K2BorderBrush}"/>
-                    <ToggleButton x:Name="TglPick" Content="{loc:Get screen_probe_pick}"
-                                  Margin="8,0,0,0" Padding="10,2"/>
+                <!-- OCR only: read the rectangle as it is, or keep just the ink of one colour.
+                     A number printed over the game's own artwork reads far better filtered; a
+                     line of text on a flat panel reads fine as it is, and picking a colour for it
+                     is work for nothing. -->
+                <StackPanel x:Name="PnlAnyText" Visibility="Collapsed">
+                    <CheckBox x:Name="ChkAnyText" Content="{loc:Get screen_probe_any_text}"
+                              Margin="0,12,0,0" Foreground="{DynamicResource K2TextBrush}"
+                              Click="ChkAnyText_Click"/>
+                    <TextBlock Text="{loc:Get screen_probe_any_text_hint}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,4,0,0"
+                               Foreground="{DynamicResource K2TextMutedBrush}"/>
                 </StackPanel>
 
-                <TextBlock x:Name="LblTolerance" Margin="0,12,0,3"
-                           Foreground="{DynamicResource K2TextBrush}"/>
-                <Slider x:Name="SldTolerance" Minimum="0" Maximum="255" TickFrequency="5"
-                        IsSnapToTickEnabled="True" ValueChanged="SldTolerance_ValueChanged"/>
+                <StackPanel x:Name="PnlColor">
+                    <TextBlock x:Name="LblColorCaption" Text="{loc:Get screen_probe_color}"
+                               Margin="0,12,0,3" Foreground="{DynamicResource K2TextBrush}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <Border x:Name="ColorSwatch" Width="40" Height="26" BorderThickness="1"
+                                BorderBrush="{DynamicResource K2BorderBrush}"/>
+                        <ToggleButton x:Name="TglPick" Content="{loc:Get screen_probe_pick}"
+                                      Margin="8,0,0,0" Padding="10,2"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel x:Name="PnlTolerance">
+                    <TextBlock x:Name="LblTolerance" Margin="0,12,0,3"
+                               Foreground="{DynamicResource K2TextBrush}"/>
+                    <Slider x:Name="SldTolerance" Minimum="0" Maximum="255" TickFrequency="5"
+                            IsSnapToTickEnabled="True" ValueChanged="SldTolerance_ValueChanged"/>
+                </StackPanel>
 
                 <CheckBox x:Name="ChkInvert" Content="{loc:Get screen_probe_invert}" Margin="0,12,0,0"
                           Foreground="{DynamicResource K2TextBrush}" Click="Field_Changed"/>
 
-                <TextBlock Text="{loc:Get screen_probe_zoom}" Margin="0,16,0,3"
+                <!-- The rectangle itself, in PIXELS of the captured frame: its size, and where it
+                     sits measured from an edge or from the middle. One block and one table, because
+                     the four numbers answer one question — and typing them is the only way to ask
+                     for "48 px wide, 12 off the bottom" on a 4K frame shown at 12%. The two long
+                     explanations live on the hint icons; on screen there is just the table. -->
+                <Border Height="1" Margin="0,16,0,0" Background="{DynamicResource K2BorderBrush}"/>
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,6">
+                    <TextBlock Text="{loc:Get screen_probe_rect}" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Foreground="{DynamicResource K2TextBrush}"/>
+                    <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get screen_probe_pos_hint}"/>
+                </StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="6"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="6"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Get screen_probe_size}" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource K2TextBrush}"/>
+                        <Path Style="{DynamicResource K2HintIcon}"
+                              ToolTip="{loc:Get screen_probe_size_hint}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal"
+                                HorizontalAlignment="Right">
+                        <TextBox x:Name="TxtPxW" Width="64" Height="26" VerticalContentAlignment="Center"
+                                 KeyDown="SizeBox_KeyDown" LostFocus="SizeBox_LostFocus"
+                                 TextChanged="SizeBox_TextChanged"/>
+                        <TextBlock Text="&#xD7;" VerticalAlignment="Center" Margin="6,0"
+                                   Foreground="{DynamicResource K2TextMutedBrush}"/>
+                        <TextBox x:Name="TxtPxH" Width="64" Height="26" VerticalContentAlignment="Center"
+                                 KeyDown="SizeBox_KeyDown" LostFocus="SizeBox_LostFocus"
+                                 TextChanged="SizeBox_TextChanged"/>
+                    </StackPanel>
+
+                    <ComboBox x:Name="CbRefX" Grid.Row="2" Grid.Column="0" Height="26" MinWidth="180"
+                              SelectionChanged="RefBox_Changed"/>
+                    <TextBox x:Name="TxtPosX" Grid.Row="2" Grid.Column="2" Width="64" Height="26"
+                             HorizontalAlignment="Right" VerticalContentAlignment="Center"
+                             KeyDown="PosBox_KeyDown" LostFocus="PosBox_LostFocus"
+                             TextChanged="PosBox_TextChanged"/>
+                    <ComboBox x:Name="CbRefY" Grid.Row="4" Grid.Column="0" Height="26" MinWidth="180"
+                              SelectionChanged="RefBox_Changed"/>
+                    <TextBox x:Name="TxtPosY" Grid.Row="4" Grid.Column="2" Width="64" Height="26"
+                             HorizontalAlignment="Right" VerticalContentAlignment="Center"
+                             KeyDown="PosBox_KeyDown" LostFocus="PosBox_LostFocus"
+                             TextChanged="PosBox_TextChanged"/>
+                </Grid>
+
+                <Border Height="1" Margin="0,16,0,0" Background="{DynamicResource K2BorderBrush}"/>
+                <TextBlock Text="{loc:Get screen_probe_zoom}" Margin="0,12,0,4" FontWeight="SemiBold"
                            Foreground="{DynamicResource K2TextBrush}"/>
                 <Border BorderThickness="1" BorderBrush="{DynamicResource K2BorderBrush}"
                         Background="#101010" Height="90">
@@ -105,7 +276,7 @@
                            RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                 </Border>
 
-                <TextBlock x:Name="LblReading" Margin="0,14,0,0" FontSize="20"
+                <TextBlock x:Name="LblReading" Margin="0,12,0,0" FontSize="24" FontWeight="SemiBold"
                            Foreground="{DynamicResource K2TextBrush}"/>
                 <TextBlock x:Name="LblReadingHint" FontSize="11" TextWrapping="Wrap"
                            Foreground="{DynamicResource K2TextMutedBrush}"/>

@@ -102,6 +102,21 @@ internal sealed class DisplayPadActionHost : IActionHost
         return dlg.ShowDialog() == true ? dlg.SavedProbeId : null;
     });
 
+    bool IActionHost.SupportsCustomActions => true;
+
+    IReadOnlyList<(string Id, string Name)> IActionHost.ListCustomActions() =>
+        Services.CustomGameStore.Actions().Select(a => (a.Id, a.Name)).ToList();
+
+    string? IActionHost.EditCustomAction(string? actionId) => _win.Dispatcher.Invoke(() =>
+    {
+        var owner = System.Windows.Application.Current?.Windows
+            .OfType<System.Windows.Window>().FirstOrDefault(w => w.IsActive) ?? _win;
+        var studio = new GameStudioWindow(actionId) { Owner = owner };
+        studio.ShowDialog();
+        _win.RepaintPadsAfterStudio();
+        return studio.SavedActionId;
+    });
+
     bool IActionHost.SupportsSpeedTestConfig => true;
 
     void IActionHost.OpenSpeedTestConfig() => _win.Dispatcher.Invoke(() =>
@@ -113,7 +128,7 @@ internal sealed class DisplayPadActionHost : IActionHost
 
     string? IActionHost.PreviewLiveTile(string? actionType, string? actionValue)
     {
-        if (actionType == "dp_screen")
+        if (actionType is "dp_screen" or "dp_custom")
         {
             var (screenText, _) = Services.DpLiveTileService.TileValue(actionType, actionValue ?? "");
             return string.IsNullOrEmpty(screenText) ? null : screenText;

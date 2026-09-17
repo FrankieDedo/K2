@@ -73,6 +73,11 @@ public partial class DpKeyConfigDialog : Window
     private const string CacheDir_UserRotated =
         "K2.DisplayPad\\user_rotated";
 
+    /// <summary>Where "Emoji as image" parks the PNG it renders (shared by every key that
+    /// picks the same emoji — see <see cref="EmojiGlyphRenderer.RenderToCache"/>).</summary>
+    private const string CacheDir_EmojiIcons =
+        "K2.DisplayPad\\emoji_icons";
+
     // =====================================================================
     // Constructor
     // =====================================================================
@@ -200,7 +205,7 @@ public partial class DpKeyConfigDialog : Window
 
     private static bool IsLiveActionType(string? type) =>
         type is "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus"
-             or "dp_screen";
+             or KspTelemachus.ActionType or "dp_screen" or "dp_custom";
 
     /// <summary>Starts/stops the 1 Hz preview refresh to match whether the CURRENT action is a
     /// live type with its default icon active — called after every change that could flip
@@ -290,6 +295,7 @@ public partial class DpKeyConfigDialog : Window
         bool isDefault = _spec.DefaultIcon;
 
         BtnLoadImage.IsEnabled   = !isDefault;
+        BtnEmojiImage.IsEnabled  = !isDefault;
         BtnRemoveImage.IsEnabled = !isDefault;
 
         // "Edit icon" stays enabled either way — for a default icon it edits the caption/font/
@@ -328,6 +334,34 @@ public partial class DpKeyConfigDialog : Window
 
         SetRotation(0);
         RefreshImagePreview();      // crop editor (static) or animated preview (GIF)
+        UpdateIconControlsAvailability();
+    }
+
+    /// <summary>
+    /// "Emoji as image" — the emoji becomes the key's PICTURE and nothing else: the action is
+    /// left exactly as it is (an emoji tile on a "launch Discord" key is just an icon choice).
+    /// That's what separates this from the "Emoji" ACTION, which types the emoji on press and
+    /// draws itself as the tile; here the tile is a hand-picked picture like a loaded PNG, so
+    /// it turns "Default icon" off and goes through the same crop/edit path afterwards.
+    /// </summary>
+    private void BtnEmojiImage_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new EmojiPickerDialog { Owner = this };
+        if (picker.ShowDialog() != true || picker.SelectedEmoji is null) return;
+
+        // Null only for an emoji with no color art, which the picker can't offer (its catalog
+        // is filtered to what EmojiGlyphRenderer can draw) — keep the current picture then.
+        string? png = EmojiGlyphRenderer.RenderToCache(
+            picker.SelectedEmoji, DpHidNative.IconSize, CacheDir_EmojiIcons);
+        if (png is null) return;
+
+        _pendingPath = png;
+        _spec.Text = null;          // the emoji tile carries no caption of its own yet
+        _spec.DefaultIcon = false;
+        ChkDefaultIcon.IsChecked = false;
+
+        SetRotation(0);
+        RefreshImagePreview();
         UpdateIconControlsAvailability();
     }
 
@@ -650,6 +684,7 @@ public partial class DpKeyConfigDialog : Window
         // Live tiles: the short symbol/abbreviation the tile carries by default ("CPU", "download"),
         // so "Edit icon" starts from the real wording. A clock face has none — it needs no label.
         "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus" or "dp_screen"
+            or "dp_custom" or KspTelemachus.ActionType
                           => DpLiveTileService.TileCaption(ActionType!, ActionValue) is { Length: > 0 } c ? c : null,
         "exec" or "emoji" => null,   // these tiles never draw a caption
         _                 => ActionIconFallback.Caption(ActionType, ActionValue),

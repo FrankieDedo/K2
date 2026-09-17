@@ -218,9 +218,12 @@ internal static class SpotifyCoverService
     private static int _tick;
 
     private static Timer? _webPoll;   // WebApi source has no push events — poll GET /me/player
+    private static int _pollMs;       // current period of _webPoll (0 = not running)
     private static Timer? _marquee;   // scrolls the Single-layout text tiles
 
     private const int WebPollMs = 4000;
+    // Local (SMTC) source: pure safety net behind the push events, so it can be slow.
+    private const int LocalPollMs = 5000;
     // ~8 fps. Each tick re-uploads one 102x102 tile per OVERFLOWING field, and the pad shares
     // that pipe with every other upload K2 does; the original 11 fps left no room for them and
     // showed as tearing on the scrolling line (user report 2026-09-01). The step grows to keep
@@ -302,6 +305,32 @@ internal static class SpotifyCoverService
     /// <see cref="PreviewChanged"/>.</summary>
     private static async Task RefreshAsync(int? onlyDeviceId)
     {
+        // One resolve at a time, globally. A play/pause/next press makes SMTC raise several
+        // events back to back, and OnTrackChanged adds a delayed follow-up on top: the resolves
+        // they start overlap, and WinRT hands them back in any order. Whichever finished LAST
+        // won, so a half-populated read taken mid-swap could land after the good one and stay on
+        // the pad forever (Local source has no poll to correct it) — user report 2026-09-08:
+        // "premo pausa/avanti e i testi spariscono finche' non ricarico il profilo".
+        await _refreshGate.WaitAsync().ConfigureAwait(false);
+        try { await RefreshCoreAsync(onlyDeviceId).ConfigureAwait(false); }
+        finally { _refreshGate.Release(); }
+    }
+
+    private static readonly SemaphoreSlim _refreshGate = new(1, 1);
+
+    /// <summary>Timer-driven refresh: unlike an event-driven one it must never QUEUE behind the
+    /// resolve already in flight — a slow WinRT/HTTP read would otherwise pile up a backlog of
+    /// identical polls that all run back to back once it returns. Skipping is free: the next
+    /// tick is at most one period away.</summary>
+    private static async Task PollRefreshAsync()
+    {
+        if (!await _refreshGate.WaitAsync(0).ConfigureAwait(false)) return;
+        try { await RefreshCoreAsync(null).ConfigureAwait(false); }
+        finally { _refreshGate.Release(); }
+    }
+
+    private static async Task RefreshCoreAsync(int? onlyDeviceId)
+    {
         var targets = new List<(int Id, DeviceCtx Ctx)>();
         lock (_gate)
         {
@@ -320,6 +349,7 @@ internal static class SpotifyCoverService
             TrackData track = await ResolveTrackAsync(ctx).ConfigureAwait(false);
             bool skip = false;
             bool stateChanged = false;
+            bool anythingChanged = false;
             lock (_gate)
             {
                 if (!_rt.TryGetValue(id, out var rt)) { rt = new DeviceRt(); _rt[id] = rt; }
@@ -327,31 +357,52 @@ internal static class SpotifyCoverService
                 // Blank read: keep what is on the pad rather than wiping it, ONCE. A real stop
                 // (Spotify closed) reads blank again on the follow-up above and goes through on
                 // the second try, so nothing gets stuck showing a track that ended.
-                bool blank = string.IsNullOrWhiteSpace(track.Title)
-                             && string.IsNullOrWhiteSpace(track.Artist)
-                             && string.IsNullOrWhiteSpace(track.Album)
-                             && !track.HasArt;
+                bool blankText = string.IsNullOrWhiteSpace(track.Title)
+                                 && string.IsNullOrWhiteSpace(track.Artist)
+                                 && string.IsNullOrWhiteSpace(track.Album);
+                bool blank = blankText && !track.HasArt;
                 bool hadSomething = !string.IsNullOrWhiteSpace(rt.Track.Title)
                                     || !string.IsNullOrWhiteSpace(rt.Track.Artist)
                                     || !string.IsNullOrWhiteSpace(rt.Track.Album);
                 rt.BlankStreak = blank ? rt.BlankStreak + 1 : 0;
                 if (blank && hadSomething && rt.BlankStreak < 2) skip = true;
+                // PARTIAL read: cover art came back but the metadata didn't. That is never a
+                // real state of a playing track (Spotify always reports a title), it's the
+                // session being read while it swaps — and the old guard above let it through,
+                // because it only recognised an ALL-blank read. It then wrote three empty text
+                // tiles and cached them as the current track, so nothing came back to fix it:
+                // exactly the "premo pausa/avanti e spariscono i testi, ricarico il profilo e
+                // tornano" report (2026-09-08). Keep the last known text instead.
+                else if (!skip && blankText && hadSomething)
+                {
+                    ctx.Log("[Spotify] partial read (art, no metadata) — keeping last known text");
+                    track = track with { Title = rt.Track.Title, Artist = rt.Track.Artist, Album = rt.Track.Album };
+                }
                 // Rewind the marquee only when the TEXT actually changed. The WebApi source
                 // re-resolves the same track every 4s; resetting unconditionally made every
                 // scrolling line snap back to its start on each poll (user report 2026-09-01).
                 bool sameText = rt.Track.Title == track.Title
                                 && rt.Track.Artist == track.Artist
                                 && rt.Track.Album == track.Album;
+                // Same idea for the cover: a read that lost the art while the track did NOT
+                // change is a partial read, not an album without a cover.
+                if (!skip && !track.HasArt && sameText && rt.Track.HasArt)
+                    track = track with { Art = rt.Track.Art };
                 bool sameState = rt.Track.IsPlaying == track.IsPlaying
                                  && rt.Track.ShuffleOn == track.ShuffleOn
                                  && rt.Track.RepeatMode == track.RepeatMode;
                 stateChanged = !skip && !sameState;
+                // The hardware push below is unconditional (it doubles as the "re-assert the
+                // block" path), but the WPF preview only needs redoing when something actually
+                // changed — the Local safety poll would otherwise re-render the grid every 5s.
+                anythingChanged = !skip && (!sameText || !sameState
+                                            || rt.Track.HasArt != track.HasArt);
                 if (!skip) rt.Track = track;
                 if (!skip && !sameText)
                     for (int i = 0; i < 3; i++) rt.ScrollPx[i] = 0;
             }
             if (skip) continue;
-            PushDevice(id, ctx, track, notify: true);
+            PushDevice(id, ctx, track, notify: anythingChanged);
             if (stateChanged)
                 try { PlaybackStateChanged?.Invoke(id, new PlaybackState(track.IsPlaying, track.ShuffleOn, track.RepeatMode)); }
                 catch (Exception ex) { ctx.Log($"[Spotify] PlaybackStateChanged handler threw: {ex.Message}"); }
@@ -707,10 +758,18 @@ internal static class SpotifyCoverService
     /// set. Call with <see cref="_gate"/> held.</summary>
     private static void SyncTimersLocked()
     {
-        bool wantPoll = _devices.Values.Any(d => d.Cfg.Source == SpotifyCoverSource.WebApi);
-        if (wantPoll && _webPoll is null)
-            _webPoll = new Timer(_ => { _ = RefreshAsync(null); }, null, WebPollMs, WebPollMs);
-        else if (!wantPoll && _webPoll is not null) { _webPoll.Dispose(); _webPoll = null; }
+        // The Local source is push-only (SMTC events), so ANY read it gets wrong stays on the
+        // pad until the next track change — there was nothing behind it to correct a bad frame.
+        // A slow poll is that safety net (user report 2026-09-08); the WebApi source keeps its
+        // faster one, which is its only source of updates at all.
+        bool wantWeb = _devices.Values.Any(d => d.Cfg.Source == SpotifyCoverSource.WebApi);
+        int wantMs = wantWeb ? WebPollMs : (_devices.Count > 0 ? LocalPollMs : 0);
+        if (wantMs != _pollMs)
+        {
+            _webPoll?.Dispose();
+            _webPoll = wantMs > 0 ? new Timer(_ => { _ = PollRefreshAsync(); }, null, wantMs, wantMs) : null;
+            _pollMs = wantMs;
+        }
 
         bool wantMarquee = _devices.Values.Any(d =>
             d.Cfg.Layout == SpotifyCoverLayout.Single && d.Cfg.TextMode == SpotifyTextMode.Marquee);

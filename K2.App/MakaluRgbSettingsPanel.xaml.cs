@@ -185,6 +185,40 @@ public partial class MakaluRgbSettingsPanel : UserControl
     /// (effect/speed/direction/colors/brightness) — see <see cref="ApplyCurrentMkEffect"/>.</summary>
     internal event Action? PreviewChanged;
 
+    /// <summary>"Turn off backlight when idle" enabled + timeout (seconds) for the current
+    /// profile — raised from <see cref="Init"/>, <see cref="MkReloadProfile"/> and the
+    /// checkbox/seconds handlers so MainWindow can (re)configure its own
+    /// <see cref="K2.Core.Services.BacklightIdleTimer"/>. Subscribe BEFORE calling
+    /// <see cref="Init"/> — Init raises it once with the loaded value.</summary>
+    internal event Action<bool, int>? AutoOffConfigChanged;
+
+    private void RaiseAutoOffConfig()
+    {
+        int sec = int.TryParse(TxtMkBacklightIdleSec.Text, out var s)
+            ? Math.Clamp(s, MkBacklightIdleSecMin, MkBacklightIdleSecMax)
+            : MkBacklightIdleSecDefault;
+        AutoOffConfigChanged?.Invoke(CkMkBacklightIdle.IsChecked == true, sec);
+    }
+
+    /// <summary>Idle-timeout hook: sends effect Off to the mouse without touching the
+    /// panel's stored lighting choice, so <see cref="ReapplyLightingNow"/> can restore it
+    /// verbatim on the next activity. No-op while disconnected.</summary>
+    internal void ForceBacklightOff()
+    {
+        if (!_mkConnected) return;
+        _makalu.SetLighting(MakaluProtocol.Effect.Off, (0, 0, 0), 0);
+        _log("[AutoOff] Makalu backlight off (idle)");
+    }
+
+    /// <summary>Wake hook: re-sends whatever effect the panel currently shows (preset or
+    /// Custom) — same path as a profile reload's apply step.</summary>
+    internal void ReapplyLightingNow()
+    {
+        if (!_mkConnected) return;
+        _log("[AutoOff] Makalu backlight restored (activity)");
+        ApplyCurrentMkEffect();
+    }
+
     internal MkPreviewState GetPreviewState() => new(
         ResolveMkWireEffect(CbMkEffect.SelectedItem is MkEffectChoice pick ? pick.Eff : MakaluProtocol.Effect.Off),
         _mkColor1, _mkColor2,
@@ -245,6 +279,9 @@ public partial class MakaluRgbSettingsPanel : UserControl
             SldMkClickSpeed.Value = 0;
             LblMkClickSpeedVal.Text = "0";
 
+            CkMkBacklightIdle.IsChecked = false;
+            TxtMkBacklightIdleSec.Text = "60";
+
             BuildMkDpiLevelButtons();
         }
         finally
@@ -253,6 +290,7 @@ public partial class MakaluRgbSettingsPanel : UserControl
         }
         _mkInitialized = true;
         PreviewChanged?.Invoke();
+        RaiseAutoOffConfig();
     }
 
     /// <summary>Called by the parent whenever the detected model changes —
@@ -623,10 +661,55 @@ public partial class MakaluRgbSettingsPanel : UserControl
         MkPersistDeviceSettings();
     }
 
-    /// <summary>Snapshots polling/debounce/angle/lift-off/sensitivity/click-speed (one
-    /// combined blob per profile) from the current controls — called after each of the
-    /// Apply actions above, so the saved record always reflects whichever setting the
-    /// user has last touched.</summary>
+    /// <summary>Min/max for the "turn off lighting when idle" timeout, in seconds.
+    /// Range is K2's own choice (matches the other panels' auto-off boxes) — there's
+    /// no confirmed firmware range for the Makalu 67, and nothing is written to the
+    /// device yet anyway (see MakaluDeviceSettingsRecord's doc comment).</summary>
+    private const int MkBacklightIdleSecMin = 5;
+    private const int MkBacklightIdleSecMax = 3600;
+    private const int MkBacklightIdleSecDefault = 60;
+
+    private void CkMkBacklightIdle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_mkSuppress) return;
+        MkApplyBacklightIdle();
+    }
+
+    private void TxtMkBacklightIdleSec_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) MkApplyBacklightIdle();
+    }
+
+    private void TxtMkBacklightIdleSec_LostFocus(object sender, RoutedEventArgs e) => MkApplyBacklightIdle();
+
+    /// <summary>Normalises the seconds box, persists the flag + timeout, and re-raises
+    /// <see cref="AutoOffConfigChanged"/> so MainWindow reconfigures its
+    /// <see cref="K2.Core.Services.BacklightIdleTimer"/>.
+    /// <para>This is a SOFTWARE idle timer (2026-09-10): the firmware sensor-RAM write at
+    /// addr 4013 was tried on real 67 hardware and did nothing (see
+    /// <see cref="MakaluProtocol.SetBacklightIdleOff"/>), so instead MainWindow.Makalu.cs
+    /// counts idle time from <see cref="RawMouseActivityWatcher"/> and calls
+    /// <see cref="ForceBacklightOff"/> / <see cref="ReapplyLightingNow"/> on this panel —
+    /// same pattern as Everest 60 / MacroPad, just with mouse Raw Input as the activity
+    /// source instead of a key-event callback. The persisted seconds value still
+    /// round-trips through BC import/export (<c>MakaluSettings.WakeUpSleepSoft</c>).</para></summary>
+    private void MkApplyBacklightIdle()
+    {
+        if (_mkSuppress) return;
+        if (!int.TryParse(TxtMkBacklightIdleSec.Text, out int sec))
+            sec = MkBacklightIdleSecDefault;
+        sec = Math.Clamp(sec, MkBacklightIdleSecMin, MkBacklightIdleSecMax);
+        TxtMkBacklightIdleSec.Text = sec.ToString();
+        _log($"[SET ] BacklightIdleOff enabled={CkMkBacklightIdle.IsChecked == true} sec={sec}");
+        LblMkBacklightIdleStatus.Text = "";
+        MkPersistDeviceSettings();
+        RaiseAutoOffConfig();
+    }
+
+    /// <summary>Snapshots polling/debounce/angle/lift-off/sensitivity/click-speed plus
+    /// the "turn off lighting when idle" flag + timeout (one combined blob per profile)
+    /// from the current controls — called after each of the Apply actions above, so the
+    /// saved record always reflects whichever setting the user has last touched.</summary>
     private void MkPersistDeviceSettings()
     {
         if (_mkStore is null) return;
@@ -634,11 +717,15 @@ public partial class MakaluRgbSettingsPanel : UserControl
         int debIdx  = Math.Clamp((int)Math.Round(SldMkDebounce.Value), 0, DebounceSteps.Length - 1);
         int sensitivity = Math.Clamp((int)Math.Round(SldMkSensitivity.Value), MakaluOsMouseSettings.ScaleMin, MakaluOsMouseSettings.ScaleMax);
         int clickSpeed  = Math.Clamp((int)Math.Round(SldMkClickSpeed.Value), MakaluOsMouseSettings.ScaleMin, MakaluOsMouseSettings.ScaleMax);
+        bool blIdleOff = CkMkBacklightIdle.IsChecked == true;
+        int blIdleSec = int.TryParse(TxtMkBacklightIdleSec.Text, out var bs)
+            ? Math.Clamp(bs, MkBacklightIdleSecMin, MkBacklightIdleSecMax)
+            : MkBacklightIdleSecDefault;
         _mkStore.SaveSettings(CurrentSlot, new MakaluDeviceSettingsRecord(
             PollingSteps[pollIdx], DebounceSteps[debIdx],
             RbMkAngleOn.IsChecked == true, RbMkLiftHigh.IsChecked == true,
             RbMkLiftCustom.IsChecked == true && _mkLiftCustom, _mkSurfaceA, _mkSurfaceB,
-            sensitivity, clickSpeed));
+            sensitivity, clickSpeed, blIdleOff, blIdleSec));
     }
 
     // ------------------------------------------------------------
@@ -1001,11 +1088,16 @@ public partial class MakaluRgbSettingsPanel : UserControl
                 int clickSpeed = Math.Clamp(settings.ClickSpeed, MakaluOsMouseSettings.ScaleMin, MakaluOsMouseSettings.ScaleMax);
                 SldMkClickSpeed.Value = clickSpeed;
                 LblMkClickSpeedVal.Text = clickSpeed.ToString();
+
+                CkMkBacklightIdle.IsChecked = settings.BacklightIdleOff;
+                TxtMkBacklightIdleSec.Text = Math.Clamp(
+                    settings.BacklightIdleOffSec, MkBacklightIdleSecMin, MkBacklightIdleSecMax).ToString();
             }
         }
         finally { _mkSuppress = wasSuppress; }
 
         PreviewChanged?.Invoke();
+        RaiseAutoOffConfig();
 
         if (!_mkConnected)
         {

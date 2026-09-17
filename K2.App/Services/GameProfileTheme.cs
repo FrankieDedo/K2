@@ -199,7 +199,18 @@ internal static class GameProfileTheme
     private static string? ExistingBg(GameProfileSpec spec, string fileName)
     {
         string path = Path.Combine(GameArtRoot, spec.ArtFolder, fileName);
-        return File.Exists(path) ? path : null;
+        if (File.Exists(path)) return path;
+
+        // A profile that came from a game-profile module ships its art beside that module, not in
+        // K2's own Assets folder. Same file names and the same sub-folder-per-game layout — only
+        // the root differs.
+        if (GameProfileModules.ArtRootFor(spec.Id) is { } moduleRoot)
+        {
+            string modulePath = Path.Combine(moduleRoot, spec.ArtFolder, fileName);
+            if (File.Exists(modulePath)) return modulePath;
+        }
+
+        return null;
     }
 
     /// <summary>Text colour hex for a profile's key, dimmed when the key's own state is "off"

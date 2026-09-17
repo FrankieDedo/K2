@@ -59,6 +59,14 @@ public sealed class GoogleHomeBridge
 
     public static GoogleHomeBridge Instance { get; } = new();
 
+    /// <summary>App log, wired in <c>App.OnStartup</c>. <see cref="TriggerAsync"/> gets its own
+    /// per-call log action from ButtonActionEngine; this one is for the paths that have none —
+    /// above all <see cref="GoogleHomeSetupWindow"/>'s page scan, which used to fail silently.
+    /// </summary>
+    public static Action<string>? Log { get; set; }
+
+    internal static void Say(string message) => Log?.Invoke("[GoogleHome] " + message);
+
     private GoogleHomeBridge() { }
 
     private CoreWebView2Environment? _environment;
@@ -272,8 +280,24 @@ public sealed class GoogleHomeBridge
 
     private async Task<WebView2> EnsureTriggerViewAsync()
     {
-        if (_triggerView is not null) return _triggerView;
+        // Gate the whole creation, not just the null check: _triggerView has to be assigned
+        // before the first await (the WPF objects must be built on this thread in one go), so
+        // without this a second key press landing mid-creation would get the view back with a
+        // still-null CoreWebView2 and NRE inside TriggerFoyerAsync. Two presses in a row on a
+        // Google Home key is the normal case, not an edge one.
+        await _triggerViewGate.WaitAsync();
+        try
+        {
+            if (_triggerView is not null) return _triggerView;
+            return await CreateTriggerViewAsync();
+        }
+        finally { _triggerViewGate.Release(); }
+    }
 
+    private readonly System.Threading.SemaphoreSlim _triggerViewGate = new(1, 1);
+
+    private async Task<WebView2> CreateTriggerViewAsync()
+    {
         // Offscreen, never shown: WebView2 still needs a real HWND to host the browser
         // process, so this is a real (positioned off the visible desktop) window rather
         // than a hidden one — Show() is what actually creates the HWND. Sized like a real
@@ -307,7 +331,12 @@ public sealed class GoogleHomeBridge
         return _triggerView;
     }
 
-    private static Task NavigateAsync(WebView2 view, string url)
+    /// <summary>Navigate and wait for the load to finish. Bounded by
+    /// <see cref="NavigateTimeout"/>: NavigationCompleted is not guaranteed to fire for every
+    /// URL (a redirect chain that ends elsewhere, a page that never settles), and an unbounded
+    /// wait here hangs whatever awaited it — see GoogleHomeSetupWindow's Disconnect button,
+    /// which used to strand itself exactly this way.</summary>
+    internal static async Task NavigateAsync(WebView2 view, string url)
     {
         var tcs = new TaskCompletionSource();
         void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
@@ -317,6 +346,13 @@ public sealed class GoogleHomeBridge
         }
         view.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
         view.CoreWebView2.Navigate(url);
-        return tcs.Task;
+
+        if (await Task.WhenAny(tcs.Task, Task.Delay(NavigateTimeout)) != tcs.Task)
+        {
+            view.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+            Say($"navigation to {url} did not complete within {NavigateTimeout.TotalSeconds:0}s — continuing anyway");
+        }
     }
+
+    internal static readonly TimeSpan NavigateTimeout = TimeSpan.FromSeconds(20);
 }

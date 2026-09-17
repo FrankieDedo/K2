@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using K2.App.Services;
@@ -94,6 +95,14 @@ public partial class MainWindow
     /// <summary>Channel the dismissals above belong to.</summary>
     private string? _dvpLastChannel;
 
+    /// <summary>Per-device coalescing window for repaints driven by live events. A burst of
+    /// SPEAKING_START/STOP (DiscordVoiceRoom raises those several times a second while people
+    /// talk) collapses into a single paint instead of one paint per event.</summary>
+    private const int DvpPaintCoalesceMs = 120;
+
+    /// <summary>Devices with a coalesced repaint already due — see <see cref="DvpRequestRepaint"/>.</summary>
+    private readonly Dictionary<int, DispatcherTimer> _dvpPaintTimers = new();
+
     /// <summary>Per-device one-shot timers that bring the voice page back on their own after the
     /// user left it for a normal profile mid-call — the screensaver-style comeback gated by
     /// <see cref="DiscordStore.VoicePageReturnEnabled"/>/<see cref="DiscordStore.VoicePageReturnSeconds"/>
@@ -115,6 +124,27 @@ public partial class MainWindow
         public string?[] Tiles = new string?[12];
         /// <summary>Participant id behind each physical key, for the press handler.</summary>
         public string?[] Users = new string?[12];
+
+        /// <summary>What the DEVICE actually has on each physical key right now (null = blank).
+        /// Touched ONLY by the queued upload job, which runs serialized on the per-device upload
+        /// chain — so it is a single-writer field and the diff in <see cref="MainWindow.DvpPaint"/>
+        /// is always taken against what really went out on the wire, never against an optimistic
+        /// guess made on the UI thread. This is what turns a speaking start/stop (one circle
+        /// changes) into a ONE-tile write instead of a twelve-tile one.</summary>
+        public string?[] OnDevice = new string?[12];
+
+        /// <summary>Set when the next upload must send all 12 keys regardless of the diff: the
+        /// page has just taken the panel over (whatever the profile left there is unknown to us),
+        /// or a previous upload reported a failure and the device state is no longer trustworthy.</summary>
+        public bool FullResend = true;
+
+        /// <summary>Bumped on the UI thread for every queued paint; the job compares it on the
+        /// chain thread and returns immediately when a NEWER paint has been queued behind it.
+        /// Without this the chain is an unbounded backlog: SPEAKING_START/STOP arrives several
+        /// times a second (see DiscordVoiceRoom's remarks) while a full panel write takes
+        /// ~150-250 ms, so the producer outruns the consumer by an order of magnitude and every
+        /// event adds a job that will never be dropped. Latest-wins makes the backlog drain.</summary>
+        public int PaintSeq;
     }
 
     /// <summary>True while <paramref name="devId"/>'s panel is owned by the voice page.</summary>
@@ -298,6 +328,7 @@ public partial class MainWindow
         _dvpForegroundTimer?.Stop();
         _dvpForegroundTimer = null;
         DvpCancelAllReturnTimers();
+        DvpCancelAllPaintTimers();
     }
 
     /// <summary>Channel joined/left (or the roster changed): open, close or repaint.</summary>
@@ -421,7 +452,43 @@ public partial class MainWindow
 
     private void DvpRepaintAll()
     {
-        foreach (int id in _dpDiscordRoom.Keys.ToList()) DvpPaint(id);
+        foreach (int id in _dpDiscordRoom.Keys.ToList()) DvpRequestRepaint(id);
+    }
+
+    /// <summary>
+    /// Coalesced repaint: the entry point for every repaint driven by a LIVE event (speaking
+    /// start/stop, avatar downloaded). The first call arms a short timer and the ones landing
+    /// inside that window ride on it, so a talkative call produces at most one paint per
+    /// <see cref="DvpPaintCoalesceMs"/> instead of one per event.
+    ///
+    /// <para>Repaints the user is waiting on — the page opening, the roster arrows — call
+    /// <see cref="DvpPaint"/> directly instead: they must land now, and they don't come in
+    /// bursts.</para>
+    /// </summary>
+    private void DvpRequestRepaint(int devId)
+    {
+        if (_dpTornDown || !_dpDiscordRoom.ContainsKey(devId)) return;
+        if (_dvpPaintTimers.ContainsKey(devId)) return;   // one already due — this event rides on it
+
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(DvpPaintCoalesceMs) };
+        timer.Tick += (_, _) =>
+        {
+            DvpCancelPaintTimer(devId);
+            if (!_dpTornDown) DvpPaint(devId);
+        };
+        _dvpPaintTimers[devId] = timer;
+        timer.Start();
+    }
+
+    private void DvpCancelPaintTimer(int devId)
+    {
+        if (_dvpPaintTimers.Remove(devId, out var timer)) timer.Stop();
+    }
+
+    private void DvpCancelAllPaintTimers()
+    {
+        foreach (var timer in _dvpPaintTimers.Values) timer.Stop();
+        _dvpPaintTimers.Clear();
     }
 
     // ================================================================
@@ -492,6 +559,7 @@ public partial class MainWindow
         // system-wide.
         if (_dvpPttHeld) DvpPushToTalk(false);
 
+        DvpCancelPaintTimer(devId);
         if (!_dpDiscordRoom.Remove(devId)) return;
         DpLog($"[DVP] device {devId}: Discord voice page closed — restoring page icons");
         DvpSyncDedicatedUi(devId, active: false);
@@ -503,6 +571,7 @@ public partial class MainWindow
     /// <see cref="DpEmojiBrowserAbandon"/>.</summary>
     private void DvpAbandon(int devId)
     {
+        DvpCancelPaintTimer(devId);
         if (_dpDiscordRoom.Remove(devId))
             DpLog($"[DVP] device {devId}: Discord voice page dropped (panel repainted elsewhere)");
     }
@@ -531,7 +600,7 @@ public partial class MainWindow
         {
             string? tile = DvpControlTile("ptt", Loc.Get("dvp_ptt"), highlight: pressed);
             st.Tiles[btnIndex] = tile;
-            if (tile is not null) DvpUpload(devId, tile, btnIndex, st.Rotation, shrink: false);
+            if (tile is not null) DvpUpload(devId, tile, btnIndex, st.Rotation, shrink: false, record: st);
             DvpPushToTalk(pressed);
             return;
         }
@@ -686,11 +755,21 @@ public partial class MainWindow
 
     /// <summary>One key's picture onto the device, chained onto the same per-device upload chain as
     /// every other icon write so it can never race a repaint.</summary>
-    private void DvpUpload(int devId, string tile, int btnIndex, int rotation, bool shrink)
+    /// <param name="record">When given, the write is recorded in that state's
+    /// <see cref="DvpState.OnDevice"/> so the next paint's diff knows this key already carries
+    /// <paramref name="tile"/> and doesn't send it again. Only for a write that changes what the
+    /// key shows for good — NOT for the shrink-on-press bounce, whose key-up puts the very same
+    /// picture back.</param>
+    private void DvpUpload(int devId, string tile, int btnIndex, int rotation, bool shrink,
+                           DvpState? record = null)
     {
         var previous = _dpUploadChain.TryGetValue(devId, out var p) ? p : Task.CompletedTask;
-        _dpUploadChain[devId] = previous.ContinueWith(
-            _ => _dpClient.UploadImage(devId, tile, btnIndex, rotation, shrink), TaskScheduler.Default);
+        _dpUploadChain[devId] = previous.ContinueWith(_ =>
+        {
+            bool ok = _dpClient.UploadImage(devId, tile, btnIndex, rotation, shrink);
+            // Written on the chain thread, like every other OnDevice update — see DvpPaint.
+            if (record is not null) { record.OnDevice[btnIndex] = tile; if (!ok) record.FullResend = true; }
+        }, TaskScheduler.Default);
     }
 
     /// <summary>Renders the 12 tiles from the current room state and uploads them, chained onto
@@ -698,6 +777,8 @@ public partial class MainWindow
     private void DvpPaint(int devId)
     {
         if (!_dpDiscordRoom.TryGetValue(devId, out var st)) return;
+        // Painting now — a coalesced repaint still on the clock has nothing left to do.
+        DvpCancelPaintTimer(devId);
         // A roster/speaking event mid-screensaver must not tick tiles into the image — the page
         // is put back wholesale on wake (see DvpOpen's screensaver guard).
         if (_dpScreensaverShowing.Contains(devId)) return;
@@ -763,15 +844,36 @@ public partial class MainWindow
         st.Tiles = tiles;
         st.Users = users;
 
+        // Everything already queued for this device is now stale — see DvpState.PaintSeq.
+        int seq = unchecked(st.PaintSeq + 1);
+        Volatile.Write(ref st.PaintSeq, seq);
+
         int rotation = st.Rotation;
         var previous = _dpUploadChain.TryGetValue(devId, out var p) ? p : Task.CompletedTask;
         _dpUploadChain[devId] = previous.ContinueWith(_ =>
         {
+            // Superseded while it waited its turn on the chain: a newer paint carrying newer
+            // tiles is queued behind, so writing these would cost ~150-250 ms of wire time only
+            // to show state that is already out of date. Dropping it is what keeps the chain
+            // from growing without bound when the room is busier than the USB pipe.
+            if (Volatile.Read(ref st.PaintSeq) != seq) return;
+
+            // OnDevice/FullResend are read and written HERE and nowhere else (this chain is
+            // serialized per device), so the diff is always taken against what actually went
+            // out on the wire — never against an optimistic guess made on the UI thread.
+            bool all = st.FullResend;
+            st.FullResend = false;
+            bool ok = true;
             for (int i = 0; i < 12; i++)
             {
-                if (tiles[i] is string path) _dpClient.UploadImage(devId, path, i, rotation);
+                if (!all && tiles[i] == st.OnDevice[i]) continue;
+                if (tiles[i] is string path) ok &= _dpClient.UploadImage(devId, path, i, rotation);
                 else DpClearKeyOnDevice(devId, i);
+                st.OnDevice[i] = tiles[i];
             }
+            // A write that failed leaves the panel holding something we can no longer predict:
+            // take the diff out of the loop next time rather than let the two drift apart.
+            if (!ok) st.FullResend = true;
         }, TaskScheduler.Default);
     }
 
@@ -799,13 +901,19 @@ public partial class MainWindow
         string? avatar = DiscordAvatarCache.TryGet(p.AvatarUrl);
         bool speaking = DiscordVoiceRoom.IsSpeaking(p.Id);
 
+        // Somebody muted locally (Discord's per-user mute — what pressing their circle does, and
+        // what the client's own right-click Mute does) carries the SAME red badge as a real mute:
+        // from this pad they are silent either way, so a second badge would only add a symbol to
+        // decode (user choice 2026-09-08).
+        bool mute = p.Mute || DiscordVoiceRoom.IsLocallyMuted(p.Id);
+
         string key = string.Join("|", avatar ?? "noavatar", p.Id, p.Name,
-            speaking ? "spk" : "-", p.Mute ? "m" : "-", p.Deaf ? "d" : "-", p.Self ? "self" : "-",
+            speaking ? "spk" : "-", mute ? "m" : "-", p.Deaf ? "d" : "-", p.Self ? "self" : "-",
             DpHidNative.IconSize);
         string dest = DpAutoIconCachePath("dvpface", key);
         if (File.Exists(dest)) return dest;
         return DiscordTileRenderer.TryRenderParticipant(
-            avatar, p.Name, speaking, p.Mute, p.Deaf, p.Self, DpHidNative.IconSize, dest) ? dest : null;
+            avatar, p.Name, speaking, mute, p.Deaf, p.Self, DpHidNative.IconSize, dest) ? dest : null;
     }
 
     private static string? DvpWaitingTile()

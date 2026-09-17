@@ -56,11 +56,24 @@ public partial class MainWindow
     /// instead of press/release like the other 5.</summary>
     private DispatcherTimer? _mkDpiFlashTimer;
 
+    /// <summary>"Turn off backlight when idle" — SOFTWARE timer (the Makalu has no
+    /// firmware LED idle-off; the addr-4013 sensor-RAM write did nothing on real 67
+    /// hardware, see MakaluProtocol.SetBacklightIdleOff). Activity comes from
+    /// RawMouseActivityWatcher (any Makalu movement/wheel/click), timeout/wake call
+    /// MkRgbSettings.ForceBacklightOff / ReapplyLightingNow — same shape as Everest 60 /
+    /// MacroPad, see BacklightIdleTimer.</summary>
+    private BacklightIdleTimer? _mkAutoOffTimer;
+
     /// <summary>Called once from the MainWindow constructor.</summary>
     private void InitMakaluModule()
     {
         _makalu = new MakaluService(LogMakalu);
         _mkStore = new MakaluStore();
+
+        _mkAutoOffTimer = new BacklightIdleTimer(Dispatcher, MkAutoOffTimeout, MkAutoOffWake);
+        // Subscribe before Init() — Init() raises AutoOffConfigChanged once with the
+        // loaded value and it must not be missed (same note as Everest60RgbPanel).
+        MkRgbSettings.AutoOffConfigChanged += (enabled, seconds) => _mkAutoOffTimer?.Configure(enabled, seconds);
 
         MkRgbSettings.Init(_makalu, LogMakalu, _mkStore, MkCurrentProfile);
         MkDpiRemap.Init(_makalu, LogMakalu, _mkStore, MkCurrentProfile);
@@ -632,8 +645,15 @@ public partial class MainWindow
                     ? Math.Clamp(sv, MakaluOsMouseSettings.ScaleMin, MakaluOsMouseSettings.ScaleMax) : 10;
                 int clickSpeed = int.TryParse(settingsEl.Element("ClickSpeed")?.Value, out var cs)
                     ? Math.Clamp(cs, MakaluOsMouseSettings.ScaleMin, MakaluOsMouseSettings.ScaleMax) : 0;
+                // WakeUpSleepSoft ("soft sleep" / LED-off idle) -> K2's "turn off lighting
+                // when idle". BC's unit is assumed minutes (see
+                // BaseCampDbImporter.ReadMakaluMouseSettings), K2 stores seconds.
+                int wakeSoft = int.TryParse(settingsEl.Element("WakeUpSleepSoft")?.Value, out var ws) ? Math.Max(0, ws) : 0;
+                bool blIdleOff = wakeSoft > 0;
+                int blIdleSec = wakeSoft > 0 ? Math.Clamp(wakeSoft * 60, 5, 3600) : 60;
                 _mkStore.SaveSettings(slot, new MakaluDeviceSettingsRecord(
-                    pollHz, debMs, angleOn, liftHigh, liftCustom, Sensitivity: sensitivity, ClickSpeed: clickSpeed));
+                    pollHz, debMs, angleOn, liftHigh, liftCustom, Sensitivity: sensitivity, ClickSpeed: clickSpeed,
+                    BacklightIdleOff: blIdleOff, BacklightIdleOffSec: blIdleSec));
             }
 
             if (dpiItems.Count > 0)
@@ -1573,6 +1593,27 @@ public partial class MainWindow
     }
 
     private void BtnMkRefresh_Click(object sender, RoutedEventArgs e) => MkRefreshStatus();
+
+    // ------------------------------------------------------------
+    // Backlight auto-off (software idle timer — see _mkAutoOffTimer's doc)
+    // ------------------------------------------------------------
+
+    private void MkAutoOffTimeout()
+    {
+        if (!_mkConnected) return;
+        MkRgbSettings.ForceBacklightOff();
+    }
+
+    private void MkAutoOffWake()
+    {
+        if (!_mkConnected) return;
+        MkRgbSettings.ReapplyLightingNow();
+    }
+
+    /// <summary>Fed from MainWindow.xaml.cs's WndProc raw-input hook on ANY physical
+    /// activity from a Makalu (movement / wheel / click) — the mouse-equivalent of the
+    /// per-key RegisterActivity() calls the keyboard devices make.</summary>
+    private void OnMakaluActivity() => _mkAutoOffTimer?.RegisterActivity();
 
     // ------------------------------------------------------------
     // Brightness — Slider lives in MainWindow's shared top-right bar

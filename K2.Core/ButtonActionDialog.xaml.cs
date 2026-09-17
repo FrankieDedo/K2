@@ -53,6 +53,12 @@ public partial class ButtonActionDialog : Window
                 CbType.Items.Remove(dpOnly);
         }
 
+        // Two types whose values are things the USER defines. On a host with no store behind
+        // them the card would open a picker that can only answer "none", so the type is dropped
+        // from the list entirely and the picker skips it with it.
+        if (_host?.SupportsScreenProbes != true) RemoveType("dp_screen");
+        if (_host?.SupportsCustomActions != true) RemoveType(CustomActionType.Tag);
+
         // Set BEFORE SetType(): assigning CbType.SelectedItem below fires
         // CbType_SelectionChanged synchronously, which cascades into UpdatePanels() ->
         // EnsurePagePanel() — that needs _originalPageId already resolved to pre-select
@@ -89,8 +95,15 @@ public partial class ButtonActionDialog : Window
             LoadProfileSpec(ProfileTargetPayload.Parse(currentValue)
                 ?? LegacyProfileSpec(currentValue));
         }
+        // "dp_screen"/"dp_custom" are in this list too although their value list is built from a
+        // host store rather than a fixed enum: without the load, CbComboValue stayed EMPTY on a
+        // dialog opened on an existing key — the 3rd crumb showed nothing, the sub-action grid
+        // opened blank, a game profile could not recognise the key as one of the game's own
+        // commands (so the breadcrumb read "Live tiles > Generic" instead of the game's family),
+        // and saving wrote the value back as "" (user report 2026-09-18).
         else if (currentType is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
-                 or "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus")
+                 or "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus"
+                 or KspTelemachus.ActionType or "dp_screen" or CustomActionType.Tag)
         {
             LoadComboSpec(currentType, currentValue ?? "");
         }
@@ -156,6 +169,16 @@ public partial class ButtonActionDialog : Window
     private string CurrentTag()
         => CbType.SelectedItem is ComboBoxItem ci ? (string?)ci.Tag ?? "none" : "none";
 
+    /// <summary>Drops one action type from the list. Used for the types a host cannot back;
+    /// silently does nothing when the tag isn't there, since an allow-list may have removed it
+    /// already.</summary>
+    private void RemoveType(string tag)
+    {
+        foreach (var item in CbType.Items.OfType<ComboBoxItem>()
+                     .Where(i => (string?)i.Tag == tag).ToList())
+            CbType.Items.Remove(item);
+    }
+
     private void CbType_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (CbType.SelectedItem is not ComboBoxItem ci) return;
@@ -212,9 +235,14 @@ public partial class ButtonActionDialog : Window
         bool page    = tag == "dp_folder";
         bool browser = tag == "browser";
         bool profile = tag == "profile";
+        // "dp_screen"/"dp_custom" belong here as well: their value lives in CbComboValue like every
+        // other combo type, and ComboPanel is where their "Edit reading…"/"Edit action…" button and
+        // their live readout sit. Leaving them out is what kept the combo unpopulated — see the
+        // constructor's LoadComboSpec branch.
         bool combo   = tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
                               or "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus"
-                              or "dp_zcstatus";
+                              or "dp_zcstatus" or KspTelemachus.ActionType
+                              or "dp_screen" or CustomActionType.Tag;
         bool sysmon  = tag == "dp_sysmon";
         bool keys    = tag == "keys";
         bool hotkeyswitch = tag == "hotkeyswitch";
@@ -223,6 +251,11 @@ public partial class ButtonActionDialog : Window
         bool youtube = tag == "youtube";
         bool emoji   = tag == "emoji";
         bool emojiBrowser = tag == "dp_emojibrowser";
+        // A custom action is CHOSEN in the picker and has nothing to type — the breadcrumb above
+        // says which action the key carries, which is the whole of it (user request 2026-09-08).
+        // That is already the case now that it counts as a "combo" type: ComboPanel's label and
+        // list are permanently Collapsed in XAML, so only the "Edit action…" button and the live
+        // readout show, and it never falls through to the standard value box.
         bool std     = !py && !exec && !folder && !page && !browser && !profile && !combo && !keys && !hotkeyswitch && !multi && !appShortcut && !youtube && !emoji && !emojiBrowser;
 
         PyPanel.Visibility       = py      ? Visibility.Visible : Visibility.Collapsed;
@@ -336,7 +369,7 @@ public partial class ButtonActionDialog : Window
             ActionValue = SaveProfileSpec().ToJson();
         }
         else if (tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
-                 or "dp_clock" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus")
+                 or "dp_clock" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus" or KspTelemachus.ActionType)
         {
             ActionValue = SaveComboSpec();
         }
@@ -347,6 +380,10 @@ public partial class ButtonActionDialog : Window
         else if (tag == "dp_screen")
         {
             ActionValue = SaveScreenProbeSpec();
+        }
+        else if (tag == CustomActionType.Tag)
+        {
+            ActionValue = SaveCustomActionSpec();
         }
         else if (tag == "keys")
         {

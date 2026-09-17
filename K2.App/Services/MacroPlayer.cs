@@ -52,11 +52,11 @@ public sealed class MacroPlayer
         // played yet — i.e. keys the macro is "holding" (typically a
         // modifier like Alt held across several other keys, e.g. an
         // Alt+Numpad Unicode code). A single keydown sent once isn't
-        // enough: some input consumers (Windows' own Alt+Numpad composer
-        // among them) expect the key to keep being reasserted the way a
-        // real held key auto-repeats, not just go down once and stay
-        // silent until the up. See <see cref="HoldRepeat"/>.
-        var heldKeys = new HashSet<ushort>();
+        // enough: a really held key keeps emitting — modifiers must be
+        // reasserted for consumers that expect it (Windows' own Alt+Numpad
+        // composer among them), and an ordinary key auto-repeats.
+        // See <see cref="HoldRepeat"/>.
+        var heldKeys = new Dictionary<ushort, HeldKey>();
 
         try
         {
@@ -68,22 +68,10 @@ public sealed class MacroPlayer
                     if (ct.IsCancellationRequested) break;
                     var input = macro.Inputs[idx];
 
-                    // Delay
-                    int delay = macro.DelayOption switch
-                    {
-                        MacroDelay.NoDelay  => 0,
-                        MacroDelay.Custom   => macro.CustomDelayMs,
-                        _                   => input.DelayMs
-                    };
-                    if (delay > 0)
-                        HoldRepeat(delay, heldKeys, ct);
-
                     if (input.Type == "k2action")
                     {
                         K2ActionRequested?.Invoke(input.K2Type ?? "", input.Text ?? "");
-                        continue;
                     }
-
                     // Alt+Numpad code (Alt held, numpad digits, Alt released — e.g.
                     // Alt+0192 = "À"): compose the character ourselves and inject it as
                     // a single Unicode keystroke instead of replaying the raw keys.
@@ -95,19 +83,35 @@ public sealed class MacroPlayer
                     // deterministically removes every timing/composer dependency.
                     // Only when no other key is currently held by the macro: a group
                     // played under e.g. a held Ctrl isn't a plain Alt code.
-                    if (heldKeys.Count == 0
-                        && TryComposeAltCode(macro.Inputs, idx, out char altChar, out int groupEnd))
+                    else if (heldKeys.Count == 0
+                             && TryComposeAltCode(macro.Inputs, idx, out char altChar, out int groupEnd))
                     {
                         SendCharInput(altChar);
-                        idx = groupEnd; // skip the whole group, intra-group delays included
-                        continue;
+                        idx = groupEnd;          // skip the whole group, intra-group delays included
+                        input = macro.Inputs[idx];   // the group's closing Alt-up carries the trailing delay
+                    }
+                    else
+                    {
+                        ExecuteInput(input, heldKeys);
                     }
 
-                    ExecuteInput(input, heldKeys);
+                    // Delay AFTER the step just played — the in-memory convention
+                    // (see MacroInput.ShiftToDelayAfter). On a keydown that is how
+                    // long the key stays held down (HoldRepeat keeps it alive for
+                    // the whole stretch); on a keyup it is the pause before the
+                    // next step.
+                    int delay = macro.DelayOption switch
+                    {
+                        MacroDelay.NoDelay  => 0,
+                        MacroDelay.Custom   => macro.CustomDelayMs,
+                        _                   => input.DelayMs
+                    };
+                    if (delay > 0)
+                        HoldRepeat(delay, heldKeys, ct);
                 }
                 // A macro missing a keyup (truncated recording, edited by
                 // hand) must not leave a modifier stuck down system-wide.
-                foreach (var vk in heldKeys)
+                foreach (var vk in heldKeys.Keys)
                     SendKeyInput(vk, true);
             }
         }
@@ -117,17 +121,31 @@ public sealed class MacroPlayer
         }
     }
 
-    private const int HoldRepeatIntervalMs = 30;
+    private const int HoldRepeatIntervalMs = 15;
 
-    /// <summary>Sleeps <paramref name="totalMs"/> in small slices, resending
-    /// a keydown for every currently-held MODIFIER key on each slice —
-    /// mirrors the OS's own key auto-repeat for a physically held modifier
-    /// instead of a single fire-and-forget keydown.
-    /// Only modifiers: resending a non-modifier key (e.g. a numpad digit
-    /// between its recorded down and up) types it again on every slice,
-    /// which corrupts Alt+Numpad codes (Alt+0233 became Alt+02223333…)
-    /// and duplicates any character held across a recorded delay.</summary>
-    private static void HoldRepeat(int totalMs, HashSet<ushort> heldKeys, CancellationToken ct)
+    /// <summary>State kept for a key the macro is currently holding down.</summary>
+    private sealed class HeldKey
+    {
+        /// <summary><see cref="Environment.TickCount64"/> at which this key's next
+        /// auto-repeat keydown is due. Seeded one typematic delay after the
+        /// original keydown — only non-modifier keys use it.</summary>
+        public long RepeatAtTick;
+    }
+
+    /// <summary>Sleeps <paramref name="totalMs"/> in small slices, keeping every
+    /// currently-held key alive the way a physically held key stays alive:
+    /// <list type="bullet">
+    /// <item>MODIFIERS are reasserted on every slice — some consumers (Windows'
+    /// own Alt+Numpad composer among them) expect a steady stream rather than a
+    /// single fire-and-forget keydown, and a repeated modifier emits nothing.</item>
+    /// <item>ORDINARY keys auto-repeat on the system's own typematic schedule
+    /// (Control Panel repeat delay, then repeat rate), so a recording where "A"
+    /// was held for two seconds plays back as "aaaaaaa…" rather than a single
+    /// "a". The initial delay is what keeps this from corrupting fast
+    /// sequences: normal typing leaves a key down for far less than it, so
+    /// Alt+Numpad digits and quick keystrokes still fire exactly once.</item>
+    /// </list></summary>
+    private static void HoldRepeat(int totalMs, Dictionary<ushort, HeldKey> heldKeys, CancellationToken ct)
     {
         int elapsed = 0;
         while (elapsed < totalMs && !ct.IsCancellationRequested)
@@ -135,11 +153,35 @@ public sealed class MacroPlayer
             int chunk = Math.Min(HoldRepeatIntervalMs, totalMs - elapsed);
             Thread.Sleep(chunk);
             elapsed += chunk;
-            foreach (var vk in heldKeys)
-                if (IsModifierKey(vk))
-                    SendKeyInput(vk, false);
+            long now = Environment.TickCount64;
+            foreach (var pair in heldKeys)
+            {
+                if (IsModifierKey(pair.Key)) { SendKeyInput(pair.Key, false); continue; }
+                if (now < pair.Value.RepeatAtTick) continue;
+                SendKeyInput(pair.Key, false);
+                pair.Value.RepeatAtTick = now + TypematicRepeatMs;
+            }
         }
     }
+
+    /// <summary>Windows' keyboard repeat DELAY (SPI_GETKEYBOARDDELAY, 0-3 →
+    /// 250/500/750/1000 ms) — how long a key must stay down before it starts
+    /// repeating. Read once: changing it mid-session is not worth a re-read.</summary>
+    private static readonly int TypematicDelayMs = ReadTypematicDelayMs();
+
+    private static int ReadTypematicDelayMs() =>
+        SystemParametersInfo(SPI_GETKEYBOARDDELAY, 0, out int v, 0) && v is >= 0 and <= 3
+            ? 250 * (v + 1)
+            : 500;
+
+    /// <summary>Windows' keyboard repeat RATE (SPI_GETKEYBOARDSPEED, 0-31 →
+    /// ~2.5 to ~30 repeats per second), as a period in ms.</summary>
+    private static readonly int TypematicRepeatMs = ReadTypematicRepeatMs();
+
+    private static int ReadTypematicRepeatMs() =>
+        SystemParametersInfo(SPI_GETKEYBOARDSPEED, 0, out int v, 0) && v is >= 0 and <= 31
+            ? (int)Math.Round(1000.0 / (2.5 + 27.5 * v / 31.0))
+            : 33;
 
     /// <summary>
     /// Detects an Alt+Numpad compose group starting at <paramref name="start"/>:
@@ -211,12 +253,13 @@ public sealed class MacroPlayer
         _ => false
     };
 
-    private static void ExecuteInput(MacroInput input, HashSet<ushort> heldKeys)
+    private static void ExecuteInput(MacroInput input, Dictionary<ushort, HeldKey> heldKeys)
     {
         switch (input.Type)
         {
             case "keydown":
-                heldKeys.Add((ushort)input.Key);
+                heldKeys[(ushort)input.Key] =
+                    new HeldKey { RepeatAtTick = Environment.TickCount64 + TypematicDelayMs };
                 SendKeyInput((ushort)input.Key, false);
                 break;
             case "keyup":
@@ -409,6 +452,14 @@ public sealed class MacroPlayer
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);
+
+    private const uint SPI_GETKEYBOARDSPEED = 0x000A;
+    private const uint SPI_GETKEYBOARDDELAY = 0x0016;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SystemParametersInfo(
+        uint uiAction, uint uiParam, out int pvParam, uint fWinIni);
 
     private const uint MAPVK_VK_TO_VSC = 0;
 

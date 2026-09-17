@@ -106,6 +106,11 @@ public static class ActionIconFallback
         ["volume_up"]      = "Volume Up",
         ["volume_down"]    = "Volume Down",
         ["mute_toggle"]    = "Mute",
+        // The Windows per-app-volume variants (see AppAudioVolume) mean the same thing to the
+        // user, so they get the same glyph/caption as their Web API counterparts.
+        ["app_volume_up"]   = "Volume Up",
+        ["app_volume_down"] = "Volume Down",
+        ["app_mute_toggle"] = "Mute",
         ["shuffle_toggle"] = "Shuffle",
         ["repeat_cycle"]   = "Repeat",
     };
@@ -121,6 +126,9 @@ public static class ActionIconFallback
         ["volume_up"]      = "media_vol_up",
         ["volume_down"]    = "media_vol_down",
         ["mute_toggle"]    = "media_mute",
+        ["app_volume_up"]   = "media_vol_up",
+        ["app_volume_down"] = "media_vol_down",
+        ["app_mute_toggle"] = "media_mute",
         ["shuffle_toggle"] = "media_shuffle",
         ["repeat_cycle"]   = "media_repeat",
     };

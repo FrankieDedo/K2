@@ -26,8 +26,12 @@ namespace K2.Core.Services;
 /// that's what drives the live key icons on the DisplayPad (<see cref="VoiceStateChanged"/>).
 ///
 /// Command methods block on the pipe round trip (short timeout), same synchronous shape as
-/// <see cref="ObsBridge"/>/<see cref="TwitchBridge"/>, since <c>ButtonActionEngine.Execute</c>
-/// runs on the UI thread and callers already accept a brief block for a keypress.
+/// <see cref="ObsBridge"/>/<see cref="TwitchBridge"/>. They must therefore NOT be called from
+/// the UI thread: <c>ButtonActionEngine.Execute</c> dispatches the whole <c>discord</c> case on
+/// the thread pool, and the DisplayPad voice page does the same through its own <c>Rpc()</c>
+/// helper. Before that, a key bound to "toggle mute" froze the app for good whenever the OAuth
+/// token had expired (user report 2026-09-09) — the refresh's continuation wanted the UI thread
+/// the key press was blocking.
 /// </summary>
 public static class DiscordBridge
 {
@@ -127,7 +131,11 @@ public static class DiscordBridge
     private static DiscordIpc? EnsureReady(Action<string> log)
     {
         if (!DiscordStore.IsConnected) { log("[EXEC] discord: not connected"); return null; }
-        if (!DiscordAuth.EnsureFreshTokenAsync().GetAwaiter().GetResult())
+        // Task.Run, not a bare .GetAwaiter().GetResult(): EnsureFreshTokenAsync awaits without
+        // ConfigureAwait(false), so blocking a caller that HAS a SynchronizationContext (the WPF
+        // UI thread) on it dead-locks the app permanently. Hopping to the thread pool first
+        // means the continuation has no context to come back to.
+        if (!System.Threading.Tasks.Task.Run(() => DiscordAuth.EnsureFreshTokenAsync()).GetAwaiter().GetResult())
         {
             log("[EXEC] discord: token refresh failed");
             return null;
@@ -379,7 +387,12 @@ public static class DiscordBridge
 
         bool muted = ReadBool(data, "mute") ?? false;
         ipc.Send("SET_USER_VOICE_SETTINGS", new { user_id = userId, mute = !muted }, CommandTimeout, out var error);
-        if (error is not null) log($"[EXEC] discord user mute: {error}");
+        if (error is not null) { log($"[EXEC] discord user mute: {error}"); return; }
+
+        // Discord pushes no event for a per-user mute (it is a setting of THIS client about that
+        // user, not part of their voice state), so the voice page would keep showing them
+        // unmuted until something else repainted it. Tell the room model what we just wrote.
+        DiscordVoiceRoom.NoteLocalMute(userId, !muted);
     }, log, "user mute");
 
     // ---------------------------------------------------------------- webhook
@@ -394,7 +407,7 @@ public static class DiscordBridge
 
         try
         {
-            using var http = new HttpClient();
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
             var body = new StringContent(JsonSerializer.Serialize(new { content = message }), Encoding.UTF8, "application/json");
             var resp = http.PostAsync(url, body).GetAwaiter().GetResult();
             if (!resp.IsSuccessStatusCode) { log($"[EXEC] discord webhook: {resp.StatusCode}"); return false; }

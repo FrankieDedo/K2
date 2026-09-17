@@ -8,6 +8,38 @@
         ShowInTaskbar="False"
         Style="{DynamicResource K2WindowStyle}">
 
+    <Window.Resources>
+        <!-- Stock ListBox/ListBoxItem chrome forces a white/system background
+             regardless of Background set on the instance — same fix as
+             K2.App's MacroLibraryItemStyle/LbMacros and K2.Core's
+             RecentPathItemStyle/LstExecRecent. -->
+        <Style x:Key="ProcessItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource K2TextBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1E1E26"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource K2AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource K2AccentTextBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -19,7 +51,19 @@
                    Foreground="#AAA" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"/>
 
         <ListBox Grid.Row="1" x:Name="LstProcesses"
+                 ItemContainerStyle="{StaticResource ProcessItemStyle}"
                  MouseDoubleClick="LstProcesses_MouseDoubleClick">
+            <ListBox.Template>
+                <ControlTemplate TargetType="ListBox">
+                    <Border Background="{StaticResource K2SurfaceDarkBrush}"
+                            BorderBrush="{StaticResource K2BorderBrush}" BorderThickness="1"
+                            CornerRadius="4">
+                        <ScrollViewer Padding="2" CanContentScroll="False">
+                            <ItemsPresenter/>
+                        </ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </ListBox.Template>
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <StackPanel Orientation="Horizontal" Margin="0,2">

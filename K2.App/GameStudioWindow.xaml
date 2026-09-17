@@ -1,0 +1,1470 @@
+﻿<Window x:Class="K2.App.GameStudioWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+        Title="{loc:Get studio_title}"
+        Width="1280" Height="860" MinWidth="1080" MinHeight="700"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        FontFamily="{DynamicResource K2AppFontFamily}"
+        Style="{DynamicResource K2WindowStyle}">
+
+    <Window.Resources>
+        <Style x:Key="StudioLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource K2TextBrush}"/>
+            <Setter Property="Margin" Value="0,12,0,3"/>
+        </Style>
+        <Style x:Key="StudioHint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource K2TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style x:Key="StudioSection" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource K2TextBrush}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style x:Key="StudioFieldLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource K2TextMutedBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+        </Style>
+
+        <!-- Text fields at the app's own height (23): a taller box leaves the text floating away
+             from the border. BasedOn is load-bearing: a KEYED style does not inherit the theme's
+             implicit one, so without it these boxes came up in WPF's default white-on-white. -->
+        <Style x:Key="StudioBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Height" Value="23"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="StudioCombo" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <!-- A panel on the window's ground: the nav, the profile settings, the key bar. -->
+        <Style x:Key="StudioCard" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource K2SurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource K2BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="14,12"/>
+        </Style>
+
+        <!-- A glyph-only square button, same look as K2IconButton (whose template keeps a gap after
+             the glyph for its caption, which an icon-only button would wear as a lopsided margin). -->
+        <Style x:Key="StudioGlyphButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource K2SurfaceAltBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource K2TextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource K2BorderBrush}"/>
+            <Setter Property="Width" Value="27"/>
+            <Setter Property="Height" Value="25"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" CornerRadius="7" BorderThickness="1"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}">
+                            <Grid>
+                                <ContentPresenter x:Name="glyph" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <!-- This style carries its glyph in Content, not Tag, so the
+                                     delete swap keys off Content (see K2DeleteIcon). -->
+                                <Rectangle x:Name="trash" Style="{StaticResource K2DeleteIcon}"
+                                           Fill="{TemplateBinding Foreground}" Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Content" Value="&#xE74D;">
+                                <Setter TargetName="glyph" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="trash" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource K2HoverBrush}"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource K2AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource K2SurfaceDarkBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- A button that reads as a link: the breadcrumb back to the profile. -->
+        <Style x:Key="StudioLinkButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource K2TextMutedBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter VerticalAlignment="Center"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource K2TextBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- The colour cell is the swatch itself: a "Pick" button beside it would be one more
+             control on a line that already carries the inherit tick. -->
+        <Style x:Key="StudioSwatchButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderThickness="1" BorderBrush="{DynamicResource K2BorderBrush}"
+                                CornerRadius="3"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush"
+                                        Value="{DynamicResource K2AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Lists: WPF's default ListBox is white-on-white, which in this app reads as a hole in
+             the window. Same accent-when-selected language as the macro library's list. -->
+        <Style x:Key="StudioListItem" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="#9A9AA2"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="9,7"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderThickness="3,0,0,0" BorderBrush="Transparent"
+                                CornerRadius="0,4,4,0" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1E1E26"/>
+                                <Setter Property="Foreground" Value="#DCDCE0"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource K2AccentBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource K2AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource K2AccentTextBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="StudioList" TargetType="ListBox">
+            <!-- No horizontal scrolling: a long name is trimmed with an ellipsis rather than pushing
+                 a scrollbar under the list. -->
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="Background" Value="{DynamicResource K2SurfaceAltBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource K2TextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource K2BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="0,4"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource StudioListItem}"/>
+        </Style>
+
+        <!-- The navigation: group headings are rows too (so the list scrolls as one piece) but they
+             cannot be picked, and the "+ New…" rows read quieter than the things they create. -->
+        <Style x:Key="StudioNavItem" TargetType="ListBoxItem" BasedOn="{StaticResource StudioListItem}">
+            <Setter Property="Padding" Value="8,6"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                    <Setter Property="IsHitTestVisible" Value="False"/>
+                    <Setter Property="Focusable" Value="False"/>
+                    <Setter Property="Padding" Value="8,14,8,4"/>
+                    <Setter Property="Foreground" Value="{DynamicResource K2TextDimBrush}"/>
+                    <Setter Property="FontSize" Value="11"/>
+                    <Setter Property="FontWeight" Value="Bold"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsCommand}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource K2TextDimBrush}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- The header of one of the action editor's three steps: the whole bar is the toggle. -->
+        <Style x:Key="StudioStep" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource K2SurfaceAltBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource K2BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="7"/>
+            <Setter Property="Padding" Value="12,9"/>
+            <Setter Property="Margin" Value="0,10,0,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource K2HoverBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="StudioStepNumber" TargetType="Border">
+            <Setter Property="Width" Value="22"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="CornerRadius" Value="11"/>
+            <Setter Property="Background" Value="{DynamicResource K2SurfaceDarkBrush}"/>
+        </Style>
+        <Style x:Key="StudioStepBody" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource K2BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1,0,1,1"/>
+            <Setter Property="CornerRadius" Value="0,0,7,7"/>
+            <Setter Property="Padding" Value="14,4,14,14"/>
+            <Setter Property="Margin" Value="0,-4,0,0"/>
+        </Style>
+        <Style x:Key="StudioChevron" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{DynamicResource K2TextMutedBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="{loc:Get studio_title}" FontSize="18" FontWeight="Bold"
+                       Foreground="{DynamicResource K2TextBrush}"/>
+            <TextBlock Text="{loc:Get studio_intro}" Style="{StaticResource StudioHint}" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="250"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ─────────────── the one navigation: profiles, and the actions under each ─────────────── -->
+            <Border Grid.Column="0" Style="{StaticResource StudioCard}" Padding="8,10">
+                <DockPanel>
+                    <Grid DockPanel.Dock="Top" Margin="6,0,0,2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{loc:Get studio_nav_title}" Style="{StaticResource StudioSection}"
+                                       VerticalAlignment="Center"/>
+                            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get studio_nav_hint}"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Style="{StaticResource StudioGlyphButton}" Content="&#xE896;"
+                                ToolTip="{loc:Get studio_nav_import_tip}" Click="BtnProfileImport_Click"/>
+                    </Grid>
+                    <ListBox x:Name="LstNav" Style="{StaticResource StudioList}" Background="Transparent"
+                             BorderThickness="0" ItemContainerStyle="{StaticResource StudioNavItem}"
+                             SelectionChanged="LstNav_SelectionChanged"
+                             MouseRightButtonUp="LstNav_MouseRightButtonUp">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="{Binding Indent}">
+                                    <TextBlock DockPanel.Dock="Left" Text="{Binding Glyph}" Width="{Binding GlyphWidth}"
+                                               FontFamily="Segoe MDL2 Assets" FontSize="11" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center"/>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <Grid Grid.Column="2">
+                <TextBlock x:Name="PnlEmpty" Text="{loc:Get studio_empty}" Style="{StaticResource StudioHint}"
+                           FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Visibility="Collapsed"/>
+
+                <!-- ═══════════════ a profile: the pad at the centre ═══════════════ -->
+                <DockPanel x:Name="PnlProfileView">
+                    <Grid DockPanel.Dock="Top">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtProfileTitle" FontSize="18" FontWeight="Bold"
+                                       Foreground="{DynamicResource K2TextBrush}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="360"/>
+                            <Border x:Name="BdExeChip" CornerRadius="6" Padding="8,2" Margin="12,0,0,0"
+                                    Background="{DynamicResource K2SurfaceAltBrush}" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtExeChip" FontSize="11"
+                                           Foreground="{DynamicResource K2TextMutedBrush}"/>
+                            </Border>
+                            <Border x:Name="BdBuiltinBadge" CornerRadius="6" Padding="8,2" Margin="6,0,0,0"
+                                    Background="{DynamicResource K2SurfaceAltBrush}" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE72E;" FontFamily="Segoe MDL2 Assets" FontSize="10"
+                                               Foreground="{DynamicResource K2TextMutedBrush}"
+                                               VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                    <TextBlock Text="{loc:Get studio_builtin}" FontSize="11"
+                                               Foreground="{DynamicResource K2TextMutedBrush}"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button x:Name="BtnProfileSettings" Style="{StaticResource K2IconButton}" Tag="&#xE713;"
+                                    Content="{loc:Get studio_profile_settings}" Click="BtnProfileSettings_Click"/>
+                            <Button x:Name="BtnProfileExport" Style="{StaticResource StudioGlyphButton}"
+                                    Content="&#xE898;" Margin="6,0,0,0" ToolTip="{loc:Get studio_export_tip}"
+                                    Click="BtnProfileExport_Click"/>
+                            <Button x:Name="BtnProfileDelete" Style="{StaticResource StudioGlyphButton}"
+                                    Content="&#xE74D;" Margin="6,0,0,0" ToolTip="{loc:Get studio_profile_delete}"
+                                    Click="BtnProfileDelete_Click"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Set once and left alone, so folded away until asked for. -->
+                    <Border DockPanel.Dock="Top" x:Name="PnlProfileSettings" Style="{StaticResource StudioCard}"
+                            Margin="0,12,0,0" Visibility="Collapsed">
+                        <Grid x:Name="PnlProfile">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="28"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{loc:Get studio_identity}" Style="{StaticResource StudioSection}"/>
+                                <!-- Shown only on a profile K2 ships: says why the fields are locked
+                                     and what CAN still be done to it here. -->
+                                <Border x:Name="PnlBuiltinNote" Visibility="Collapsed" CornerRadius="6"
+                                        Background="{DynamicResource K2SurfaceAltBrush}" Padding="10,8" Margin="0,8,0,0">
+                                    <TextBlock Text="{loc:Get studio_builtin_note}" Style="{StaticResource StudioHint}"/>
+                                </Border>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,12,0,3">
+                                    <TextBlock Text="{loc:Get studio_profile_name}" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource K2TextBrush}"/>
+                                    <Path Style="{DynamicResource K2HintIcon}"
+                                          ToolTip="{loc:Get studio_profile_name_hint}"/>
+                                </StackPanel>
+                                <TextBox x:Name="TxtProfileName" Style="{StaticResource StudioBox}"
+                                         LostFocus="ProfileField_Changed"/>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,12,0,3">
+                                    <TextBlock Text="{loc:Get studio_profile_exe}"
+                                               Foreground="{DynamicResource K2TextBrush}" VerticalAlignment="Center"/>
+                                    <Path Style="{DynamicResource K2HintIcon}"
+                                          ToolTip="{loc:Get studio_profile_exe_hint}"/>
+                                </StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" x:Name="TxtProfileExe" Style="{StaticResource StudioBox}"
+                                             LostFocus="ProfileField_Changed"/>
+                                    <Button Grid.Column="1" x:Name="BtnExeRunning" Content="{loc:Get studio_exe_running}"
+                                            Margin="6,0,0,0" Padding="8,1" Click="BtnExeRunning_Click"/>
+                                    <Button Grid.Column="2" x:Name="BtnExeBrowse" Content="{loc:Get studio_exe_browse}"
+                                            Margin="6,0,0,0" Padding="8,1" Click="BtnExeBrowse_Click"/>
+                                </Grid>
+
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="24"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                            <TextBlock Text="{loc:Get studio_profile_appid}" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource K2TextBrush}"/>
+                                            <Path Style="{DynamicResource K2HintIcon}"
+                                                  ToolTip="{loc:Get studio_profile_appid_hint}"/>
+                                        </StackPanel>
+                                        <TextBox x:Name="TxtProfileAppId" Width="140" HorizontalAlignment="Left"
+                                                 Style="{StaticResource StudioBox}" LostFocus="ProfileField_Changed"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                            <TextBlock Text="{loc:Get studio_accent}" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource K2TextBrush}"/>
+                                            <Path Style="{DynamicResource K2HintIcon}"
+                                                  ToolTip="{loc:Get studio_accent_hint}"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Border x:Name="SwAccent" Width="40" Height="23" BorderThickness="1"
+                                                    CornerRadius="3" BorderBrush="{DynamicResource K2BorderBrush}"/>
+                                            <Button x:Name="BtnAccent" Content="{loc:Get studio_pick_color}" Margin="8,0,0,0"
+                                                    Padding="10,1" Tag="accent" Click="BtnPickColor_Click"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{loc:Get studio_default_style}" Style="{StaticResource StudioSection}"/>
+                                    <Path Style="{DynamicResource K2HintIcon}"
+                                          ToolTip="{loc:Get studio_default_style_hint}"/>
+                                </StackPanel>
+
+                                <Grid x:Name="GrdProfileStyle" Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="140"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Text="{loc:Get studio_bg_on}" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource K2TextBrush}" Margin="0,3"/>
+                                    <Border Grid.Row="0" Grid.Column="1" x:Name="SwBgOn" Width="40" Height="23" CornerRadius="3"
+                                            BorderThickness="1" BorderBrush="{DynamicResource K2BorderBrush}" Margin="0,3"/>
+                                    <Button Grid.Row="0" Grid.Column="2" Content="{loc:Get studio_pick_color}"
+                                            Margin="8,3" Padding="8,1" Tag="dbgon" Click="BtnPickColor_Click"/>
+
+                                    <TextBlock Grid.Row="1" Text="{loc:Get studio_text_on}" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource K2TextBrush}" Margin="0,3"/>
+                                    <Border Grid.Row="1" Grid.Column="1" x:Name="SwTextOn" Width="40" Height="23" CornerRadius="3"
+                                            BorderThickness="1" BorderBrush="{DynamicResource K2BorderBrush}" Margin="0,3"/>
+                                    <Button Grid.Row="1" Grid.Column="2" Content="{loc:Get studio_pick_color}"
+                                            Margin="8,3" Padding="8,1" Tag="dtexton" Click="BtnPickColor_Click"/>
+
+                                    <StackPanel Grid.Row="2" Grid.ColumnSpan="4" Orientation="Horizontal"
+                                                Margin="0,8,0,3">
+                                        <CheckBox x:Name="ChkProfileOff" Content="{loc:Get studio_use_off}"
+                                                  Foreground="{DynamicResource K2TextBrush}" Click="ChkProfileOff_Click"/>
+                                        <Path Style="{DynamicResource K2HintIcon}"
+                                              ToolTip="{loc:Get studio_use_off_hint}"/>
+                                    </StackPanel>
+
+                                    <!-- The OFF pair only exists once asked for: two more rows of
+                                         colours nobody uses is how this panel became a wall. -->
+                                    <StackPanel Grid.Row="3" Grid.ColumnSpan="4" x:Name="PnlProfileOff">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Grid.Row="0" Text="{loc:Get studio_bg_off}" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource K2TextBrush}" Margin="0,3"/>
+                                            <Border Grid.Row="0" Grid.Column="1" x:Name="SwBgOff" Width="40" Height="23"
+                                                    CornerRadius="3" BorderThickness="1"
+                                                    BorderBrush="{DynamicResource K2BorderBrush}" Margin="0,3"/>
+                                            <Button Grid.Row="0" Grid.Column="2" x:Name="BtnBgOff"
+                                                    Content="{loc:Get studio_pick_color}"
+                                                    Margin="8,3" Padding="8,1" Tag="dbgoff" Click="BtnPickColor_Click"/>
+
+                                            <TextBlock Grid.Row="1" Text="{loc:Get studio_text_off}" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource K2TextBrush}" Margin="0,3"/>
+                                            <Border Grid.Row="1" Grid.Column="1" x:Name="SwTextOff" Width="40" Height="23"
+                                                    CornerRadius="3" BorderThickness="1"
+                                                    BorderBrush="{DynamicResource K2BorderBrush}" Margin="0,3"/>
+                                            <Button Grid.Row="1" Grid.Column="2" x:Name="BtnTextOff"
+                                                    Content="{loc:Get studio_pick_color}"
+                                                    Margin="8,3" Padding="8,1" Tag="dtextoff" Click="BtnPickColor_Click"/>
+                                        </Grid>
+                                    </StackPanel>
+
+                                    <!-- The frame the tiles wear right now, the game's own art
+                                         included: "change the background" is a guess until you can
+                                         see what is being replaced. -->
+                                    <TextBlock Grid.Row="4" Text="{loc:Get studio_bg_image}" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource K2TextBrush}" Margin="0,10,0,3"/>
+                                    <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3" Orientation="Horizontal"
+                                                Margin="0,10,0,3">
+                                        <Button Content="{loc:Get studio_pick_image}" Padding="8,1" Tag="dbgimgon"
+                                                Click="BtnPickImage_Click"/>
+                                        <Button Content="{loc:Get studio_clear_image}" Margin="6,0,0,0" Padding="8,1"
+                                                Tag="dbgimgon" Click="BtnClearImage_Click"/>
+                                        <Path Style="{DynamicResource K2HintIcon}"
+                                              ToolTip="{loc:Get studio_bg_image_hint}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="5" Grid.ColumnSpan="4" Orientation="Horizontal" Margin="0,6,0,0">
+                                        <Border Width="48" Height="48" BorderThickness="1" Background="#141416"
+                                                CornerRadius="3" BorderBrush="{DynamicResource K2BorderBrush}">
+                                            <Image x:Name="ImgProfileBg" Stretch="Uniform" Margin="2"
+                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                        </Border>
+                                        <TextBlock x:Name="LblProfileBgImage" VerticalAlignment="Center"
+                                                   Margin="10,0,0,0" Style="{StaticResource StudioHint}"
+                                                   TextTrimming="CharacterEllipsis" MaxWidth="240"/>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- The headings the profile's actions are filed under in the action
+                                 browser. Generic and a shipped game's own are fixed; the rest are
+                                 the user's. -->
+                            <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Margin="0,18,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{loc:Get studio_categories}" Style="{StaticResource StudioSection}"/>
+                                    <Path Style="{DynamicResource K2HintIcon}"
+                                          ToolTip="{loc:Get studio_categories_hint}"/>
+                                </StackPanel>
+                                <WrapPanel x:Name="PnlCategories" Margin="0,8,0,0"/>
+                                <Grid Margin="0,4,0,0" MaxWidth="420" HorizontalAlignment="Left">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="TxtNewCategory" Style="{StaticResource StudioBox}" MinWidth="220"
+                                             KeyDown="TxtNewCategory_KeyDown"/>
+                                    <Button Grid.Column="1" Content="{loc:Get studio_category_add}" Margin="6,0,0,0"
+                                            Padding="10,1" Click="BtnCategoryAdd_Click"/>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Grid DockPanel.Dock="Top" Margin="0,16,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{loc:Get studio_keys}" Style="{StaticResource StudioSection}"/>
+                            <Path x:Name="HintKeys" Style="{DynamicResource K2HintIcon}"
+                                  ToolTip="{loc:Get studio_layout_hint}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <StackPanel x:Name="PnlPageNav" Orientation="Horizontal" Visibility="Collapsed"
+                                        VerticalAlignment="Center" Margin="0,0,10,0">
+                                <Button x:Name="BtnPagePrev" Style="{StaticResource StudioGlyphButton}" Content="&#xE76B;"
+                                        Click="BtnPagePrev_Click"/>
+                                <TextBlock x:Name="TxtPage" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource K2TextMutedBrush}"
+                                           MinWidth="100" TextAlignment="Center"/>
+                                <Button x:Name="BtnPageNext" Style="{StaticResource StudioGlyphButton}" Content="&#xE76C;"
+                                        Click="BtnPageNext_Click"/>
+                            </StackPanel>
+                            <Path Style="{DynamicResource K2HintIcon}" Margin="0,0,10,0"
+                                  ToolTip="{loc:Get studio_pages_hint}"/>
+                            <Button x:Name="BtnPageAdd" Style="{StaticResource K2IconButton}" Tag="&#xE710;"
+                                    Content="{loc:Get studio_page_add}" Click="BtnPageAdd_Click"/>
+                            <Button x:Name="BtnPageRemove" Style="{StaticResource StudioGlyphButton}" Content="&#xE74D;"
+                                    Margin="6,0,0,0" ToolTip="{loc:Get studio_page_remove}" Click="BtnPageRemove_Click"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- The key the user last clicked: what it does, and the three things they can do
+                         to it. -->
+                    <Border DockPanel.Dock="Bottom" x:Name="PnlKeyBar" Style="{StaticResource StudioCard}"
+                            Margin="0,12,0,0" Padding="10,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="BdKeyThumb" Width="46" Height="46" CornerRadius="4" Margin="0,0,12,0"
+                                    Background="#0D0D10" BorderThickness="1" BorderBrush="{DynamicResource K2BorderBrush}">
+                                <Image x:Name="ImgKeyBar" Stretch="UniformToFill"
+                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtKeyTitle" Foreground="{DynamicResource K2TextBrush}"
+                                           FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="TxtKeyDesc" Style="{StaticResource StudioHint}"
+                                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" x:Name="PnlKeyActions" Orientation="Horizontal"
+                                        VerticalAlignment="Center">
+                                <Path Style="{DynamicResource K2HintIcon}" Margin="0,0,10,0"
+                                      ToolTip="{loc:Get studio_key_bar_hint}"/>
+                                <Button x:Name="BtnKeyEditAction" Style="{StaticResource K2IconAccentButton}"
+                                        Tag="&#xE70F;" Content="{loc:Get studio_key_edit_action}"
+                                        Margin="0,0,6,0" Click="BtnKeyEditAction_Click"/>
+                                <Button x:Name="BtnKeyChange" Style="{StaticResource K2IconButton}" Tag="&#xE8AB;"
+                                        Content="{loc:Get studio_key_change}" Click="BtnKeyChange_Click"/>
+                                <Button x:Name="BtnKeyClear" Style="{StaticResource StudioGlyphButton}" Content="&#xE74D;"
+                                        Margin="6,0,0,0" ToolTip="{loc:Get dp_remove_action}" Click="BtnKeyClear_Click"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- The profile's keys, on the pad itself: same picture and same key geometry as
+                         the game-profile popup and the DisplayPad section (Assets/mkd_bg.png, screen
+                         area 55..455 x 130..330, 60x60 keys), so what is configured looks like what
+                         the user will be holding. -->
+                    <Viewbox VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="820">
+                        <Canvas x:Name="CvsKeys" Width="510" Height="370" ClipToBounds="True">
+                            <Canvas.Background>
+                                <ImageBrush ImageSource="Assets/mkd_bg.png" Stretch="Fill"/>
+                            </Canvas.Background>
+                        </Canvas>
+                    </Viewbox>
+                </DockPanel>
+
+                <!-- ═══════════════ an action: three steps, in the order they are done ═══════════════ -->
+                <DockPanel x:Name="PnlActionView" Visibility="Collapsed">
+                    <Grid DockPanel.Dock="Top">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="BtnCrumbProfile" Style="{StaticResource StudioLinkButton}"
+                                    Click="BtnCrumbProfile_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE72B;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                                               VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock x:Name="TxtCrumbProfile" FontSize="13" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="10,0"
+                                       Foreground="{DynamicResource K2TextDimBrush}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtActionTitle" FontSize="18" FontWeight="Bold"
+                                       Foreground="{DynamicResource K2TextBrush}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="420"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button x:Name="BtnActionCopy" Style="{StaticResource K2IconButton}" Tag="&#xE8C8;"
+                                    Content="{loc:Get studio_action_copy}" ToolTip="{loc:Get studio_action_copy_tip}"
+                                    Click="BtnActionCopy_Click"/>
+                            <Button x:Name="BtnActionDuplicate" Style="{StaticResource K2IconButton}" Tag="&#xE8C8;"
+                                    Margin="6,0,0,0" Content="{loc:Get studio_action_duplicate}"
+                                    ToolTip="{loc:Get studio_action_duplicate_tip}"
+                                    Click="BtnActionDuplicate_Click"/>
+                            <Button x:Name="BtnActionDelete" Style="{StaticResource StudioGlyphButton}"
+                                    Content="&#xE74D;" Margin="6,0,0,0" ToolTip="{loc:Get studio_action_delete}"
+                                    Click="BtnActionDelete_Click"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
+                        <StackPanel x:Name="PnlAction" Margin="0,0,10,0">
+
+                            <!-- What the tile IS: two one-line fields. Its profile is the one it
+                                 sits under in the navigation, so it has no field of its own. -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="14"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                        <TextBlock Text="{loc:Get studio_action_name}" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource K2TextBrush}"/>
+                                        <Path Style="{DynamicResource K2HintIcon}"
+                                              ToolTip="{loc:Get studio_action_name_hint}"/>
+                                    </StackPanel>
+                                    <TextBox x:Name="TxtActionName" Style="{StaticResource StudioBox}"
+                                             LostFocus="ActionField_Changed"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                        <TextBlock Text="{loc:Get studio_action_category}"
+                                                   Foreground="{DynamicResource K2TextBrush}" VerticalAlignment="Center"/>
+                                        <Path Style="{DynamicResource K2HintIcon}"
+                                              ToolTip="{loc:Get studio_action_category_hint}"/>
+                                    </StackPanel>
+                                    <ComboBox x:Name="CbCategory" Style="{StaticResource StudioCombo}"
+                                              SelectionChanged="ActionField_Changed"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- What the key PRESSES, on top of what it shows. Optional: a tile with
+                                 no key here is a pure reading, which is what most of them are. -->
+                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                <TextBlock Text="{loc:Get studio_action_keys}" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource K2TextBrush}"/>
+                                <Path Style="{DynamicResource K2HintIcon}"
+                                      ToolTip="{loc:Get studio_action_keys_hint}"/>
+                                <CheckBox x:Name="ChkActKeyCtrl" Content="Ctrl" Margin="10,0,12,0"
+                                          VerticalAlignment="Center" Foreground="{DynamicResource K2TextBrush}"
+                                          Click="ActionField_Changed"/>
+                                <CheckBox x:Name="ChkActKeyShift" Content="Shift" Margin="0,0,12,0"
+                                          VerticalAlignment="Center" Foreground="{DynamicResource K2TextBrush}"
+                                          Click="ActionField_Changed"/>
+                                <CheckBox x:Name="ChkActKeyAlt" Content="Alt" Margin="0,0,12,0"
+                                          VerticalAlignment="Center" Foreground="{DynamicResource K2TextBrush}"
+                                          Click="ActionField_Changed"/>
+                                <CheckBox x:Name="ChkActKeyWin" Content="Win" Margin="0,0,14,0"
+                                          VerticalAlignment="Center" Foreground="{DynamicResource K2TextBrush}"
+                                          Click="ActionField_Changed"/>
+                                <ComboBox x:Name="CbActKeyValue" Style="{StaticResource StudioCombo}"
+                                          Width="150" IsEditable="True"
+                                          SelectionChanged="ActionField_Changed"
+                                          LostFocus="ActionField_Changed"/>
+                                <Button x:Name="BtnActKeyClear" Style="{StaticResource StudioGlyphButton}"
+                                        Content="&#xE894;" Margin="6,0,0,0"
+                                        ToolTip="{loc:Get studio_action_keys_clear}"
+                                        Click="BtnActKeyClear_Click"/>
+                            </StackPanel>
+
+                            <!-- ─────────── ① what to read ─────────── -->
+                            <Border x:Name="StepRead" Style="{StaticResource StudioStep}" Margin="0,16,0,0"
+                                    Tag="read" MouseLeftButtonUp="Step_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border x:Name="BdStepReadNum" Style="{StaticResource StudioStepNumber}">
+                                        <TextBlock Text="1" FontWeight="Bold" HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource K2TextBrush}"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{loc:Get studio_step_read}" Margin="10,0,14,0"
+                                               Style="{StaticResource StudioSection}" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtStepReadSum" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource K2TextMutedBrush}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="3" x:Name="ChevRead" Style="{StaticResource StudioChevron}"/>
+                                </Grid>
+                            </Border>
+                            <Border x:Name="StepReadBody" Style="{StaticResource StudioStepBody}">
+                                <StackPanel Margin="0,12,0,0">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <TextBlock Text="{loc:Get studio_readings}" Style="{StaticResource StudioSection}"/>
+                                        <Path Style="{DynamicResource K2HintIcon}"
+                                              ToolTip="{loc:Get studio_readings_hint}"/>
+                                    </StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="210"/>
+                                            <ColumnDefinition Width="16"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <DockPanel Grid.Column="0">
+                                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+                                                <Button Style="{StaticResource K2IconButton}" Tag="&#xE710;"
+                                                        Content="{loc:Get studio_reading_new}" Click="BtnReadingNew_Click"/>
+                                                <Button x:Name="BtnReadingDelete" Style="{StaticResource StudioGlyphButton}"
+                                                        Content="&#xE74D;" Margin="6,0,0,0"
+                                                        ToolTip="{loc:Get studio_reading_delete}"
+                                                        Click="BtnReadingDelete_Click"/>
+                                            </StackPanel>
+                                            <ListBox x:Name="LstReadings" Height="150" Style="{StaticResource StudioList}"
+                                                     SelectionChanged="LstReadings_SelectionChanged">
+                                                <ListBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis"/>
+                                                    </DataTemplate>
+                                                </ListBox.ItemTemplate>
+                                            </ListBox>
+                                        </DockPanel>
+
+                                        <StackPanel Grid.Column="2" x:Name="PnlReading">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="12"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                                        <TextBlock Text="{loc:Get studio_reading_name}" VerticalAlignment="Center"
+                                                                   Foreground="{DynamicResource K2TextBrush}"/>
+                                                        <Path Style="{DynamicResource K2HintIcon}"
+                                                              ToolTip="{loc:Get studio_reading_name_hint}"/>
+                                                    </StackPanel>
+                                                    <TextBox x:Name="TxtReadingName" Style="{StaticResource StudioBox}"
+                                                             LostFocus="ReadingField_Changed"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2">
+                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                                        <TextBlock Text="{loc:Get studio_kind}"
+                                                                   Foreground="{DynamicResource K2TextBrush}"
+                                                                   VerticalAlignment="Center"/>
+                                                        <Path x:Name="HintKind" Style="{DynamicResource K2HintIcon}"/>
+                                                    </StackPanel>
+                                                    <ComboBox x:Name="CbKind" Style="{StaticResource StudioCombo}"
+                                                              SelectionChanged="ReadingField_Changed"/>
+                                                </StackPanel>
+                                            </Grid>
+                                            <!-- Where the value comes from. A separate question from
+                                                 the KIND on purpose: "a number between 0 and 100" is
+                                                 the same reading whether it is measured off the screen
+                                                 or published by the game itself. -->
+                                            <StackPanel Orientation="Horizontal" Margin="0,12,0,3">
+                                                <TextBlock Text="{loc:Get studio_source}" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource K2TextBrush}"/>
+                                                <Path x:Name="HintSource" Style="{DynamicResource K2HintIcon}"/>
+                                            </StackPanel>
+                                            <ComboBox x:Name="CbSource" Style="{StaticResource StudioCombo}"
+                                                      SelectionChanged="CbSource_SelectionChanged"/>
+
+                                            <TextBlock x:Name="LblKindWarning" Style="{StaticResource StudioHint}"
+                                                       Foreground="#C9A227" Margin="0,4,0,0" Visibility="Collapsed"/>
+
+                                            <StackPanel x:Name="PnlSingleProbe">
+                                                <StackPanel Orientation="Horizontal" Margin="0,12,0,3">
+                                                    <TextBlock Text="{loc:Get studio_probe}" VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource K2TextBrush}"/>
+                                                    <Path Style="{DynamicResource K2HintIcon}"
+                                                          ToolTip="{loc:Get studio_probe_hint}"/>
+                                                </StackPanel>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <ComboBox Grid.Column="0" x:Name="CbProbe"
+                                                              Style="{StaticResource StudioCombo}"
+                                                              SelectionChanged="ReadingField_Changed"/>
+                                                    <Button Grid.Column="1" x:Name="BtnProbeEdit"
+                                                            Style="{StaticResource K2IconAccentButton}" Tag="&#xE70F;"
+                                                            Content="{loc:Get studio_probe_edit}"
+                                                            Margin="6,0,0,0" Click="BtnProbeEdit_Click"/>
+                                                    <Button Grid.Column="2" Style="{StaticResource StudioGlyphButton}"
+                                                            Content="&#xE710;" Margin="6,0,0,0"
+                                                            ToolTip="{loc:Get studio_probe_new_tip}" Click="BtnProbeNew_Click"/>
+                                                    <Button Grid.Column="3" Style="{StaticResource StudioGlyphButton}"
+                                                            Content="&#xE8B7;" Margin="6,0,0,0"
+                                                            ToolTip="{loc:Get studio_probe_browse_tip}"
+                                                            Click="BtnProbeBrowse_Click"/>
+                                                    <Button Grid.Column="4" x:Name="BtnProbeDelete"
+                                                            Style="{StaticResource StudioGlyphButton}" Content="&#xE74D;"
+                                                            Margin="6,0,0,0" ToolTip="{loc:Get studio_probe_delete_tip}"
+                                                            Click="BtnProbeDelete_Click"/>
+                                                </Grid>
+                                            </StackPanel>
+
+                                            <StackPanel x:Name="PnlLink" Visibility="Collapsed">
+                                                <StackPanel x:Name="PnlLinkLabel" Orientation="Horizontal" Margin="0,12,0,3">
+                                                    <TextBlock Text="{loc:Get studio_link}" VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource K2TextBrush}"/>
+                                                    <Path Style="{DynamicResource K2HintIcon}"
+                                                          ToolTip="{loc:Get studio_link_hint}"/>
+                                                </StackPanel>
+                                                <Grid x:Name="GrdLinkPick">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <ComboBox Grid.Column="0" x:Name="CbLink"
+                                                              Style="{StaticResource StudioCombo}"
+                                                              SelectionChanged="CbLink_SelectionChanged"/>
+                                                    <Button Grid.Column="1" x:Name="BtnLinkEdit"
+                                                            Style="{StaticResource K2IconAccentButton}" Tag="&#xE70F;"
+                                                            Content="{loc:Get studio_link_edit}"
+                                                            Margin="6,0,0,0" Click="BtnLinkEdit_Click"/>
+                                                    <Button Grid.Column="2" Style="{StaticResource StudioGlyphButton}"
+                                                            Content="&#xE710;" Margin="6,0,0,0"
+                                                            ToolTip="{loc:Get studio_link_new_tip}" Click="BtnLinkNew_Click"/>
+                                                    <Button Grid.Column="3" x:Name="BtnLinkDelete"
+                                                            Style="{StaticResource StudioGlyphButton}" Content="&#xE74D;"
+                                                            Margin="6,0,0,0" ToolTip="{loc:Get studio_link_delete_tip}"
+                                                            Click="BtnLinkDelete_Click"/>
+                                                </Grid>
+
+                                                <!-- Only for a mod link, and only when it carries a
+                                                     page: the moment the user finds out the game is
+                                                     not answering is the moment they need the mod. -->
+                                                <Grid>
+                                                    <Button x:Name="BtnLinkMod" HorizontalAlignment="Left"
+                                                            Margin="0,6,0,0" Visibility="Collapsed"
+                                                            Style="{StaticResource K2IconButton}" Tag="&#xE896;"
+                                                            Content="{loc:Get studio_link_mod_get}"
+                                                            Click="BtnLinkMod_Click"/>
+                                                </Grid>
+
+                                                <StackPanel Orientation="Horizontal" Margin="0,12,0,3">
+                                                    <TextBlock Text="{loc:Get studio_link_value}" VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource K2TextBrush}"/>
+                                                    <Path Style="{DynamicResource K2HintIcon}"
+                                                          ToolTip="{loc:Get studio_link_value_hint}"/>
+                                                </StackPanel>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <!-- A box, not a drop-down. The list it used to offer
+                                                         came from the link's whole payload, which for a
+                                                         link that dumps a running game is tens of
+                                                         thousands of entries — a menu nobody can use and
+                                                         enough allocation to have crashed a 32-bit K2.
+                                                         Picking happens in the tree browser beside it;
+                                                         this is for typing or pasting a path, which has to
+                                                         keep working with the game shut down anyway. -->
+                                                    <TextBox Grid.Column="0" x:Name="TxtValuePath"
+                                                             Style="{StaticResource StudioBox}"
+                                                             LostFocus="ReadingField_Changed"/>
+                                                    <Button Grid.Column="1" Style="{StaticResource StudioGlyphButton}"
+                                                            Content="&#xE721;" Margin="6,0,0,0"
+                                                            ToolTip="{loc:Get link_tree_browse_tip}"
+                                                            Click="BtnValuePathTree_Click"/>
+                                                    <Button Grid.Column="2" Style="{StaticResource StudioGlyphButton}"
+                                                            Content="&#xE72C;" Margin="6,0,0,0"
+                                                            ToolTip="{loc:Get studio_link_refresh_tip}"
+                                                            Click="BtnLinkRefresh_Click"/>
+                                                </Grid>
+                                                <TextBlock x:Name="LblLinkStatus" Style="{StaticResource StudioHint}"
+                                                           Margin="0,4,0,0"/>
+                                            </StackPanel>
+
+                                            <StackPanel x:Name="PnlScale" Visibility="Collapsed">
+                                                <StackPanel Orientation="Horizontal" Margin="0,12,0,3">
+                                                    <TextBlock Text="{loc:Get studio_scale}"
+                                                               Foreground="{DynamicResource K2TextBrush}"
+                                                               VerticalAlignment="Center"/>
+                                                    <Path Style="{DynamicResource K2HintIcon}"
+                                                          ToolTip="{loc:Get studio_scale_hint}"/>
+                                                </StackPanel>
+                                                <!-- Each end is a typed number OR, for a value source, a
+                                                     path read from the game (the lens picks one). With a
+                                                     path the number box turns read-only and shows what
+                                                     the path reads right now; the path box and its X
+                                                     only exist while a path is set. -->
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+                                                    <TextBlock Text="{loc:Get studio_scale_min}" VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource K2TextBrush}" Margin="0,0,6,0"/>
+                                                    <TextBox Grid.Column="1" x:Name="TxtMin" Style="{StaticResource StudioBox}"
+                                                             Width="80" LostFocus="ReadingField_Changed"/>
+                                                    <Button Grid.Column="2" x:Name="BtnMinTree" Style="{StaticResource StudioGlyphButton}"
+                                                            Content="&#xE721;" Margin="6,0,0,0"
+                                                            ToolTip="{loc:Get studio_scale_browse_tip}"
+                                                            Click="BtnScaleTree_Click"/>
+                                                    <TextBox Grid.Column="3" x:Name="TxtMinPath" Style="{StaticResource StudioBox}"
+                                                             Margin="6,0,0,0" Visibility="Collapsed"
+                                                             LostFocus="ReadingField_Changed"/>
+                                                    <Button Grid.Column="4" x:Name="BtnMinClear" Style="{StaticResource StudioGlyphButton}"
+                                                            Content="&#xE711;" Margin="6,0,0,0" Visibility="Collapsed"
+                                                            ToolTip="{loc:Get studio_scale_clear_tip}"
+                                                            Click="BtnScaleClear_Click"/>
+                                                    <TextBlock Grid.Row="1" Text="{loc:Get studio_scale_max}" VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource K2TextBrush}" Margin="0,6,6,0"/>
+                                                    <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtMax" Style="{StaticResource StudioBox}"
+                                                             Width="80" Margin="0,6,0,0" LostFocus="ReadingField_Changed"/>
+                                                    <Button Grid.Row="1" Grid.Column="2" x:Name="BtnMaxTree" Style="{StaticResource StudioGlyphButton}"
+                                                            Content="&#xE721;" Margin="6,6,0,0"
+                                                            ToolTip="{loc:Get studio_scale_browse_tip}"
+                                                            Click="BtnScaleTree_Click"/>
+                                                    <TextBox Grid.Row="1" Grid.Column="3" x:Name="TxtMaxPath" Style="{StaticResource StudioBox}"
+                                                             Margin="6,6,0,0" Visibility="Collapsed"
+                                                             LostFocus="ReadingField_Changed"/>
+                                                    <Button Grid.Row="1" Grid.Column="4" x:Name="BtnMaxClear" Style="{StaticResource StudioGlyphButton}"
+                                                            Content="&#xE711;" Margin="6,6,0,0" Visibility="Collapsed"
+                                                            ToolTip="{loc:Get studio_scale_clear_tip}"
+                                                            Click="BtnScaleClear_Click"/>
+                                                </Grid>
+                                            </StackPanel>
+
+                                            <StackPanel x:Name="PnlStates" Visibility="Collapsed">
+                                                <StackPanel Orientation="Horizontal" Margin="0,12,0,3">
+                                                    <TextBlock Text="{loc:Get studio_multi_mode}"
+                                                               Foreground="{DynamicResource K2TextBrush}"
+                                                               VerticalAlignment="Center"/>
+                                                    <Path x:Name="HintMulti" Style="{DynamicResource K2HintIcon}"/>
+                                                </StackPanel>
+                                                <ComboBox x:Name="CbMultiMode" Style="{StaticResource StudioCombo}"
+                                                          SelectionChanged="ReadingField_Changed"/>
+
+                                                <StackPanel Orientation="Horizontal" Margin="0,12,0,3">
+                                                    <TextBlock Text="{loc:Get studio_states}" VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource K2TextBrush}"/>
+                                                    <Path Style="{DynamicResource K2HintIcon}"
+                                                          ToolTip="{loc:Get studio_states_hint}"/>
+                                                </StackPanel>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <ListBox Grid.Column="0" x:Name="LstStates" Height="120"
+                                                             Style="{StaticResource StudioList}" DisplayMemberPath="Name"
+                                                             SelectionChanged="LstStates_SelectionChanged"/>
+                                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                                        <Button Style="{StaticResource K2IconButton}" Tag="&#xE710;"
+                                                                Content="{loc:Get studio_state_add}"
+                                                                HorizontalContentAlignment="Left" Click="BtnStateAdd_Click"/>
+                                                        <Button x:Name="BtnStateRemove" Style="{StaticResource K2IconButton}"
+                                                                Tag="&#xE74D;" Content="{loc:Get studio_state_remove}"
+                                                                HorizontalContentAlignment="Left"
+                                                                Margin="0,4,0,0" Click="BtnStateRemove_Click"/>
+                                                        <TextBox x:Name="TxtStateName" Margin="0,8,0,0" Width="140"
+                                                                 Style="{StaticResource StudioBox}"
+                                                                 LostFocus="StateField_Changed"/>
+                                                        <Button x:Name="BtnStateProbe" Style="{StaticResource K2IconButton}"
+                                                                Tag="&#xE70F;" Content="{loc:Get studio_state_probe}"
+                                                                HorizontalContentAlignment="Left"
+                                                                Margin="0,4,0,0" Click="BtnStateProbe_Click"/>
+                                                        <StackPanel x:Name="PnlStateLink" Visibility="Collapsed">
+                                                            <TextBlock Text="{loc:Get studio_link_value}"
+                                                                       Style="{StaticResource StudioHint}"
+                                                                       Margin="0,6,0,2"/>
+                                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                                                                <TextBox x:Name="TxtStateValuePath" Width="140"
+                                                                         Style="{StaticResource StudioBox}"
+                                                                         LostFocus="StateField_Changed"/>
+                                                                <Button Style="{StaticResource StudioGlyphButton}"
+                                                                        Content="&#xE721;" Margin="6,0,0,0"
+                                                                        ToolTip="{loc:Get link_tree_browse_tip}"
+                                                                        Click="BtnStateValuePathTree_Click"/>
+                                                            </StackPanel>
+                                                            <StackPanel Orientation="Horizontal" Margin="0,6,0,2">
+                                                                <TextBlock Text="{loc:Get studio_state_match}"
+                                                                           Style="{StaticResource StudioHint}"
+                                                                           VerticalAlignment="Center"/>
+                                                                <Path Style="{DynamicResource K2HintIcon}"
+                                                                      ToolTip="{loc:Get studio_state_match_hint}"/>
+                                                            </StackPanel>
+                                                            <TextBox x:Name="TxtStateMatch" Width="140"
+                                                                     HorizontalAlignment="Left"
+                                                                     Style="{StaticResource StudioBox}"
+                                                                     LostFocus="StateField_Changed"/>
+                                                        </StackPanel>
+                                                        <Button x:Name="BtnStateIcon" Style="{StaticResource K2IconButton}"
+                                                                Tag="&#xE8B9;" Content="{loc:Get studio_state_icon}"
+                                                                HorizontalContentAlignment="Left"
+                                                                Margin="0,4,0,0" Click="BtnStateIcon_Click"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ─────────── ② how it looks ─────────── -->
+                            <Border x:Name="StepLook" Style="{StaticResource StudioStep}" Tag="look"
+                                    MouseLeftButtonUp="Step_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border x:Name="BdStepLookNum" Style="{StaticResource StudioStepNumber}">
+                                        <TextBlock Text="2" FontWeight="Bold" HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource K2TextBrush}"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{loc:Get studio_step_look}" Margin="10,0,14,0"
+                                               Style="{StaticResource StudioSection}" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtStepLookSum" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource K2TextMutedBrush}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="3" x:Name="ChevLook" Style="{StaticResource StudioChevron}"/>
+                                </Grid>
+                            </Border>
+                            <Border x:Name="StepLookBody" Style="{StaticResource StudioStepBody}">
+                                <Grid Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="20"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- The tile, big: the thing all of this is for. -->
+                                    <StackPanel Grid.Column="0">
+                                        <Border Width="240" Height="240" HorizontalAlignment="Left" Background="#141416"
+                                                BorderThickness="1" BorderBrush="{DynamicResource K2BorderBrush}"
+                                                CornerRadius="4">
+                                            <Grid x:Name="PreviewHost" ClipToBounds="True">
+                                                <Image x:Name="ImgPreview" Stretch="Uniform"
+                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                <!-- The outlines and their grips are built in code, one
+                                                     per element, so a tile with five pieces gets five. -->
+                                                <Canvas x:Name="CvsHandles" Background="Transparent"
+                                                        Focusable="True" FocusVisualStyle="{x:Null}"
+                                                        KeyDown="Handles_KeyDown"
+                                                        KeyUp="Handles_KeyUp"
+                                                        LostKeyboardFocus="Handles_LostKeyboardFocus"
+                                                        MouseMove="Handles_MouseMove"
+                                                        MouseLeftButtonUp="Handles_MouseUp"
+                                                        MouseLeave="Handles_MouseUp"/>
+                                            </Grid>
+                                        </Border>
+                                        <TextBlock x:Name="LblPreviewCaption" Style="{StaticResource StudioHint}"
+                                                   Margin="0,6,0,0" MaxWidth="240" HorizontalAlignment="Left"
+                                                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                            <Button Style="{StaticResource K2IconButton}" Tag="&#xE72C;"
+                                                    Content="{loc:Get studio_reset_layout}" Click="BtnResetLayout_Click"/>
+                                            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get studio_drag_hint}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2">
+                                        <!-- The layers: the list IS the drawing order, last on top. -->
+                                        <Grid Margin="0,0,0,6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="{loc:Get studio_elements}" Style="{StaticResource StudioSection}"/>
+                                                <Path Style="{DynamicResource K2HintIcon}"
+                                                      ToolTip="{loc:Get studio_elements_hint}"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                <Button x:Name="BtnElementAdd" Style="{StaticResource K2IconButton}"
+                                                        Tag="&#xE710;" Content="{loc:Get studio_element_add}"
+                                                        Click="BtnElementAdd_Click"/>
+                                                <Button x:Name="BtnElementUp" Style="{StaticResource StudioGlyphButton}"
+                                                        Content="&#xE74A;" Margin="6,0,0,0"
+                                                        ToolTip="{loc:Get studio_el_up}" Click="BtnElementUp_Click"/>
+                                                <Button x:Name="BtnElementDown" Style="{StaticResource StudioGlyphButton}"
+                                                        Content="&#xE74B;" Margin="4,0,0,0"
+                                                        ToolTip="{loc:Get studio_el_down}" Click="BtnElementDown_Click"/>
+                                                <Button x:Name="BtnElementDelete" Style="{StaticResource StudioGlyphButton}"
+                                                        Content="&#xE74D;" Margin="4,0,0,0"
+                                                        ToolTip="{loc:Get studio_element_delete}"
+                                                        Click="BtnElementDelete_Click"/>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <ListBox x:Name="LstElements" Style="{StaticResource StudioList}" MaxHeight="170"
+                                                 SelectionChanged="LstElements_SelectionChanged">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <!-- Same colour as the piece's outline on the preview. -->
+                                                        <Border Width="10" Height="10" CornerRadius="2"
+                                                                Background="{Binding Colour}" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding Kind}" FontWeight="SemiBold"
+                                                                   Margin="8,0,8,0" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="2" Text="{Binding Detail}" Opacity="0.75"
+                                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+
+                                        <!-- The selected piece, and only what its kind has. -->
+                                        <Border Style="{StaticResource StudioCard}" Margin="0,10,0,0" Padding="12,10">
+                                            <Grid>
+                                                <TextBlock x:Name="TxtElPropsEmpty" Text="{loc:Get studio_el_props_empty}"
+                                                           Style="{StaticResource StudioHint}" Visibility="Collapsed"/>
+                                                <Grid x:Name="PnlElement">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="150"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+
+                                                    <!-- Shows: a reading for most pieces, typed words for a label. -->
+                                                    <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock x:Name="LblElMain" Style="{StaticResource StudioFieldLabel}"
+                                                                   Margin="0"/>
+                                                        <Path x:Name="HintElMain" Style="{DynamicResource K2HintIcon}"
+                                                              Margin="8,0,10,0"/>
+                                                    </StackPanel>
+                                                    <Grid Grid.Row="0" Grid.Column="1" Margin="0,3">
+                                                        <ComboBox x:Name="CbElReading" Style="{StaticResource StudioCombo}"
+                                                                  SelectedValuePath="Value" MaxWidth="260"
+                                                                  HorizontalAlignment="Left" MinWidth="200"
+                                                                  SelectionChanged="ElReading_Changed"/>
+                                                        <TextBox x:Name="TxtElText" Style="{StaticResource StudioBox}"
+                                                                 Width="260" HorizontalAlignment="Left"
+                                                                 ToolTip="{loc:Get studio_el_text_hint}"
+                                                                 LostFocus="ElText_Changed"/>
+                                                    </Grid>
+
+                                                    <StackPanel Grid.Row="1" x:Name="PnlElShapeLabel" Orientation="Horizontal"
+                                                                VerticalAlignment="Center">
+                                                        <TextBlock x:Name="LblElShape" Text="{loc:Get studio_el_shape}"
+                                                                   Style="{StaticResource StudioFieldLabel}" Margin="0"/>
+                                                        <Path Style="{DynamicResource K2HintIcon}" Margin="8,0,10,0"
+                                                              ToolTip="{loc:Get studio_el_shape_hint}"/>
+                                                    </StackPanel>
+                                                    <ComboBox Grid.Row="1" Grid.Column="1" x:Name="CbElShape" Margin="0,3"
+                                                              Style="{StaticResource StudioCombo}" SelectedValuePath="Value"
+                                                              HorizontalAlignment="Left" MinWidth="200"
+                                                              SelectionChanged="ElShape_Changed"/>
+
+                                                    <StackPanel Grid.Row="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="{loc:Get studio_el_colour}"
+                                                                   Style="{StaticResource StudioFieldLabel}" Margin="0"/>
+                                                        <Path Style="{DynamicResource K2HintIcon}" Margin="8,0,10,0"
+                                                              ToolTip="{loc:Get studio_el_colour_hint}"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,3">
+                                                        <Button x:Name="BtnElColour" Width="40" Height="22"
+                                                                Style="{StaticResource StudioSwatchButton}"
+                                                                ToolTip="{loc:Get studio_pick_color}" Click="ElColour_Click"/>
+                                                        <CheckBox x:Name="ChkElInherit" Content="{loc:Get studio_el_inherit_long}"
+                                                                  Margin="12,0,0,0" VerticalAlignment="Center"
+                                                                  Foreground="{DynamicResource K2TextBrush}"
+                                                                  Click="ElInherit_Click"/>
+                                                    </StackPanel>
+
+                                                    <!-- A picture's own PNG. -->
+                                                    <StackPanel Grid.Row="3" x:Name="PnlElIconLabel" Orientation="Horizontal"
+                                                                VerticalAlignment="Center">
+                                                        <TextBlock x:Name="LblElIcon" Text="{loc:Get studio_icon}"
+                                                                   Style="{StaticResource StudioFieldLabel}" Margin="0"
+                                                                   TextTrimming="CharacterEllipsis"/>
+                                                        <Path Style="{DynamicResource K2HintIcon}" Margin="8,0,10,0"
+                                                              ToolTip="{loc:Get studio_icon_hint}"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="3" Grid.Column="1" x:Name="PnlElIcon"
+                                                                Orientation="Horizontal" Margin="0,3">
+                                                        <Border Width="34" Height="34" BorderThickness="1" CornerRadius="3"
+                                                                Background="#141416" VerticalAlignment="Center"
+                                                                BorderBrush="{DynamicResource K2BorderBrush}">
+                                                            <Image x:Name="ImgActionIcon" Stretch="Uniform" Margin="2"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                        </Border>
+                                                        <Button Content="{loc:Get studio_pick_image}" Padding="8,1" Margin="8,0,0,0"
+                                                                VerticalAlignment="Center" Tag="aicon" Click="BtnPickImage_Click"/>
+                                                        <Button Content="{loc:Get studio_clear_image}" Margin="6,0,0,0"
+                                                                VerticalAlignment="Center" Padding="8,1" Tag="aicon"
+                                                                Click="BtnClearImage_Click"/>
+                                                        <TextBlock x:Name="LblActionIcon" VerticalAlignment="Center"
+                                                                   Margin="8,0,0,0" Style="{StaticResource StudioHint}"
+                                                                   TextTrimming="CharacterEllipsis" MaxWidth="160"/>
+                                                    </StackPanel>
+
+                                                    <!-- A text piece's lettering. -->
+                                                    <StackPanel Grid.Row="4" x:Name="PnlElFontLabel" Orientation="Horizontal"
+                                                                VerticalAlignment="Center">
+                                                        <TextBlock x:Name="LblElFont" Text="{loc:Get studio_font}"
+                                                                   Style="{StaticResource StudioFieldLabel}" Margin="0"/>
+                                                        <Path Style="{DynamicResource K2HintIcon}" Margin="8,0,10,0"
+                                                              ToolTip="{loc:Get studio_el_font_hint}"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="4" Grid.Column="1" x:Name="PnlElFont"
+                                                                Orientation="Horizontal" Margin="0,3">
+                                                        <ComboBox x:Name="CbFont" Width="170" Style="{StaticResource StudioCombo}"
+                                                                  SelectionChanged="ElementField_Changed"/>
+                                                        <TextBlock Text="{loc:Get studio_value_size}" VerticalAlignment="Center"
+                                                                   Foreground="{DynamicResource K2TextMutedBrush}" Margin="14,0,6,0"/>
+                                                        <CheckBox x:Name="ChkValueAuto" IsChecked="True"
+                                                                  Content="{loc:Get studio_size_auto}" VerticalAlignment="Center"
+                                                                  Foreground="{DynamicResource K2TextBrush}" Margin="0,0,8,0"
+                                                                  Click="ElementField_Changed"/>
+                                                        <Slider x:Name="SldValueSize" Width="100" Minimum="8" Maximum="80"
+                                                                IsEnabled="False" VerticalAlignment="Center"
+                                                                ValueChanged="ElementSize_Changed"/>
+                                                        <TextBlock x:Name="LblValueSize" Width="26" TextAlignment="Right"
+                                                                   VerticalAlignment="Center"
+                                                                   Foreground="{DynamicResource K2TextMutedBrush}"/>
+                                                    </StackPanel>
+
+                                                    <!-- A value piece: the number, or where it sits on its scale. -->
+                                                    <StackPanel Grid.Row="5" x:Name="PnlElValueLabelLabel" Orientation="Horizontal"
+                                                                VerticalAlignment="Center">
+                                                        <TextBlock Text="{loc:Get studio_value_label}"
+                                                                   Style="{StaticResource StudioFieldLabel}" Margin="0"/>
+                                                        <Path Style="{DynamicResource K2HintIcon}" Margin="8,0,10,0"
+                                                              ToolTip="{loc:Get studio_value_label_hint}"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="5" Grid.Column="1" x:Name="PnlElValueLabel"
+                                                                Orientation="Horizontal" Margin="0,5">
+                                                        <RadioButton x:Name="RbElPercent" GroupName="ElValueLabel"
+                                                                     Content="{loc:Get studio_value_label_percent}"
+                                                                     VerticalAlignment="Center" Click="ElValueLabel_Click"/>
+                                                        <RadioButton x:Name="RbElNumber" GroupName="ElValueLabel"
+                                                                     Content="{loc:Get studio_value_label_number}"
+                                                                     VerticalAlignment="Center" Margin="18,0,0,0"
+                                                                     Click="ElValueLabel_Click"/>
+                                                        <RadioButton x:Name="RbElValueOfMax" GroupName="ElValueLabel"
+                                                                     Content="{loc:Get studio_value_label_value_max}"
+                                                                     VerticalAlignment="Center" Margin="18,0,0,0"
+                                                                     Click="ElValueLabel_Click"/>
+                                                    </StackPanel>
+
+                                                    <!-- Rarely touched: kept one click away. -->
+                                                    <StackPanel Grid.Row="6" Grid.ColumnSpan="2" Margin="0,8,0,0">
+                                                        <TextBlock x:Name="TxtElAdvancedToggle" Cursor="Hand"
+                                                                   Foreground="{DynamicResource K2TextMutedBrush}"
+                                                                   MouseLeftButtonUp="ElAdvancedToggle_Click"/>
+                                                        <StackPanel x:Name="PnlElAdvanced" Orientation="Horizontal"
+                                                                    Margin="0,6,0,0" Visibility="Collapsed">
+                                                            <CheckBox x:Name="ChkElSnap" Content="{loc:Get studio_col_snap}"
+                                                                      VerticalAlignment="Center"
+                                                                      Foreground="{DynamicResource K2TextBrush}"
+                                                                      Click="ElSnap_Click"/>
+                                                            <TextBlock Text="{loc:Get studio_col_margin}" VerticalAlignment="Center"
+                                                                       Foreground="{DynamicResource K2TextBrush}" Margin="18,0,6,0"/>
+                                                            <TextBox x:Name="TxtElEdge" Width="50" TextAlignment="Center"
+                                                                     Style="{StaticResource StudioBox}"
+                                                                     LostFocus="ElEdge_Changed"/>
+                                                            <Path Style="{DynamicResource K2HintIcon}"
+                                                                  ToolTip="{loc:Get studio_elements_hint}"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Grid>
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <!-- ─────────── ③ colours ───────────
+                                 What every element inherits. The background picture belongs here
+                                 too — it is the tile's, not an element's. -->
+                            <Border x:Name="StepColours" Style="{StaticResource StudioStep}" Tag="colours"
+                                    MouseLeftButtonUp="Step_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border x:Name="BdStepColoursNum" Style="{StaticResource StudioStepNumber}">
+                                        <TextBlock Text="3" FontWeight="Bold" HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource K2TextBrush}"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{loc:Get studio_step_colours}" Margin="10,0,14,0"
+                                               Style="{StaticResource StudioSection}" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtStepColoursSum" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource K2TextMutedBrush}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="3" x:Name="ChevColours" Style="{StaticResource StudioChevron}"/>
+                                </Grid>
+                            </Border>
+                            <Border x:Name="StepColoursBody" Style="{StaticResource StudioStepBody}">
+                                <StackPanel Margin="0,12,0,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <CheckBox x:Name="ChkActionOverride" Content="{loc:Get studio_override_style}"
+                                                  Foreground="{DynamicResource K2TextBrush}"
+                                                  Click="ChkActionOverride_Click"/>
+                                        <Path Style="{DynamicResource K2HintIcon}"
+                                              ToolTip="{loc:Get studio_action_style_hint}"/>
+                                    </StackPanel>
+                                    <Grid x:Name="GrdActionStyle" Margin="0,8,0,0" Visibility="Collapsed">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="40"/>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Text="{loc:Get studio_bg_on}" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource K2TextBrush}" Margin="0,3"/>
+                                        <Border Grid.Row="0" Grid.Column="1" x:Name="SwABgOn" Width="40" Height="23"
+                                                CornerRadius="3" BorderThickness="1"
+                                                BorderBrush="{DynamicResource K2BorderBrush}" Margin="0,3"/>
+                                        <Button Grid.Row="0" Grid.Column="2" Content="{loc:Get studio_pick_color}"
+                                                Margin="8,3" Padding="8,1" Tag="abgon" Click="BtnPickColor_Click"/>
+
+                                        <TextBlock Grid.Row="1" Text="{loc:Get studio_text_on}" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource K2TextBrush}" Margin="0,3"/>
+                                        <Border Grid.Row="1" Grid.Column="1" x:Name="SwATextOn" Width="40" Height="23"
+                                                CornerRadius="3" BorderThickness="1"
+                                                BorderBrush="{DynamicResource K2BorderBrush}" Margin="0,3"/>
+                                        <Button Grid.Row="1" Grid.Column="2" Content="{loc:Get studio_pick_color}"
+                                                Margin="8,3" Padding="8,1" Tag="atexton" Click="BtnPickColor_Click"/>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="4" Text="{loc:Get studio_bg_off}"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource K2TextBrush}" Margin="0,3"/>
+                                        <Border Grid.Row="0" Grid.Column="5" x:Name="SwABgOff" Width="40" Height="23"
+                                                CornerRadius="3" BorderThickness="1"
+                                                BorderBrush="{DynamicResource K2BorderBrush}" Margin="0,3"/>
+                                        <Button Grid.Row="0" Grid.Column="6" Content="{loc:Get studio_pick_color}"
+                                                Margin="8,3" Padding="8,1" Tag="abgoff" Click="BtnPickColor_Click"/>
+
+                                        <TextBlock Grid.Row="1" Grid.Column="4" Text="{loc:Get studio_text_off}"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource K2TextBrush}" Margin="0,3"/>
+                                        <Border Grid.Row="1" Grid.Column="5" x:Name="SwATextOff" Width="40" Height="23"
+                                                CornerRadius="3" BorderThickness="1"
+                                                BorderBrush="{DynamicResource K2BorderBrush}" Margin="0,3"/>
+                                        <Button Grid.Row="1" Grid.Column="6" Content="{loc:Get studio_pick_color}"
+                                                Margin="8,3" Padding="8,1" Tag="atextoff" Click="BtnPickColor_Click"/>
+
+                                        <TextBlock Grid.Row="2" Text="{loc:Get studio_bg_image}" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource K2TextBrush}" Margin="0,10,0,3"/>
+                                        <StackPanel Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="6"
+                                                    Orientation="Horizontal" Margin="0,10,0,3">
+                                            <Button Content="{loc:Get studio_pick_image}" Padding="8,1" Tag="abgimgon"
+                                                    Click="BtnPickImage_Click"/>
+                                            <Button Content="{loc:Get studio_clear_image}" Margin="6,0,0,0" Padding="8,1"
+                                                    Tag="abgimgon" Click="BtnClearImage_Click"/>
+                                            <Path Style="{DynamicResource K2HintIcon}"
+                                                  ToolTip="{loc:Get studio_bg_image_hint}"/>
+                                            <TextBlock x:Name="LblActionBgImage" Style="{StaticResource StudioHint}"
+                                                       VerticalAlignment="Center" Margin="10,0,0,0"
+                                                       TextTrimming="CharacterEllipsis" MaxWidth="240"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </Grid>
+        </Grid>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <!-- Same "Guide" button as the config popups (game profiles / Discord / Spotify):
+                 shared GuideBarButton style, icon + label. Opens K2.Core's GuideWindow on the
+                 studio's own blocks — the hint dots explain one field, this explains the job. -->
+            <Button Style="{DynamicResource GuideBarButton}" VerticalAlignment="Center" Margin="0,0,12,0"
+                    Content="{loc:Get guide_button}" ToolTip="{loc:Get guide_tooltip}" Click="BtnGuide_Click"/>
+            <Button Content="{loc:Get close}" MinWidth="90" IsCancel="True"
+                    Style="{StaticResource K2IconAccentButton}" Click="BtnClose_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

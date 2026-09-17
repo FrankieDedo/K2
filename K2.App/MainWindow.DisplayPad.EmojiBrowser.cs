@@ -303,11 +303,17 @@ public partial class MainWindow
         }, TaskScheduler.Default);
     }
 
+    /// <summary>Bumped whenever the emoji/category tiles LOOK different for the same inputs,
+    /// so the PNGs cached by a previous look are abandoned instead of being served forever
+    /// (these two caches short-circuit on <c>File.Exists</c>). v2 = tile background black
+    /// instead of #1A1A1E, to match every other generated tile.</summary>
+    private const int EmbTileVersion = 2;
+
     /// <summary>Tile for one emoji — cached on disk under the shared auto-icon folder, so a
     /// given emoji is only ever rasterized once per install.</summary>
     private static string? EmbEmojiTile(string emoji)
     {
-        string dest = DpAutoIconCachePath("embemoji", emoji);
+        string dest = DpAutoIconCachePath("embemoji", $"v{EmbTileVersion}|{emoji}");
         if (File.Exists(dest)) return dest;
         return EmojiGlyphRenderer.TryGenerateEmojiIcon(emoji, DpHidNative.IconSize, dest) ? dest : null;
     }
@@ -346,7 +352,7 @@ public partial class MainWindow
             : EmojiCatalog.All.FirstOrDefault(x => x.Group == group)?.Emoji ?? "";
 
         // Emoji art, accent-independent; caption is language-dependent — both in the key.
-        string dest = DpAutoIconCachePath("embcat", $"{emoji}|{caption}");
+        string dest = DpAutoIconCachePath("embcat", $"v{EmbTileVersion}|{emoji}|{caption}");
         if (File.Exists(dest)) return dest;
         if (EmojiGlyphRenderer.TryGenerateEmojiIcon(emoji, DpHidNative.IconSize, dest, caption)) return dest;
         return IconImageGenerator.TryGenerateCaptionIcon(caption, DpHidNative.IconSize, dest) ? dest : null;

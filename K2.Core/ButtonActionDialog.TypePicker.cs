@@ -77,7 +77,7 @@ public partial class ButtonActionDialog
         ("navigation", "🧭",  new[] { "dp_folder", "profile", "browser" }),
         ("input",      "⌨",  new[] { "keys", "hotkeyswitch", "mouse", "media", "multi", "macro" }),
         ("content",    "📝", new[] { "text", "emoji", "dp_emojibrowser" }),
-        ("live",       "📊", new[] { "dp_clock", "dp_sysmon", "dp_speedtest", "dp_screen" }),
+        ("live",       "📊", new[] { "dp_clock", "dp_sysmon", "dp_speedtest", "dp_screen", "dp_custom" }),
         ("apps",       "🧩", new[] { "googlehome", "adobe", "davinci", "zoom", "obs", "twitch", "spotify", "discord", "youtube", "pyscript" }),
         // Game-specific commands — kept out of the generic categories above so a game's own
         // vocabulary (cockpit annunciators, in-game shortcuts) doesn't crowd the everyday
@@ -86,7 +86,7 @@ public partial class ButtonActionDialog
         // EdShortcutPresets — they are the "non-dynamic" plain shortcuts, one card each so a
         // commander picks "Frame Shift Drive" instead of having to know it's bound to J.
         ("games",      "🎮", new[] { "dp_edstatus", "dp_ed_fsd", "dp_ed_heatsink", "dp_ed_target",
-                                     "dp_zcstatus" }),
+                                     "dp_zcstatus", KspTelemachus.ActionType }),
     };
 
     /// <summary>Per-type emoji fallback for tags with no real vector logo in
@@ -100,8 +100,10 @@ public partial class ButtonActionDialog
         ["keys"] = "⌨", ["hotkeyswitch"] = "🔁", ["mouse"] = "🖱", ["media"] = "🎵", ["multi"] = "📋", ["macro"] = "⏱",
         ["text"] = "📝", ["emoji"] = "😀", ["dp_emojibrowser"] = "🙂",
         ["dp_clock"] = "🕐", ["dp_sysmon"] = "📊", ["dp_speedtest"] = "🚀", ["dp_screen"] = "🔍",
+        ["dp_custom"] = "🎨",
         ["dp_edstatus"] = "🛸",
         ["dp_zcstatus"] = "🎖",
+        [KspTelemachus.ActionType] = "🚀",
         ["dp_ed_fsd"] = "🌌", ["dp_ed_heatsink"] = "❄", ["dp_ed_target"] = "🎯",
     };
 
@@ -122,7 +124,8 @@ public partial class ButtonActionDialog
     /// the "combo" set UpdatePanels() already switches ComboPanel on for.</summary>
     private static readonly HashSet<string> ComboTags = new()
         { "oscmd", "media", "mouse", "macro", "googlehome", "obs", "twitch", "spotify", "discord", "audiodevice",
-          "dp_clock", "dp_sysmon", "dp_speedtest", "dp_edstatus", "dp_zcstatus", "dp_screen" };
+          "dp_clock", "dp_sysmon", "dp_speedtest", "dp_edstatus", "dp_zcstatus", KspTelemachus.ActionType, "dp_screen",
+          CustomActionType.Tag };
 
     /// <summary>The two CbType tags whose loc key doesn't follow the plain "act_"+tag
     /// pattern the rest of the list uses (see the ComboBoxItem list in ButtonActionDialog.xaml) —
@@ -139,6 +142,16 @@ public partial class ButtonActionDialog
     /// hidden everywhere else: their actions are meaningless on an ordinary profile (an Elite
     /// cockpit annunciator on a general-purpose page has no ship to mirror).</summary>
     private static readonly string[] GameOnlyCategories = { "games" };
+
+    /// <summary>Tags that keep their place in <see cref="PickerCategories"/> — the breadcrumb
+    /// takes an action's category from there — but are never offered as a CARD of their own.
+    ///
+    /// <para>A studio action belongs to the game it was written for and is picked under THAT
+    /// game's card, filed in its family. Listing it a second time under "Live tiles" showed the
+    /// same action twice in a game profile and, on an ordinary profile, opened a grid holding
+    /// every game's actions at once — or, with no studio action defined, nothing at all
+    /// (user report 2026-09-18).</para></summary>
+    private static readonly HashSet<string> CardlessTags = new() { CustomActionType.Tag };
 
     /// <summary>The game a game-profile key belongs to. When set, the picker's generic "Game
     /// controls" category is replaced by one card carrying the GAME's own name and icon, and its
@@ -269,7 +282,8 @@ public partial class ButtonActionDialog
             .Select(i => (string?)i.Tag).ToHashSet();
         IcPickerCategories.ItemsSource = PickerCategories
             .Where(c => CategoryAllowed(c.Key))
-            .Where(c => c.Tags.Any(t => availableTags.Contains(t) || EdShortcutPresets.ContainsKey(t)))
+            .Where(c => c.Tags.Any(t => !CardlessTags.Contains(t) &&
+                                        (availableTags.Contains(t) || EdShortcutPresets.ContainsKey(t))))
             .Select(c => c.Key == "games" && _gameProfile is { } gp
                 // The game's own identity, not a generic label: the card says "Elite Dangerous"
                 // and wears the profile's icon, so the two top-level choices read as "keyboard
@@ -303,6 +317,7 @@ public partial class ButtonActionDialog
 
         var availableTags = CbType.Items.OfType<ComboBoxItem>().Select(i => (string?)i.Tag).ToHashSet();
         IcPickerActions.ItemsSource = category.Tags
+            .Where(t => !CardlessTags.Contains(t))
             .Where(t => availableTags.Contains(t) || EdShortcutPresets.ContainsKey(t))
             .Select(tag =>
             {
@@ -483,6 +498,14 @@ public partial class ButtonActionDialog
         {
             CloseOverlay();
             OpenScreenProbeEditor(null);
+            return;
+        }
+
+        // "Custom action" > "New action…": the studio is the picker for this type.
+        if (value == CustomActionNewTag)
+        {
+            CloseOverlay();
+            OpenCustomActionEditor(null);
             return;
         }
 

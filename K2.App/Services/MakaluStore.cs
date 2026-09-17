@@ -315,8 +315,27 @@ public sealed record MakaluDpiRecord(int[] Levels, int Active);
 /// next to "Sensitivity"/"ClickSpeed" in BaseCamp.UI.exe — see MakaluOsMouseSettings
 /// for where K2 applies them), so unlike every other field here they carry no risk
 /// to the physical device if the exact 0-11→OS-value curve turns out to not match
-/// Base Camp's own (unverified — see MakaluOsMouseSettings' doc comment).</summary>
+/// Base Camp's own (unverified — see MakaluOsMouseSettings' doc comment).
+/// <para>BacklightIdleOff/BacklightIdleOffSec (2026-09-07): "turn off lighting when
+/// idle" + its timeout, per profile — mirrors Base Camp's own
+/// <c>MakaluSettings.WakeUpSleepSoft</c> ("soft sleep", the LED-off idle timer;
+/// Base Camp's Makalu 67 UI doesn't surface it, but the column exists for every
+/// Makalu profile). This is a FIRMWARE timer, not the software
+/// <see cref="K2.Core.Services.BacklightIdleTimer"/> the other devices use — the
+/// Makalu has no host-side activity signal (buttons are remapped in firmware, no
+/// KeyEvent). No firmware LED idle-off exists either — a sensor-RAM write at
+/// address 4013 (CMD 0xDE, the OG-Makalu <c>Makalu.cs</c> <c>Mem_Sleep_Time</c>)
+/// was tried on real 67 hardware (2026-09-10), <c>HidD_SetFeature</c> ok but the
+/// LEDs never went off. So K2 does it in SOFTWARE: MainWindow.Makalu.cs runs a
+/// <see cref="K2.Core.Services.BacklightIdleTimer"/> fed by
+/// <see cref="RawMouseActivityWatcher"/> (any Makalu movement/wheel/click) and,
+/// on timeout, calls <c>SetLighting(Off)</c> on the mouse; the stored effect is
+/// re-sent on the next activity. Same pattern as Everest 60 / MacroPad, just with
+/// mouse Raw Input as the activity source. These two fields are per-profile and
+/// round-trip through BC import/export (<c>MakaluSettings.WakeUpSleepSoft</c>,
+/// unit assumed minutes on import).</para></summary>
 public sealed record MakaluDeviceSettingsRecord(
     int PollingHz, int DebounceMs, bool AngleSnapping, bool LiftOffHigh,
     bool LiftOffCustom = false, byte? SurfaceA = null, byte? SurfaceB = null,
-    int Sensitivity = 10, int ClickSpeed = 0);
+    int Sensitivity = 10, int ClickSpeed = 0,
+    bool BacklightIdleOff = false, int BacklightIdleOffSec = 60);

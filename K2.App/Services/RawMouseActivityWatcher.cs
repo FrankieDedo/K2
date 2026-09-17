@@ -45,6 +45,13 @@ internal static class RawMouseActivityWatcher
     private const ushort RI_MOUSE_BUTTON_4_UP        = 0x0080;
     private const ushort RI_MOUSE_BUTTON_5_DOWN      = 0x0100; // XBUTTON2 / Forward
     private const ushort RI_MOUSE_BUTTON_5_UP        = 0x0200;
+    // (wheel/hwheel also set usButtonFlags != 0, so they count as activity without a named flag)
+
+    /// <summary>Throttle for the "any activity" callback — raw movement reports arrive at
+    /// the polling rate (up to 1000/s) and the idle timer only needs a coarse "still
+    /// alive" ping.</summary>
+    private const long ActivityThrottleMs = 200;
+    private static long s_lastActivityTick;
 
     /// <summary>Standard mouse buttons Raw Input can tell apart.</summary>
     public enum MouseButton { Left, Right, Middle, Back, Forward }
@@ -125,10 +132,13 @@ internal static class RawMouseActivityWatcher
     /// Call from the window's WndProc for every message. Invokes <paramref name="onButtonChanged"/>
     /// once per button transition this WM_INPUT report carries (usually 0 or 1), but ONLY for a
     /// device whose Raw Input path carries the Makalu's VID — every other mouse/trackpad on the
-    /// system is silently ignored. Pure movement reports (usButtonFlags == 0) skip the device-path
-    /// lookup entirely, so normal cursor movement doesn't pay for it.
+    /// system is silently ignored. <paramref name="onMakaluActivity"/>, when given, fires (throttled
+    /// to <see cref="ActivityThrottleMs"/>) on ANY Makalu report that carries movement, wheel or a
+    /// button transition — the activity signal for the software backlight-auto-off idle timer.
+    /// A report with neither movement nor button flags skips the device-path lookup entirely.
     /// </summary>
-    public static void HandleMessage(int msg, IntPtr lParam, Action<MouseButton, bool> onButtonChanged)
+    public static void HandleMessage(int msg, IntPtr lParam, Action<MouseButton, bool> onButtonChanged,
+        Action? onMakaluActivity = null)
     {
         if (msg != WM_INPUT) return;
 
@@ -148,9 +158,22 @@ internal static class RawMouseActivityWatcher
 
             var mouse = Marshal.PtrToStructure<RAWMOUSE>(IntPtr.Add(buffer, (int)headerSize));
             ushort flags = mouse.usButtonFlags;
-            if (flags == 0) return; // pure movement/wheel — no button transition, skip the device lookup
+            bool moved = mouse.lLastX != 0 || mouse.lLastY != 0;
+            if (flags == 0 && !moved) return; // nothing happened — skip the device lookup
 
             if (!IsMakalu(header.hDevice)) return;
+
+            if (onMakaluActivity != null)
+            {
+                long now = Environment.TickCount64;
+                if (now - s_lastActivityTick >= ActivityThrottleMs)
+                {
+                    s_lastActivityTick = now;
+                    onMakaluActivity();
+                }
+            }
+
+            if (flags == 0) return; // movement/wheel only — no button transition to dispatch
 
             if ((flags & RI_MOUSE_LEFT_BUTTON_DOWN)   != 0) onButtonChanged(MouseButton.Left,    true);
             if ((flags & RI_MOUSE_LEFT_BUTTON_UP)     != 0) onButtonChanged(MouseButton.Left,    false);

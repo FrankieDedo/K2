@@ -94,7 +94,17 @@ public sealed class MacroRecorder : IDisposable
     /// Win32 virtual-key code. No-op unless a keyboard recording is running.</summary>
     public void InjectKey(int vk, bool down)
     {
-        if (!_recording || !_recordKeyboard || vk == 0) return;
+        if (vk == 0) return;
+        // A single-key re-record is armed: the Everest is exactly the case that
+        // needs this path, since it stops emitting standard keyboard input
+        // while K2 is focused — and the capture is always armed from a click
+        // inside K2, so its WH_KEYBOARD_LL hook alone would never see the key.
+        if (_capturing)
+        {
+            if (down) CompleteSingleKeyCapture(vk);
+            return;
+        }
+        if (!_recording || !_recordKeyboard) return;
         if (IsDuplicateKey(vk, down, KeySource.Injected)) return;
         var input = new MacroInput
         {
@@ -464,6 +474,25 @@ public sealed class MacroRecorder : IDisposable
         return true;
     }
 
+    /// <summary>Delivers the captured VK to the armed callback and tears the
+    /// capture pump down. Reached from either source — the temporary
+    /// WH_KEYBOARD_LL hook (on its own pump thread) or
+    /// <see cref="InjectKey"/> (the Everest NKRO path, on the UI thread).
+    /// <see cref="_capturing"/> is cleared first, so whichever source wins the
+    /// race the other one is a no-op.</summary>
+    private void CompleteSingleKeyCapture(int vk)
+    {
+        var cb = _captureCallback;
+        if (!_capturing || cb is null) return;
+        _capturing = false;
+        _captureCallback = null;
+        // Tear the pump down from outside the hook callback.
+        if (_captureThreadId != 0)
+            PostThreadMessage(_captureThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+        if (_uiCtx != null) _uiCtx.Post(_ => cb(vk), null);
+        else cb(vk);
+    }
+
     public void CancelCaptureSingleKey()
     {
         if (_captureThreadId != 0)
@@ -507,15 +536,7 @@ public sealed class MacroRecorder : IDisposable
                     && hs.scanCode == ALTGR_FAKE_LCONTROL_SCANCODE;
                 if (!isFakeAltGrCtrl)
                 {
-                    var cb = _captureCallback;
-                    int vk = hs.vkCode;
-                    _capturing = false;
-                    _captureCallback = null;
-                    // Tear the pump down from outside the callback.
-                    if (_captureThreadId != 0)
-                        PostThreadMessage(_captureThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
-                    if (_uiCtx != null) _uiCtx.Post(_ => cb?.Invoke(vk), null);
-                    else cb?.Invoke(vk);
+                    CompleteSingleKeyCapture(hs.vkCode);
                     return (IntPtr)1; // swallow — don't leak the keystroke
                 }
             }

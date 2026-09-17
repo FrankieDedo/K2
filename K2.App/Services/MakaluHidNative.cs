@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.Win32.SafeHandles;
@@ -94,6 +95,18 @@ internal static class MakaluHidNative
         IntPtr devs = SetupDiGetClassDevsW(ref hidGuid, null, IntPtr.Zero,
                                            DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
         if (devs == INVALID_HANDLE_VALUE) return null;
+
+        // Interface 1 (mi_01) exposes SEVERAL HID top-level collections (col01,
+        // col02, … — each its own device path in Windows). Matching on "mi_01"
+        // alone picks whichever Windows enumerates first, which isn't stable
+        // across boots/reconnects. Checking FeatureReportByteLength narrows it
+        // down, but 2026-09-10 (real hardware) showed MORE THAN ONE collection
+        // reporting a 64-byte feature length while only ONE is actually wired to
+        // the vendor firmware — the others let HidD_SetFeature succeed at the OS
+        // level while the write goes nowhere ("SetLighting -> True" yet no light,
+        // and GetDpi reads back zeros). So gather every feature-capable candidate,
+        // log its caps, then keep the one that actually answers a vendor command.
+        var candidates = new List<(string Path, ushort Pid)>();
         try
         {
             var ifData = new SP_DEVICE_INTERFACE_DATA { cbSize = Marshal.SizeOf<SP_DEVICE_INTERFACE_DATA>() };
@@ -114,26 +127,57 @@ internal static class MakaluHidNative
 
                 string lower = path.ToLowerInvariant();
                 if (!lower.Contains(InterfaceMarker)) continue;
+                if (!TryGetCaps(h, out HIDP_CAPS caps)) continue;
 
-                // Interface 1 exposes SEVERAL HID top-level collections (col01,
-                // col02, ... — each its own device path in Windows), only one of
-                // which actually declares Feature Reports big enough for our
-                // 64-byte report. Matching on "mi_01" alone picks whichever
-                // collection Windows enumerates first, which isn't guaranteed
-                // stable across boots/reconnects — 2026-07-13: a session that
-                // landed on a different collection than before got SetFeature
-                // silently rejected (HidD_SetFeature -> false) despite the handle
-                // opening fine. Checking FeatureReportByteLength via
-                // HidP_GetCaps is the deterministic way to find the right one.
-                if (!TryGetFeatureReportLength(h, out int featureLen) || featureLen < ReportSize)
-                    continue;
+                string tag = CollectionTag(lower);
+                log?.Invoke($"[MakaluNative] mi_01 {tag}: feature={caps.FeatureReportByteLength} " +
+                            $"input={caps.InputReportByteLength} usage={caps.UsagePage:X4}/{caps.Usage:X2}");
 
-                log?.Invoke($"[MakaluNative] found {lower[..Math.Min(80, lower.Length)]}…");
-                return new FoundDevice(path, attrs.ProductID);
+                if (caps.FeatureReportByteLength >= ReportSize)
+                    candidates.Add((path, attrs.ProductID));
             }
         }
         finally { SetupDiDestroyDeviceInfoList(devs); }
-        return null;
+
+        if (candidates.Count == 0) return null;
+
+        // Pick the collection that actually replies to a vendor command.
+        foreach (var (path, pid) in candidates)
+        {
+            using var probe = OpenHandle(path, throwOnFail: false, queryOnly: false);
+            if (probe is null || probe.IsInvalid) continue;
+            if (!MakaluProtocol.IsVendorCollection(probe)) continue;
+            log?.Invoke($"[MakaluNative] using {CollectionTag(path.ToLowerInvariant())} (vendor probe OK)");
+            return new FoundDevice(path, pid);
+        }
+
+        // Nothing answered — keep the historical "first feature-capable collection"
+        // behaviour so a transient probe failure can't regress a working setup.
+        var fb = candidates[0];
+        log?.Invoke($"[MakaluNative] WARN no collection answered the vendor probe; " +
+                    $"falling back to {CollectionTag(fb.Path.ToLowerInvariant())}");
+        return new FoundDevice(fb.Path, fb.Pid);
+    }
+
+    /// <summary>Short "colNN" / "mi_0N" label for a device-interface path, for logs.</summary>
+    private static string CollectionTag(string lowerPath)
+    {
+        int c = lowerPath.IndexOf("&col", StringComparison.Ordinal);
+        if (c >= 0 && c + 6 <= lowerPath.Length) return lowerPath.Substring(c + 1, 5);
+        int m = lowerPath.IndexOf("&mi_", StringComparison.Ordinal);
+        if (m >= 0 && m + 6 <= lowerPath.Length) return lowerPath.Substring(m + 1, 5);
+        return "?";
+    }
+
+    /// <summary>Full HID caps for the collection <paramref name="h"/> is open on —
+    /// query-only handle is enough (reads the cached descriptor, no I/O).</summary>
+    private static bool TryGetCaps(SafeFileHandle h, out HIDP_CAPS caps)
+    {
+        caps = default;
+        if (!HidD_GetPreparsedData(h, out IntPtr preparsed) || preparsed == IntPtr.Zero)
+            return false;
+        try { return HidP_GetCaps(preparsed, out caps) == HIDP_STATUS_SUCCESS; }
+        finally { HidD_FreePreparsedData(preparsed); }
     }
 
     /// <summary>Reads the collection's declared Feature Report length via the

@@ -49,6 +49,7 @@ public partial class MainWindow : Window
         InitLedPreview();        // Real-time LED color preview across all devices
         InitAppSettingsPanel();  // General Settings: centralized Debug + Log level
         InitTray();              // System tray: close-to-tray + tray icon menu
+        WireDeviceTabScroller(); // Device tab strip: single-row overflow + arrow cards
 
         _macroPad.KeyEvent += OnMacroPadKey;
         _macroPad.DevicePlug += OnMacroPadPlug;
@@ -275,6 +276,7 @@ public partial class MainWindow : Window
         if (_reorderingTabs) return;
         if (TcDevices.SelectedItem is not TabItem tab) return;
         string tag = tab.Tag as string ?? "";
+        EnsureDeviceTabVisible(tab); // selected from code (device plugged in, reorder): may be scrolled out
 
         SetSettingsTabActive(false);
         SetMacroTabActive(false);
@@ -672,8 +674,10 @@ public partial class MainWindow : Window
 
         // Makalu physical-press hotspot highlight (user request 2026-07-27) — see
         // RawMouseActivityWatcher's doc comment for why this is Raw Input rather than the
-        // vendor HID channel (Makalu has no readback path for button state at all).
-        Services.RawMouseActivityWatcher.HandleMessage(msg, lParam, OnMakaluRawButton);
+        // vendor HID channel (Makalu has no readback path for button state at all). The
+        // second callback fires on ANY Makalu activity (movement/wheel/click) and feeds
+        // the software backlight-auto-off idle timer (MainWindow.Makalu.cs).
+        Services.RawMouseActivityWatcher.HandleMessage(msg, lParam, OnMakaluRawButton, OnMakaluActivity);
 
         // Everest 60 main-board key-press highlight — see RawEv60KeyWatcher's doc comment
         // for why this replaced the vendor SDK's KEY_CALLBACK (2026-07-28: never fires on

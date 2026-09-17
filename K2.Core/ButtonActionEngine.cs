@@ -136,6 +136,27 @@ public sealed class ButtonActionEngine : IDisposable
         log($"[EXEC] keys -> \"{value}\"  (sendkeys=\"{seq}\")");
     }
 
+    /// <summary>Sends a shortcut the way a KEY should: held down while the button is held when the
+    /// caller asked for a momentary binding and the combination can be held, one shot otherwise.
+    /// Shared by the Keys action and by a studio tile's own keystroke, so the two cannot drift into
+    /// behaving differently for the same string.</summary>
+    private void RunKeys(string value, int buttonIndex, bool momentary, Action<string> log)
+    {
+        if (momentary && buttonIndex >= 0 && value.IndexOfAny(SendKeysMeta) < 0)
+        {
+            // A stale hold on this same button (missed up edge) — lift it first.
+            if (_heldShortcuts.ContainsKey(buttonIndex)) Release(buttonIndex);
+            if (HotkeySender.TryHoldDown(value, out var err))
+            {
+                _heldShortcuts[buttonIndex] = (value, DateTime.UtcNow);
+                log($"[EXEC] keys hold-down -> \"{value}\"");
+                return;
+            }
+            log($"[EXEC] keys hold-down failed ({err}) — one-shot");
+        }
+        RunShortcut(value, log);
+    }
+
     private void Dispatch(string type, string value, int buttonIndex, bool momentary)
     {
         void Log(string m) => _host.Log(m);
@@ -186,25 +207,19 @@ public sealed class ButtonActionEngine : IDisposable
                 break;
 
             case "keys":
-            {
                 if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] keys without payload"); break; }
-                if (momentary && buttonIndex >= 0 && value.IndexOfAny(SendKeysMeta) < 0)
-                {
-                    // A stale hold on this same button (missed up edge) — lift it first.
-                    if (_heldShortcuts.ContainsKey(buttonIndex)) Release(buttonIndex);
-                    if (HotkeySender.TryHoldDown(value, out var err))
-                    {
-                        _heldShortcuts[buttonIndex] = (value, DateTime.UtcNow);
-                        Log($"[EXEC] keys hold-down -> \"{value}\"");
-                    }
-                    else
-                    {
-                        Log($"[EXEC] keys hold-down failed ({err}) — one-shot");
-                        RunShortcut(value, Log);
-                    }
-                    break;
-                }
-                RunShortcut(value, Log);
+                RunKeys(value, buttonIndex, momentary, Log);
+                break;
+
+            case CustomActionType.Tag:
+            {
+                // A game-studio tile IS its reading — that is what draws the key. On top of that it
+                // may carry a keystroke of its own (CustomGameAction.Keys), so one key can both show
+                // the health number and press the key that heals. The combination lives on the
+                // ACTION, not in this value, which is why it is asked for rather than parsed.
+                string keys = CustomActionType.KeysOf(value);
+                if (keys.Length == 0) { Log("[EXEC] custom tile: reading only, no keys"); break; }
+                RunKeys(keys, buttonIndex, momentary, Log);
                 break;
             }
 
@@ -311,29 +326,50 @@ public sealed class ButtonActionEngine : IDisposable
                 int tilde = value.IndexOf('~');
                 string cmd = tilde < 0 ? value : value[..tilde];
                 string arg = tilde < 0 ? "" : value[(tilde + 1)..];
-                bool ok = cmd switch
+
+                // Handled by the DisplayPad key dispatch before it ever reaches the engine
+                // (MainWindow.DisplayPad.cs / DpHandleBackgroundKey); on any other device there
+                // is no panel to take over.
+                if (cmd == "voice_page") { Log("[EXEC] discord -> voice_page = True"); break; }
+
+                // DiscordBridge is SYNCHRONOUS (named pipe round trips, plus an OAuth token
+                // refresh over HTTPS when the token expired) and Execute runs on the UI thread,
+                // so calling it from here would block the whole app for seconds — and, when the
+                // refresh actually fires, FOREVER: EnsureFreshTokenAsync awaits without
+                // ConfigureAwait(false), and blocking the UI thread on it dead-locks it against
+                // its own continuation (user report 2026-09-09, "toggle mute froze the whole
+                // program"). Same fix and same shape as SpotifyBridge and as the voice page's
+                // own Rpc() helper: dispatch on the thread pool, marshal the log back.
+                var dsc = System.Threading.SynchronizationContext.Current;
+                Action<string> dlog = dsc is null ? Log : m => dsc.Post(_ => Log(m), null);
+
+                System.Threading.Tasks.Task.Run(() =>
                 {
-                    "mute_toggle"       => Services.DiscordBridge.ToggleMute(Log),
-                    "mute_on"           => Services.DiscordBridge.SetMute(true, Log),
-                    "mute_off"          => Services.DiscordBridge.SetMute(false, Log),
-                    "deafen_toggle"     => Services.DiscordBridge.ToggleDeaf(Log),
-                    "deafen_on"         => Services.DiscordBridge.SetDeaf(true, Log),
-                    "deafen_off"        => Services.DiscordBridge.SetDeaf(false, Log),
-                    "input_mode_toggle" => Services.DiscordBridge.ToggleInputMode(Log),
-                    "input_volume"      => Services.DiscordBridge.SetInputVolume(arg, Log),
-                    "output_volume"     => Services.DiscordBridge.SetOutputVolume(arg, Log),
-                    "join_voice"        => Services.DiscordBridge.JoinVoiceChannel(arg, Log),
-                    "leave_voice"       => Services.DiscordBridge.LeaveVoiceChannel(Log),
-                    "user_volume"       => Services.DiscordBridge.SetUserVolume(arg, Log),
-                    "user_mute_toggle"  => Services.DiscordBridge.ToggleUserMute(arg, Log),
-                    "send_message"      => Services.DiscordBridge.SendWebhookMessage(arg, Log),
-                    // Handled by the DisplayPad key dispatch before it ever reaches the
-                    // engine (MainWindow.DisplayPad.cs / DpHandleBackgroundKey); on any
-                    // other device there is no panel to take over.
-                    "voice_page"        => true,
-                    _ => LogUnhandledDiscordCommand(cmd, Log),
-                };
-                Log($"[EXEC] discord -> {cmd}{(arg.Length > 0 ? $" ({arg})" : "")} = {ok}");
+                    bool ok;
+                    try
+                    {
+                        ok = cmd switch
+                        {
+                            "mute_toggle"       => Services.DiscordBridge.ToggleMute(dlog),
+                            "mute_on"           => Services.DiscordBridge.SetMute(true, dlog),
+                            "mute_off"          => Services.DiscordBridge.SetMute(false, dlog),
+                            "deafen_toggle"     => Services.DiscordBridge.ToggleDeaf(dlog),
+                            "deafen_on"         => Services.DiscordBridge.SetDeaf(true, dlog),
+                            "deafen_off"        => Services.DiscordBridge.SetDeaf(false, dlog),
+                            "input_mode_toggle" => Services.DiscordBridge.ToggleInputMode(dlog),
+                            "input_volume"      => Services.DiscordBridge.SetInputVolume(arg, dlog),
+                            "output_volume"     => Services.DiscordBridge.SetOutputVolume(arg, dlog),
+                            "join_voice"        => Services.DiscordBridge.JoinVoiceChannel(arg, dlog),
+                            "leave_voice"       => Services.DiscordBridge.LeaveVoiceChannel(dlog),
+                            "user_volume"       => Services.DiscordBridge.SetUserVolume(arg, dlog),
+                            "user_mute_toggle"  => Services.DiscordBridge.ToggleUserMute(arg, dlog),
+                            "send_message"      => Services.DiscordBridge.SendWebhookMessage(arg, dlog),
+                            _ => LogUnhandledDiscordCommand(cmd, dlog),
+                        };
+                    }
+                    catch (Exception ex) { dlog($"[EXEC] discord {cmd} error: {ex.Message}"); ok = false; }
+                    dlog($"[EXEC] discord -> {cmd}{(arg.Length > 0 ? $" ({arg})" : "")} = {ok}");
+                });
                 break;
             }
 
@@ -346,6 +382,30 @@ public sealed class ButtonActionEngine : IDisposable
                 string cmd = sp.Length > 0 ? sp[0] : "";
                 string arg = sp.Length > 1 ? sp[1] : "";
                 string spDevice = sp.Length > 2 ? sp[2] : "";
+
+                // Windows per-app volume (Volume Mixer): account-free, Premium-free, and it
+                // moves Spotify's slider only — unlike "volume_up" (Web API, needs Premium + an
+                // active Connect device) and unlike the system media key the Local source used
+                // to seed, which drags every other app's audio with it (user request
+                // 2026-09-08). Handled BEFORE the account-dependent branches below on purpose:
+                // it must work with no Spotify account connected at all.
+                if (cmd is "app_volume_up" or "app_volume_down" or "app_mute_toggle")
+                {
+                    float step = float.TryParse(arg, System.Globalization.NumberStyles.Float,
+                                                System.Globalization.CultureInfo.InvariantCulture, out float pct)
+                                 && pct > 0
+                        ? Math.Clamp(pct / 100f, 0.01f, 1f)
+                        : Services.AppAudioVolume.DefaultStep;
+                    bool done = cmd == "app_mute_toggle"
+                        ? Services.AppAudioVolume.TryToggleMute(SpotifyProcessName, Log)
+                        : Services.AppAudioVolume.TryStep(SpotifyProcessName,
+                            cmd == "app_volume_up" ? step : -step, Log);
+                    // Deliberately NO system-media-key fallback when Spotify has no audio
+                    // session: silently moving the MASTER volume instead is exactly the
+                    // behaviour this command exists to avoid.
+                    Log($"[EXEC] spotify -> {cmd} (app session) = {(done ? "ok" : "no session")}");
+                    break;
+                }
 
                 // Unless Web API playback is CONFIRMED to work for this account (tier read as
                 // Premium), fall back to plain system media keys (and the SMTC Spotify session
@@ -474,6 +534,10 @@ public sealed class ButtonActionEngine : IDisposable
     /// keys, plus the SMTC Spotify session for shuffle/repeat (no media key exists for those).
     /// Returns false for commands with no media equivalent (volume_set) and for like/playlist,
     /// which keep going through the Web API — those work on free Spotify accounts.</summary>
+    /// <summary>Process whose Windows audio session the <c>app_*</c> Spotify commands drive —
+    /// the desktop player, Store build included (both report as "Spotify").</summary>
+    private const string SpotifyProcessName = "Spotify";
+
     private static bool SpotifyMediaFallback(string cmd, Action<string> log)
     {
         switch (cmd)

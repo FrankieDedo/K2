@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 
 namespace K2.App.Services;
@@ -75,12 +75,20 @@ internal static class EverestSdkNative
         public byte byEffectMenuIndex;
     }
 
-    /// <summary>Row of the effect table for a profile.</summary>
+    /// <summary>Row of the effect table for a profile: the effect index held by each of
+    /// the 9 menu slots, then which slot is active. 10 bytes — layout from Base Camp's own
+    /// struct (<c>BaseCamp.Service.Helpers.Everest.EffectTable</c>, decompiled 2026-09-11).
+    /// <para>This used to be a guessed 2-byte <c>{curIndex, byEffSize}</c>: the marshaller
+    /// then handed SDKDLL a 12-byte buffer for a 52-byte <see cref="EffectMenu"/>, the DLL
+    /// wrote 40 bytes past it, and the corrupted native heap killed the process with
+    /// <c>0x80131506</c> in coreclr.dll (hardware log 2026-09-11 00:45:22). It also read
+    /// <c>menu[0]</c> as curIndex, so the Display Dial sync always saw slot 0 (Static).</para></summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct EffectTable
     {
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 9)]
+        public byte[] menu;
         public byte curIndex;
-        public byte byEffSize;
     }
 
     /// <summary>Effect table for all profiles (used by GetProfileEffectTable).</summary>
@@ -93,12 +101,19 @@ internal static class EverestSdkNative
         public EffectTable[] table;
     }
 
-    /// <summary>Extended brightness for sub-device (bar/numpad/...).</summary>
+    /// <summary>Per-profile DISPLAY brightness (one pair per firmware profile, 5 in
+    /// <see cref="FW_EXTEND_INFO.exBrightness"/>): the Display Dial's screen and the numpad's
+    /// display keys. Field names from Base Camp's own struct (decompiled 2026-09-11).
+    /// <para>Encoding, from a Base Camp capture of its "display brightness" slider
+    /// (<c>_reference/usb_dumps/ev_lightdisplay.pcapng</c>, 75-50-25-0-25-50-75-100 ->
+    /// CB B2 99 80 99 B2 CB E4): <c>0x80 | percent</c> — bit 7 = "set", low 7 bits = 0..100.
+    /// 0 = never set. Base Camp always writes both bytes with the same value; its UI builds
+    /// the whole FW_EXTEND_INFO, which is why the service code never names these fields.</para></summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct FW_EXTEND_BRIGHTNESS
     {
-        public byte byDevType;
-        public byte byBrightness;
+        public byte byMMDockBrightness;
+        public byte byNumpadBrightness;
     }
 
     /// <summary>Extended firmware information (MMDock, Numpad, PixelShift).</summary>
@@ -957,24 +972,40 @@ internal static class EverestSdkNative
     public static extern bool SetEQInfo(EQ_DATA data);
 
     /// <summary>
-    /// Updates the clock on the Media Dock display. Base Camp calls this
-    /// every second via a timer. The booleans indicate whether the clock
-    /// is enabled and whether it uses 24h format.
+    /// Updates the clock on the Media Dock display (Base Camp re-pushes it every
+    /// 30 minutes; the dock has its own RTC in between).
+    /// <para>
+    /// <b>Parameter names corrected 2026-09-09.</b> The last two booleans used to be
+    /// declared here as <c>clockEnabled</c> / <c>format24h</c>, which was a guess and
+    /// was wrong on both counts. The real export, read off Base Camp's own P/Invoke
+    /// declaration (<c>ilspycmd BaseCamp.Service.exe</c>, <c>Everest.SetClockInfo</c>),
+    /// is <c>SetClockInfo(int iMonth, int iDay, int iHour, int iMin, int iSec,
+    /// bool isDigitalClock, bool is12hr)</c> — the 6th argument is the clock
+    /// <i>face style</i>, not an enable flag. BaseCampLinux's raw packet agrees: the
+    /// byte after <c>second</c> in <c>11 84 00 01 00 00 M D h m s &lt;style&gt;</c> is
+    /// 0 = analog, 1 = digital (<c>devices/everest_max/controller.py</c>).
+    /// K2 used to hardcode that argument to <c>true</c>, which is exactly why the
+    /// Display Dial's "Analog" setting never took effect — every clock push forced
+    /// the digital face back on.
+    /// </para>
     /// </summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SetClockInfo(int month, int day, int hour, int minute, int second,
-        [MarshalAs(UnmanagedType.I1)] bool clockEnabled,
-        [MarshalAs(UnmanagedType.I1)] bool format24h);
+        [MarshalAs(UnmanagedType.I1)] bool isDigitalClock,
+        [MarshalAs(UnmanagedType.I1)] bool is12hr);
 
     /// <summary>
-    /// Reads the clock settings from the firmware (enabled? 24h format?).
+    /// Reads the clock settings back from the firmware (analog/digital face, 12h/24h).
+    /// Base Camp's own periodic resync (<c>Common.SetClockInfoInHW</c>) calls this first
+    /// and echoes both values straight back into <see cref="SetClockInfo"/>, so its
+    /// clock timer never overrides what the user picked.
     /// </summary>
     [DllImport(Dll, CallingConvention = Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool GetClockInfo(
-        [MarshalAs(UnmanagedType.I1)] ref bool clockEnabled,
-        [MarshalAs(UnmanagedType.I1)] ref bool format24h);
+        [MarshalAs(UnmanagedType.I1)] ref bool isDigitalClock,
+        [MarshalAs(UnmanagedType.I1)] ref bool is12hr);
 
     /// <summary>
     /// Sends a PC monitoring value to the Media Dock. The type (first param)

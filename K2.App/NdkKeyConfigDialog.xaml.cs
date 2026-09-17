@@ -62,6 +62,10 @@ public partial class NdkKeyConfigDialog : Window
 
     private const string CacheDir_UserRotated = "K2.App\\user_rotated";
 
+    /// <summary>Where "Emoji as image" parks the PNG it renders (shared by every key that
+    /// picks the same emoji — see <see cref="EmojiGlyphRenderer.RenderToCache"/>).</summary>
+    private const string CacheDir_EmojiIcons = "K2.App\\emoji_icons";
+
     // =====================================================================
     // Constructor
     // =====================================================================
@@ -148,6 +152,7 @@ public partial class NdkKeyConfigDialog : Window
         bool isDefault = _spec.DefaultIcon;
 
         BtnLoadImage.IsEnabled   = !isDefault;
+        BtnEmojiImage.IsEnabled  = !isDefault;
         BtnRemoveImage.IsEnabled = !isDefault;
 
         // "Edit icon" stays enabled either way — for a default icon it edits the caption/font/
@@ -175,6 +180,33 @@ public partial class NdkKeyConfigDialog : Window
 
         SetRotation(0);
         RefreshImagePreview();      // crop/zoom now happens inside "Edit icon"
+        UpdateIconControlsAvailability();
+    }
+
+    /// <summary>
+    /// "Emoji as image" — the emoji becomes the key's PICTURE and nothing else: the action is
+    /// left exactly as it is. That's what separates this from the "Emoji" ACTION, which types
+    /// the emoji on press and draws itself as the tile; here the tile is a hand-picked picture
+    /// like a loaded PNG. Same handler as the DisplayPad's (<c>DpKeyConfigDialog</c>), whose
+    /// interface this dialog deliberately mirrors.
+    /// </summary>
+    private void BtnEmojiImage_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new EmojiPickerDialog { Owner = this };
+        if (picker.ShowDialog() != true || picker.SelectedEmoji is null) return;
+
+        // Null only for an emoji with no color art, which the picker can't offer (its catalog
+        // is filtered to what EmojiGlyphRenderer can draw) — keep the current picture then.
+        string? png = EmojiGlyphRenderer.RenderToCache(picker.SelectedEmoji, IconSize, CacheDir_EmojiIcons);
+        if (png is null) return;
+
+        _pendingPath = png;
+        _spec.Text = null;          // the emoji tile carries no caption of its own yet
+        _spec.DefaultIcon = false;
+        ChkDefaultIcon.IsChecked = false;
+
+        SetRotation(0);
+        RefreshImagePreview();
         UpdateIconControlsAvailability();
     }
 

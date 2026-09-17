@@ -53,7 +53,11 @@ public partial class MainWindow
             TxtAppUpdateStatus.Text = Loc.Get("settings_update_checking");
         }
 
-        var result = await UpdateChecker.CheckAsync();
+        // Settings > Debug local package: same result shape as a GitHub release, so
+        // everything below (panel, badge, toast, update button) is exercised unchanged.
+        var result = UseDebugLocalUpdate()
+            ? await UpdateChecker.CheckLocalZipAsync(AppSettings.DebugLocalUpdateZip!, force: !silent)
+            : await UpdateChecker.CheckAsync();
         _lastUpdateCheck = result;
 
         if (!result.Success)
@@ -71,8 +75,15 @@ public partial class MainWindow
             PnlAppUpdateAvailable.Visibility = Visibility.Visible;
 
             bool installed = InstallDetector.IsInstalled();
+            // Preferred path for BOTH installed and portable copies: the ZIP is applied
+            // in place by K2 itself (see Services/SelfUpdate.cs), no wizard to click
+            // through. The installer button stays as the fallback for installed copies
+            // (e.g. an update that needs the wizard's own logic to run again), and the
+            // "save the ZIP" button as the manual route for portable ones.
+            BtnAppUpdateSelfInstall.Visibility = result.PortableZipAsset is not null ? Visibility.Visible : Visibility.Collapsed;
             BtnAppUpdateInstall.Visibility = installed && result.InstallerAsset is not null ? Visibility.Visible : Visibility.Collapsed;
             BtnAppUpdateZip.Visibility = !installed && result.PortableZipAsset is not null ? Visibility.Visible : Visibility.Collapsed;
+            BtnAppUpdateViewRelease.Visibility = result.ReleaseUrl is not null ? Visibility.Visible : Visibility.Collapsed;
 
             SetUpdateBadge(result.LatestVersion);
             // Only the startup check announces itself: after a manual "Check for
@@ -105,6 +116,62 @@ public partial class MainWindow
 
         DotUpdateBadge.Visibility = Visibility.Visible;
         BtnSettingsTab.ToolTip = Loc.Get("settings_update_available", latestVersion);
+    }
+
+    /// <summary>Self-contained update: downloads the release ZIP, stages it and hands
+    /// the swap to a copy of the NEW K2.App.exe running from the staging folder
+    /// (<c>--apply-update</c>), then closes K2 so its files can be replaced. The updater
+    /// restarts K2 when it is done — no installer, no wizard. Works for installed and
+    /// portable copies alike; see Services/SelfUpdate.cs for the whole flow.</summary>
+    private async void BtnAppUpdateSelfInstall_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lastUpdateCheck?.PortableZipAsset is not { } asset) return;
+
+        var confirm = MessageBox.Show(this,
+            Loc.Get("settings_update_selfupdate_confirm", _lastUpdateCheck.LatestVersion ?? "?"),
+            Loc.Get("settings_update_group"), MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        try
+        {
+            BtnAppUpdateSelfInstall.IsEnabled = false;
+            BtnAppUpdateInstall.IsEnabled = false;
+            PbAppUpdateDownload.Value = 0;
+            PbAppUpdateDownload.Visibility = Visibility.Visible;
+            var progress = new Progress<double>(p =>
+            {
+                PbAppUpdateDownload.Value = p * 100;
+                TxtAppUpdateStatus.Text = Loc.Get("settings_update_downloading_pct", (int)Math.Round(p * 100));
+            });
+
+            TxtAppUpdateStatus.Text = Loc.Get("settings_update_downloading");
+            System.IO.Directory.CreateDirectory(SelfUpdate.UpdateRoot);
+            string zip = System.IO.Path.Combine(SelfUpdate.UpdateRoot, asset.Name);
+            await UpdateInstaller.DownloadAsync(asset, zip, progress);
+
+            TxtAppUpdateStatus.Text = Loc.Get("settings_update_extracting");
+            PbAppUpdateDownload.IsIndeterminate = true;
+            await Task.Run(() => SelfUpdate.StageZip(zip));
+
+            TxtAppUpdateStatus.Text = Loc.Get("settings_update_applying");
+            SelfUpdate.LaunchApply(SelfUpdate.StagingDir, SelfUpdate.InstallDir);
+
+            // Same exit path as the installer flow / tray "Exit": the updater is waiting
+            // for this process to die before it can overwrite K2.App.exe.
+            _reallyClosing = true;
+            Close();
+        }
+        catch (Exception ex)
+        {
+            SelfUpdate.Log($"self-update aborted in the UI: {ex}");
+            MessageBox.Show(this, Loc.Get("settings_update_failed", ex.Message),
+                Loc.Get("settings_update_group"), MessageBoxButton.OK, MessageBoxImage.Error);
+            TxtAppUpdateStatus.Text = Loc.Get("settings_update_failed", ex.Message);
+            BtnAppUpdateSelfInstall.IsEnabled = true;
+            BtnAppUpdateInstall.IsEnabled = true;
+            PbAppUpdateDownload.IsIndeterminate = false;
+            PbAppUpdateDownload.Visibility = Visibility.Collapsed;
+        }
     }
 
     /// <summary>Installed copies (Inno Setup): download the installer and launch it,
@@ -186,6 +253,37 @@ public partial class MainWindow
             BtnAppUpdateZip.IsEnabled = true;
             PbAppUpdateDownload.Visibility = Visibility.Collapsed;
         }
+    }
+
+    private static bool UseDebugLocalUpdate() =>
+        AppSettings.DebugMode && AppSettings.DebugLocalUpdateEnabled
+        && !string.IsNullOrWhiteSpace(AppSettings.DebugLocalUpdateZip);
+
+    /// <summary>Settings &gt; Debug: flag + ZIP picker for testing the self-update against a
+    /// local K2-X.Y.Z.zip (Installer\build-installer.bat) instead of a GitHub release.
+    /// See UpdateChecker.CheckLocalZipAsync.</summary>
+    private void InitDebugLocalUpdatePanel()
+    {
+        CkDebugLocalUpdate.IsChecked = AppSettings.DebugLocalUpdateEnabled;
+        TxtDebugLocalUpdateZip.Text = AppSettings.DebugLocalUpdateZip ?? Loc.Get("settings_debug_update_no_file");
+    }
+
+    private void CkDebugLocalUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.SetDebugLocalUpdateEnabled(CkDebugLocalUpdate.IsChecked == true);
+        _ = RunUpdateCheckAsync(silent: false);
+    }
+
+    private void BtnDebugLocalUpdateBrowse_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "ZIP archive|*.zip" };
+        string? dir = System.IO.Path.GetDirectoryName(AppSettings.DebugLocalUpdateZip ?? "");
+        if (!string.IsNullOrEmpty(dir) && System.IO.Directory.Exists(dir)) dlg.InitialDirectory = dir;
+        if (dlg.ShowDialog(this) != true) return;
+
+        AppSettings.SetDebugLocalUpdateZip(dlg.FileName);
+        TxtDebugLocalUpdateZip.Text = dlg.FileName;
+        if (AppSettings.DebugLocalUpdateEnabled) _ = RunUpdateCheckAsync(silent: false);
     }
 
     private void BtnAppUpdateViewRelease_Click(object sender, RoutedEventArgs e)
@@ -289,10 +387,19 @@ public partial class MainWindow
 
     private bool _bcDllPanelUpdating;
 
+    /// <summary>Refreshes the found/missing line under the folder picker. It reports the
+    /// folder currently selected by the radios — the manual override in manual mode, the
+    /// auto-detected install otherwise — and not "resolvable from anywhere", or pointing
+    /// the picker at an empty folder would still read "found" thanks to the other
+    /// fallbacks in <see cref="NativeDependencyResolver.CandidatePaths"/>.</summary>
     private void RefreshBcDllStatus()
     {
+        string? folder = RbBcDllManual.IsChecked == true
+            ? AppSettings.BaseCampDllFolder
+            : NativeDependencyResolver.BaseCampDirectories().FirstOrDefault();
+
         var parts = NativeDependencyResolver.BaseCampNativeDlls.Select(dll =>
-            $"{dll}: {(NativeDependencyResolver.IsResolvable(dll) ? Loc.Get("settings_bc_dll_found") : Loc.Get("settings_bc_dll_missing"))}");
+            $"{dll}: {(NativeDependencyResolver.IsResolvableIn(dll, folder) ? Loc.Get("settings_bc_dll_found") : Loc.Get("settings_bc_dll_missing"))}");
         TxtBcDllStatus.Text = string.Join("   ", parts);
     }
 
@@ -302,9 +409,20 @@ public partial class MainWindow
     /// picker below (the folder itself is only saved once the user browses to one).</summary>
     private void RbBcDllMode_Checked(object sender, RoutedEventArgs e)
     {
-        if (RbBcDllAuto.IsChecked == true)
+        if (_bcDllPanelUpdating) return; // this handler also fires while Init* sets IsChecked
+
+        // Do NOT call InitBcDllFolderPanel() here: it re-derives the mode from the saved
+        // folder, which is still empty the moment the user picks "manual" — the radio
+        // would snap straight back to auto and leave Browse… disabled. Just unlock the
+        // picker and let BtnBcDllFolderBrowse_Click persist the folder.
+        bool manual = RbBcDllManual.IsChecked == true;
+        if (!manual)
             AppSettings.SetBaseCampDllFolder(null);
-        InitBcDllFolderPanel();
+
+        TxtBcDllFolder.IsEnabled = manual;
+        BtnBcDllFolderBrowse.IsEnabled = manual;
+        TxtBcDllFolder.Text = AppSettings.BaseCampDllFolder ?? Loc.Get("settings_bc_dll_none");
+        RefreshBcDllStatus();
     }
 
     /// <summary>"Browse…" in the "Base Camp DLL folder" group — lets the user point K2
@@ -361,6 +479,7 @@ public partial class MainWindow
         InitAppIconColorCombo();
         InitIconGalleryStyleRadios();
         InitUpdatesPanel();
+        InitDebugLocalUpdatePanel();
         InitAcknowledgementsPanel();
         InitExtraLinksPanel();
 
@@ -859,6 +978,7 @@ public partial class MainWindow
     /// <summary>Applies the centralized debug flag to every device module at once.</summary>
     private void ApplyDebugModeToAllDevices(bool debug)
     {
+        GbAppDebug.Visibility = debug ? Visibility.Visible : Visibility.Collapsed;
         ApplyDebugMode(debug);     // Everest    — MainWindow.SectionNav.cs
         ApplyMpDebugMode(debug);   // MacroPad   — MainWindow.Keys.cs
         ApplyDpDebugMode(debug);   // DisplayPad — MainWindow.DisplayPad.cs

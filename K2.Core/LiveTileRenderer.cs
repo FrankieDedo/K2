@@ -205,11 +205,21 @@ public static class LiveTileRenderer
     /// theme: these dials belong to a game profile and wear the GAME's colour, which is the
     /// whole point of the tile reading as part of the game's own HUD.</para>
     /// </summary>
+    /// <param name="edgeInset">Fraction of the tile kept clear on every side — see the same
+    /// parameter on <see cref="TryRenderSpeedTile"/>.</param>
+    /// <param name="dialScale">Dial size relative to the stock layout. Anything but 1 (or a non-zero
+    /// <paramref name="edgeInset"/>) switches to a layout where the dial takes whatever height the
+    /// inset and a compact one-strip caption leave, instead of the fixed upper half.</param>
     public static bool TryRenderSegmentedGauge(string valueText, double? fraction, string caption,
                                                int size, string outputPngPath,
                                                Color accent, int segments,
-                                               TileEmphasis emphasis = TileEmphasis.ShadowLitCore)
+                                               TileEmphasis emphasis = TileEmphasis.ShadowLitCore,
+                                               float edgeInset = 0f, float dialScale = 1f)
     {
+        if (edgeInset > 0f || Math.Abs(dialScale - 1f) > 0.001f)
+            return TryRenderLargeDial(valueText, fraction, caption, size, outputPngPath, accent, segments,
+                                      emphasis, edgeInset, dialScale);
+
         try
         {
             segments = Math.Clamp(segments, 1, 24);
@@ -243,6 +253,54 @@ public static class LiveTileRenderer
 
                 if (withCaption)
                     DrawSegmentedCaption(g, size, caption, emphasis);
+            }
+            return Save(canvas, outputPngPath);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>The <see cref="TryRenderSegmentedGauge"/> layout for a bigger dial: the caption is a
+    /// single strip at the bottom, the dial is centred in the height above it, and nothing comes
+    /// closer to the key's edge than <paramref name="edgeInset"/>.</summary>
+    private static bool TryRenderLargeDial(string valueText, double? fraction, string caption,
+                                           int size, string outputPngPath, Color accent, int segments,
+                                           TileEmphasis emphasis, float edgeInset, float dialScale)
+    {
+        try
+        {
+            using var canvas = new Bitmap(size, size);
+            using (var g = NewGraphics(canvas, size))
+            {
+                caption = IconStyleScope.OverrideCaption ?? caption;
+                bool withCaption = caption.Length > 0;
+                float inset = size * edgeInset;
+                float innerW = size - 2 * inset;
+                float captionH = withCaption ? size * 0.16f : 0f;
+                float available = size - 2 * inset - captionH;
+
+                float ring = Math.Min(size * (withCaption ? 0.46f : 0.76f) * dialScale, Math.Min(available, innerW));
+                float left = (size - ring) / 2f;
+                float top = inset + (available - ring) / 2f;
+                float thickness = Math.Max(3f, size * 0.075f * Math.Min(dialScale, 1.25f));
+
+                if (fraction is double f)
+                {
+                    var rect = new RectangleF(left + thickness / 2f, top + thickness / 2f,
+                                              ring - thickness, ring - thickness);
+                    DrawSegmentedDial(g, rect, thickness, Math.Clamp(segments, 1, 24), f, accent, emphasis, size);
+                    float innerBox = ring * 0.62f;
+                    DrawFitted(g, valueText,
+                               new RectangleF(left + (ring - innerBox) / 2f, top + (ring - innerBox) / 2f, innerBox, innerBox),
+                               size * 0.30f * dialScale, TextColor);
+                }
+                else
+                {
+                    DrawCenteredValue(g, valueText, new RectangleF(inset, inset, innerW, available), size, TextColor);
+                }
+
+                if (withCaption)
+                    DrawFitted(g, caption, new RectangleF(inset, size - inset - captionH, innerW, captionH),
+                               size * 0.15f, IconStyleScope.OverrideText ?? Color.White);
             }
             return Save(canvas, outputPngPath);
         }
@@ -1106,9 +1164,13 @@ public static class LiveTileRenderer
     /// between the two text strips rather than the whole tile.
     /// </para>
     /// </summary>
+    /// <param name="edgeInset">Fraction of the tile kept clear on every side — for a profile whose
+    /// frame art runs close to the key's edge, where edge-to-edge caption and unit strips would sit
+    /// on top of the frame. 0 keeps the original full-bleed layout.</param>
     public static bool TryRenderSpeedTile(string valueText, double? fraction, string caption,
                                           string unitText, int size, string outputPngPath,
-                                          bool ownValueSize = false, float valueTopPad = 0f)
+                                          bool ownValueSize = false, float valueTopPad = 0f,
+                                          float edgeInset = 0f)
     {
         try
         {
@@ -1117,19 +1179,24 @@ public static class LiveTileRenderer
             {
                 bool withCaption = caption.Length > 0;
                 bool withUnit = unitText.Length > 0;
-                float captionH = withCaption ? size * 0.22f : 0f;
-                float unitH = withUnit ? size * 0.22f : 0f;
+                float inset = size * edgeInset;
+                // The strips give up a little height when inset, so the value in the middle keeps
+                // most of its room instead of paying for both margins alone.
+                float band = edgeInset > 0 ? 0.20f : 0.22f;
+                float captionH = withCaption ? size * band : 0f;
+                float unitH = withUnit ? size * band : 0f;
                 float pad = size * valueTopPad;
-                float midTop = captionH + pad;
-                float midHeight = size - captionH - unitH - pad;
+                float midTop = inset + captionH + pad;
+                float midHeight = size - 2 * inset - captionH - unitH - pad;
+                float innerW = size - 2 * inset;
 
-                var captionRect = new RectangleF(0, pad, size, captionH);
-                var unitRect = new RectangleF(0, size - unitH, size, unitH);
-                var valueRect = new RectangleF(size * 0.04f, midTop, size * 0.92f, midHeight);
+                var captionRect = new RectangleF(inset, inset + pad, innerW, captionH);
+                var unitRect = new RectangleF(inset, size - inset - unitH, innerW, unitH);
+                var valueRect = new RectangleF(inset + innerW * 0.04f, midTop, innerW * 0.92f, midHeight);
 
                 if (fraction is double f)
                 {
-                    float ring = Math.Min(size * 0.9f, midHeight) * 0.92f;
+                    float ring = Math.Min(innerW * 0.9f, midHeight) * 0.92f;
                     float left = (size - ring) / 2f;
                     float top = midTop + (midHeight - ring) / 2f;
                     float thickness = Math.Max(3f, size * 0.075f);

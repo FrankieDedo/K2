@@ -239,7 +239,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
                     // picture, so this only shows in the moment between assigning the action and
                     // the tile being rendered.
                     "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus"
-                        or "dp_screen"
+                        or K2.Core.KspTelemachus.ActionType or "dp_screen" or "dp_custom"
                                 => ActionTypeHelper.LiveTileSummary(_actionType, _actionValue),
                     "macro"     => ActionTypeHelper.MacroSummary(_actionValue),
                     _           => ActionTypeHelper.IsUnrecognized(_actionType) ? Loc.Get("act_unrecognized") : _actionType ?? "",

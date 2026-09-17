@@ -108,6 +108,7 @@ public partial class MainWindow
 
         _everest.KeyEvent += OnEverestKey;
         _everest.NumpadButtonEvent += OnEverestNumpadButton;
+        _everest.Reconnected += (_, _) => Dispatcher.BeginInvoke(new Action(EvOnReconnected));
 
         _evActionHost = new EverestActionHost(
             dispatcher:           Dispatcher,
@@ -1213,16 +1214,34 @@ public partial class MainWindow
                        "(Everest Max uses SDKDLL.dll; Everest360_USB.dll is for the Everest 60.)");
             return;
         }
+        // From here until the 2s resend has run: no SaveFlash, no duplicate applies, no
+        // extra clock push — see _evStartupSequence.
+        _evStartupSequence = true;
         int ver = _everest.SdkVersion();
         LblEvSdk.Text = ver > 0 ? $"SDKDLL.dll v{ver}" : "SDKDLL.dll not available";
         EvRefresh();
         // Land the device on K2's current profile right away — every per-profile
         // operation (NDK uploads/resets target the ACTIVE firmware profile slot)
         // assumes the two agree, and at startup the keyboard may be on whatever
-        // profile it was last left on.
-        _everest.SwitchProfile(EvCurrentProfile());
+        // profile it was last left on. Only when they DON'T agree already: a same-profile
+        // switch changes nothing and keeps the keyboard busy ~700ms (log 2026-09-11).
+        if (_everest.CurrentProfile() != EvCurrentProfile())
+            _everest.SwitchProfile(EvCurrentProfile());
         UpdateKeyboardLayout();
-        ApplyCurrentEffect();
+        PushDialClock("driver-open");
+
+        // The keyboard normally comes up already running K2's effect — K2 persisted it
+        // the last time it was changed — and re-sending it only restarts the animation and
+        // costs two AP transitions: the startup flickers. Send it only when it isn't there.
+        _evStartupEffectOnDevice = EvKeyboardAlreadyRunsCurrentEffect();
+        if (!_evStartupEffectOnDevice)
+        {
+            // What InitDllState used to do unconditionally: leave AP mode once, so both
+            // applies (this one and the 2s resend) run in normal mode with no AP toggling
+            // of their own; the resend puts AP back on at the end.
+            _everest.APEnable(false);
+            ApplyCurrentEffect(startupApply: true);
+        }
         ApplyEverestSettingsToDevice();
         StartLedPreview();
         // NDK image resync intentionally NOT done here (2026-07-16, user report):
@@ -1255,10 +1274,87 @@ public partial class MainWindow
     private DispatcherTimer? _evStartupResendTimer;
 
     /// <summary>
+    /// True from <see cref="EvAutoOpen"/> (or a reconnect) until the 2s resend has run.
+    /// Everything the startup sequence writes keeps the keyboard's MCU busy, and a busy MCU
+    /// stops reporting keys — typing while K2 started made the last key repeat (user report
+    /// 2026-09-11). The startup trace had THREE effect applies (the third bounced back from
+    /// the MacroPad's lighting sync on its re-plug), THREE SaveFlash writes (~300ms of flash
+    /// each) and three clock pushes inside ~8s. While this is set:
+    /// <list type="bullet">
+    /// <item>applies don't schedule a SaveFlash — the effect being restored is K2's stored
+    /// one, and K2 restores it at every launch anyway;</item>
+    /// <item>an apply identical to the one the sequence already sent is skipped (only the
+    /// two applies the sequence itself makes go through, see <c>startupApply</c>);</item>
+    /// <item>the "dock-attached" clock push is skipped — "driver-open" and "ap-on" follow.</item>
+    /// </list></summary>
+    private bool _evStartupSequence;
+
+    /// <summary>Signature of the last apply sent during <see cref="_evStartupSequence"/>.</summary>
+    private string? _evStartupApplySig;
+
+    /// <summary>EvAutoOpen found the keyboard already running K2's effect and sent
+    /// nothing — the 2s resend then has nothing to re-send either.</summary>
+    private bool _evStartupEffectOnDevice;
+
+    /// <summary>Everything a firmware preset apply depends on, from the panel controls.
+    /// Same string for the same look, so it can tell "already sent" apart.</summary>
+    private string EvApplySignature(EverestService.Effect effect, int? brightnessOverride = null) =>
+        $"{effect}|{(int)SldEvSpeed.Value}|{_evDirIndex}|{RbEvRainbow.IsChecked}|" +
+        $"{RbEvColorDouble.IsChecked}|{brightnessOverride ?? (int)SldEvBrightness.Value}|" +
+        $"{_evColor1:X6}|{_evColor2:X6}";
+
+    /// <summary>Device-level setting holding the <see cref="EvApplySignature"/> of the last
+    /// PERSISTED apply on firmware profile <paramref name="fwProfile"/>, i.e. what its
+    /// flash holds as far as K2 knows.</summary>
+    private static string EvFlashedSigKey(int fwProfile) => $"rgb.flashed_sig.p{fwProfile}";
+
+    /// <summary>
+    /// True when the keyboard is already running exactly the effect the panel would send,
+    /// so the startup sequence can leave the lighting alone. The firmware's readback only
+    /// carries the effect index and brightness of the active slot (speed/colors of a block
+    /// effect like Wave don't map back reliably), so the rest comes from K2's own record of
+    /// what it last persisted (<see cref="EvFlashedSigKey"/>). Every condition has to hold —
+    /// right profile, right menu slot, right effect, right brightness, same fingerprint —
+    /// otherwise the old apply + resend runs. Custom and the host-driven Diagonal wave are
+    /// never skipped: their state is not a firmware preset.
+    /// </summary>
+    private bool EvKeyboardAlreadyRunsCurrentEffect()
+    {
+        if (!_evRgbInitialized || CbEvEffect.SelectedItem is not EvEffectChoice pick) return false;
+        var effect = pick.Eff;
+        if (effect is EverestService.Effect.Custom or EverestService.Effect.DiagonalWave) return false;
+
+        int k2Profile = EvCurrentProfile();
+        string why;
+        if (!_everest.TryGetFirmwareInfo(out var fi))                               why = "FW info unreadable";
+        else if (fi.currentlyProfileIndex != k2Profile)                             why = $"profile {fi.currentlyProfileIndex}";
+        else if (fi.byEffectMenuIndex != EverestService.MenuIndexFor(effect))       why = $"menu slot {fi.byEffectMenuIndex}";
+        else if (!_everest.TryGetCurrentEffect(k2Profile, out var eff))             why = "effect unreadable";
+        else if (eff.byEffectIndex != (byte)(effect == EverestService.Effect.Matrix2
+                                         ? EverestSdkNative.EffectIndex.Matrix
+                                         : (EverestSdkNative.EffectIndex)effect))    why = $"effect 0x{eff.byEffectIndex:X2}";
+        else if (eff.byLightness != (byte)EverestService.QuantizeBrightness((int)SldEvBrightness.Value))
+                                                                                    why = $"brightness {eff.byLightness}";
+        else if (_evStore.GetSetting(EvFlashedSigKey(k2Profile)) != EvApplySignature(effect))
+                                                                                    why = "no matching K2 fingerprint";
+        else
+        {
+            _evStartupApplySig = EvApplySignature(effect);   // a bounced identical apply is a dupe
+            LogEverest($"[RGB ] startup: keyboard already runs {effect} (p{k2Profile}) — not re-sent");
+            return true;
+        }
+        LogEverest($"[RGB ] startup: effect will be sent ({why})");
+        return false;
+    }
+
+    /// <summary>
     /// Fires <see cref="ApplyCurrentEffect"/> once more ~2s after <see cref="EvAutoOpen"/>'s
-    /// initial apply — see the call site's comment for why. Also re-applies the
-    /// Settings panel (Game Mode/Indicator LED/Sync), same rationale, same firmware
-    /// AP-mode-transition window.
+    /// initial apply — see the call site's comment for why.
+    ///
+    /// <para>Used to re-apply the Settings panel (Game Mode/Indicator LED/Sync) here too,
+    /// "same rationale" — but a dropped settings write was never observed, the firmware
+    /// keeps those values in flash, and each of the three is a ~110ms write that keeps the
+    /// keyboard busy (see _evStartupSequence). EvAutoOpen still applies them once.</para>
     /// </summary>
     private void EvScheduleStartupEffectResend()
     {
@@ -1270,12 +1366,64 @@ public partial class MainWindow
         _evStartupResendTimer.Tick += (_, _) =>
         {
             _evStartupResendTimer!.Stop();
-            if (!_everest.IsOpen) return;
-            LogEverest("[RGB ] startup resend: re-applying effect (see EvAutoOpen comment)");
-            ApplyCurrentEffect();
-            ApplyEverestSettingsToDevice();
+            bool effectOnDevice = _evStartupEffectOnDevice;
+            _evStartupEffectOnDevice = false;
+            if (!_everest.IsOpen) { _evStartupSequence = false; _evStartupApplySig = null; return; }
+            if (effectOnDevice)
+            {
+                LogEverest("[RGB ] startup resend: skipped — the keyboard already runs K2's effect");
+            }
+            else
+            {
+                LogEverest("[RGB ] startup resend: re-applying effect (see EvAutoOpen comment)");
+                // Out of the startup sequence FIRST, so this apply persists: the flash then
+                // holds K2's effect (and EvFlashedSigKey records it), and the next launch
+                // can skip both applies.
+                _evStartupSequence = false;
+                ApplyCurrentEffect(startupApply: true);
+            }
+            _evStartupSequence = false;
+            _evStartupApplySig = null;
+
+            // Leave the keyboard in AP mode from here on, the way Base Camp does. Counted
+            // over the two USB captures in _reference/usb_dumps: BC sends APEnable(true)
+            // 20 times and APEnable(false) ZERO times, while K2 forces it off at init and
+            // before every ChangeEffect. With AP off the dial's clock page free-runs on its
+            // own counter and drifts (minutes, user report 2026-09-10) — it only re-latches
+            // onto the firmware RTC when the page is re-entered or the dock wakes; with AP
+            // on it tracks the RTC, which is why BC needs no periodic clock traffic and
+            // never flickers. Done HERE, after both effect applies, so the one AP
+            // transition K2 makes is folded into the startup flicker that already happens
+            // rather than adding another one later.
+            // Forced: when no apply was needed, AP was never touched and K2 only ASSUMES it
+            // is on (InitDllState) — normally true (left on by the last K2/BC session), and
+            // then this is the free redundant APEnable(true) BC also sends. The pending
+            // SaveFlash of the resend's apply goes out first, still in normal mode, as it
+            // did when the settings writes here flushed it.
+            _everest.FlushSaveFlash();
+            _everest.EnsureApMode(force: true);
+            PushDialClock("ap-on");
         };
         _evStartupResendTimer.Start();
+    }
+
+    /// <summary>The keyboard came back from a USB re-enumeration (hub reset, suspend,
+    /// accessory re-seated) and <see cref="EverestService"/> revived both transports. The
+    /// firmware may have restarted from flash in the meantime, so replay what EvAutoOpen
+    /// pushes — same startup sequence, same 2s insurance re-apply.</summary>
+    private void EvOnReconnected()
+    {
+        if (!_everest.IsOpen) return;
+        LogEverest("[RECONNECT] keyboard back after USB re-enumeration — re-applying profile");
+        _evStartupSequence = true;
+        _evStartupEffectOnDevice = false;   // the firmware may have restarted: always re-send
+        _everest.SwitchProfile(EvCurrentProfile());
+        UpdateKeyboardLayout();
+        PushEvDisabledKeysToDevice();
+        _everest.APEnable(false);           // same as EvAutoOpen's apply branch
+        ApplyCurrentEffect(startupApply: true);
+        ApplyEverestSettingsToDevice();
+        EvScheduleStartupEffectResend();
     }
 
     private void BtnEvRename_Click(object sender, RoutedEventArgs e)
@@ -1305,8 +1453,10 @@ public partial class MainWindow
         if (ok)
         {
             UpdateKeyboardLayout();
+            _everest.APEnable(false);       // InitDllState no longer does it (see there)
             ApplyCurrentEffect();
             ApplyEverestSettingsToDevice();
+            PushDialClock("driver-open");   // same reason as in EvAutoOpen
             StartLedPreview();
             EvUploadNdkImages(); // resync current profile's NDK pictures in case this is a different/reset device
         }
@@ -2048,7 +2198,7 @@ public partial class MainWindow
     /// </summary>
     private void EvClaimNdkSlot(int slot) => _evStore.DeleteSettingsWithPrefix($"ndk.{slot}.");
 
-    private void EvResetEmptyNdkSlots(string? busyMessage = null)
+    private bool EvResetEmptyNdkSlots(string? busyMessage = null)
         => EvResetEmptyNdkSlots(EvCurrentProfile(), busyMessage);
 
     /// <summary>Same as <see cref="EvResetEmptyNdkSlots(string?)"/> but on an explicit
@@ -2058,9 +2208,9 @@ public partial class MainWindow
     /// profile-addressed though, so callers that care about the firmware really applying
     /// the reset should still land the device on <paramref name="profile"/> first — the
     /// multi-profile Base Camp import does exactly that, one slot at a time.</summary>
-    private void EvResetEmptyNdkSlots(int profile, string? busyMessage)
+    private bool EvResetEmptyNdkSlots(int profile, string? busyMessage)
     {
-        if (!_everest.IsOpen) return;
+        if (!_everest.IsOpen) return false;
 
         var toReset = new System.Collections.Generic.List<int>(4);
         for (int i = 0; i < NdkCount; i++)
@@ -2074,7 +2224,7 @@ public partial class MainWindow
             if (_evStore.GetSetting($"ndk.{profile}.{i}.flashOk") == "1") continue;
             toReset.Add(i);
         }
-        if (toReset.Count == 0) return;
+        if (toReset.Count == 0) return true;
 
         // The command echo only proves the firmware RECEIVED a reset, not that it applied
         // it: for several seconds after a picture upload the firmware is still writing
@@ -2128,6 +2278,7 @@ public partial class MainWindow
         if (done.Count < toReset.Count)
             LogEverest($"[NDK] profile {profile}: {toReset.Count - done.Count} display key(s) FAILED to reset " +
                        "— the keyboard rejected/ignored the sequence (firmware busy?)");
+        return done.Count == toReset.Count;
     }
 
     /// <summary>Blocks until the firmware's post-picture-upload busy window (~15s from the
@@ -2489,12 +2640,14 @@ public partial class MainWindow
             LogEverest($"[KEY ] {(e.FromNativeKeyReport ? "hidUsage" : "wMatrix")}=0x{rawMatrix:X2} " +
                        $"{(e.Pressed ? "down" : "up")}");
 
-        // Feed real keystrokes into an in-progress macro recording. While K2 is
-        // the foreground window the Everest stops emitting standard keyboard
-        // input (presses arrive only as these NKRO native reports), so
-        // MacroRecorder's global WH_KEYBOARD_LL hook would capture nothing.
-        // De-dupe inside MacroRecorder handles the case where both paths fire.
-        if (e.FromNativeKeyReport && _macroRecorder?.IsRecording == true)
+        // Feed real keystrokes into an in-progress macro recording — or into an
+        // armed single-row key re-record. While K2 is the foreground window the
+        // Everest stops emitting standard keyboard input (presses arrive only as
+        // these NKRO native reports), so MacroRecorder's global WH_KEYBOARD_LL
+        // hook would capture nothing. De-dupe inside MacroRecorder handles the
+        // case where both paths fire.
+        if (e.FromNativeKeyReport
+            && (_macroRecorder?.IsRecording == true || _macroRecorder?.IsCapturingSingleKey == true))
         {
             int vk = K2.App.Services.HidKeyboardUsage.ToVirtualKey(rawMatrix);
             if (vk != 0) _macroRecorder.InjectKey(vk, e.Pressed);
@@ -2624,9 +2777,18 @@ public partial class MainWindow
         // undoing) — see PushEvDisabledKeysToDevice.
         PushEvDisabledKeysToDevice();
 
-        ReloadEverestRgbForProfileSwitch(applyRgb);
-        ReloadEverestSettingsForProfileSwitch();
-        ReloadEverestDialForProfileSwitch();
+        // The RGB reload moves SldEvBrightness BEFORE the Display Dial panel has caught up
+        // with the new profile: mirroring it into the display brightness at that point
+        // would save the previous profile's dial controls under the new one (see
+        // MirrorDisplayBrightness). Each profile's stored pair is already consistent.
+        _evProfileReloading = true;
+        try
+        {
+            ReloadEverestRgbForProfileSwitch(applyRgb);
+            ReloadEverestSettingsForProfileSwitch();
+            ReloadEverestDialForProfileSwitch();
+        }
+        finally { _evProfileReloading = false; }
     }
 
     /// <summary>
@@ -2984,8 +3146,21 @@ public partial class MainWindow
         // it already had until the user picks something).
         EvRefreshProfiles();
         EvSelectProfileSlot(1);
-        EvResetAllNdkSlotsToFactory();
+        bool hwOk = EvResetAllNdkSlotsToFactory();
         EvActivateProfileSlot(1, applyRgb: false);
+
+        // The K2-side wipe above always succeeds (it is a local database); the hardware
+        // half can fail on its own, and used to do so without a word — see
+        // EvResetAllNdkSlotsToFactory.
+        if (!hwOk)
+        {
+            LogEverest("[UI ] Everest restore defaults: hardware half INCOMPLETE (see the failures above)");
+            MessageBox.Show(
+                Loc.Get("restore_defaults_hw_incomplete"),
+                Loc.Get("restore_defaults"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     /// <summary>Restores the factory display-key artwork on ALL firmware profile slots,
@@ -3005,15 +3180,22 @@ public partial class MainWindow
     /// device back on the profile it wants active (EvActivateProfileSlot switches again).
     /// Skipped entirely when the numpad isn't attached: no display keys, and every reset
     /// would just burn its retries against a missing accessory.</para></summary>
-    private void EvResetAllNdkSlotsToFactory()
+    /// <returns>false when at least one slot's artwork could not be restored — the caller
+    /// warns the user instead of leaving "restore defaults" looking like it worked. A dead
+    /// USB handle used to make the whole hardware half a silent no-op (user report
+    /// 2026-09-10); the handle now self-heals (EverestHidNative.Pad.TryReopen) but the
+    /// firmware can still refuse mid-flash-write, so the outcome is reported either way.</returns>
+    private bool EvResetAllNdkSlotsToFactory()
     {
-        if (!_everest.IsOpen || !_evNumpadConnected) return;
+        if (!_everest.IsOpen || !_evNumpadConnected) return true;
         string busy = Loc.Get("hw_busy_restoring_defaults");
+        bool allOk = true;
         for (int slot = 1; slot <= EverestService.ProfileCount; slot++)
         {
-            _everest.SwitchProfile(slot);
-            EvResetEmptyNdkSlots(slot, busy);
+            allOk &= _everest.SwitchProfile(slot);
+            allOk &= EvResetEmptyNdkSlots(slot, busy);
         }
+        return allOk;
     }
 
     private int EvSdkVersion()
@@ -3424,28 +3606,43 @@ public partial class MainWindow
         _evAutoOffTimer?.Configure(enabled, seconds);
     }
 
-    /// <summary>Backlight-off-when-idle timer callbacks. Deliberately do NOT use
-    /// SetMainBrightness/SetBacklight (SDKDLL.dll's on/off toggle): that call was
-    /// suspected of crashing the SDK's internal callback thread on real hardware
-    /// (2026-07-20 report — after auto-off engaged, no further physical key events
-    /// were ever delivered again, meaning RegisterActivity/wake never re-fired;
-    /// see App.xaml.cs's VEH crash-recovery mechanism, which exists precisely
-    /// because SDKDLL.dll is known to crash). Instead, mirror Everest 60's
-    /// approach (Everest60RgbPanel.SetBacklightForcedOff): resend the current
-    /// effect via the same ChangeEffect/SetEffect path already exercised by
-    /// every brightness-slider/effect change, just with brightness forced to 0,
-    /// without touching the persisted brightness setting or the slider itself.</summary>
+    /// <summary>Backlight-off-when-idle timer callbacks. Uses SetMainBrightness
+    /// (<see cref="EverestService.SetBacklight"/>), the firmware's own on/off toggle, and
+    /// falls back to the effect resend at brightness 0 if it fails.
+    /// <para>The resend used to be the ONLY path here: SetMainBrightness was suspected of
+    /// crashing SDKDLL's internal callback thread (2026-07-20 report — after auto-off no
+    /// physical key event was ever delivered again, so wake never re-fired). That blocker
+    /// is gone: in native-engine mode key presses come from the NKRO bitmap, not from
+    /// SDKDLL's <c>SetKeyCallBack</c> (see EverestService.OpenNative), and the very same
+    /// call already sits behind the manual backlight checkbox
+    /// (<see cref="CkEvBacklight_Click"/>) with no reports against it.</para>
+    /// <para>The reason to switch is AP mode: since 2026-09-10 K2 leaves the keyboard in AP
+    /// mode so the Display Dial's clock stays latched to the firmware RTC, and
+    /// <c>ChangeEffect</c> is ignored while AP is on — so the resend path would need an
+    /// AP off/on pair per idle-off AND per wake, i.e. a visible LED flicker every time the
+    /// keyboard goes idle and comes back. SetMainBrightness doesn't touch effects, so it
+    /// needs no AP transition at all.</para></summary>
     private void EvAutoOffTimeout()
     {
-        LogEverest("[RGB ] auto-off: resend effect at brightness=0");
-        ApplyCurrentEffect(brightnessOverride: 0, transient: true);
+        if (_everest.SetBacklight(false))
+            LogEverest("[RGB ] auto-off: SetBacklight(false)");
+        else
+        {
+            LogEverest("[RGB ] auto-off: SetBacklight(false) failed -> resend effect at brightness=0");
+            ApplyCurrentEffect(brightnessOverride: 0, transient: true);
+        }
         CkEvBacklight.IsChecked = false;
     }
 
     private void EvAutoOffWake()
     {
-        LogEverest("[RGB ] auto-off wake: resend current effect");
-        ApplyCurrentEffect(transient: true);
+        if (_everest.SetBacklight(true))
+            LogEverest("[RGB ] auto-off wake: SetBacklight(true)");
+        else
+        {
+            LogEverest("[RGB ] auto-off wake: SetBacklight(true) failed -> resend current effect");
+            ApplyCurrentEffect(transient: true);
+        }
         CkEvBacklight.IsChecked = true;
     }
 
@@ -3596,6 +3793,8 @@ public partial class MainWindow
         System.Windows.RoutedPropertyChangedEventArgs<double> e)
     {
         if (LblEvBrightness != null) LblEvBrightness.Text = $"{(int)e.NewValue}%";
+        // Also covers the Display Dial's knob: SyncUiEffectFromDevice lands here too.
+        MirrorDisplayBrightness(e.NewValue);
         ApplyCurrentEffect();
     }
 
@@ -3734,7 +3933,11 @@ public partial class MainWindow
     /// write is exactly what leaves the firmware unresponsive long enough for the
     /// woke-up keypress to auto-repeat, "AAAAAAAA" — user report 2026-08-30, only
     /// reproduced with Static). Also skips the manual-toggle re-sync below.</param>
-    private void ApplyCurrentEffect(int? brightnessOverride = null, bool transient = false)
+    /// <param name="startupApply">One of the applies the startup sequence makes on purpose
+    /// (EvAutoOpen, its 2s resend, a reconnect) — never skipped as a duplicate, see
+    /// <see cref="_evStartupSequence"/>.</param>
+    private void ApplyCurrentEffect(int? brightnessOverride = null, bool transient = false,
+                                    bool startupApply = false)
     {
         // Exit WITHOUT logging if the UI has not finished loading: during
         // InitializeComponent() the Slider raises ValueChanged setting Value=100
@@ -3751,6 +3954,17 @@ public partial class MainWindow
             return;
         }
         var effect = pick.Eff;
+
+        if (_evStartupSequence)
+        {
+            string sig = EvApplySignature(effect, brightnessOverride);
+            if (!startupApply && sig == _evStartupApplySig)
+            {
+                LogEverest("[RGB ] skip: same effect the startup sequence already sent");
+                return;
+            }
+            _evStartupApplySig = sig;
+        }
 
         // Backlight was auto-off (idle) and the user just applied a real effect
         // through a panel control: the device is lit again, so clear the idle
@@ -3786,7 +4000,10 @@ public partial class MainWindow
             // custom with no saved LEDs must turn everything dark, not keep the
             // previous effect running). The Custom panel's own Apply button covers
             // subsequent paint edits (BtnCustomApply_Click, MainWindow.CustomLighting.cs).
-            byte cb = (byte)Math.Clamp(brightnessOverride ?? 100, 0, 100);
+            // Brightness is the device-wide slider, as on every other path (the panel's
+            // Apply button, DiagonalWave above). A hardcoded 100 here made the slider a
+            // no-op in Custom and left the Display Dial showing 100 whatever K2 said.
+            byte cb = (byte)Math.Clamp(brightnessOverride ?? (int)SldEvBrightness.Value, 0, 100);
             LogEverest($"[RGB ] Custom selected: applying stored per-LED colors (bright={cb})");
             ApplyCustomColorsToDevice(cb);
             return;
@@ -3815,6 +4032,7 @@ public partial class MainWindow
 
         LogEverest($"[RGB ] apply eff={effect} speedByte={speedByte} dir={dirByte} rainbow={rainbow} " +
                    $"colors={colorCount} bright={bright}% c1=#{_evColor1:X6} c2=#{_evColor2:X6}");
+        bool persist = !transient && !_evStartupSequence;
         // NB: NO EnsureApMode here. ChangeEffect requires the device in normal mode;
         // AP mode is only for ChangeSWEffect (per-key streaming).
         bool ok = _everest.SetEffect(
@@ -3826,8 +4044,12 @@ public partial class MainWindow
             speedByte:          speedByte,
             directionByte:      dirByte,
             colorCountOverride: colorCount,
-            persist:            !transient);
+            persist:            persist);
         LogEverest($"[RGB ] ChangeEffect -> {ok}");
+        // Fingerprint of what now goes to flash — lets the next launch tell that the
+        // keyboard already runs this exact effect (EvKeyboardAlreadyRunsCurrentEffect).
+        if (ok && persist && !SignalRgbGuard.LightingYielded)
+            _evStore.SetSetting(EvFlashedSigKey(EvCurrentProfile()), EvApplySignature(effect, brightnessOverride));
 
         // Cross-device lighting sync — coordinator's re-entrancy guard makes this safe
         // even when the apply was itself sync-driven. Custom / DiagonalWave return early

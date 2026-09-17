@@ -1269,7 +1269,9 @@ public static class IconImageGenerator
                 FormatFlags = StringFormatFlags.LineLimit,
             };
             SizeF measured = g.MeasureString(text, candidate, (int)rect.Width, format);
-            if (measured.Height <= rect.Height)
+            // Height alone let GDI+ break a single long word across lines ("PROGRAD / E"):
+            // the size is only good once the longest word also fits on one line.
+            if (measured.Height <= rect.Height && LongestWordFits(g, text, candidate, rect.Width))
             {
                 g.DrawString(text, candidate, brush, rect, format);
                 return;
@@ -1285,6 +1287,14 @@ public static class IconImageGenerator
             FormatFlags = StringFormatFlags.LineLimit,
         };
         g.DrawString(text, fallbackFont, brush, rect, fallbackFormat);
+    }
+
+    private static bool LongestWordFits(Graphics g, string text, Font font, float width)
+    {
+        using var single = new StringFormat(StringFormat.GenericDefault) { FormatFlags = StringFormatFlags.NoWrap };
+        foreach (string word in text.Split(new[] { ' ', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries))
+            if (g.MeasureString(word, font, PointF.Empty, single).Width > width) return false;
+        return true;
     }
 
     private const float MinLabelFontSize = 7f;

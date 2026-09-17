@@ -9,7 +9,7 @@ namespace K2.Core;
 /// Everything about a game profile that is <b>presentation and integration</b> rather than key
 /// mapping: the art its tiles are drawn on, its accent colour, and the commands its action picker
 /// offers. The key mapping itself — which command sits in which slot — lives in
-/// <c>GameProfileCatalog.Definition</c> over in K2.App.
+/// <c>GameProfileDefinition</c> over in K2.App.
 ///
 /// <para>
 /// <b>Why it is a record and not a switch.</b> Every one of these used to be an
@@ -25,7 +25,7 @@ namespace K2.Core;
 /// Core hosts <see cref="ButtonActionDialog"/>, whose picker shows the game's own commands.
 /// </para>
 /// </summary>
-/// <param name="Id">Matches <c>GameProfileCatalog.Definition.Id</c>. The two are joined by this
+/// <param name="Id">Matches <c>GameProfileDefinition.Id</c>. The two are joined by this
 /// string and nothing else, so they must agree exactly.</param>
 /// <param name="ArtFolder">Sub-folder of <c>Assets\GameProfiles\</c> holding the tile backgrounds,
 /// or empty for a game that ships none (its tiles then use K2's ordinary action icons).</param>
@@ -49,6 +49,9 @@ namespace K2.Core;
 /// the catalogue ships. True for a plain shortcut page that can grow; false for a game whose single
 /// page IS the layout — Zero Company's 2×6 tactical grid has its own on-pad scroll key, so a second
 /// DisplayPad page would be dead rows the pad cannot reach.</param>
+/// <param name="DynamicFamilies">Families only known at run time, appended after
+/// <paramref name="CommandFamilies"/> — Kerbal Space Program's come from the API listing the
+/// Telemachus mod serves about itself.</param>
 public sealed record GameProfileSpec(
     string Id,
     string ArtFolder,
@@ -57,7 +60,8 @@ public sealed record GameProfileSpec(
     bool StyleAllTiles,
     (string LocKey, string Glyph, ActionTypeHelper.GameCommand[] Items)[] CommandFamilies,
     string RestingArtColor = "orange",
-    bool AllowExtraPages = true);
+    bool AllowExtraPages = true,
+    Func<(string LocKey, string Glyph, ActionTypeHelper.GameCommand[] Items)[]>? DynamicFamilies = null);
 
 /// <summary>The per-game specs K2 ships. One entry per game that has art, colours or commands of
 /// its own; see <see cref="GameProfileSpec"/> for what each field buys.</summary>
@@ -84,6 +88,13 @@ public static class GameProfileSpecs
 
     /// <summary>The sand/khaki the game's HUD and menus are lettered in.</summary>
     public static readonly Color DeadsideSand = Color.FromArgb(198, 176, 122);
+
+    /// <summary>Kerbal Space Program's catalogue id — the <c>dp_ksp</c> painter styles its tiles
+    /// with this profile's art, the way the other live painters refer to theirs.</summary>
+    public const string KspId = "kerbal_space_program";
+
+    /// <summary>The green of the game's flight UI — navball speed readout, staging highlights.</summary>
+    public static readonly Color KspGreen = Color.FromArgb(146, 222, 92);
 
     public static IReadOnlyList<GameProfileSpec> All { get; } = new[]
     {
@@ -116,13 +127,50 @@ public static class GameProfileSpecs
             Accent: DeadsideSand,
             StyleAllTiles: true,
             CommandFamilies: ActionTypeHelper.DeadsideCommandFamilies),
+
+        // Every command and reading goes through the Telemachus mod (see KspTelemachus): the
+        // families ARE the mod's API, grouped as its documentation groups it.
+        new GameProfileSpec(
+            Id: KspId,
+            ArtFolder: "KerbalSpaceProgram",
+            ArtPrefix: "ksp",
+            Accent: KspGreen,
+            StyleAllTiles: true,
+            CommandFamilies: KspTelemachus.CommandFamilies,
+            RestingArtColor: "green",
+            DynamicFamilies: KspTelemachus.ApiFamilies),
     };
+
+    /// <summary>
+    /// Specs for profiles K2 does not ship — the ones the user builds in the game studio, whose
+    /// definitions live in K2.App's store. Set once at startup by the app.
+    ///
+    /// <para>A delegate rather than a second list because the two live on opposite sides of the
+    /// assembly line: the studio's profiles are user data owned by K2.App, and K2.Core — which
+    /// hosts the action dialog — must be able to ask about one without referencing it.</para>
+    /// </summary>
+    public static Func<string, GameProfileSpec?>? CustomSpecProvider { get; set; }
+
+    /// <summary>
+    /// Command families contributed on top of a profile's own — the actions the user built in the
+    /// game studio for that profile. Set once at startup by the app, like
+    /// <see cref="CustomSpecProvider"/>.
+    ///
+    /// <para>Separate from the spec on purpose: these are offered for EVERY profile, the shipped
+    /// ones included. An action the user made to read Elite's own HUD belongs in Elite's picker
+    /// next to the cockpit toggles, and folding it into the spec would have made that possible
+    /// only for profiles the studio owns outright.</para>
+    /// </summary>
+    public static Func<string, (string LocKey, string Glyph, ActionTypeHelper.GameCommand[] Items)[]>?
+        CustomFamiliesProvider { get; set; }
 
     /// <summary>The spec for a profile, or null when the game ships none — which is the normal
     /// case for a profile that is just a page of keyboard shortcuts.</summary>
     public static GameProfileSpec? ById(string? profileId) =>
         profileId is null ? null
-        : All.FirstOrDefault(s => string.Equals(s.Id, profileId, StringComparison.Ordinal));
+        : All.FirstOrDefault(s => string.Equals(s.Id, profileId, StringComparison.Ordinal))
+          ?? GameProfileModules.SpecById(profileId)
+          ?? CustomSpecProvider?.Invoke(profileId);
 
     /// <summary>Whether the config popup offers "add page" for this profile. Default (no spec, or a
     /// spec that doesn't say) is yes — only a game whose layout is fixed opts out.</summary>
@@ -132,7 +180,28 @@ public static class GameProfileSpecs
     /// <summary>The commands a profile's action picker shows beside Input. Empty for a game with
     /// no integration of its own.</summary>
     public static (string LocKey, string Glyph, ActionTypeHelper.GameCommand[] Items)[] FamiliesFor(
-        string? profileId) =>
-        ById(profileId)?.CommandFamilies
-        ?? Array.Empty<(string LocKey, string Glyph, ActionTypeHelper.GameCommand[] Items)>();
+        string? profileId)
+    {
+        var spec = ById(profileId);
+        var own = spec?.CommandFamilies
+                  ?? Array.Empty<(string LocKey, string Glyph, ActionTypeHelper.GameCommand[] Items)>();
+        if (spec?.DynamicFamilies?.Invoke() is { Length: > 0 } dynamicFamilies)
+            own = own.Concat(dynamicFamilies).ToArray();
+        var custom = profileId is null ? null : CustomFamiliesProvider?.Invoke(profileId);
+        if (custom is not { Length: > 0 }) return own;
+
+        // A custom family whose key matches one the game already has is FOLDED INTO it — the
+        // user's own "Health" reading then appears inside the game's "Gauges" card rather than in
+        // a second card beside it. Everything else is appended, in the studio's order.
+        var merged = own.Select(f =>
+        {
+            var extra = custom.FirstOrDefault(c => c.LocKey == f.LocKey);
+            return extra.Items is { Length: > 0 }
+                ? (f.LocKey, f.Glyph, f.Items.Concat(extra.Items).ToArray())
+                : f;
+        }).ToList();
+
+        merged.AddRange(custom.Where(c => !own.Any(f => f.LocKey == c.LocKey)));
+        return merged.ToArray();
+    }
 }

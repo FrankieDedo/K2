@@ -1,4 +1,4 @@
-// SystemMonitor.cs — PC metrics for the Everest Max Media Dock's "PC Info" pages.
+﻿// SystemMonitor.cs — PC metrics for the Everest Max Media Dock's "PC Info" pages.
 //
 // Base Camp's own numbers (ground truth, decompiled 2026-08-22 from
 // BaseCamp.ResourceMonitorHelper/PCResourceMonitorHelper.cs and
@@ -60,6 +60,19 @@ internal static class SystemMonitor
                 && (DateTime.UtcNow - hit.At).TotalMilliseconds < MinSampleMs)
                 return hit.Value;
 
+            int value = sample();
+            _cache[key] = (DateTime.UtcNow, value);
+            return value;
+        }
+    }
+
+    /// <summary>Samples unconditionally and refreshes the cache entry. Only for metrics
+    /// that are plain instantaneous reads (not the delta-based ones, which would break —
+    /// again, see <see cref="Cached"/>'s remarks).</summary>
+    private static int Recache(string key, Func<int> sample)
+    {
+        lock (_cacheGate)
+        {
             int value = sample();
             _cache[key] = (DateTime.UtcNow, value);
             return value;
@@ -392,9 +405,14 @@ internal static class SystemMonitor
     // Windows-side volume change as dock activity (see MainWindow.MediaDock.cs).
     //
     // Bound to whatever endpoint was default at StartVolumeNotifications() time; a later
-    // default-device switch silently stops the events until restart, which the poll still
-    // covers. Keeping the endpoint COM object referenced is what keeps the registration
-    // alive, so it is held here, not released like VolumePercentSample's throwaway one.
+    // default-device switch (headphones <-> speakers) silently stops the events until
+    // restart. That fallback is the dock poll — and it only really became one on
+    // 2026-09-09: the poll used to stop writing after the dock's idle back-off, whose only
+    // other renewal source was this very event, so switching audio device froze the dock's
+    // Volume page for good. MainWindow.MediaDock.cs's DockPollTick now notices a volume
+    // delta on its own. Keeping the endpoint COM object referenced is what keeps the
+    // registration alive, so it is held here, not released like VolumePercentSample's
+    // throwaway one.
     public static event Action? VolumeChanged;
 
     private static readonly object _volNotifyGate = new();
@@ -458,8 +476,22 @@ internal static class SystemMonitor
     }
 
     /// <summary>Master output volume, 0..100 — the value Base Camp's PcInfo_timer sends
-    /// with SetVolumeInfo while the dock shows its Volume page.</summary>
+    /// with SetVolumeInfo while the dock shows its Volume page. Cached like every other
+    /// metric, so live tiles reading it once a key can share one COM round-trip.</summary>
     public static int VolumePercent() => Cached("volume", VolumePercentSample);
+
+    /// <summary>Master output volume sampled NOW, bypassing (and refreshing) the
+    /// <see cref="MinSampleMs"/> cache.
+    /// <para>
+    /// Volume is the one metric where the shared cache actively hurts: it is not a delta
+    /// the cache exists to protect (see <see cref="Cached"/>'s remarks), and its consumers
+    /// are edge-driven — a Core Audio notification or the dock poll pushing the new number
+    /// to the keyboard. Serving those a value up to 700 ms old means writing a level the
+    /// user has already turned past, and the Media Dock then holds that stale reading
+    /// (it draws whatever was last pushed). Base Camp takes a fresh
+    /// <c>VolumeUtilities.GetMasterVolume()</c> on every one of its 1 Hz pushes.
+    /// </para></summary>
+    public static int VolumePercentFresh() => Recache("volume", VolumePercentSample);
 
     private static int VolumePercentSample()
     {

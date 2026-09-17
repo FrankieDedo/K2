@@ -123,7 +123,15 @@ public static class MkProfileExporter
                 new XElement("ButtonResponseTime", settings.DebounceMs),
                 new XElement("AngleSnapping", settings.AngleSnapping ? "On" : "Off"),
                 new XElement("LiftOffDistance", settings.LiftOffCustom ? "Custom" : settings.LiftOffHigh ? "High" : "Low"),
-                new XElement("SelectedDPILevelId", activeDpiLevelId));
+                new XElement("SelectedDPILevelId", activeDpiLevelId),
+                // "Turn off lighting when idle" -> Base Camp's WakeUpSleepSoft ("soft
+                // sleep"). K2 stores seconds; BC's unit is assumed to be minutes (see
+                // BaseCampDbImporter.ReadMakaluMouseSettings), so divide back. Disabled =>
+                // 0, matching the column's own DEFAULT. WakeUpSleepDeep is left at 0: K2
+                // only models the single LED-off flag, not a separate deep-sleep step.
+                new XElement("WakeUpSleepSoft",
+                    settings.BacklightIdleOff ? Math.Max(1, settings.BacklightIdleOffSec / 60) : 0),
+                new XElement("WakeUpSleepDeep", 0));
 
             if (dpi is not null)
             {

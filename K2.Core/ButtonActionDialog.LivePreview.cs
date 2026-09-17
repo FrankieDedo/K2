@@ -20,7 +20,7 @@ public partial class ButtonActionDialog
     /// Called from <c>UpdatePanels</c>.</summary>
     private void UpdateLivePreview(string tag)
     {
-        if (tag is "dp_sysmon" or "dp_screen")
+        if (tag is "dp_sysmon" or "dp_screen" or "dp_custom")
         {
             if (_livePreviewTimer is null)
             {
@@ -44,8 +44,10 @@ public partial class ButtonActionDialog
         string tag = CurrentTag();
         if (tag == "dp_sysmon")
             LblSysMonPreview.Text = Compose(_host?.PreviewLiveTile("dp_sysmon", SaveSysMonSpec()));
-        else if (tag == "dp_screen")
-            LblScreenProbePreview.Text = Compose(_host?.PreviewLiveTile("dp_screen", SaveComboSpec()));
+        else if (tag is "dp_screen" or "dp_custom")
+            // Both draw into the same readout line: only one of the two can be the current type,
+            // and a second label would be an empty row under every screen key.
+            LblScreenProbePreview.Text = Compose(_host?.PreviewLiveTile(tag, SaveComboSpec()));
     }
 
     private static string Compose(string? reading) =>

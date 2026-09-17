@@ -58,15 +58,19 @@
                 <TextBlock Text="{loc:Get game_profile_exe_label}" VerticalAlignment="Center"/>
                 <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get game_profile_exe_hint}"/>
             </StackPanel>
-            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                <TextBox x:Name="TxtExePath" Width="404" Height="23"
+            <!-- DockPanel so the box takes whatever the two buttons leave: their labels vary a lot
+                 in length across languages. Emptying the box by hand is how a pin is removed. -->
+            <DockPanel Margin="0,4,0,0">
+                <Button x:Name="BtnExeRunning" DockPanel.Dock="Right"
+                        Content="{loc:Get profile_settings_pick_running}" Height="23"
+                        Padding="8,0" Margin="6,0,0,0" Click="BtnExeRunning_Click"/>
+                <Button x:Name="BtnExeBrowse" DockPanel.Dock="Right"
+                        Content="{loc:Get game_profile_exe_browse}" Height="23"
+                        Padding="8,0" Margin="6,0,0,0" Click="BtnExeBrowse_Click"/>
+                <TextBox x:Name="TxtExePath" Height="23"
                          VerticalContentAlignment="Center"
                          TextChanged="TxtExePath_TextChanged"/>
-                <Button x:Name="BtnExeBrowse" Content="{loc:Get game_profile_exe_browse}" Height="23"
-                        Padding="8,0" Margin="6,0,0,0" Click="BtnExeBrowse_Click"/>
-                <Button x:Name="BtnExeClear" Content="{loc:Get game_profile_exe_clear}" Height="23"
-                        Padding="8,0" Margin="6,0,0,0" Click="BtnExeClear_Click"/>
-            </StackPanel>
+            </DockPanel>
             <!-- Only shown while the box is empty: says what "auto" actually resolved to, so the
                  user can see whether they need to override it at all. -->
             <TextBlock x:Name="TxtExeAuto" Foreground="#9A9AA2" Margin="0,4,0,0"
@@ -143,6 +147,8 @@
             <Button x:Name="BtnGuide" Style="{DynamicResource GuideBarButton}" VerticalAlignment="Center"
                     Margin="0,0,10,0" Content="{loc:Get guide_button}" ToolTip="{loc:Get guide_tooltip}"
                     Click="BtnGuide_Click"/>
+            <Button Content="{loc:Get game_profile_edit_in_studio}" Padding="8,3" Margin="0,0,8,0"
+                    Click="BtnEditInStudio_Click"/>
             <Button Content="{loc:Get game_profile_reset_tiles}" Padding="8,3" Margin="0,0,8,0"
                     Click="BtnResetTiles_Click"/>
             <Button Content="{loc:Get save}" Width="90" Padding="6,2" IsDefault="True"

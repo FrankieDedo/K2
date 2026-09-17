@@ -1710,13 +1710,20 @@ public sealed class BaseCampDbImporter
         using var conn = OpenReadOnly(dbPath);
         int pollingHz = 1000, debounceMs = 2, selectedDpiId = 1, sensitivity = 10, clickSpeed = 0;
         bool angleOn = false, liftHigh = false, liftCustom = false;
+        // "Soft sleep" = Base Camp's LED-off idle timer. Its unit is unverified for the
+        // Makalu 67 (Base Camp's own 67 UI never surfaces it; the OG wireless Makalu's
+        // picker implies minutes) — assumed minutes here, so a non-zero value enables
+        // K2's "turn off lighting when idle" with the timeout scaled to seconds. Nothing
+        // is written to the device (see MakaluDeviceSettingsRecord's doc comment), so a
+        // wrong unit only mis-seeds a K2-side number, never the mouse.
+        int wakeSoft = 0;
         bool foundSettings = false;
 
         using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = @"
                 SELECT PollingRate, ButtonResponseTime, AngleSnapping, LiftOffDistance, SelectedDPILevelId,
-                       Sensitivity, ClickSpeed
+                       Sensitivity, ClickSpeed, WakeUpSleepSoft
                 FROM MakaluSettings WHERE ProfileId = $pid";
             cmd.Parameters.AddWithValue("$pid", profileId);
             using var r = cmd.ExecuteReader();
@@ -1738,8 +1745,12 @@ public sealed class BaseCampDbImporter
                 // 0-11 scale (same as BaseCamp.Data.MakaluSetting's own ctor defaults).
                 sensitivity = r.IsDBNull(5) ? 10 : Math.Clamp(r.GetInt32(5), MakaluOsMouseSettings.ScaleMin, MakaluOsMouseSettings.ScaleMax);
                 clickSpeed  = r.IsDBNull(6) ? 0  : Math.Clamp(r.GetInt32(6), MakaluOsMouseSettings.ScaleMin, MakaluOsMouseSettings.ScaleMax);
+                wakeSoft    = r.IsDBNull(7) ? 0  : Math.Max(0, r.GetInt32(7));
             }
         }
+
+        bool blIdleOff = wakeSoft > 0;
+        int blIdleSec = wakeSoft > 0 ? Math.Clamp(wakeSoft * 60, 5, 3600) : 60;
 
         var levels = new List<(int Id, int Dpi)>();
         using (var cmd = conn.CreateCommand())
@@ -1752,7 +1763,8 @@ public sealed class BaseCampDbImporter
 
         MakaluDeviceSettingsRecord? settings = foundSettings
             ? new MakaluDeviceSettingsRecord(pollingHz, debounceMs, angleOn, liftHigh, liftCustom,
-                Sensitivity: sensitivity, ClickSpeed: clickSpeed)
+                Sensitivity: sensitivity, ClickSpeed: clickSpeed,
+                BacklightIdleOff: blIdleOff, BacklightIdleOffSec: blIdleSec)
             : null;
 
         MakaluDpiRecord? dpi = null;

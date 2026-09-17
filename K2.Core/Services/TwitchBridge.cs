@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Linq;
 using TwitchLib.Api;
@@ -37,7 +37,10 @@ public static class TwitchBridge
     private static bool Run(Action<TwitchAPI, string> action, Action<string> log, string opName)
     {
         if (!TwitchStore.IsConnected) { log($"[EXEC] twitch: not connected"); return false; }
-        if (!TwitchAuth.EnsureFreshTokenAsync().GetAwaiter().GetResult())
+        // Task.Run first: EnsureFreshTokenAsync awaits without ConfigureAwait(false), so
+        // blocking the WPF UI thread straight on it dead-locks the app (same bug fixed for
+        // Discord, 2026-09-09).
+        if (!System.Threading.Tasks.Task.Run(() => TwitchAuth.EnsureFreshTokenAsync()).GetAwaiter().GetResult())
         {
             log("[EXEC] twitch: token refresh failed"); return false;
         }
