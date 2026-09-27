@@ -190,6 +190,43 @@ internal static class Everest60HidNative
         return last;
     }
 
+    /// <summary>
+    /// For key-binding WRITES: sends the report ONCE, then polls GET until the echo arrives.
+    /// <see cref="SendFeature"/> re-sends the whole write on a mismatched echo, and a key
+    /// write needs ~140ms before the keyboard answers (Base Camp's own capture,
+    /// <c>ev60_devsave.pcapng</c>: SET 0x22 → GET 140ms later → echo 0x22, status 1), so its
+    /// 50ms read always missed and every write went out three times — ~435ms per key, and
+    /// three writes to a table the keyboard persists.
+    /// </summary>
+    public static byte[]? SendFeatureOnce(SafeFileHandle h, byte[] report65, int maxWaitMs = 600, int pollMs = 40, Action<string>? log = null)
+    {
+        if (report65.Length != ReportSize)
+            throw new ArgumentException($"report must be {ReportSize} bytes", nameof(report65));
+        byte cmd = report65[1];
+        bool setOk = RunWithTimeout(() => HidD_SetFeature(h, report65, report65.Length), out bool setTimedOut);
+        if (setTimedOut || !setOk)
+        {
+            log?.Invoke($"[Ev60-HID] SendFeatureOnce cmd=0x{cmd:X2}: HidD_SetFeature {(setTimedOut ? "timed out" : "failed")}");
+            return null;
+        }
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        byte[]? last = null;
+        do
+        {
+            Thread.Sleep(pollMs);
+            var resp = new byte[ReportSize];
+            bool getOk = RunWithTimeout(() => HidD_GetFeature(h, resp, resp.Length), out bool getTimedOut);
+            if (getTimedOut) break;
+            if (getOk)
+            {
+                last = resp;
+                if (resp[1] == cmd) return resp;
+            }
+        } while (sw.ElapsedMilliseconds < maxWaitMs);
+        log?.Invoke($"[Ev60-HID] SendFeatureOnce cmd=0x{cmd:X2}: no echo within {maxWaitMs}ms (last 0x{(last is null ? 0 : last[1]):X2})");
+        return last;
+    }
+
     private const int HidCallTimeoutMs = 1000;
 
     /// <summary>

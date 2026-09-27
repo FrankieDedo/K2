@@ -18,9 +18,21 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="{loc:Get sensor_pick_hint}"
-                   Foreground="{DynamicResource K2TextMutedBrush}" FontSize="11"
-                   TextWrapping="Wrap" Margin="0,0,0,8"/>
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="{loc:Get sensor_pick_hint}"
+                       Foreground="{DynamicResource K2TextMutedBrush}" FontSize="11"
+                       TextWrapping="Wrap" Margin="0,0,0,8"/>
+            <!-- PawnIO driver missing: every CPU sensor reads 0 (Services/PawnIoDriver.cs). -->
+            <StackPanel x:Name="PnlPawnIoWarn" Orientation="Horizontal" Margin="0,0,0,8"
+                        Visibility="Collapsed">
+                <Button x:Name="BtnInstallPawnIo" Content="{loc:Get sysmon_pawnio_install}"
+                        VerticalAlignment="Center" Click="BtnInstallPawnIo_Click"/>
+                <TextBlock x:Name="LblPawnIoWarn" Text="{loc:Get sysmon_pawnio_missing}"
+                           Foreground="{DynamicResource K2DangerBrush}" FontSize="11"
+                           TextWrapping="Wrap" VerticalAlignment="Center" Margin="10,0,0,0"
+                           MaxWidth="440"/>
+            </StackPanel>
+        </StackPanel>
 
         <TextBox Grid.Row="1" x:Name="TxtSearch" Height="26" Margin="0,0,0,8"
                  VerticalContentAlignment="Center"

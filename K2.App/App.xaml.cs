@@ -338,14 +338,15 @@ public partial class App : Application
 
         if (!_singleInstanceGranted)
         {
-            // Safe to show here: InitializeComponent() (called by Main() before Run())
-            // has already merged the theme resources, and DispatcherUnhandledException
-            // is already wired up from the constructor.
-            MessageBox.Show(Core.Loc.Get("app_already_running"), Core.Loc.Get("app_title"),
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            // Second launch: hand the focus to the running K2 (which restores its
+            // window, even from the tray) and leave quietly — no "already running" box.
+            WriteLog("[SingleInstance] Another K2 is running — asking it to come to front, exiting.");
+            SignalRunningInstance();
             Shutdown();
             return;
         }
+
+        StartActivationListener();
 
         // Stop any Base Camp service/process still running (or just relaunched by
         // Windows autostart) BEFORE the device modules try to open their drivers —
@@ -377,6 +378,52 @@ public partial class App : Application
     {
         _singleInstanceMutex = new Mutex(initiallyOwned: true, name: "K2App_SingleInstance_Mutex", out bool createdNew);
         return createdNew;
+    }
+
+    private const string ActivateEventName = "K2App_SingleInstance_Activate";
+    private const int ASFW_ANY = -1;
+
+    [DllImport("user32.dll")]
+    private static extern bool AllowSetForegroundWindow(int dwProcessId);
+
+    /// <summary>
+    /// Second instance: lets the running K2 take the foreground (only the process the
+    /// user just launched is allowed to, so it has to pass that right on) and pulses
+    /// the activation event it listens on. Both run elevated (requireAdministrator),
+    /// so the event's default DACL is fine.
+    /// </summary>
+    private static void SignalRunningInstance()
+    {
+        try
+        {
+            AllowSetForegroundWindow(ASFW_ANY);
+            if (EventWaitHandle.TryOpenExisting(ActivateEventName, out var ev))
+                using (ev) ev.Set();
+            else
+                WriteLog("[SingleInstance] Activation event not found (running K2 still starting?).");
+        }
+        catch (Exception ex) { WriteLog($"[SingleInstance] Signal failed: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// First instance: a background thread waits on the activation event and brings
+    /// MainWindow back up on the UI thread every time another launch is attempted.
+    /// </summary>
+    private void StartActivationListener()
+    {
+        EventWaitHandle ev;
+        try { ev = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName); }
+        catch (Exception ex) { WriteLog($"[SingleInstance] Listener not started: {ex.Message}"); return; }
+
+        var t = new Thread(() =>
+        {
+            while (ev.WaitOne())
+            {
+                try { Dispatcher.BeginInvoke(() => (MainWindow as MainWindow)?.BringToFrontFromSecondLaunch()); }
+                catch { return; } // dispatcher gone — app shutting down
+            }
+        }) { IsBackground = true, Name = "K2 single-instance activation" };
+        t.Start();
     }
 
     /// <summary>

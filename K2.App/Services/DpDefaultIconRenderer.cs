@@ -79,7 +79,7 @@ internal static class DpDefaultIconRenderer
             // internally (see LiveTileRenderer.TryRenderEdStatus), keyed off their live state
             // rather than the static caption alone.
             if (spec.TextOnly && actionType is not ("dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus"
-                                                   or "dp_zcstatus" or KspTelemachus.ActionType
+                                                   or "dp_zcstatus" or KspTelemachus.ActionType or ModLinkGames.ActionType
                                                    or "dp_screen" or "dp_custom"))
             {
                 ok = IconImageGenerator.TryGenerateCaptionIcon(userText ?? caption ?? actionValue ?? "", iconSize, work);
@@ -140,6 +140,11 @@ internal static class DpDefaultIconRenderer
                             showCaption ? userText ?? DpLiveTileService.TileCaption(actionType, actionValue) : "",
                             iconSize, work);
                     break;
+                case ModLinkGames.ActionType:
+                    ok = DpLiveTileService.RenderModLinkTile(actionValue,
+                            showCaption ? userText ?? DpLiveTileService.TileCaption(actionType, actionValue) : "",
+                            iconSize, work);
+                    break;
                 case "dp_screen":
                     ok = DpLiveTileService.RenderScreenTile(actionValue,
                             showCaption ? userText ?? DpLiveTileService.TileCaption(actionType, actionValue) : "",
@@ -161,7 +166,8 @@ internal static class DpDefaultIconRenderer
                             showCaption ? userText ?? DpLiveTileService.TileCaption(actionType, actionValue) : "",
                             showCaption ? DpLiveTileService.SpeedTestUnit(actionValue ?? "") : "",
                             iconSize, work,
-                            ownValueSize: isPing, valueTopPad: isPing ? 0.06f : 0f);
+                            ownValueSize: isPing, valueTopPad: isPing ? 0.06f : 0f,
+                            valueSizeReference: isPing ? "888" : null);
                     break;
                 }
                 default:

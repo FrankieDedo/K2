@@ -1131,8 +1131,13 @@
                  One StackPanel per device type; only the active device's is
                  shown (toggled in TcDevices_SelectionChanged / BtnSettingsTab_Click,
                  same as the Pnl* content panels below). -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,4,6">
-                <StackPanel x:Name="BrEverest" Orientation="Vertical" Visibility="Collapsed">
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,4,6"
+                        Panel.ZIndex="1">
+                <!-- Negative bottom margin = row 2 height (Slider Height 22 from K2Theme + 4 top
+                     margin): the bar keeps the one-row height of the other devices so the Everest
+                     content doesn't shift down; row 2 overhangs the panel's (empty) toolbar row.
+                     ZIndex above keeps it drawn over the content grid. -->
+                <StackPanel x:Name="BrEverest" Orientation="Vertical" Visibility="Collapsed" Margin="0,0,0,-26">
                     <!-- Row 1 (Everest Max only, user request 2026-09-11): display brightness —
                          Display Dial screen + numpad display keys, one value like Base Camp — and
                          "sync brightness", which locks it to the keyboard's brightness. State and
@@ -1141,6 +1146,8 @@
                          ValueChanged mid-parse (see _PROJECT_MAP, InitializeComponent gotcha);
                          LoadDialSettings sets it. -->
                     <Grid>
+                        <!-- Sync checkbox in column 0 (left) so label/slider/% line up at the
+                             same right-aligned x as every other device's single brightness row. -->
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
@@ -1151,28 +1158,28 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
-                        <TextBlock Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <Slider Grid.Column="1" x:Name="SldEvBrightness" Minimum="0" Maximum="100" Value="100"
+                        <CheckBox Grid.Row="1" x:Name="CkEvSyncBrightness"
+                                  Content="{loc:Get sync_display_brightness}"
+                                  VerticalAlignment="Center" Margin="0,4,16,0"
+                                  Click="CkEvSyncBrightness_Click"/>
+                        <TextBlock Grid.Column="1" Text="{loc:Get brightness}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <Slider Grid.Column="2" x:Name="SldEvBrightness" Minimum="0" Maximum="100" Value="100"
                                 Width="140" TickFrequency="25" IsSnapToTickEnabled="True"
                                 TickPlacement="BottomRight"
                                 ValueChanged="SldEvBrightness_ValueChanged"
                                 VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="2" x:Name="LblEvBrightness" Text="100%"
+                        <TextBlock Grid.Column="3" x:Name="LblEvBrightness" Text="100%"
                                    VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="40"/>
 
-                        <TextBlock Grid.Row="1" Text="{loc:Get dial_display_brightness}"
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{loc:Get dial_display_brightness}"
                                    VerticalAlignment="Center" Margin="0,4,8,0"/>
-                        <Slider Grid.Row="1" Grid.Column="1" x:Name="SldDialDisplayBrightness" Minimum="0" Maximum="100"
+                        <Slider Grid.Row="1" Grid.Column="2" x:Name="SldDialDisplayBrightness" Minimum="0" Maximum="100"
                                 Width="140" TickFrequency="25" IsSnapToTickEnabled="True"
                                 TickPlacement="BottomRight"
                                 ValueChanged="SldDialDisplayBrightness_ValueChanged"
                                 VerticalAlignment="Center" Margin="0,4,0,0"/>
-                        <TextBlock Grid.Row="1" Grid.Column="2" x:Name="LblDialDisplayBrightness" Text="100%"
+                        <TextBlock Grid.Row="1" Grid.Column="3" x:Name="LblDialDisplayBrightness" Text="100%"
                                    VerticalAlignment="Center" Margin="6,4,0,0" MinWidth="40"/>
-                        <CheckBox Grid.Row="1" Grid.Column="3" x:Name="CkEvSyncBrightness"
-                                  Content="{loc:Get sync_display_brightness}"
-                                  VerticalAlignment="Center" Margin="8,4,0,0"
-                                  Click="CkEvSyncBrightness_Click"/>
                     </Grid>
                 </StackPanel>
                 <StackPanel x:Name="BrMacroPad" Orientation="Horizontal" Visibility="Collapsed">
@@ -1547,9 +1554,13 @@
                                  described above, just reintroduced via the floor value instead of a
                                  converter). Ev60(150)/Makalu(180)/MacroPad(130)/DisplayPad(90) all stay
                                  under that budget, which is why only Everest Max showed it. -->
+                                <!-- Margin top = 8, like every other device's settings panel
+                                     (Ev60/Makalu/MacroPad/DisplayPad below): this one used to be 10,
+                                     which made the whole Everest Max panel sit 2px lower than the
+                                     others when switching tabs. -->
                                 <Border x:Name="BdrEvSettingsPanel" Grid.Row="1" Background="#14141A"
                                     BorderBrush="#2A2A32" BorderThickness="1"
-                                    CornerRadius="6" Padding="12,10" Margin="0,10,0,0"
+                                    CornerRadius="6" Padding="12,10" Margin="0,8,0,0"
                                     MinHeight="220" Grid.RowSpan="2">
                                     <Grid>
                                         <Grid.RowDefinitions>

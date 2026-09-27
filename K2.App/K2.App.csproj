@@ -119,6 +119,15 @@
     </Content>
   </ItemGroup>
 
+  <!-- Official signed PawnIO installer (namazso/PawnIO.Setup 2.2.0): the kernel driver LHM
+       needs for CPU temps/clocks/power. Run silently by K2Setup.iss and by the in-app
+       "Install" button - see Services/PawnIoDriver.cs. -->
+  <ItemGroup>
+    <Content Include="ThirdParty\PawnIO_setup.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <!-- Testo dei ringraziamenti mostrato in fondo al tab Settings: vive in
        THANKS.md accanto a K2.sln (non dentro K2.App) cosi' resta visibile/
        editabile insieme agli altri file "meta" del progetto; Link lo porta

@@ -45,17 +45,25 @@
              Everest 60's SelectKey. -->
         <Grid x:Name="SecRemap">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/> <!-- title -->
                 <RowDefinition Height="Auto"/> <!-- hint -->
                 <RowDefinition Height="*"/>    <!-- list + buttons -->
             </Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="0" Text="{loc:Get makalu_remap_title}" FontWeight="Bold" Margin="0,0,0,6"/>
-            <TextBlock Grid.Row="1" Text="{loc:Get key_binding_hint}"
-                       Foreground="#9A9AA2" FontStyle="Italic"
+            <!-- Header: the same single hint row as every other device's Key
+                 Binding section (Everest Max's PnlSecKeyMapping, MacroPad's
+                 PnlMpSecKeyBinding, DisplayPad's PnlDpSecKeyBinding in
+                 MainWindow.xaml, Everest 60's Everest60KeyBindingPanel) — same
+                 shared "key_binding_hint" string, same plain (non-italic) muted
+                 style, same 0,0,0,8 margin. The bold "Button remapping" title
+                 that used to sit above it was dropped (2026-09-21, user
+                 request, same pass as Everest 60's): RbMkSecRemap in the
+                 section nav already says "Key Binding", and the extra title row
+                 made this panel's list start lower than the other devices'. No
+                 bottom margin on the list Grid either, for the same reason. -->
+            <TextBlock Grid.Row="0" Text="{loc:Get key_binding_hint}" Foreground="#9A9AA2"
                        TextWrapping="Wrap" Margin="0,0,0,8"/>
 
-            <Grid Grid.Row="2" Margin="0,0,0,8">
+            <Grid Grid.Row="1">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="170"/>

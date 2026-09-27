@@ -205,7 +205,7 @@ public partial class DpKeyConfigDialog : Window
 
     private static bool IsLiveActionType(string? type) =>
         type is "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus"
-             or KspTelemachus.ActionType or "dp_screen" or "dp_custom";
+             or KspTelemachus.ActionType or ModLinkGames.ActionType or "dp_screen" or "dp_custom";
 
     /// <summary>Starts/stops the 1 Hz preview refresh to match whether the CURRENT action is a
     /// live type with its default icon active — called after every change that could flip
@@ -684,7 +684,7 @@ public partial class DpKeyConfigDialog : Window
         // Live tiles: the short symbol/abbreviation the tile carries by default ("CPU", "download"),
         // so "Edit icon" starts from the real wording. A clock face has none — it needs no label.
         "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus" or "dp_screen"
-            or "dp_custom" or KspTelemachus.ActionType
+            or "dp_custom" or KspTelemachus.ActionType or ModLinkGames.ActionType
                           => DpLiveTileService.TileCaption(ActionType!, ActionValue) is { Length: > 0 } c ? c : null,
         "exec" or "emoji" => null,   // these tiles never draw a caption
         _                 => ActionIconFallback.Caption(ActionType, ActionValue),

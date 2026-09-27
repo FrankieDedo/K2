@@ -94,6 +94,28 @@ public partial class ButtonActionDialog
 
         // Consumed — a later metric switch by the user must not re-apply the opened value.
         _pendingSysMonArg = "";
+        RefreshPawnIoWarning();
+    }
+
+    /// <summary>CPU temperature picked on a PC without the PawnIO driver: it would read 0, so
+    /// say why and offer to install it.</summary>
+    private void RefreshPawnIoWarning()
+    {
+        bool show = CurrentSysMonMetric() == "cpu" && RbSysTemp.IsChecked == true
+                    && _host is { CpuSensorDriverMissing: true };
+        PnlPawnIoWarn.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async void BtnInstallPawnIo_Click(object sender, RoutedEventArgs e)
+    {
+        if (_host is null) return;
+        BtnInstallPawnIo.IsEnabled = false;
+        LblPawnIoWarn.Text = Loc.Get("sysmon_pawnio_installing");
+        bool ok = await _host.InstallCpuSensorDriverAsync();
+        LblPawnIoWarn.Text = Loc.Get(ok ? "sysmon_pawnio_done" : "sysmon_pawnio_failed");
+        BtnInstallPawnIo.Visibility = ok ? Visibility.Collapsed : Visibility.Visible;
+        BtnInstallPawnIo.IsEnabled = true;
+        RefreshLivePreview();
     }
 
     private void EnsureSysMonDiskList()
@@ -137,6 +159,7 @@ public partial class ButtonActionDialog
         // RefreshSysMonPanel must not do anything except refresh the preview — the value
         // itself is read at save time.
         if (_sysMonLoading || !IsLoaded) return;
+        RefreshPawnIoWarning();
         RefreshLivePreview();
     }
 

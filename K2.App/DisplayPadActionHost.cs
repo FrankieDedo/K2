@@ -89,6 +89,11 @@ internal sealed class DisplayPadActionHost : IActionHost
         return Services.HardwareSensors.StorageDisks();
     }
 
+    bool IActionHost.CpuSensorDriverMissing => !Services.PawnIoDriver.IsInstalled;
+
+    System.Threading.Tasks.Task<bool> IActionHost.InstallCpuSensorDriverAsync() =>
+        Services.PawnIoDriver.InstallAsync();
+
     bool IActionHost.SupportsScreenProbes => true;
 
     IReadOnlyList<(string Id, string Name)> IActionHost.ListScreenProbes() =>

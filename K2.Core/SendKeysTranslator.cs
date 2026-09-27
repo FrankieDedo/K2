@@ -76,7 +76,13 @@ public static class SendKeysTranslator
                     break;
             }
         }
-        return mods.ToString() + WrapKey(keyToken);
+        // A modifier-only combination ("Alt", "Ctrl + Shift") has no SendKeys spelling: "%" on its
+        // own makes SendKeys.SendWait throw, and there is no way to say "press Alt and release it"
+        // in that syntax at all. Return nothing so the caller can skip the call — the SendInput
+        // path (HotkeySender) is the one that handles bare modifiers.
+        var wrapped = WrapKey(keyToken);
+        if (wrapped.Length == 0) return "";
+        return mods.ToString() + wrapped;
     }
 
     private static string WrapKey(string key)

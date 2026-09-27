@@ -58,6 +58,10 @@ public sealed class ProfileLaunchWatcher
         /// <summary>The registration key, carried so the log can name who did what.</summary>
         public required string Key;
         public required string ExeName;
+        /// <summary>When set, the process only counts while one of its windows is titled with
+        /// this prefix — for a game that runs inside a generic host process (Minecraft: Java
+        /// Edition is <c>javaw</c>, like every other Java program).</summary>
+        public string? TitlePrefix;
         public required bool FocusOnly;
         public required bool RestoreOnClose;
         public required bool KeepWhileRunning;
@@ -115,7 +119,7 @@ public sealed class ProfileLaunchWatcher
     public void UpdateRegistration(string key, string? exePath,
         bool focusOnly, bool restoreOnClose, string targetProfile,
         Func<string?> getCurrentProfile, Action<string> switchToProfile,
-        bool keepWhileRunning = false, int reassertAfterSeconds = 0)
+        bool keepWhileRunning = false, int reassertAfterSeconds = 0, string? windowTitlePrefix = null)
     {
         if (string.IsNullOrWhiteSpace(exePath))
         {
@@ -136,6 +140,7 @@ public sealed class ProfileLaunchWatcher
         {
             Key = key,
             ExeName = exeName,
+            TitlePrefix = string.IsNullOrWhiteSpace(windowTitlePrefix) ? null : windowTitlePrefix,
             FocusOnly = focusOnly,
             RestoreOnClose = restoreOnClose,
             KeepWhileRunning = keepWhileRunning,
@@ -226,6 +231,7 @@ public sealed class ProfileLaunchWatcher
 
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int count);
 
     /// <summary>Process name that currently owns the foreground window, or null. Exposed so
     /// callers that need the same "only while X is in front" check without a full profile
@@ -246,6 +252,37 @@ public sealed class ProfileLaunchWatcher
         catch { return null; }
     }
 
+    private static string? ForegroundWindowTitle()
+    {
+        try
+        {
+            IntPtr h = GetForegroundWindow();
+            if (h == IntPtr.Zero) return null;
+            var sb = new System.Text.StringBuilder(256);
+            return GetWindowText(h, sb, sb.Capacity) > 0 ? sb.ToString() : null;
+        }
+        catch { return null; }
+    }
+
+    private static bool HasWindowTitled(string exeName, string prefix)
+    {
+        try
+        {
+            foreach (var p in Process.GetProcessesByName(exeName))
+                using (p)
+                {
+                    try
+                    {
+                        if (p.MainWindowTitle.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                            return true;
+                    }
+                    catch { /* exited or access denied — try the next one */ }
+                }
+        }
+        catch { }
+        return false;
+    }
+
     private void Poll()
     {
         if (_regs.Count == 0) return;
@@ -261,6 +298,21 @@ public sealed class ProfileLaunchWatcher
 
         bool needForeground = _regs.Values.Any(r => r.FocusOnly);
         string? fgName = needForeground ? ForegroundProcessName() : null;
+        string? fgTitle = needForeground && _regs.Values.Any(r => r.TitlePrefix is not null)
+            ? ForegroundWindowTitle() : null;
+
+        // A title-qualified registration narrows "running" to a process that has such a window.
+        // Only processes of that name are inspected, and only once per poll per (name, prefix).
+        var titled = new Dictionary<(string, string), bool>();
+        bool IsRunning(Reg r)
+        {
+            if (!running.Contains(r.ExeName)) return false;
+            if (r.TitlePrefix is null) return true;
+            var k = (r.ExeName, r.TitlePrefix);
+            if (!titled.TryGetValue(k, out bool hit))
+                titled[k] = hit = HasWindowTitled(r.ExeName, r.TitlePrefix);
+            return hit;
+        }
 
         // Stamp launch order first, then let only the newest running keep-while-running
         // registration re-assert its profile: two of them running at once would otherwise
@@ -268,7 +320,7 @@ public sealed class ProfileLaunchWatcher
         long bestRun = 0;
         foreach (var r in _regs.Values)
         {
-            if (r.FocusOnly || !running.Contains(r.ExeName)) continue;
+            if (r.FocusOnly || !IsRunning(r)) continue;
             if (!r.WasRunning) r.RunSince = ++_runSeq;
             if (r.KeepWhileRunning && r.RunSince > bestRun) bestRun = r.RunSince;
         }
@@ -277,9 +329,11 @@ public sealed class ProfileLaunchWatcher
         {
             if (!_regs.TryGetValue(key, out var reg)) continue;
 
-            bool isRunning = running.Contains(reg.ExeName);
+            bool isRunning = IsRunning(reg);
             bool isForeground = fgName is not null &&
-                string.Equals(fgName, reg.ExeName, StringComparison.OrdinalIgnoreCase);
+                string.Equals(fgName, reg.ExeName, StringComparison.OrdinalIgnoreCase) &&
+                (reg.TitlePrefix is null ||
+                 (fgTitle?.StartsWith(reg.TitlePrefix, StringComparison.OrdinalIgnoreCase) ?? false));
 
             try
             {

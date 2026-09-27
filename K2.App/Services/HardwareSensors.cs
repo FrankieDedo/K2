@@ -187,7 +187,8 @@ public static class HardwareSensors
         }
 
         int n; lock (_gate) n = _sensors.Count;
-        App.WriteLog($"[HWSensors] LHM open OK — {n} sensors after first poll");
+        App.WriteLog($"[HWSensors] LHM open OK — {n} sensors after first poll; " +
+                     $"PawnIO installed={PawnIoDriver.IsInstalled} version={PawnIoDriver.VersionText}");
     }
 
     private static bool _opening;

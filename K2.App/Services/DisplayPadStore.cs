@@ -406,6 +406,14 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
     public void SetRotation(int deviceId, int rotation) =>
         SetSetting($"device.{deviceId}.rotation", rotation.ToString());
 
+    /// <summary>Last brightness the user picked for this pad (0..100), or null if never set.
+    /// Per device: each DisplayPad keeps its own level.</summary>
+    public int? GetBrightness(int deviceId) =>
+        int.TryParse(GetSetting($"device.{deviceId}.brightness"), out var v) && v is >= 0 and <= 100 ? v : null;
+
+    public void SetBrightness(int deviceId, int level) =>
+        SetSetting($"device.{deviceId}.brightness", level.ToString());
+
     // ---------- default icon background (device-scoped, all profiles/pages) ----------
 
     /// <summary>Absolute path of the pad's "default icon background" PNG (Settings tab), or

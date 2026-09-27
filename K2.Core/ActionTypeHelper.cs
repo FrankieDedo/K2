@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using K2.Core.Services;
@@ -43,7 +43,7 @@ public static class ActionTypeHelper
     /// "dp_folder".</summary>
     public static readonly string[] PageOnlyActionTypes =
         { "dp_folder", "dp_back", "dp_emojibrowser", "dp_clock", "dp_sysmon", "dp_speedtest",
-          "dp_edstatus", "dp_zcstatus", KspTelemachus.ActionType, "dp_screen", CustomActionType.Tag };
+          "dp_edstatus", "dp_zcstatus", KspTelemachus.ActionType, ModLinkGames.ActionType, "dp_screen", CustomActionType.Tag };
 
     /// <summary>
     /// True for a "macro" (Play Macro) action with no playable macro assigned — either no
@@ -822,6 +822,7 @@ public static class ActionTypeHelper
             "dp_edstatus"  => Array.ConvertAll(EdStatusItems, i => (i.Value, i.LocKey)),
             "dp_zcstatus"  => Array.ConvertAll(ZcStatusItems, i => (i.Value, i.LocKey)),
             KspTelemachus.ActionType => KspTelemachus.AllItems().Select(i => (i.Value, i.LocKey)).ToArray(),
+            ModLinkGames.ActionType => ModLinkGames.LiveItems().Select(i => (i.Value, i.LocKey)).ToArray(),
             _              => Array.Empty<(string Value, string LocKey)>(),
         };
         foreach (var (v, locKey) in table)
@@ -883,7 +884,7 @@ public static class ActionTypeHelper
             "pyscript" => Loc.Get("act_pyscript"),
             "dp_emojibrowser" => Loc.Get("act_emojibrowser"),
             "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus"
-                or KspTelemachus.ActionType or "dp_screen" or CustomActionType.Tag
+                or KspTelemachus.ActionType or ModLinkGames.ActionType or "dp_screen" or CustomActionType.Tag
                        => LiveTileSummary(actionType, actionValue),
             _          => IsUnrecognized(actionType) ? Loc.Get("act_unrecognized") : actionType ?? "",
         };

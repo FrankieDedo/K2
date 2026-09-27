@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -170,7 +171,7 @@ public static class LiveTileRenderer
                     float inner = ring * 0.62f;
                     DrawFitted(g, valueText,
                                new RectangleF(left + (ring - inner) / 2f, top + (ring - inner) / 2f, inner, inner),
-                               size * 0.30f, TextColor);
+                               size * 0.30f, TextColor, sizeReference: RingValueSizeReference);
                 }
                 else
                 {
@@ -241,7 +242,7 @@ public static class LiveTileRenderer
                     float inner = ring * 0.62f;
                     DrawFitted(g, valueText,
                                new RectangleF(left + (ring - inner) / 2f, top + (ring - inner) / 2f, inner, inner),
-                               size * 0.30f, TextColor);
+                               size * 0.30f, TextColor, sizeReference: RingValueSizeReference);
                 }
                 else
                 {
@@ -291,7 +292,7 @@ public static class LiveTileRenderer
                     float innerBox = ring * 0.62f;
                     DrawFitted(g, valueText,
                                new RectangleF(left + (ring - innerBox) / 2f, top + (ring - innerBox) / 2f, innerBox, innerBox),
-                               size * 0.30f * dialScale, TextColor);
+                               size * 0.30f * dialScale, TextColor, sizeReference: RingValueSizeReference);
                 }
                 else
                 {
@@ -522,7 +523,7 @@ public static class LiveTileRenderer
                     var numberBox = new RectangleF(left + (ring - inner) / 2f,
                                                    top + (ring - inner) / 2f, inner, inner);
                     DrawFitted(g, healthText, numberBox, size * 0.50f, TextColor,
-                               boostPx: 0f, semibold: true);
+                               boostPx: 0f, semibold: true, sizeReference: "100");
 
                 }
                 else
@@ -530,7 +531,7 @@ public static class LiveTileRenderer
                     // No dial: the number gets the whole left column and the heart sits under it.
                     var numberBox = new RectangleF(size * 0.045f, bandTop, leftWidth, bandHeight);
                     DrawFitted(g, healthText, numberBox, size * 0.50f, TextColor,
-                               boostPx: 0f, semibold: true);
+                               boostPx: 0f, semibold: true, sizeReference: "100");
                 }
 
                 // Three bars, equally spaced, lit from the top down.
@@ -639,7 +640,8 @@ public static class LiveTileRenderer
                                             int size, string outputPngPath, Color accent,
                                             bool tint = false,
                                             TileEmphasis emphasis = TileEmphasis.ShadowLitCore,
-                                            float iconScale = 1f, float iconOpacity = 1f)
+                                            float iconScale = 1f, float iconOpacity = 1f,
+                                            bool pixelArt = false, string? badge = null, double? wear = null)
     {
         try
         {
@@ -656,6 +658,12 @@ public static class LiveTileRenderer
 
                 if (iconPath is { Length: > 0 } && File.Exists(iconPath))
                 {
+                    // Pixel art (a Minecraft item) must stay crisp: bicubic smears a 16-px texture.
+                    if (pixelArt)
+                    {
+                        g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                        g.PixelOffsetMode = PixelOffsetMode.Half;
+                    }
                     // The box is square; the PNG need not be. The game's own ability icons are
                     // (128x128), but the placeholder art is not, and stretching it to the square
                     // made a squat, fat silhouette. Fit inside the box and keep the ratio.
@@ -697,6 +705,27 @@ public static class LiveTileRenderer
                 // key at a time instead of all at once.
 
                 if (withCaption) DrawSegmentedCaption(g, size, caption, emphasis);
+
+                // A game's own slot decorations, drawn the way its GUI draws them: a wear bar under
+                // the item (green to red) and the stack count in the bottom-right corner.
+                if (wear is double w01)
+                {
+                    float barW = size * 0.56f, barH = Math.Max(3f, size * 0.035f);
+                    float bx = (size - barW) / 2f, by = size * 0.86f;
+                    g.FillRectangle(Brushes.Black, bx, by, barW, barH);
+                    int red = (int)(255 * Math.Clamp(1 - w01, 0, 1)), green = (int)(255 * Math.Clamp(w01, 0, 1));
+                    using var wb = new SolidBrush(Color.FromArgb(red, green, 0));
+                    g.FillRectangle(wb, bx, by, (float)(barW * Math.Clamp(w01, 0, 1)), barH);
+                }
+                if (badge is { Length: > 0 })
+                {
+                    using var font = new Font("Segoe UI", size * 0.2f, FontStyle.Bold, GraphicsUnit.Pixel);
+                    var sz = g.MeasureString(badge, font);
+                    float tx = size * 0.9f - sz.Width, ty = size * 0.88f - sz.Height;
+                    using var shadow = new SolidBrush(Color.FromArgb(200, 0, 0, 0));
+                    g.DrawString(badge, font, shadow, tx + size * 0.015f, ty + size * 0.015f);
+                    g.DrawString(badge, font, Brushes.White, tx, ty);
+                }
             }
             return Save(canvas, outputPngPath);
         }
@@ -1141,6 +1170,10 @@ public static class LiveTileRenderer
     /// <see cref="TryRenderSpeedTile"/>'s remarks) rather than letting each tile's own, often
     /// shorter, text auto-grow to fill the band and end up a different size from its siblings.</summary>
     private const string SpeedValueSizeReference = "888.8";
+
+    /// <summary>The widest reading a dial's centre normally holds, so every dial value keeps one
+    /// size (see <c>DrawFitted</c>'s sizeReference).</summary>
+    private const string RingValueSizeReference = "100%";
     private const string SpeedCaptionSizeReference = "download";
     private const string SpeedUnitSizeReference = "Mbps";
 
@@ -1170,7 +1203,7 @@ public static class LiveTileRenderer
     public static bool TryRenderSpeedTile(string valueText, double? fraction, string caption,
                                           string unitText, int size, string outputPngPath,
                                           bool ownValueSize = false, float valueTopPad = 0f,
-                                          float edgeInset = 0f)
+                                          float edgeInset = 0f, string? valueSizeReference = null)
     {
         try
         {
@@ -1215,13 +1248,16 @@ public static class LiveTileRenderer
                     float inner = ring * 0.62f;
                     DrawFitted(g, valueText,
                                new RectangleF(left + (ring - inner) / 2f, top + (ring - inner) / 2f, inner, inner),
-                               size * 0.30f, TextColor);
+                               size * 0.30f, TextColor, sizeReference: RingValueSizeReference);
                 }
                 else
                 {
-                    float valuePx = FitFontSize(g, ownValueSize ? valueText : SpeedValueSizeReference,
-                                                 valueRect, size * 0.62f);
-                    DrawFitted(g, valueText, valueRect, valuePx, TextColor);
+                    // One size per key: from the caller's reference when there is one, else the
+                    // shared "888.8" — never from the value alone, which made a clock grow and
+                    // shrink as its digits changed. ownValueSize only drops the shared reference.
+                    string reference = valueSizeReference ?? (ownValueSize ? valueText : SpeedValueSizeReference);
+                    float valuePx = FitFontSize(g, reference, valueRect, size * 0.62f);
+                    DrawFitted(g, valueText, valueRect, valuePx, TextColor, sizeReference: reference);
                 }
 
                 if (withCaption)
@@ -1240,6 +1276,133 @@ public static class LiveTileRenderer
         catch { return false; }
     }
 
+    /// <summary>One row of <see cref="TryRenderBarsTile"/>: a label on the left, the value on the
+    /// right, and a bar under both. A null fraction draws an empty track (value not known).</summary>
+    /// <param name="ShowBar">False for a row that is only label and value (X/Y/Z coordinates).</param>
+    public readonly record struct BarRow(string Label, string Value, double? Fraction, Color Color, bool ShowBar = true);
+
+    /// <summary>The widest value a bar row normally shows — rows are sized from it, not from their
+    /// current value, so "9" and "19" hearts are drawn the same size.</summary>
+    private const string BarValueSizeReference = "-88888";
+
+    /// <summary>
+    /// Several readings stacked on one key — Minecraft's health and hunger, or its level with the
+    /// XP bar and the armour under it: a big number on top when <paramref name="bigText"/> is given,
+    /// then one row per <paramref name="rows"/> entry, each a label/value line over a bar.
+    ///
+    /// <para>Bars are drawn in each row's own colour (the game's: red hearts, brown drumsticks,
+    /// green XP), not the tile accent — on a key that carries two readings, colour is what tells
+    /// them apart at a glance. Labels and values use the tile's text colour like every other
+    /// tile, so the page still reads as one panel.</para>
+    /// </summary>
+    /// <param name="valueSizeReference">The widest value any row shows ("88" for Minecraft's 0-20
+    /// bars, "-8888" for coordinates): row text is sized from label + this, so it is as big as the
+    /// key allows without ever changing size with the value.</param>
+    public static bool TryRenderBarsTile(string? bigText, Color bigColor, IReadOnlyList<BarRow> rows,
+                                         int size, string outputPngPath, float edgeInset = 0f,
+                                         string valueSizeReference = BarValueSizeReference)
+    {
+        try
+        {
+            using var canvas = new Bitmap(size, size);
+            using (var g = NewGraphics(canvas, size))
+            {
+                float inset = size * Math.Max(edgeInset, 0.06f);
+                float innerW = size - 2 * inset;
+                float top = inset, bottom = size - inset;
+
+                // A row with neither label nor value is a bare bar (the XP bar under the level):
+                // it takes a thin slice, and the text rows share the rest.
+                static bool BarOnly(BarRow r) => r.Label.Length == 0 && r.Value.Length == 0;
+                int textRows = 0, barRows = 0;
+                foreach (var r in rows) { if (BarOnly(r)) barRows++; else textRows++; }
+
+                if (bigText is { Length: > 0 })
+                {
+                    float bigH = (bottom - top) * (textRows > 1 ? 0.36f : 0.48f);
+                    DrawFitted(g, bigText, new RectangleF(inset, top, innerW, bigH), size * 0.40f, bigColor,
+                               sizeReference: "888");
+                    top += bigH;
+                }
+                if (rows.Count == 0) return Save(canvas, outputPngPath);
+
+                float barRowH = size * 0.10f;
+                float rowH = textRows > 0 ? (bottom - top - barRows * barRowH) / textRows : 0f;
+                float labelPx = size * 0.30f;
+                // ONE size for every text row of the key, from its longest label: rows that differ
+                // in size read as different kinds of thing, and none may change with its value.
+                float rowPx = labelPx;
+                foreach (var r in rows)
+                {
+                    if (BarOnly(r)) continue;
+                    float h = r.ShowBar ? rowH * 0.60f : rowH * 0.9f;
+                    rowPx = Math.Min(rowPx, FitFontSize(g, r.Label + "  " + valueSizeReference,
+                                                        new RectangleF(0, 0, innerW, h), labelPx));
+                }
+                foreach (var row in rows)
+                {
+                    if (BarOnly(row))
+                    {
+                        float bh = Math.Max(4f, barRowH * 0.6f);
+                        float by = top + (barRowH - bh) / 2f;
+                        using (var track = new SolidBrush(Dim(row.Color, 0.28f)))
+                            g.FillRectangle(track, inset, by, innerW, bh);
+                        if (row.Fraction is double bf && bf > 0)
+                            using (var fill = new SolidBrush(row.Color))
+                                g.FillRectangle(fill, inset, by, (float)(innerW * Math.Clamp(bf, 0, 1)), bh);
+                        top += barRowH;
+                        continue;
+                    }
+                    float textH = row.ShowBar ? rowH * 0.60f : rowH * 0.9f;
+                    float barH = Math.Max(3f, Math.Min(rowH * 0.24f, size * 0.07f));
+                    var labelRect = new RectangleF(inset, top, innerW, textH);
+                    using (var font = IconImageGenerator.CaptionFont(rowPx))
+                    using (var brush = new SolidBrush(TextColor))
+                    {
+                        using var left = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Far, FormatFlags = StringFormatFlags.NoWrap };
+                        using var right = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Far, FormatFlags = StringFormatFlags.NoWrap };
+                        g.DrawString(row.Label, font, brush, labelRect, left);
+                        g.DrawString(row.Value, font, brush, labelRect, right);
+                    }
+
+                    if (row.ShowBar)
+                    {
+                        float barY = top + textH + (rowH - textH - barH) * 0.35f;
+                        using (var track = new SolidBrush(Dim(row.Color, 0.28f)))
+                            g.FillRectangle(track, inset, barY, innerW, barH);
+                        if (row.Fraction is double f && f > 0)
+                            using (var fill = new SolidBrush(row.Color))
+                                g.FillRectangle(fill, inset, barY, (float)(innerW * Math.Clamp(f, 0, 1)), barH);
+                    }
+                    top += rowH;
+                }
+            }
+            return Save(canvas, outputPngPath);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Every digit replaced by "8", the widest in proportional faces — so a value's size
+    /// depends on how many digits it has, never on which ones.</summary>
+    private static string DigitsAsEights(string text)
+    {
+        var chars = text.ToCharArray();
+        for (int i = 0; i < chars.Length; i++)
+            if (char.IsDigit(chars[i])) chars[i] = '8';
+        return new string(chars);
+    }
+
+    /// <summary>What a value is measured as: the wider (at a probe size) of the text and the
+    /// reference, both with digits as "8". See <see cref="DrawFitted"/>'s sizeReference.</summary>
+    private static string StableMeasure(string text, string? reference, Graphics g, Func<float, Font> face)
+    {
+        string t = DigitsAsEights(text);
+        if (reference is not { Length: > 0 }) return t;
+        string r = DigitsAsEights(reference);
+        using var probe = face(40f);
+        return g.MeasureString(r, probe).Width > g.MeasureString(t, probe).Width ? r : t;
+    }
+
     /// <summary>The largest font size (down to the same 8px floor <see cref="DrawFitted"/>
     /// uses) at which <paramref name="text"/> fits <paramref name="rect"/> both ways — the
     /// measuring half of <see cref="DrawFitted"/>'s shrink loop, split out so a band's size can
@@ -1249,7 +1412,7 @@ public static class LiveTileRenderer
         for (float px = startPx; px >= 8f; px -= 1f)
         {
             using var font = IconImageGenerator.CaptionFont(px);
-            SizeF measured = g.MeasureString(text, font);
+            SizeF measured = g.MeasureString(DigitsAsEights(text), font);
             if (measured.Width <= rect.Width && measured.Height <= rect.Height) return px;
         }
         return 8f;
@@ -1482,11 +1645,18 @@ public static class LiveTileRenderer
     /// and still look right, and stepping the shrink loop by whole pixels otherwise costs a
     /// visible amount of size on a 102 px key.</param>
     /// <param name="semibold">Force the stock semibold face instead of the key's own font.</param>
+    /// <param name="sizeReference">The widest text this spot normally shows ("100%", "88:88"). The
+    /// size is the one that fits BOTH it and the text, so a reading that changes keeps one size
+    /// instead of growing and shrinking with its own width — "9%" draws as big as "73%". Either
+    /// way digits are measured as "8", the widest, so "11:11" and "08:08" come out the same.</param>
     private static void DrawFitted(Graphics g, string text, RectangleF rect, float startPx, Color color,
-                                   float boostPx = 0f, bool semibold = false)
+                                   float boostPx = 0f, bool semibold = false, string? sizeReference = null)
     {
         Font Face(float px) =>
             semibold ? IconImageGenerator.SemiboldFont(px) : IconImageGenerator.CaptionFont(px);
+
+        // Measure the wider of text and reference in digit-normalised form; draw the real text.
+        string measureText = StableMeasure(text, sizeReference, g, Face);
 
         using var brush = new SolidBrush(color);
         using var format = new StringFormat
@@ -1498,7 +1668,7 @@ public static class LiveTileRenderer
         for (float px = startPx; px >= 8f; px -= 1f)
         {
             using var font = Face(px);
-            SizeF measured = g.MeasureString(text, font);
+            SizeF measured = g.MeasureString(measureText, font);
             if (measured.Width <= rect.Width && measured.Height <= rect.Height)
             {
                 using var drawn = Face(px + boostPx);

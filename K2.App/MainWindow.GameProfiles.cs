@@ -291,6 +291,14 @@ public partial class MainWindow
         // lookup): it follows what the user pinned, or just waits for its process name.
         if (CustomGameProfile.IsCustomId(def.Id)) return null;
 
+        // A game hosted by a generic process names its own executable: the running process would
+        // be the host (javaw) and hand the card a Java cup instead of the game's icon.
+        foreach (string candidate in def.IconExePaths ?? Array.Empty<string>())
+        {
+            string path = Environment.ExpandEnvironmentVariables(candidate);
+            if (System.IO.File.Exists(path)) return path;
+        }
+
         string? remembered = _dpStore.GetSetting(ExePathKey(def.Id));
         string? exe = Services.GameExeResolver.Resolve(def.ExeName, def.SteamAppId, remembered);
         if (exe is not null && exe != remembered) _dpStore.SetSetting(ExePathKey(def.Id), exe);
@@ -790,6 +798,7 @@ public partial class MainWindow
     private static string? SyncedBind(GameProfileDefinition def, GameProfileTile t)
     {
         if (def.Id == "deadside") return DeadsideSyncedBind(t);
+        if (ModLinkGames.GameFor(def.Id) is { } modGame) return ModLinkSyncedBind(modGame, t);
         if (def.Id != "elite_dangerous") return null;
 
         var binds = Services.EliteBindsReader.Snapshot();
@@ -855,6 +864,17 @@ public partial class MainWindow
                binds.TryGetValue(action, out var shortcut)
             ? shortcut
             : null;
+    }
+
+    /// <summary>The shortcut a Minecraft / Space Engineers <c>keys</c> tile should carry given the
+    /// player's CURRENT bindings (<see cref="Services.ModLinkBinds"/>), or null to keep the
+    /// catalogue's shipped default. Live <c>dp_modlink</c> tiles are not rewritten: they look the
+    /// bind up themselves at press time.</summary>
+    private static string? ModLinkSyncedBind(ModLinkGame game, GameProfileTile t)
+    {
+        if (t.ActionType != "keys" || !t.CaptionIsLocKey) return null;
+        if (ModLinkGames.FindByLocKey(t.Caption) is not { } hit || hit.Game != game) return null;
+        return Services.ModLinkBinds.For(game, hit.Item.Bind);
     }
 
     /// <summary>Everything a game profile leaves on the pads once it stops existing: the slot it
@@ -1095,7 +1115,8 @@ public partial class MainWindow
                     // "Bring this profile back after N seconds" — the profile's own setting, and
                     // the ONLY thing that overrides a profile the user picked by hand. Off = 0 =
                     // their choice stands until they change it.
-                    reassertAfterSeconds: LoadReturn(def.Id) ? LoadReturnSeconds(def.Id) : 0);
+                    reassertAfterSeconds: LoadReturn(def.Id) ? LoadReturnSeconds(def.Id) : 0,
+                    windowTitlePrefix: def.WindowTitlePrefix);
             }
         }
 
@@ -1400,6 +1421,88 @@ public static class GameProfileCatalog
         Ksp("r.resource[ElectricCharge]"),
     });
 
+    /// <summary>A mod-link tile (Minecraft, Space Engineers). No stored caption: the painter names
+    /// it from <see cref="ModLinkGames"/>, in the UI language — same as <see cref="Ksp"/>.</summary>
+    private static Tile Mod(string value) => new(ModLinkGames.ActionType, value, "", CaptionIsLocKey: false);
+
+    /// <summary>A plain shortcut from a mod-link game's catalogue, carrying the game's shipped
+    /// default; <see cref="MainWindow.SyncedBind"/> swaps it for the player's real bind.</summary>
+    private static Tile ModKeys(string value)
+    {
+        var item = ModLinkGames.Find(value)!.Value.Item;
+        return Keys(item.Keys ?? "", item.LocKey);
+    }
+
+    /// <summary>Minecraft: Java Edition, first page — the hotbar. The nine slots wear the real item
+    /// icons the mod draws (count and wear drawn by K2), the selected one lit, each pressing the
+    /// player's own bind from <c>options.txt</c>. Then two keys carrying two readings each —
+    /// health with hunger, level and XP bar with armour — and Actions, which opens the second page.</summary>
+    private static readonly Page MinecraftPage1 = new("Hotbar", new[]
+    {
+        Mod("mc.slot1"), Mod("mc.slot2"), Mod("mc.slot3"),
+        Mod("mc.slot4"), Mod("mc.slot5"), Mod("mc.slot6"),
+        Mod("mc.slot7"), Mod("mc.slot8"), Mod("mc.slot9"),
+        Mod("mc.vitals"), Mod("mc.xparmor"),
+        new Tile("dp_folder", "1", "gp_mc_actions"),
+    });
+
+    /// <summary>Minecraft, second page — actions: drop and swap hands, screenshot, the time of day
+    /// and the X/Y/Z coordinates on one key on top; inventory, chat, advancements, view, hide HUD
+    /// below, and the way back to the hotbar in the last position. Slot 3 is left free.</summary>
+    private static readonly Page MinecraftPage2 = new("Actions", new[]
+    {
+        ModKeys("mc.drop"),
+        ModKeys("mc.swap"),
+        Empty(),
+        ModKeys("mc.screenshot"),
+        Mod("mc.time"),
+        Mod("mc.xyz"),
+
+        ModKeys("mc.inventory"),
+        ModKeys("mc.chat"),
+        ModKeys("mc.advancements"),
+        Mod("mc.perspective"),
+        Mod("mc.hudhidden"),
+        new Tile("dp_back", "", "gp_mc_hotbar"),
+    });
+
+    /// <summary>Space Engineers. Top row: the flight toggles, each lit with the real state of what
+    /// the player controls (suit on foot, ship in a cockpit) through K2's ModAPI mod
+    /// (<c>K2/Mods/SpaceEngineers</c>), and pressing the player's own bind from
+    /// <c>SpaceEngineers.cfg</c>. Bottom row: the suit's reserves and the speed.
+    ///
+    /// <para>Ship power has no key of its own — pressing Energy switches it (TOGGLE_REACTORS on
+    /// <c>se.energy</c>) — and its slot opens the toolbar page.</para></summary>
+    private static readonly Page SpaceEngineersPage1 = new("Flight", new[]
+    {
+        Mod("se.dampeners"),
+        Mod("se.jetpack"),
+        Mod("se.lights"),
+        Mod("se.gear"),
+        Mod("se.helmet"),
+        new Tile("dp_folder", "1", "gp_se_toolbar"),
+
+        Mod("se.energy"),
+        Mod("se.oxygen"),
+        Mod("se.hydrogen"),
+        Mod("se.speed"),
+        Mod("se.altitude"),
+        ModKeys("se.terminal"),
+    });
+
+    /// <summary>Space Engineers' toolbar: slots 1–5 on top and 6–9 below, each pressing the
+    /// player's own bind, with the two end keys paging the toolbar up (key 6) and down (key 12) —
+    /// TOOLBAR_UP / TOOLBAR_DOWN, "." and "," by default. Slot 0's position is the way back to the
+    /// flight page (slot 0 itself stays in the picker).</summary>
+    private static readonly Page SpaceEngineersPage2 = new("Toolbar", new[]
+    {
+        Mod("se.slot1"), Mod("se.slot2"), Mod("se.slot3"), Mod("se.slot4"), Mod("se.slot5"),
+        Mod("se.toolbarup"),
+        Mod("se.slot6"), Mod("se.slot7"), Mod("se.slot8"), Mod("se.slot9"),
+        new Tile("dp_back", "", "gp_se_back"),
+        Mod("se.toolbardown"),
+    });
+
     /// <summary>The profiles K2 ships. Kept apart from <see cref="All"/> because that one also
     /// carries the user's own — see there.</summary>
     private static readonly IReadOnlyList<Definition> Builtins = new List<Definition>
@@ -1413,6 +1516,19 @@ public static class GameProfileCatalog
         // KSP_x64 is the game itself; Launcher.exe beside it is Squad's launcher, which exits
         // once the game is up — the same trap as Deadside's.
         new(GameProfileSpecs.KspId, "Kerbal Space Program", "KSP_x64", 220200, new[] { KspPage1 }),
+        // Java Edition runs in javaw — the JVM every Java program uses — so the watcher also wants
+        // the game's window title, and the icon comes from the launcher rather than from Java.
+        new(ModLinkGames.MinecraftId, "Minecraft", "javaw", null, new[] { MinecraftPage1, MinecraftPage2 },
+            WindowTitlePrefix: "Minecraft",
+            IconExePaths: new[]
+            {
+                @"%ProgramFiles(x86)%\Minecraft Launcher\MinecraftLauncher.exe",
+                @"%ProgramFiles%\Minecraft Launcher\MinecraftLauncher.exe",
+                @"%SystemDrive%\XboxGames\Minecraft Launcher\Content\Minecraft.exe",
+            }),
+        // The game itself sits in Bin64; there is no launcher in between.
+        new(ModLinkGames.SpaceEngineersId, "Space Engineers", "SpaceEngineers", 244850,
+            new[] { SpaceEngineersPage1, SpaceEngineersPage2 }),
     };
 
     /// <summary>Every profile there is: the shipped ones, the ones an external game-profile module

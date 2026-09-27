@@ -96,6 +96,12 @@ public static class GameProfileSpecs
     /// <summary>The green of the game's flight UI — navball speed readout, staging highlights.</summary>
     public static readonly Color KspGreen = Color.FromArgb(146, 222, 92);
 
+    /// <summary>Minecraft's own yellow — the colour of its title splash and advancement toasts.</summary>
+    public static readonly Color MinecraftYellow = Color.FromArgb(255, 255, 85);
+
+    /// <summary>The pale blue of Space Engineers' default HUD.</summary>
+    public static readonly Color SpaceEngineersBlue = Color.FromArgb(120, 200, 255);
+
     public static IReadOnlyList<GameProfileSpec> All { get; } = new[]
     {
         new GameProfileSpec(
@@ -139,6 +145,26 @@ public static class GameProfileSpecs
             CommandFamilies: KspTelemachus.CommandFamilies,
             RestingArtColor: "green",
             DynamicFamilies: KspTelemachus.ApiFamilies),
+
+        // Both read through a mod K2 ships (K2/Mods/): commands work without it — they are the
+        // player's real key binds — the readings need it. See ModLinkGames.
+        new GameProfileSpec(
+            Id: ModLinkGames.MinecraftId,
+            ArtFolder: "Minecraft",
+            ArtPrefix: "mc",
+            Accent: MinecraftYellow,
+            StyleAllTiles: true,
+            CommandFamilies: ModLinkGames.Families(ModLinkGames.Minecraft),
+            RestingArtColor: "yellow"),
+
+        new GameProfileSpec(
+            Id: ModLinkGames.SpaceEngineersId,
+            ArtFolder: "SpaceEngineers",
+            ArtPrefix: "se",
+            Accent: SpaceEngineersBlue,
+            StyleAllTiles: true,
+            CommandFamilies: ModLinkGames.Families(ModLinkGames.SpaceEngineers),
+            RestingArtColor: "blue"),
     };
 
     /// <summary>

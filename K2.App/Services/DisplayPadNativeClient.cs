@@ -98,6 +98,7 @@ public sealed class DisplayPadNativeClient : IDisplayPadClient
             foreach (var p in _pads.Values) p.Dispose();
             _pads.Clear();
             _groupKeys.Clear();
+            _brightness.Clear();
         }
     }
 
@@ -154,6 +155,7 @@ public sealed class DisplayPadNativeClient : IDisplayPadClient
                     Log($"[DpNative] pad #{id} unplugged");
                     pad.Dispose();
                     _pads.Remove(id);
+                    _brightness.Remove(id);   // firmware resets on replug — level no longer known
                     if (raiseEvents) RaisePlug();
                 }
                 _groupKeys.Remove(id);

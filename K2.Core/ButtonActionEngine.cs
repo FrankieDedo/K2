@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -132,6 +132,7 @@ public sealed class ButtonActionEngine : IDisposable
             return;
         }
         string seq = value.IndexOfAny(SendKeysMeta) >= 0 ? value : SendKeysTranslator.Translate(value);
+        if (seq.Length == 0) { log($"[EXEC] keys -> \"{value}\"  (no SendKeys spelling — not sent)"); return; }
         System.Windows.Forms.SendKeys.SendWait(seq);
         log($"[EXEC] keys -> \"{value}\"  (sendkeys=\"{seq}\")");
     }
