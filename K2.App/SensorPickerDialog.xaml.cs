@@ -59,6 +59,7 @@ public partial class SensorPickerDialog : Window
     public SensorPickerDialog(string? currentValue)
     {
         InitializeComponent();
+        if (!PawnIoDriver.IsInstalled) PnlPawnIoWarn.Visibility = Visibility.Visible;
 
         (_seedId, string? seedStat) = ParseSeed(currentValue);
         (seedStat switch
@@ -171,6 +172,16 @@ public partial class SensorPickerDialog : Window
         return r.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
             || r.Kind.Contains(q, StringComparison.OrdinalIgnoreCase)
             || r.HardwareName.Contains(q, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async void BtnInstallPawnIo_Click(object sender, RoutedEventArgs e)
+    {
+        BtnInstallPawnIo.IsEnabled = false;
+        LblPawnIoWarn.Text = Loc.Get("sysmon_pawnio_installing");
+        bool ok = await PawnIoDriver.InstallAsync();
+        LblPawnIoWarn.Text = Loc.Get(ok ? "sysmon_pawnio_done" : "sysmon_pawnio_failed");
+        BtnInstallPawnIo.Visibility = ok ? Visibility.Collapsed : Visibility.Visible;
+        BtnInstallPawnIo.IsEnabled = true;
     }
 
     private void TxtSearch_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)

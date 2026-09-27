@@ -127,4 +127,47 @@ internal static class Everest60RemapData
         ("Next Track (unconfirmed code)", 6),
         ("Stop (unconfirmed code)", 7),
     };
+
+    /// <summary>
+    /// Resolves a <c>KeyCombo</c>-spelled key name ("A", "7", "Enter", "Alt", "Win") to the
+    /// DLLKeyId <c>ChangeKey</c>/<c>ChangeShortcutKey</c> expect, or -1 when this board has no
+    /// such key. Bridges the two vocabularies: the picker in <c>ButtonActionDialog</c> speaks
+    /// the same short names the software "keys" action uses, while <see cref="KeyCatalog"/>
+    /// spells the modifiers out by side ("Alt (Left)"). A bare modifier resolves to its LEFT
+    /// key — the side a user means when they say "swap Alt and Win", and the only side the
+    /// board has for Ctrl/Win anyway.
+    ///
+    /// <para>Deliberately NOT a general-purpose lookup: it only answers for keys this physical
+    /// board actually has, so an unsupported target is refused at bind time instead of being
+    /// written to firmware and silently doing nothing. F-keys, the nav cluster and the numpad
+    /// are among the ~52 extra catalog entries valid as remap TARGETS that were never extracted
+    /// (see <see cref="KeyCatalog"/>'s doc) — they would need that second extraction pass
+    /// before they can be offered.</para>
+    /// </summary>
+    public static int ResolveComboKeyName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return -1;
+        string n = name.Trim();
+
+        if (KeyCatalog.TryGetValue(n, out var direct)) return direct;
+
+        foreach (var (label, id) in ComboNameAliases)
+            if (string.Equals(label, n, System.StringComparison.OrdinalIgnoreCase)) return id;
+
+        // Letters and digits are catalogued by their bare uppercase label.
+        if (n.Length == 1 && KeyCatalog.TryGetValue(n.ToUpperInvariant(), out var single)) return single;
+
+        return -1;
+    }
+
+    /// <summary>Short name (what the key picker offers) → DLLKeyId, for the keys whose catalog
+    /// label differs. The modifiers map to their left-hand key; see
+    /// <see cref="ResolveComboKeyName"/>.</summary>
+    private static readonly (string Label, int Id)[] ComboNameAliases =
+    {
+        ("Ctrl", 58), ("Win", 59), ("Alt", 60), ("Shift", 44),
+        ("Esc", 110), ("CapsLock", 30), ("Caps Lock", 30),
+        ("Up", 83), ("Down", 84), ("Left", 79), ("Right", 89),
+        ("Delete", 76), ("Del", 76), ("Backspace", 15), ("Space", 61), ("Enter", 43), ("Tab", 16),
+    };
 }

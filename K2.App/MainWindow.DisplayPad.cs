@@ -1138,8 +1138,7 @@ public partial class MainWindow
 
     private void DpAutoOffTimeout(int id)
     {
-        int b = _dpClient.GetBrightness(id);
-        _dpSavedBrightness[id] = b >= 0 ? b : (int)SldDpBrightness.Value;
+        _dpSavedBrightness[id] = DpBrightnessOf(id);
         DpLog($"[UI] auto-off: SetBrightness(id={id}, 0) -> {_dpClient.SetBrightness(id, 0)}");
     }
 
@@ -1362,8 +1361,8 @@ public partial class MainWindow
         _dpSuppressBrightness = true;
         try
         {
-            int b = _dpClient.GetBrightness(id);
-            if (b >= 0) { SldDpBrightness.Value = b; LblDpBrightness.Text = $"{b}%"; }
+            int b = DpBrightnessOf(id);
+            SldDpBrightness.Value = b; LblDpBrightness.Text = $"{b}%";
         }
         finally { _dpSuppressBrightness = false; }
 
@@ -2282,6 +2281,17 @@ public partial class MainWindow
         int level = (int)Math.Round(e.NewValue / 25.0) * 25;
         LblDpBrightness.Text = $"{level}%";
         _dpClient.SetBrightness(id, level);
+        _dpStore.SetBrightness(id, level);
+    }
+
+    /// <summary>Brightness to show for pad <paramref name="id"/>: the level live on the
+    /// device this session, else its saved level, else the firmware default (100). Never
+    /// falls back to the slider's current value — that belongs to whichever pad was
+    /// selected before, and reusing it made one pad's level "leak" onto the others.</summary>
+    private int DpBrightnessOf(int id)
+    {
+        int b = _dpClient.GetBrightness(id);
+        return b >= 0 ? b : _dpStore.GetBrightness(id) ?? 100;
     }
 
     private void BtnDpMapKeys_Click(object sender, RoutedEventArgs e)
@@ -3725,6 +3735,10 @@ public partial class MainWindow
             }
             string fw = _dpClient.FirmwareVersion(id);
             int br = _dpClient.GetBrightness(id);
+            // No live level yet (fresh start / replug): push this pad's own saved level so
+            // every pad comes up at the brightness the user picked for it.
+            if (br < 0 && _dpStore.GetBrightness(id) is int savedBr && _dpClient.SetBrightness(id, savedBr))
+                br = savedBr;
             // Use custom name if set, otherwise default progressive label
             string defaultLabel = $"DisplayPad {progressive}";
             string label = _dpStore.GetSetting($"device.{id}.name") ?? defaultLabel;

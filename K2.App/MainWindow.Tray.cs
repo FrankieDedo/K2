@@ -83,6 +83,24 @@ public partial class MainWindow
         Activate();
     }
 
+    /// <summary>Someone launched K2 again while this instance runs (see
+    /// App.StartActivationListener): show the window wherever it is — tray, minimized
+    /// or behind other windows — keeping a maximized state intact.</summary>
+    internal void BringToFrontFromSecondLaunch()
+    {
+        if (!IsVisible)
+            RestoreFromTray();
+        else if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+
+        Activate();
+        // Activate() alone can just flash the taskbar button; a Topmost toggle reliably
+        // raises the window above the one that currently has focus.
+        Topmost = true;
+        Topmost = false;
+        Focus();
+    }
+
     /// <summary>Startup "an update is available" toast (see MainWindow.Settings.cs,
     /// the silent check kicked off by InitUpdatesPanel). It is a tray balloon, which
     /// Windows 10/11 renders as a normal toast and files in the Action Center; if the

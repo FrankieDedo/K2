@@ -198,6 +198,12 @@ Name: "{group}\Uninstall K2"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\K2"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
+; PawnIO: the kernel driver LibreHardwareMonitor needs to read CPU temperature,
+; clocks and power (without it the DisplayPad CPU sensor tiles read 0). Official
+; signed installer shipped next to the exe (K2.App.csproj). Silent, only when it
+; isn't there yet; runas so it still elevates when setup runs per-user.
+Filename: "{app}\ThirdParty\PawnIO_setup.exe"; Parameters: "-install -silent"; Flags: runhidden waituntilterminated shellexec; Verb: "runas"; Check: PawnIoMissing
+
 ; shellexec (not the default CreateProcess) is required here: K2.App.exe's
 ; manifest is requireAdministrator, and CreateProcess cannot elevate a child
 ; process on its own — it fails with "CreateProcess failed; code 740" even
@@ -215,6 +221,18 @@ var
   DetectedBcDir: String;
 
   BehaviorPage: TInputOptionWizardPage;
+
+{ Same test LibreHardwareMonitor uses (PawnIo.IsInstalled): the PawnIO
+  uninstall key, in either registry view. }
+function PawnIoMissing(): Boolean;
+var
+  Key: String;
+begin
+  Key := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO';
+  Result := not RegKeyExists(HKLM32, Key);
+  if Result and IsWin64 then
+    Result := not RegKeyExists(HKLM64, Key);
+end;
 
 { True if any of the known Base Camp native DLLs (MacroPadSDK.dll,
   SDKDLL.dll, Everest360_USB.dll - same list as K2.App's

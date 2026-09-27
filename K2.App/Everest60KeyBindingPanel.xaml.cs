@@ -49,6 +49,13 @@ public partial class Everest60KeyBindingPanel : UserControl
 
     internal void SetMainBoardDisablePush(Action reconcile) => _reconcileDisabledKeys = reconcile;
 
+    /// <summary>Injected by MainWindow.Everest60.cs: puts a main-board key back to its factory
+    /// function in the keyboard, whoever remapped it (Base Camp included). Invoked when a key is
+    /// left with no action, which is how the user asks for "A types A again".</summary>
+    private Action<int>? _restoreMainKey;
+
+    internal void SetMainKeyFactoryRestore(Action<int> restore) => _restoreMainKey = restore;
+
     internal void SetNumpadDevicePush(Action<int, string> writeBinding, Action<int> unassignBinding)
     {
         _writeNumpadBinding = writeBinding;
@@ -306,6 +313,8 @@ public partial class Everest60KeyBindingPanel : UserControl
         _log($"[KeyBind] key led={key.LedIndex} removed");
         if (key.NumpadIndex is int npi)
             _unassignNumpadBinding?.Invoke(Everest60RemapData.NumpadDllKeyId[npi]);
+        else
+            _restoreMainKey?.Invoke(key.LedIndex);
         _reconcileDisabledKeys?.Invoke();
     }
 
@@ -327,6 +336,8 @@ public partial class Everest60KeyBindingPanel : UserControl
             _log($"[KeyBind] key led={key.LedIndex} emptied, removed");
             if (key.NumpadIndex is int npi1)
                 _unassignNumpadBinding?.Invoke(Everest60RemapData.NumpadDllKeyId[npi1]);
+            else
+                _restoreMainKey?.Invoke(key.LedIndex);
         }
         else
         {

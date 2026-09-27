@@ -155,6 +155,13 @@ public interface IActionHost
     /// <c>disk:&lt;Id&gt;</c>. Empty on a host with no sensor backend.</summary>
     IReadOnlyList<(string Id, string Name)> ListStorageDisks() => System.Array.Empty<(string, string)>();
 
+    /// <summary>True when CPU sensors can't be read because the PawnIO driver is missing — the
+    /// <c>dp_sysmon</c> CPU-temperature option then shows a warning with an install button.</summary>
+    bool CpuSensorDriverMissing => false;
+
+    /// <summary>Installs the CPU-sensor driver (PawnIO) silently; true on success.</summary>
+    System.Threading.Tasks.Task<bool> InstallCpuSensorDriverAsync() => System.Threading.Tasks.Task.FromResult(false);
+
     /// <summary>True on a host that can define SCREEN PROBES — user-made readings taken off
     /// another program's window (K2.App's DisplayPad host, backed by
     /// <c>K2.App.Services.ScreenProbeStore</c>). When false the "Screen reading" action type is

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -103,7 +103,7 @@ public partial class ButtonActionDialog : Window
         // and saving wrote the value back as "" (user report 2026-09-18).
         else if (currentType is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
                  or "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus"
-                 or KspTelemachus.ActionType or "dp_screen" or CustomActionType.Tag)
+                 or KspTelemachus.ActionType or ModLinkGames.ActionType or "dp_screen" or CustomActionType.Tag)
         {
             LoadComboSpec(currentType, currentValue ?? "");
         }
@@ -241,7 +241,7 @@ public partial class ButtonActionDialog : Window
         // constructor's LoadComboSpec branch.
         bool combo   = tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
                               or "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus"
-                              or "dp_zcstatus" or KspTelemachus.ActionType
+                              or "dp_zcstatus" or KspTelemachus.ActionType or ModLinkGames.ActionType
                               or "dp_screen" or CustomActionType.Tag;
         bool sysmon  = tag == "dp_sysmon";
         bool keys    = tag == "keys";
@@ -369,7 +369,7 @@ public partial class ButtonActionDialog : Window
             ActionValue = SaveProfileSpec().ToJson();
         }
         else if (tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
-                 or "dp_clock" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus" or KspTelemachus.ActionType)
+                 or "dp_clock" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus" or KspTelemachus.ActionType or ModLinkGames.ActionType)
         {
             ActionValue = SaveComboSpec();
         }

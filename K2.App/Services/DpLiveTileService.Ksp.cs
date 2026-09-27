@@ -38,7 +38,10 @@ internal static partial class DpLiveTileService
 
         return LiveTileRenderer.TryRenderSpeedTile(r.Text, null, caption, r.Unit, size, outputPngPath,
                                                    ownValueSize: item.Format is KspFormat.Text or KspFormat.SasMode,
-                                                   edgeInset: KspEdgeInset);
+                                                   edgeInset: KspEdgeInset,
+                                                   // Words (body, SAS mode) share one size: the width of a long one.
+                                                   valueSizeReference: item.Format is KspFormat.Text or KspFormat.SasMode
+                                                       ? "Retrograde" : null);
     }
 
     private const int KspDialSegments = 12;

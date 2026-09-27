@@ -53,6 +53,10 @@ public partial class MainWindow
     /// coexistence-with-raw-HID caveat.</summary>
     private readonly Everest60SdkService _ev60Sdk = new();
     private DispatcherTimer? _ev60PollTimer;
+
+    /// <summary>Set once the window starts closing: from then on nothing may reopen the SDK or
+    /// write key bindings, or the exit restore would be undone (see the Closed handler).</summary>
+    private bool _ev60ShuttingDown;
     private bool _ev60Connected;
     private Everest60Store _ev60Store = null!;
     private bool _ev60SuppressProfile;
@@ -190,6 +194,7 @@ public partial class MainWindow
             playMacro:             PlayMacroByName);
         Ev60KeyBindingPanel.SetActionHost(_ev60ActionHost);
         Ev60KeyBindingPanel.SetMainBoardDisablePush(PushEv60DisabledKeysToDevice);
+        Ev60KeyBindingPanel.SetMainKeyFactoryRestore(RestoreEv60MainKeyToFactory);
         Ev60KeyBindingPanel.SetNumpadDevicePush(
             writeBinding:     (dllKeyId, label) => { _ev60.WriteNumpadKeyBinding(dllKeyId, label); StartEv60NumpadPresenceGrace(); },
             unassignBinding:  dllKeyId => { _ev60.UnassignNumpadKey(dllKeyId); StartEv60NumpadPresenceGrace(); });
@@ -217,6 +222,13 @@ public partial class MainWindow
 
         Closed += (_, _) =>
         {
+            // Stop everything that can reopen the SDK and re-silence keys BEFORE restoring them.
+            // Real log 2026-09-27: the restore ran, then a status-poll tick queued behind it saw
+            // the SDK disposed, reopened it and reloaded the profile — re-silencing every bound
+            // key a few ms before the process exited. Those writes persist in the keyboard, so
+            // the keys stayed dead with K2 closed.
+            _ev60ShuttingDown = true;
+            _ev60PollTimer?.Stop();
             try { RestoreEv60DisabledKeysOnExit(); } catch { /* ignore */ }
             try { _ev60LedPoller?.Dispose(); } catch { /* ignore */ }
             try { _ev60Engine?.Dispose(); } catch { /* ignore */ }
@@ -239,10 +251,9 @@ public partial class MainWindow
     // lighting is raw HID — see architectural note in _PROJECT_MAP.md): a
     // "profile" is purely a K2-side slot (1..5), persisted in Everest60Store.
     // Switching re-sends the stored lighting state and rewrites the stored
-    // 64-key binding table LIVE to firmware — it does NOT call SaveFlash
-    // automatically (stays behind the manual "Save" button in
-    // Everest60KeyBindingPanel, to avoid wearing the keyboard's flash on
-    // every switch). Mirrors MainWindow.Makalu.cs's Mk* profile methods.
+    // 64-key binding table LIVE to firmware — no SaveFlash: the keyboard
+    // persists binding writes on its own (capture 2026-09-27, see
+    // PushEv60FirmwareRemaps). Mirrors MainWindow.Makalu.cs's Mk* profile methods.
     // ------------------------------------------------------------
 
     private sealed record Ev60ProfileItem(int Slot, string Label)
@@ -1788,8 +1799,14 @@ public partial class MainWindow
     /// (<see cref="HandleEv60KeyByLed"/> sends the matching up edge to
     /// <see cref="ButtonActionEngine.Release"/>); RPC / programmatic presses via
     /// <see cref="Ev60PressButton"/> stay one-shot.</param>
-    private void ExecuteEv60Key(Ev60Key k, bool momentary = false) =>
+    /// <summary>Runs a key's K2 action — unless the keyboard is holding that binding itself, in
+    /// which case it has already emitted the keystroke and running it here too would double it
+    /// (see <see cref="PushEv60FirmwareRemaps"/>).</summary>
+    private void ExecuteEv60Key(Ev60Key k, bool momentary = false)
+    {
+        if (_ev60FirmwareRemappedKeys.Contains(k.LedIndex)) return;
         _ev60Engine?.Execute(k.ActionType, k.ActionValue, Ev60KeyBindingPanel.IndexOf(k), momentary);
+    }
 
     /// <summary>Physical key press/release, reported by the vendor SDK's
     /// callback (Everest60SdkService.KeyEvent) — mirrors MainWindow.Everest.cs's
@@ -1802,6 +1819,12 @@ public partial class MainWindow
     {
         if (AppSettings.LogLevel == K2LogLevel.Verbose)
             LogEverest60($"[KEY ] wMatrix=0x{wMatrix:X2} {(pressed ? "down" : "up")}");
+
+        // Once Raw Input has delivered anything, it is the only source: the SDK callback does
+        // fire now (log 2026-09-27) but ~200ms late and in bunched down/up bursts, and letting
+        // both routes through meant a cross-route dedup window that also swallowed real fast
+        // presses (3 quick taps -> 1 action).
+        if (_ev60RawInputSeen) return;
 
         // Covers the accessory numpad too, not just the 64 main-board keys — the
         // callback reports both (see _ev60DllKeyIdToLedIndex's doc comment).
@@ -1839,6 +1862,7 @@ public partial class MainWindow
     {
         if (AppSettings.LogLevel == K2LogLevel.Verbose)
             LogEverest60($"[KEY ] scanCode=0x{scanCode:X3} {(pressed ? "down" : "up")}");
+        _ev60RawInputSeen = true;
 
         if (!Everest60KeyboardLayout.ScanCodeToLedIndex.TryGetValue(scanCode, out int ledIndex))
         {
@@ -1933,12 +1957,22 @@ public partial class MainWindow
     /// <see cref="ExecuteEv60KeyDeduped"/>.</summary>
     private (int Led, DateTime At) _ev60LastExecuted = (-1, DateTime.MinValue);
 
+    /// <summary>True once <see cref="HandleEv60KeyFromHid"/> has seen a key: from then on the
+    /// SDK callback is ignored (see <see cref="HandleEv60Key"/>).</summary>
+    private bool _ev60RawInputSeen;
+
+    /// <summary>Two edges of the same key closer than this are one physical press (the
+    /// firmware's double-edge quirk, "a few milliseconds apart"). Was 400ms back when two
+    /// routes could each report the press; that also ate genuine fast repeats.</summary>
+    private static readonly TimeSpan Ev60DuplicatePressWindow = TimeSpan.FromMilliseconds(40);
+
     /// <summary>
     /// Runs a key's action at most once per physical press. Raw Input is now the only
     /// route for both main-board AND numpad keys (see
     /// <see cref="Everest60KeyboardLayout.ScanCodeToLedIndex"/>'s doc comment — the SDK
     /// callback never fires on real hardware, and <see cref="Everest60NumpadKeyPoller"/>
-    /// was retired 2026-07-28), but the 400ms window stays: this device family has a
+    /// was retired 2026-07-28), but a short window (<see cref="Ev60DuplicatePressWindow"/>)
+    /// stays: this device family has a
     /// confirmed firmware quirk where a single physical press can arrive as two distinct
     /// edges "a few milliseconds apart" instead of one clean one (same quirk
     /// <see cref="ExecuteEverestKeyDeduped"/> guards against on the Everest Max, and the
@@ -1948,9 +1982,9 @@ public partial class MainWindow
     {
         var now = DateTime.UtcNow;
         if (_ev60LastExecuted.Led == key.LedIndex
-            && (now - _ev60LastExecuted.At) < TimeSpan.FromMilliseconds(400))
+            && (now - _ev60LastExecuted.At) < Ev60DuplicatePressWindow)
         {
-            LogEverest60($"[KEY ] led={key.LedIndex} duplicate press ignored (other route already ran it)");
+            LogEverest60($"[KEY ] led={key.LedIndex} duplicate press ignored (double edge)");
             return;
         }
         _ev60LastExecuted = (key.LedIndex, now);
@@ -1990,10 +2024,17 @@ public partial class MainWindow
     /// </summary>
     private void PushEv60DisabledKeysToDevice()
     {
+        if (_ev60ShuttingDown) return;
         var table = Everest60RemapData.LedIndexToDllKeyIdArray;
+
+        // Bindings the keyboard can perform itself are handed to it (PushEv60FirmwareRemaps, run
+        // first so this method knows which keys it must NOT silence).
+        var inFirmware = PushEv60FirmwareRemaps();
+
         var wanted = Ev60KeyBindingPanel.Keys
             .Where(k => k.NumpadIndex is null
                         && k.HasAction
+                        && !inFirmware.Contains(k.LedIndex)
                         && k.LedIndex >= 0 && k.LedIndex < table.Length)
             .Select(k => k.LedIndex)
             .ToHashSet();
@@ -2015,6 +2056,121 @@ public partial class MainWindow
 
         _ev60FirmwareDisabledKeys.Clear();
         _ev60FirmwareDisabledKeys.UnionWith(wanted);
+    }
+
+    /// <summary>ledIndexes currently handed over to the keyboard's own table, so one that loses
+    /// its binding can be put back to factory. The opposite of
+    /// <see cref="_ev60FirmwareDisabledKeys"/>: that set is keys K2 silenced so it could run them
+    /// itself, this one is keys K2 is NOT running at all.</summary>
+    private readonly HashSet<int> _ev60FirmwareRemappedKeys = new();
+
+    /// <summary>What was last written for each key in <see cref="_ev60FirmwareRemappedKeys"/>
+    /// ("keys:Ctrl+X", "media:4"…), so a reconcile only rewrites keys whose binding changed —
+    /// it runs on every key save and profile switch, and each write costs ~150ms.</summary>
+    private readonly Dictionary<int, string> _ev60FirmwareWritten = new();
+
+    /// <summary>Base Camp's media index for each K2 media value (BC <c>Common.
+    /// GetEverestFunctionTypeValues("Media")</c>; Play/Pause = 4 confirmed by capture).
+    /// Shuffle has no firmware equivalent and stays with K2.</summary>
+    private static readonly Dictionary<string, int> Ev60FirmwareMediaIndex = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Volume Up"] = 1, ["Volume Down"] = 2, ["Mute"] = 3, ["Play/Pause"] = 4,
+        ["Previous track"] = 5, ["Next track"] = 6, ["Stop"] = 7,
+    };
+
+    /// <summary>
+    /// Writes into the keyboard itself every binding the keyboard can perform on its own, so it
+    /// works the same with K2 open or closed (user requirement 2026-09-27), and returns the
+    /// ledIndexes it took over — everything else stays an ordinary K2 binding (silenced +
+    /// executed host-side).
+    ///
+    /// <para>What qualifies: a <c>keys</c> action that resolves to ONE key of this board, with or
+    /// without modifiers (cmd 0x22 src|target|mask; a bare modifier is a plain remap onto that
+    /// modifier, the literal "this key IS Alt now" an Alt/Win swap needs), and a <c>media</c>
+    /// action Base Camp has an index for (cmd 0x29 src|3|index). Both formats come from a capture
+    /// of Base Camp (<c>_reference/usb_dumps/ev60_devsave.pcapng</c>), sent over raw HID — no
+    /// dependency on the vendor DLL being open. Recorded macros are NOT here yet: their event
+    /// format (delay unit, framing past one report) isn't pinned down by a capture.</para>
+    ///
+    /// <para><b>No SaveFlash.</b> The keyboard persists every binding write on its own (Base Camp
+    /// never saves, and its bindings survived BC closed + an unplug). Corollary: so do the
+    /// "silence" writes of <see cref="PushEv60DisabledKeysToDevice"/> — same table.</para>
+    /// </summary>
+    private HashSet<int> PushEv60FirmwareRemaps()
+    {
+        var table = Everest60RemapData.LedIndexToDllKeyIdArray;
+        var taken = new HashSet<int>();
+
+        foreach (var key in Ev60KeyBindingPanel.Keys)
+        {
+            if (key.NumpadIndex is not null) continue;
+            if (key.LedIndex < 0 || key.LedIndex >= table.Length) continue;
+            int src = table[key.LedIndex];
+
+            Func<bool>? write = null;
+            string signature = "";
+            if (key.ActionType == "keys")
+            {
+                var (mask, keyName) = Ev60FirmwareRemap.Parse(key.ActionValue);
+                string targetName = keyName.Length == 0 ? Ev60FirmwareRemap.SoleModifier(mask) : keyName;
+                int target = Everest60RemapData.ResolveComboKeyName(targetName);
+                if (target >= 0)
+                {
+                    int m = keyName.Length == 0 ? 0 : mask;
+                    signature = $"keys:{target}:{m}";
+                    write = () => _ev60.RemapMainKey(src, target, m);
+                }
+            }
+            else if (key.ActionType == "media"
+                     && Ev60FirmwareMediaIndex.TryGetValue(ActionTypeHelper.NormalizeMediaKey(key.ActionValue) ?? "", out int idx))
+            {
+                signature = $"media:{idx}";
+                write = () => _ev60.SetMainMediaKey(src, idx);
+            }
+
+            if (write is null)
+            {
+                if (key.ActionType is "keys" or "media")
+                    LogEverest60($"[KeyBind] key led={key.LedIndex} stays with K2: " +
+                                 $"\"{key.ActionValue}\" has no keyboard-memory form");
+                continue;
+            }
+
+            taken.Add(key.LedIndex);
+            if (_ev60FirmwareWritten.TryGetValue(key.LedIndex, out var prev) && prev == signature) continue;
+            bool ok = write();
+            if (ok) _ev60FirmwareWritten[key.LedIndex] = signature;
+            else _ev60FirmwareWritten.Remove(key.LedIndex);
+            LogEverest60($"[KeyBind] key led={key.LedIndex} -> keyboard memory \"{key.ActionValue}\" ({signature}) -> {ok}");
+        }
+
+        // Keys that were in the keyboard's table and no longer qualify.
+        foreach (int led in _ev60FirmwareRemappedKeys.Except(taken).ToList())
+        {
+            bool ok = _ev60.SetMainKeyDisabled(table[led], disabled: false);
+            _ev60FirmwareWritten.Remove(led);
+            LogEverest60($"[KeyBind] key led={led} taken back from keyboard memory -> {ok}");
+        }
+
+        _ev60FirmwareRemappedKeys.Clear();
+        _ev60FirmwareRemappedKeys.UnionWith(taken);
+        return taken;
+    }
+
+    /// <summary>Puts one main-board key back to its factory function in the keyboard's own table
+    /// (cmd 0x22 with 255 — byte for byte what Base Camp sends before every assignment, capture
+    /// 2026-09-27), whoever remapped it. The reconcile only ever undoes what K2 itself wrote, so
+    /// without this an "A types B" left behind by Base Camp could never be cleared from K2. Called
+    /// when the user leaves a key with no action (picker "None", or Remove).</summary>
+    private void RestoreEv60MainKeyToFactory(int ledIndex)
+    {
+        var table = Everest60RemapData.LedIndexToDllKeyIdArray;
+        if (ledIndex < 0 || ledIndex >= table.Length) return;
+        bool ok = _ev60.SetMainKeyDisabled(table[ledIndex], disabled: false);
+        _ev60FirmwareDisabledKeys.Remove(ledIndex);
+        _ev60FirmwareRemappedKeys.Remove(ledIndex);
+        _ev60FirmwareWritten.Remove(ledIndex);
+        LogEverest60($"[KeyBind] key led={ledIndex} restored to factory on request -> {ok}");
     }
 
     /// <summary>Re-enables every main-board key K2 switched off, on shutdown — same
@@ -2339,6 +2495,7 @@ public partial class MainWindow
 
     private void Ev60RefreshStatus()
     {
+        if (_ev60ShuttingDown) return;
         bool wasConnected = _ev60Connected;
         bool connected = _ev60.IsConnected(out string model);
         _ev60Connected = connected;
@@ -2851,6 +3008,9 @@ public partial class MainWindow
 
         if (_ev60Sdk.IsOpen)
             LogEverest60($"[SET ] Everest60SdkService.ResetKeys -> {_ev60Sdk.ResetKeys()}");
+        // ResetKeys clears the keyboard's own remap table, so nothing K2 wrote is in there any more.
+        _ev60FirmwareRemappedKeys.Clear();
+        _ev60FirmwareWritten.Clear();
 
         _ev60Store.ResetAllData();
         LogEverest60("[SET ] factory reset: K2's Everest 60 store wiped.");

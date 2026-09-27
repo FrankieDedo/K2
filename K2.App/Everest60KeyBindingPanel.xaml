@@ -21,7 +21,7 @@
          through the same engine — see MainWindow.Everest60.cs's OnEv60Key.
          2026-07-14 (third pass, explicit user request — "make the mapped-keys
          box exactly like Everest Max"): root is now a Grid (not a StackPanel)
-         with an Auto/Auto/*/Auto row split, same reasoning as Everest Max's
+         with an Auto/* row split, same reasoning as Everest Max's
          PnlSecKeyMapping (MainWindow.xaml) — a StackPanel always sizes a child
          to its natural height, so LvEv60Keys previously needed a fixed
          MaxHeight (260) and left dead space below it; a Grid's "*" row
@@ -31,17 +31,24 @@
          either — see the matching 2026-07-14 note there. -->
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/> <!-- title -->
             <RowDefinition Height="Auto"/> <!-- hint -->
             <RowDefinition Height="*"/>    <!-- list + buttons: fills remaining height -->
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="{loc:Get ev60_key_binding}" FontWeight="Bold" Margin="0,0,0,6"/>
-        <TextBlock Grid.Row="1" Text="{loc:Get ev60_key_binding_hint}"
-                   Foreground="#9A9AA2" FontStyle="Italic"
+        <!-- Header: EXACTLY the same single hint row as every other device's Key
+             Binding section (Everest Max's PnlSecKeyMapping, MacroPad's
+             PnlMpSecKeyBinding, DisplayPad's PnlDpSecKeyBinding in
+             MainWindow.xaml) — same shared "key_binding_hint" string, same
+             plain (non-italic) muted style, same 0,0,0,8 margin. The bold
+             "Key Binding" title that used to sit above it was dropped
+             (2026-09-21, user request): the section nav radio button already
+             says "Key Binding", and the extra title row pushed this panel's
+             list ~24px lower than on the other devices. No bottom margin on
+             the list Grid either, for the same reason. -->
+        <TextBlock Grid.Row="0" Text="{loc:Get key_binding_hint}" Foreground="#9A9AA2"
                    TextWrapping="Wrap" Margin="0,0,0,8"/>
 
-        <Grid Grid.Row="2" Margin="0,0,0,8">
+        <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="170"/>

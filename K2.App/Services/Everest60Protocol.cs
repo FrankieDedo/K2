@@ -517,10 +517,11 @@ internal static class Everest60Protocol
     /// (which is why K2 must not reuse it to switch a key off — a previous session
     /// nearly did).</para>
     ///
-    /// <para>Neither sequence is followed by a flash save, so the writes are live-only:
-    /// unplugging the keyboard restores factory behaviour regardless of what K2 left
-    /// behind. That's the safety net behind <c>MainWindow.Everest60.cs</c>'s
-    /// disabled-key bookkeeping.</para>
+    /// <para>Neither sequence is followed by a flash save, yet the writes are NOT live-only
+    /// (corrected 2026-09-27, capture <c>ev60_devsave.pcapng</c> + unplug test): the
+    /// keyboard persists every binding write on its own, so a key K2 leaves disabled stays
+    /// dead after K2 closes and after an unplug. <c>MainWindow.Everest60.cs</c> must
+    /// restore them on exit — there is no hardware safety net.</para>
     /// </summary>
     public static class MainKeyBinding
     {
@@ -528,36 +529,48 @@ internal static class Everest60Protocol
         /// int32 of the cmd 0x29 write.</summary>
         private const int DisableActionCode = 11;
 
-        /// <summary>Prologue both sequences open with (cmd 0x30, no parameters). Base
+        /// <summary>Prologue every key write opens with (cmd 0x30, no parameters). Base
         /// Camp sends it before every key write; its meaning is unknown and K2 doesn't
         /// need it to be known, only to be reproduced.</summary>
         private static void Prologue(SafeFileHandle h, Action<string>? log)
-            => Everest60HidNative.SendFeature(h, MakeBuf(0x30), log: log);
+            => Everest60HidNative.SendFeatureOnce(h, MakeBuf(0x30), log: log);
+
+        /// <summary>Base Camp's cmd 0x29 action type for a media function (capture
+        /// <c>ev60_devsave.pcapng</c>: Play/Pause = type 3, index 4).</summary>
+        public const int MediaActionType = 3;
+
+        private static void Write(SafeFileHandle h, byte cmd, int dllKeyId, int a, int b, string what, Action<string>? log)
+        {
+            Prologue(h, log);
+            var req = MakeBuf(cmd);
+            BitConverter.GetBytes(dllKeyId).CopyTo(req, 5);
+            BitConverter.GetBytes(a).CopyTo(req, 9);
+            BitConverter.GetBytes(b).CopyTo(req, 13);
+            var resp = Everest60HidNative.SendFeatureOnce(h, req, log: log);
+            log?.Invoke($"[Ev60] MainKeyBinding.{what}: dllKeyId={dllKeyId} a={a} b={b} " +
+                        $"-> {(resp is { Length: > 1 } && resp[1] == cmd ? "ack" : "no-ack")}");
+        }
 
         /// <summary>Switches a main-board key off in firmware: it stops emitting its
         /// keystroke entirely (this is what Base Camp's own "Disable" does).</summary>
         public static void DisableKey(SafeFileHandle h, int dllKeyId, Action<string>? log = null)
-        {
-            Prologue(h, log);
-            var req = MakeBuf(0x29);
-            BitConverter.GetBytes(dllKeyId).CopyTo(req, 5);
-            BitConverter.GetBytes(DisableActionCode).CopyTo(req, 9);
-            var resp = Everest60HidNative.SendFeature(h, req, log: log);
-            log?.Invoke($"[Ev60] MainKeyBinding.DisableKey: dllKeyId={dllKeyId} " +
-                        $"-> {(resp is { Length: > 1 } && resp[1] == 0x29 ? "ack" : "no-ack")}");
-        }
+            => Write(h, 0x29, dllKeyId, DisableActionCode, 0, "DisableKey", log);
 
         /// <summary>Puts a main-board key back to its factory function.</summary>
         public static void RestoreKey(SafeFileHandle h, int dllKeyId, Action<string>? log = null)
-        {
-            Prologue(h, log);
-            var req = MakeBuf(0x22);
-            BitConverter.GetBytes(dllKeyId).CopyTo(req, 5);
-            BitConverter.GetBytes(NumpadUnassignedMarker).CopyTo(req, 9);
-            var resp = Everest60HidNative.SendFeature(h, req, log: log);
-            log?.Invoke($"[Ev60] MainKeyBinding.RestoreKey: dllKeyId={dllKeyId} " +
-                        $"-> {(resp is { Length: > 1 } && resp[1] == 0x22 ? "ack" : "no-ack")}");
-        }
+            => Write(h, 0x22, dllKeyId, NumpadUnassignedMarker, 0, "RestoreKey", log);
+
+        /// <summary>Makes the key emit <paramref name="targetDllKeyId"/>, with the modifiers in
+        /// <paramref name="modifierMask"/> held (Ctrl 1, Shift 2, Alt 4, Win 8; 0 = plain key).
+        /// Capture <c>ev60_devsave.pcapng</c>: <c>22 | src | target | mask</c>, e.g. Ctrl+Shift+X
+        /// = mask 3. Persisted by the keyboard itself, no save needed.</summary>
+        public static void RemapKey(SafeFileHandle h, int dllKeyId, int targetDllKeyId, int modifierMask, Action<string>? log = null)
+            => Write(h, 0x22, dllKeyId, targetDllKeyId, modifierMask, "RemapKey", log);
+
+        /// <summary>Makes the key a media key (<see cref="MediaActionType"/>, index from Base
+        /// Camp's table: 1 vol+, 2 vol-, 3 mute, 4 play/pause, 5 prev, 6 next, 7 stop).</summary>
+        public static void SetMediaKey(SafeFileHandle h, int dllKeyId, int mediaIndex, Action<string>? log = null)
+            => Write(h, 0x29, dllKeyId, MediaActionType, mediaIndex, "SetMediaKey", log);
     }
 
     /// <summary>

@@ -83,6 +83,7 @@ public partial class GameProfileConfigDialog : Window
         // generic "Game controls" card there (see ButtonActionDialog.GamePickerProfile).
         _pickerProfile = new ButtonActionDialog.GamePickerProfile(profileId, profileName, gameIconPath);
         TxtTitle.Text = profileName;
+        SetupConnectorRow();
         CkEnabled.IsChecked = enabled;
         CkReturn.IsChecked = returnEnabled;
         TxtReturnSec.Text = returnSeconds.ToString(CultureInfo.InvariantCulture);
@@ -692,4 +693,42 @@ public partial class GameProfileConfigDialog : Window
         DialogResult = true;
     }
 
+
+    // ─────────────────────── Game connector ───────────────────────
+
+    private ModLinkGame? _connectorGame;
+    private System.Windows.Threading.DispatcherTimer? _connectorTimer;
+
+    /// <summary>Shows the connector row for a game K2 reads through its own mod: a link to where
+    /// the mod is released, and a status line refreshed every second while the dialog is open —
+    /// so the player can see the connector come alive when they start the game.</summary>
+    private void SetupConnectorRow()
+    {
+        _connectorGame = ModLinkGames.GameFor(_profileId);
+        if (_connectorGame is not { DownloadUrl.Length: > 0 }) return;
+
+        PnlConnector.Visibility = Visibility.Visible;
+        LnkConnector.ToolTip = _connectorGame.DownloadUrl;
+        UpdateConnectorStatus();
+        _connectorTimer = new System.Windows.Threading.DispatcherTimer { Interval = System.TimeSpan.FromSeconds(1) };
+        _connectorTimer.Tick += (_, _) => UpdateConnectorStatus();
+        _connectorTimer.Start();
+        Closed += (_, _) => _connectorTimer?.Stop();
+    }
+
+    private void UpdateConnectorStatus()
+    {
+        if (_connectorGame is null) return;
+        var st = Services.ModLinkClient.Want(_connectorGame);
+        string? version = st.Values.TryGetValue("modVersion", out var v) &&
+                          v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null;
+        TxtConnectorStatus.Text = !st.Alive ? Loc.Get("game_profile_connector_missing")
+                                : st.InGame ? Loc.Get("game_profile_connector_ok", version ?? "?")
+                                : Loc.Get("game_profile_connector_menu", version ?? "?");
+    }
+
+    private void LnkConnector_Click(object sender, RoutedEventArgs e)
+    {
+        if (_connectorGame is { DownloadUrl.Length: > 0 } g) Services.GameLinkMod.Open(g.DownloadUrl);
+    }
 }

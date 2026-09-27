@@ -244,6 +244,18 @@ internal sealed class Everest60Service
             else          Everest60Protocol.MainKeyBinding.RestoreKey(h, dllKeyId, _log);
         }, op: disabled ? "DisableMainKey" : "RestoreMainKey");
 
+    /// <summary>Stores a key/shortcut remap in the keyboard itself — see
+    /// <see cref="Everest60Protocol.MainKeyBinding.RemapKey"/>.</summary>
+    public bool RemapMainKey(int dllKeyId, int targetDllKeyId, int modifierMask) =>
+        WithDevice(h => Everest60Protocol.MainKeyBinding.RemapKey(h, dllKeyId, targetDllKeyId, modifierMask, _log),
+                   op: "RemapMainKey");
+
+    /// <summary>Stores a media function in the keyboard itself — see
+    /// <see cref="Everest60Protocol.MainKeyBinding.SetMediaKey"/>.</summary>
+    public bool SetMainMediaKey(int dllKeyId, int mediaIndex) =>
+        WithDevice(h => Everest60Protocol.MainKeyBinding.SetMediaKey(h, dllKeyId, mediaIndex, _log),
+                   op: "SetMainMediaKey");
+
     /// <summary>Restores a numpad accessory key to its factory (unassigned,
     /// literal-keystroke) state — see
     /// <see cref="Everest60Protocol.NumpadKeyBinding"/>'s doc comment.</summary>

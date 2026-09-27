@@ -1241,6 +1241,81 @@ questa sorgente.
   tasti restano sconosciuti e la mod ignora la pressione; orbita, dati di volo
   e risorse continuano a funzionare.
 
+@@@ gameprofile:minecraft
+# Minecraft — K2 Link
+
+## Cosa fanno i tasti
+
+- **Prima pagina — barra rapida**: i nove slot con le icone vere degli
+  oggetti, quantità e durabilità comprese, quello selezionato acceso. Poi
+  **Salute e fame** e **XP e armatura** (numero del livello con la barra
+  dell'esperienza, armatura sotto) e **Azioni**, che apre la seconda pagina.
+- **Seconda pagina — azioni**: Getta, Scambia mani, Screenshot, Ora del
+  giorno e le coordinate X/Y/Z su un solo tasto in alto; Inventario, Chat,
+  Progressi, Visuale (accesa con la visuale attuale), Nascondi HUD e
+  **Barra rapida** (torna alla prima pagina) in basso.
+
+Ogni tasto che fa qualcosa preme **il tuo tasto**, letto da `options.txt` del
+gioco: se cambi un comando in Minecraft il pad si adegua. Questi tasti
+funzionano anche senza la mod.
+
+## Scegliere altre voci
+
+Clicca un tasto e apri **Minecraft** nel browser azioni: barre del giocatore,
+movimento e stato (scatto, accovacciato, volo, elitre, in fiamme), mondo
+(bioma, meteo, giorno, luce), posizione (X/Y/Z, direzione, velocità), barra
+rapida (slot 1–9 accesi su quello selezionato, oggetto in mano) e schermate.
+
+## Preparazione nel gioco
+
+- Java Edition **26.3** con **Fabric Loader** (Fabric API non serve).
+- Scarica **K2 Link** dal link nelle impostazioni di questo profilo
+  (**Scarica K2 Link**, accanto a **Connettore di gioco**) e metti il `.jar`
+  nella cartella `mods` del gioco (o dell'istanza, per CurseForge/Prism). La
+  stessa riga dice se il connettore sta rispondendo.
+- Legge soltanto: non cambia mai il gioco e funziona su qualsiasi server.
+- Senza il connettore le letture mostrano "—"; i tasti comando funzionano
+  comunque.
+
+@@@ gameprofile:space_engineers
+# Space Engineers — K2 Link
+
+## Cosa fanno i tasti
+
+- **Riga in alto**: Smorzatori, Jetpack, Luci, Carrello, Casco e Barra strumenti
+  (apre la pagina della barra).
+  Ogni tasto preme il tuo comando e si accende con lo stato reale di ciò che
+  controlli — la tuta a piedi, la nave in cabina.
+- **Riga in basso**: Energia, Ossigeno e Idrogeno della tuta, Velocità,
+  Altitudine e il Terminale. Premendo **Energia** accendi e spegni l'energia
+  della nave.
+- **Pagina Barra strumenti**: slot 1–9, barra su e giù, e Indietro (al posto
+  dello slot 0) per tornare alla prima pagina.
+
+I comandi vengono da `SpaceEngineers.cfg` del gioco: se li cambi nel gioco il
+pad si adegua.
+
+## Scegliere altre voci
+
+Clicca un tasto e apri **Space Engineers** nel browser azioni: controlli di
+volo, tuta, nave (batterie, serbatoi di idrogeno e ossigeno, carico, massa,
+connettore, motore di salto), navigazione (altitudine, gravità, pianeta),
+slot della barra strumenti e schermate.
+
+## Preparazione nel gioco
+
+- Le letture arrivano dalla mod **K2 Link** sul Workshop di Steam: aprila
+  dalle impostazioni di questo profilo (**Scarica K2 Link**, accanto a
+  **Connettore di gioco**), iscriviti e aggiungila alla lista mod del mondo
+  (Carica partita → Modifica impostazioni → Mod) — oppure, su un server
+  dedicato, alla lista mod del server. La stessa riga dice se il connettore
+  sta rispondendo.
+- Legge soltanto: scrive lo stato in un piccolo file nella cartella
+  `Storage` del gioco, che K2 legge. Sul server non gira nulla.
+- Senza la mod le letture mostrano "—"; ogni tasto preme comunque il suo
+  comando. La trasmissione della tuta e l'altitudine a piedi non sono
+  disponibili alle mod.
+
 @@@ speedtest
 # Speed test — opzioni server
 

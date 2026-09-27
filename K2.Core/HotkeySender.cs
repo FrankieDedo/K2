@@ -37,9 +37,9 @@ public static class HotkeySender
         if (!TryParse(hotkey, out var mods, out ushort key, out error)) return false;
 
         foreach (var m in mods) { Send(m, down: true); Thread.Sleep(5); }
-        Send(key, down: true);
+        if (key != 0) Send(key, down: true);
         Thread.Sleep(30);
-        Send(key, down: false);
+        if (key != 0) Send(key, down: false);
         for (int i = mods.Count - 1; i >= 0; i--) { Thread.Sleep(5); Send(mods[i], down: false); }
         return true;
     }
@@ -51,7 +51,7 @@ public static class HotkeySender
     {
         if (!TryParse(hotkey, out var mods, out ushort key, out error)) return false;
         foreach (var m in mods) { Send(m, down: true); Thread.Sleep(5); }
-        Send(key, down: true);
+        if (key != 0) Send(key, down: true);
         return true;
     }
 
@@ -60,13 +60,15 @@ public static class HotkeySender
     public static bool TryHoldUp(string? hotkey, out string error)
     {
         if (!TryParse(hotkey, out var mods, out ushort key, out error)) return false;
-        Send(key, down: false);
+        if (key != 0) Send(key, down: false);
         for (int i = mods.Count - 1; i >= 0; i--) { Thread.Sleep(5); Send(mods[i], down: false); }
         return true;
     }
 
     /// <summary>Splits "Ctrl+Shift+V" into its modifier VKs and the single non-modifier key,
-    /// resolving each on the current keyboard layout. Shared by the one-shot and the hold paths.</summary>
+    /// resolving each on the current keyboard layout. Shared by the one-shot and the hold paths.
+    /// <paramref name="key"/> comes back 0 for a modifier-only combination ("Alt", "Ctrl + Shift"),
+    /// which the callers send as just the modifiers.</summary>
     private static bool TryParse(string? hotkey, out List<ushort> mods, out ushort key, out string error)
     {
         mods = new List<ushort>();
@@ -89,7 +91,10 @@ public static class HotkeySender
                     break;
             }
         }
-        if (key == 0) { error = "no key in the shortcut"; return false; }
+        // A BARE MODIFIER is a valid shortcut, not a broken one: "Alt" alone means "press Alt",
+        // which is how a key gets remapped into another modifier (the Alt/Win swap users ask for).
+        // Only a string that resolved to nothing at all is an error.
+        if (key == 0 && mods.Count == 0) { error = "no key in the shortcut"; return false; }
         return true;
     }
 
@@ -148,13 +153,20 @@ public static class HotkeySender
         ["PgDn"] = 0x22, ["PageDown"] = 0x22, ["Up"] = 0x26, ["Down"] = 0x28,
         ["Left"] = 0x25, ["Right"] = 0x27, ["CapsLock"] = 0x14, ["NumLock"] = 0x90,
         ["ScrollLock"] = 0x91, ["PrtSc"] = 0x2C, ["Pause"] = 0x13,
+        // Numeric keypad and the minus key ("-" itself is a separator in the shortcut syntax).
+        // Games bind these (Space Engineers ships spectator controls on the keypad, and players
+        // move suit toggles there), and a bind K2 read from the game must be pressable.
+        ["Num0"] = 0x60, ["Num1"] = 0x61, ["Num2"] = 0x62, ["Num3"] = 0x63, ["Num4"] = 0x64,
+        ["Num5"] = 0x65, ["Num6"] = 0x66, ["Num7"] = 0x67, ["Num8"] = 0x68, ["Num9"] = 0x69,
+        ["NumMultiply"] = 0x6A, ["NumAdd"] = 0x6B, ["NumSubtract"] = 0x6D,
+        ["NumDecimal"] = 0x6E, ["NumDivide"] = 0x6F, ["Minus"] = 0xBD,
     };
 
     /// <summary>Keys on the extended half of the keyboard need <c>KEYEVENTF_EXTENDEDKEY</c>, or the
     /// listener sees the numpad twin of the arrow/navigation key instead.</summary>
     private static bool IsExtended(ushort vk) =>
         vk is 0x21 or 0x22 or 0x23 or 0x24 or 0x25 or 0x26 or 0x27 or 0x28
-           or 0x2D or 0x2E or 0x90 or 0x5B or 0x5C or 0x2C;
+           or 0x2D or 0x2E or 0x90 or 0x5B or 0x5C or 0x2C or 0x6F;
 
     private static void Send(ushort vk, bool down)
     {

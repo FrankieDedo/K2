@@ -1169,6 +1169,77 @@ again. New actions of this profile start on this source.
   those keys stay unknown and their presses are ignored by the mod; orbit,
   flight data and resources keep working.
 
+@@@ gameprofile:minecraft
+# Minecraft — K2 Link
+
+## What the keys do
+
+- **First page — hotbar**: the nine slots with the real item icons, count
+  and durability included, the selected one lit. Then **Health & hunger** and
+  **XP & armor** (level number with the XP bar, armour under it), and
+  **Actions**, which opens the second page.
+- **Second page — actions**: Drop, Swap hands, Screenshot, Time of day and
+  the X/Y/Z coordinates on one key on top; Inventory, Chat, Advancements,
+  View (lit with the current camera), Hide HUD and **Hotbar** (back to the
+  first page) below.
+
+Every key that does something presses **your own key binding**, read from the
+game's `options.txt`: rebind a control in Minecraft and the pad follows. These
+keys work even without the mod.
+
+## Picking other entries
+
+Click a key and open **Minecraft** in the action browser: player bars,
+movement & status (sprint, sneak, flying, elytra, on fire), world (biome,
+weather, day, light), position (X/Y/Z, facing, speed), hotbar (slots 1–9 lit
+on the selected one, item in hand) and screens.
+
+## Set-up in the game
+
+- Java Edition **26.3** with **Fabric Loader** (Fabric API is not needed).
+- Get **K2 Link** from the link in this profile's settings (**Download K2
+  Link**, next to **Game connector**) and put the `.jar` in the `mods` folder
+  of the game (or of the instance, for CurseForge/Prism). The same row says
+  whether the connector is answering.
+- It only reads: it never changes the game, and works on any server.
+- Without it the readings show "—"; the command keys still work.
+
+@@@ gameprofile:space_engineers
+# Space Engineers — K2 Link
+
+## What the keys do
+
+- **Top row**: Dampeners, Jetpack, Lights, Landing gear, Helmet — each key
+  presses your own binding and lights up with the real state of what you
+  control, the suit on foot, the ship in a cockpit — and Toolbar, which opens
+  the toolbar page.
+- **Bottom row**: suit Energy, Oxygen and Hydrogen, Speed, Altitude, and the
+  Terminal. Pressing **Energy** switches the ship's power on and off.
+- **Toolbar page**: slots 1–9, toolbar up and down, and Back (where slot 0
+  would be) to return to the first page.
+
+The bindings come from the game's `SpaceEngineers.cfg`: rebind a control in
+the game and the pad follows.
+
+## Picking other entries
+
+Click a key and open **Space Engineers** in the action browser: flight
+controls, suit, ship (batteries, hydrogen and oxygen tanks, cargo, mass,
+connector, jump drive), navigation (altitude, gravity, planet), toolbar
+slots and screens.
+
+## Set-up in the game
+
+- The readings come from the **K2 Link** mod on the Steam Workshop: open it
+  from this profile's settings (**Download K2 Link**, next to **Game
+  connector**), subscribe, and add it to the world's mod list (Load game →
+  Edit settings → Mods) — or, on a dedicated server, to the server's mod
+  list. The same row says whether the connector is answering.
+- It only reads: it writes the state to a small file in the game's
+  `Storage` folder, which K2 reads. Nothing runs on the server.
+- Without the mod the readings show "—"; every key still presses its
+  control. Suit broadcasting and on-foot altitude are not available to mods.
+
 @@@ speedtest
 # Speed test — server options
 

@@ -37,5 +37,13 @@ public sealed record GameProfilePage(string Name, IReadOnlyList<GameProfileTile>
 /// what the launch watcher matches on. Verified against the real installs rather than guessed.</param>
 /// <param name="SteamAppId">Only so the icon resolver can ask Steam where the game lives
 /// (see <c>GameExeResolver</c>); null for a game that isn't a Steam install.</param>
+/// <param name="WindowTitlePrefix">For a game that runs inside a generic host process: the
+/// process only counts as the game while it has a window titled with this prefix. Minecraft: Java
+/// Edition is <c>javaw</c>, and so is every other Java program on the machine.</param>
+/// <param name="IconExePaths">Where the game's OWN executable usually lives, tried before any
+/// detection — for the same kind of game, whose running process would hand over the host's icon
+/// (a Java cup) instead of the game's. Environment variables are expanded.</param>
 public sealed record GameProfileDefinition(string Id, string Name, string ExeName, int? SteamAppId,
-                                           IReadOnlyList<GameProfilePage> Pages);
+                                           IReadOnlyList<GameProfilePage> Pages,
+                                           string? WindowTitlePrefix = null,
+                                           IReadOnlyList<string>? IconExePaths = null);

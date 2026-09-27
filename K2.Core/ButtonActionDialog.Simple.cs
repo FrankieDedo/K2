@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using K2.Core.Services;
@@ -166,6 +166,7 @@ public partial class ButtonActionDialog
         "dp_edstatus"  => EdStatusOptions,
         "dp_zcstatus"  => ZcStatusOptions,
         KspTelemachus.ActionType => KspOptions(),
+        ModLinkGames.ActionType => ModLinkGames.LiveItems().Select(i => new ComboOption(i.Value, i.LocKey)).ToArray(),
         "oscmd"   => OsCmdOptions,
         "media"   => MediaOptions,
         "mouse"   => MouseOptions,
@@ -196,6 +197,7 @@ public partial class ButtonActionDialog
         "dp_edstatus"  => "act_dp_edstatus",
         "dp_zcstatus"  => "act_dp_zcstatus",
         KspTelemachus.ActionType => "act_dp_ksp",
+        ModLinkGames.ActionType => "act_dp_modlink",
         _            => "dlg_value",
     };
 
