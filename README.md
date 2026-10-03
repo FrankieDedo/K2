@@ -154,7 +154,7 @@ If you need a more detailed guide, check this out: <a href='https://github.com/F
   <li>More accessibility options (and functions, maybe)</li>
   <li>Driving wheel mode for DisplayPad — turning it into an interactive display for racing sims, and possibly other sims down the line (flight sims?)</li>
   <li>Tray icon quick UI</li>
-  <li>Accurate LED sync between devices</li>
+  <li>Game profiles with functions for every device</li>
   <li>Desk layout feature — for users with multiple Mountain accessories, track where each device sits on your desk and drive multi-device LED effects across them (similar to Razer-style software)</li>
   <li>More DisplayPad shenanigans</li>
 </ul>
