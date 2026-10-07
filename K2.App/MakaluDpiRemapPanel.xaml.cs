@@ -59,6 +59,29 @@ public partial class MakaluDpiRemapPanel : UserControl
     /// Configure dialog directly — called from MainWindow.Makalu.cs's
     /// MkHotspotClicked when a hotspot on the device image is clicked, same
     /// flow as Everest 60's SelectKey (click image -> select + configure).</summary>
+    private IActionHost? _actionHost;
+
+    /// <summary>Set once the Makalu's IActionHost exists (MainWindow.Makalu.cs) — handed to
+    /// the shared action dialog Configure opens.</summary>
+    internal void SetActionHost(IActionHost host) => _actionHost = host;
+
+    /// <summary>The K2 action on a button in the current profile, if it has one — what
+    /// MainWindow.Makalu.cs runs when the mouse reports that button.</summary>
+    internal bool TryGetAction(int btnIdx, out string type, out string value)
+    {
+        type = value = "";
+        return _byIdx.TryGetValue(btnIdx, out var item)
+            && MakaluRemapData.TryParseAction(item.Assignment, out type, out value);
+    }
+
+    /// <summary>Every button as the shared engine sees it (get_buttons API).</summary>
+    internal IReadOnlyList<HostButton> GetHostButtons() =>
+        _byIdx.Values.OrderBy(i => i.Index).Select(i =>
+        {
+            bool isAction = MakaluRemapData.TryParseAction(i.Assignment, out var t, out var v);
+            return new HostButton(i.Index, null, false, null, isAction ? t : null, isAction ? v : null);
+        }).ToList();
+
     internal void SelectRemapButton(int btnIdx)
     {
         if (!_byIdx.TryGetValue(btnIdx, out var item)) return;
@@ -147,10 +170,16 @@ public partial class MakaluDpiRemapPanel : UserControl
 
     private void OpenConfigureDialog(MakaluButtonItem item)
     {
-        var dlg = new MakaluRemapConfigDialog(item.BaseLabel, item.Assignment, _mkInfo.DpiMin)
+        // Same dialog as every other device. The mouse's own functions are its "Makalu"
+        // category (stored in the mouse); anything else picked there is a K2 action.
+        var (type, value) = MakaluRemapData.ToPicker(item.Assignment);
+        var dlg = new ButtonActionDialog(item.Index, type, value, _actionHost)
                   { Owner = Window.GetWindow(this) };
         if (dlg.ShowDialog() != true) return;
-        ApplyAssignment(item, dlg.ResultAssignment);
+
+        string assignment = MakaluRemapData.FromPicker(dlg.ActionType, dlg.ActionValue, _mkInfo.DpiMin)
+            ?? MakaluRemapData.RemapDefaults(_mkInfo.Model).GetValueOrDefault(item.Index, "left");
+        if (assignment != item.Assignment) ApplyAssignment(item, assignment);
     }
 
     /// <summary>Resets the selected button back to this model's default
@@ -172,11 +201,7 @@ public partial class MakaluDpiRemapPanel : UserControl
     private void ApplyAssignment(MakaluButtonItem item, string newAssignment)
     {
         string oldRaw = item.Assignment;
-        bool ok;
-        if (newAssignment.StartsWith("sniper:") && int.TryParse(newAssignment.Split(':')[1], out int dpi))
-            ok = _makalu.SetButtonSniper(item.Index, dpi, _mkInfo.DpiMin);
-        else
-            ok = _makalu.SetButtonRemap(item.Index, newAssignment);
+        bool ok = _makalu.ApplyAssignment(item.Index, newAssignment, _mkInfo.DpiMin);
         _log($"[REMAP] button={item.Index} fn={newAssignment} -> {ok}");
 
         if (!ok)
@@ -236,9 +261,7 @@ public partial class MakaluDpiRemapPanel : UserControl
         if (_mkConfirmItem is not MakaluButtonItem item) return;
         string oldFn = _mkConfirmOldFn;
 
-        bool ok = oldFn.StartsWith("sniper:") && int.TryParse(oldFn.Split(':')[1], out int dpi)
-            ? _makalu.SetButtonSniper(item.Index, dpi, _mkInfo.DpiMin)
-            : _makalu.SetButtonRemap(item.Index, oldFn);
+        bool ok = _makalu.ApplyAssignment(item.Index, oldFn, _mkInfo.DpiMin);
         _log($"[REMAP] revert button={item.Index} -> {oldFn} ok={ok}");
 
         if (ok)
@@ -271,9 +294,7 @@ public partial class MakaluDpiRemapPanel : UserControl
                 RefreshMkItemVisibility(item);
             }
 
-            bool ok = kv.Value.StartsWith("sniper:") && int.TryParse(kv.Value.Split(':')[1], out int dpi)
-                ? _makalu.SetButtonSniper(kv.Key, dpi, _mkInfo.DpiMin)
-                : _makalu.SetButtonRemap(kv.Key, kv.Value);
+            bool ok = _makalu.ApplyAssignment(kv.Key, kv.Value, _mkInfo.DpiMin);
             anyConnected |= ok;
         }
         _log($"[PROFILE] reload remap slot={slot}: {assignments.Count} button(s), hw ok={anyConnected}");

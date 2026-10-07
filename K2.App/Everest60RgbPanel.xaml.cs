@@ -105,6 +105,19 @@ public partial class Everest60RgbPanel : UserControl
         new(Everest60Protocol.Effect.Custom,    "Custom"),
     };
 
+    /// <summary>The effect list as the "Lighting effect" key action offers it
+    /// (MainWindow.LightingActions.cs).</summary>
+    internal IReadOnlyList<LightingEffectChoice> LightingEffects { get; } =
+        Ev60EffectList.Select(e => new LightingEffectChoice(e.Eff.ToString(), e.Label)).ToList();
+
+    /// <summary>Position of the current effect in <see cref="LightingEffects"/>. Set through
+    /// the combo, so the effect is applied and saved like a click.</summary>
+    internal int LightingEffectIndex
+    {
+        get => CbEv60Effect.SelectedIndex;
+        set => CbEv60Effect.SelectedIndex = value;
+    }
+
     private sealed record Ev60Caps(int MaxColors, bool Rainbow, bool Speed, Ev60DirChoice[] Directions);
 
     /// <summary>Backs GridEv60Direction's segmented buttons — mirrors what

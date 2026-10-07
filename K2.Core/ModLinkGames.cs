@@ -68,13 +68,16 @@ public sealed record ModLinkBar(string Read, string? ReadMax, double? Max, strin
 /// Null = the format's default.</param>
 /// <param name="IconRev">For <see cref="ModLinkFormat.Icon"/>: the state field that changes when
 /// the picture does (0 = no picture, e.g. an empty slot).</param>
+/// <param name="Mcu">Mackie Control note the key presses (<see cref="ModLinkGame.Midi"/> games only).
+/// <see cref="McuShift"/> ORed in = the same button with Shift held (Redo, Save As). The LED the
+/// host lights on that same note is what <paramref name="Read"/> reports.</param>
 public sealed record ModLinkItem(string Value, string LocKey, string GroupLocKey, string? Read,
                                  ModLinkFormat Format, string? Bind = null, string? Keys = null,
                                  string? ReadMax = null, double? Max = null, string Unit = "",
                                  string? LitWhen = null, double? AlarmBelow = null,
                                  bool AlarmWhenLit = false, string? Icon = null,
                                  string? IconRev = null, ModLinkBar[]? Bars = null,
-                                 string? BigRead = null, string? SizeRef = null);
+                                 string? BigRead = null, string? SizeRef = null, int? Mcu = null);
 
 /// <summary>A game K2 talks to through a small mod of its own: the mod publishes the game's state
 /// as ONE flat JSON object (see <c>K2/Mods/</c>), and K2 reads the player's key bindings from the
@@ -88,10 +91,13 @@ public sealed record ModLinkItem(string Value, string LocKey, string GroupLocKey
 /// <param name="DownloadUrl">Where the player gets the connector — offered as a link in the game
 /// profile's settings. The connectors are released on their own (github.com/FrankieDedo/K2-Link,
 /// and the Steam Workshop for Space Engineers), so a fix to one never waits for a K2 release.</param>
+/// <param name="Midi">The game is a program K2 drives as a Mackie Control surface over MIDI (Fender
+/// Studio Pro): no mod, no port — the transport is <c>McuClient</c>, and an item presses an
+/// <see cref="ModLinkItem.Mcu"/> note instead of a shortcut.</param>
 public sealed record ModLinkGame(string ProfileId, string Prefix, int Port, string ModName,
                                  (string LocKey, string Glyph)[] Groups,
                                  IReadOnlyList<ModLinkItem> Items,
-                                 string DownloadUrl = "");
+                                 string DownloadUrl = "", bool Midi = false);
 
 /// <summary>
 /// The vocabulary of the games K2 reads through a mod it ships itself — Minecraft (Fabric mod) and
@@ -108,6 +114,10 @@ public sealed record ModLinkGame(string ProfileId, string Prefix, int Port, stri
 public static class ModLinkGames
 {
     public const string ActionType = "dp_modlink";
+
+    /// <summary>The same machinery under a tag of its own for Fender Studio Pro, so the picker can
+    /// list it under "Apps and services" instead of "Games". Values are still <c>sp.*</c>.</summary>
+    public const string StudioActionType = "dp_studio";
 
     public const string MinecraftId = "minecraft";
     public const string SpaceEngineersId = "space_engineers";
@@ -289,7 +299,80 @@ public static class ModLinkGames
         },
         DownloadUrl: "https://steamcommunity.com/sharedfiles/filedetails/?id=3808623622");
 
-    public static IReadOnlyList<ModLinkGame> Games { get; } = new[] { Minecraft, SpaceEngineers };
+    // ------------------------------------------------------------------ Fender Studio Pro
+
+    public const string StudioProId = "studio_pro";
+
+    /// <summary>ORed into <see cref="ModLinkItem.Mcu"/>: press the note with the MCU Shift button held.</summary>
+    public const int McuShift = 0x100;
+
+    /// <summary>Not a Mackie Control button at all: the key that hands the pad back to the profile it
+    /// was on (see <c>MainWindow.DpStudioLeave</c>). Kept in the vocabulary so it is picked, drawn
+    /// and stored like every other Studio Pro key.</summary>
+    public const int McuBack = -1;
+
+    /// <summary>Fender Studio Pro (the former Studio One), driven as a Mackie Control surface: a key
+    /// presses an MCU button (note on/off), and the LED the program lights on that note is the
+    /// state the tile shows — recording, playing, looping, a track armed. Note numbers are the
+    /// standard Mackie Control table; the program's manual lists which functions it implements but
+    /// not the numbers, so every item here is UNVERIFIED against a running Studio Pro until a
+    /// hardware pass (Loop and Click are the two the manual does not list).</summary>
+    public static readonly ModLinkGame StudioPro = new(
+        StudioProId, "sp.", 0, "Mackie Control (MIDI)",
+        new[]
+        {
+            ("spgrp_transport", "▶"),
+            ("spgrp_edit",      "✂"),
+            ("spgrp_tracks",    "🎚"),
+            ("spgrp_nav",       "🧭"),
+        },
+        new[]
+        {
+            new ModLinkItem("sp.play",    "gp_sp_play",    "spgrp_transport", "play",    ModLinkFormat.Lamp, Mcu: 0x5E),
+            new ModLinkItem("sp.stop",    "gp_sp_stop",    "spgrp_transport", "stop",    ModLinkFormat.Lamp, Mcu: 0x5D),
+            new ModLinkItem("sp.record",  "gp_sp_record",  "spgrp_transport", "record",  ModLinkFormat.Lamp, Mcu: 0x5F, AlarmWhenLit: true),
+            new ModLinkItem("sp.rewind",  "gp_sp_rewind",  "spgrp_transport", "rewind",  ModLinkFormat.Lamp, Mcu: 0x5B),
+            new ModLinkItem("sp.forward", "gp_sp_forward", "spgrp_transport", "forward", ModLinkFormat.Lamp, Mcu: 0x5C),
+            new ModLinkItem("sp.loop",    "gp_sp_loop",    "spgrp_transport", "loop",    ModLinkFormat.Lamp, Mcu: 0x56),
+            new ModLinkItem("sp.click",   "gp_sp_click",   "spgrp_transport", "click",   ModLinkFormat.Lamp, Mcu: 0x59),
+            new ModLinkItem("sp.marker",  "gp_sp_marker",  "spgrp_transport", null,      ModLinkFormat.Lamp, Mcu: 0x54),
+
+            new ModLinkItem("sp.save",   "gp_sp_save",   "spgrp_edit", null, ModLinkFormat.Lamp, Mcu: 0x50),
+            new ModLinkItem("sp.saveas", "gp_sp_saveas", "spgrp_edit", null, ModLinkFormat.Lamp, Mcu: 0x50 | McuShift),
+            new ModLinkItem("sp.undo",   "gp_sp_undo",   "spgrp_edit", null, ModLinkFormat.Lamp, Mcu: 0x51),
+            new ModLinkItem("sp.redo",   "gp_sp_redo",   "spgrp_edit", null, ModLinkFormat.Lamp, Mcu: 0x51 | McuShift),
+            new ModLinkItem("sp.zoom",   "gp_sp_zoom",   "spgrp_edit", "zoom", ModLinkFormat.Lamp, Mcu: 0x64),
+            new ModLinkItem("sp.up",     "gp_sp_up",     "spgrp_edit", null, ModLinkFormat.Lamp, Mcu: 0x60),
+            new ModLinkItem("sp.down",   "gp_sp_down",   "spgrp_edit", null, ModLinkFormat.Lamp, Mcu: 0x61),
+            new ModLinkItem("sp.left",   "gp_sp_left",   "spgrp_edit", null, ModLinkFormat.Lamp, Mcu: 0x62),
+            new ModLinkItem("sp.right",  "gp_sp_right",  "spgrp_edit", null, ModLinkFormat.Lamp, Mcu: 0x63),
+            new ModLinkItem("sp.timemode", "gp_sp_timemode", "spgrp_edit", null, ModLinkFormat.Lamp, Mcu: 0x35),
+
+            new ModLinkItem("sp.anysolo", "gp_sp_anysolo", "spgrp_tracks", "anysolo", ModLinkFormat.Lamp, Mcu: 0x5A),
+        }
+        // One arm / solo / mute / select per fader strip: the eight tracks of the bank the program
+        // currently shows (the nav keys below move that bank).
+        .Concat(Enumerable.Range(1, 8).SelectMany(n => new[]
+        {
+            new ModLinkItem($"sp.arm{n}",    $"gp_sp_arm{n}",    "spgrp_tracks", $"arm{n}",    ModLinkFormat.Lamp, Mcu: 0x00 + n - 1, AlarmWhenLit: true),
+            new ModLinkItem($"sp.solo{n}",   $"gp_sp_solo{n}",   "spgrp_tracks", $"solo{n}",   ModLinkFormat.Lamp, Mcu: 0x08 + n - 1),
+            new ModLinkItem($"sp.mute{n}",   $"gp_sp_mute{n}",   "spgrp_tracks", $"mute{n}",   ModLinkFormat.Lamp, Mcu: 0x10 + n - 1),
+            new ModLinkItem($"sp.select{n}", $"gp_sp_select{n}", "spgrp_tracks", $"select{n}", ModLinkFormat.Lamp, Mcu: 0x18 + n - 1),
+        }))
+        .Concat(new[]
+        {
+            new ModLinkItem("sp.bankprev", "gp_sp_bankprev", "spgrp_nav", null, ModLinkFormat.Lamp, Mcu: 0x2E),
+            new ModLinkItem("sp.banknext", "gp_sp_banknext", "spgrp_nav", null, ModLinkFormat.Lamp, Mcu: 0x2F),
+            new ModLinkItem("sp.trackprev", "gp_sp_trackprev", "spgrp_nav", null, ModLinkFormat.Lamp, Mcu: 0x30),
+            new ModLinkItem("sp.tracknext", "gp_sp_tracknext", "spgrp_nav", null, ModLinkFormat.Lamp, Mcu: 0x31),
+            new ModLinkItem("sp.flip",     "gp_sp_flip",     "spgrp_nav", "flip", ModLinkFormat.Lamp, Mcu: 0x32),
+            new ModLinkItem("sp.globalview", "gp_sp_globalview", "spgrp_nav", "globalview", ModLinkFormat.Lamp, Mcu: 0x33),
+            new ModLinkItem("sp.back", "gp_sp_back", "spgrp_nav", null, ModLinkFormat.Lamp, Mcu: McuBack),
+        })
+        .ToArray(),
+        DownloadUrl: "https://www.tobias-erichsen.de/software/loopmidi.html", Midi: true);
+
+    public static IReadOnlyList<ModLinkGame> Games { get; } = new[] { Minecraft, SpaceEngineers, StudioPro };
 
     private static readonly Dictionary<string, (ModLinkGame Game, ModLinkItem Item)> ByValue =
         Games.SelectMany(g => g.Items.Select(i => (g, i)))
@@ -324,7 +407,10 @@ public static class ModLinkGames
 
     /// <summary>Every item a <c>dp_modlink</c> key can hold (the live ones), for the value combos.</summary>
     public static IEnumerable<ModLinkItem> LiveItems() =>
-        Games.SelectMany(g => g.Items).Where(i => i.Read is not null);
+        Games.Where(g => !g.Midi).SelectMany(g => g.Items).Where(i => i.Read is not null);
+
+    /// <summary>Every item a <c>dp_studio</c> key can hold.</summary>
+    public static IEnumerable<ModLinkItem> StudioItems() => StudioPro.Items;
 
     /// <summary>The picker's families for one game: live items as <see cref="ActionType"/>,
     /// plain commands as ordinary <c>keys</c> actions carrying the shipped default.</summary>
@@ -332,9 +418,9 @@ public static class ModLinkGames
         game.Groups
             .Select(g => (g.LocKey, g.Glyph, game.Items
                 .Where(i => i.GroupLocKey == g.LocKey)
-                .Select(i => i.Read is null
+                .Select(i => i.Read is null && i.Mcu is null
                     ? new ActionTypeHelper.GameCommand("keys", i.Keys ?? "", i.LocKey)
-                    : new ActionTypeHelper.GameCommand(ActionType, i.Value, i.LocKey))
+                    : new ActionTypeHelper.GameCommand(game.Midi ? StudioActionType : ActionType, i.Value, i.LocKey))
                 .ToArray()))
             .Where(f => f.Item3.Length > 0)
             .ToArray();

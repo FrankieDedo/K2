@@ -67,7 +67,7 @@ internal static partial class DpLiveTileService
     /// <summary>True for the action types this service paints.</summary>
     public static bool IsLiveType(string? actionType) =>
         actionType is "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus"
-                   or KspTelemachus.ActionType or ModLinkGames.ActionType or "dp_screen" or "dp_custom";
+                   or KspTelemachus.ActionType or ModLinkGames.ActionType or ModLinkGames.StudioActionType or "dp_screen" or "dp_custom";
 
     /// <summary>Registers (or refreshes, or stops) the live keys of one device from the page rows
     /// being painted — called from every repaint path, so the live set always matches the page
@@ -196,7 +196,7 @@ internal static partial class DpLiveTileService
         if (key.Type == "dp_edstatus") EdSendToggle(key.Value, log);
         if (key.Type == CustomActionType.Tag) CustomSendKeys(key.Value, log);
         if (key.Type == KspTelemachus.ActionType) KspPress(key.Value, log);
-        if (key.Type == ModLinkGames.ActionType) ModLinkPress(key.Value, log);
+        if (key.Type is ModLinkGames.ActionType or ModLinkGames.StudioActionType) ModLinkPress(key.Value, log, deviceId);
         if (key.Type == "dp_zcstatus")
         {
             string zcValue = ZcState(key.Value);
@@ -417,7 +417,7 @@ internal static partial class DpLiveTileService
                           + (ParseEdValue(key.Value).Blink ? ":b" + (BlinkOnPhase(now) ? 1 : 0) : ""),
         "dp_zcstatus"  => "z:" + ZcStamp(key.Value),
         KspTelemachus.ActionType => "k:" + KspStamp(key.Value),
-        ModLinkGames.ActionType => "m:" + ModLinkStamp(key.Value),
+        ModLinkGames.ActionType or ModLinkGames.StudioActionType => "m:" + ModLinkStamp(key.Value),
         // The probe's own reading, rounded exactly as the tile draws it: a health bar that
         // wobbles by a fraction of a percent must not cost an upload a second.
         "dp_screen"    => "p:" + ScreenValue(key.Value).Text,
@@ -492,6 +492,7 @@ internal static partial class DpLiveTileService
                 case KspTelemachus.ActionType:
                     return RenderKspTile(key.Value, caption, DpHidNative.IconSize, path);
                 case ModLinkGames.ActionType:
+                case ModLinkGames.StudioActionType:
                     return RenderModLinkTile(key.Value, caption, DpHidNative.IconSize, path);
                 case "dp_screen":
                     return RenderScreenTile(key.Value, caption, DpHidNative.IconSize, path);
@@ -1218,7 +1219,7 @@ internal static partial class DpLiveTileService
             // key keeps a caption even after the action behind it is deleted.
             "dp_custom" => CustomActionTile.Caption(value),
             KspTelemachus.ActionType => KspCaption(value),
-            ModLinkGames.ActionType => ModLinkCaption(value),
+            ModLinkGames.ActionType or ModLinkGames.StudioActionType => ModLinkCaption(value),
             // A "Choose sensor…" pick: its captured name, left for the renderer's shrink-to-fit
             // (the user can shorten it in "Edit icon").
             "dp_sysmon" => ActionTypeHelper.ParseSensorValue(value) is { } sensor

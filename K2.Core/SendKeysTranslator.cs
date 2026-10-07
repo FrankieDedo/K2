@@ -49,7 +49,7 @@ public static class SendKeysTranslator
                          .ToList();
 
         var mods = new StringBuilder();
-        string keyToken = "";
+        var keyTokens = new List<string>();
 
         foreach (var p in parts)
         {
@@ -72,7 +72,7 @@ public static class SendKeysTranslator
                     // SendKeys does not support the Windows key
                     break;
                 default:
-                    keyToken = p;
+                    keyTokens.Add(p);
                     break;
             }
         }
@@ -80,9 +80,12 @@ public static class SendKeysTranslator
         // own makes SendKeys.SendWait throw, and there is no way to say "press Alt and release it"
         // in that syntax at all. Return nothing so the caller can skip the call — the SendInput
         // path (HotkeySender) is the one that handles bare modifiers.
-        var wrapped = WrapKey(keyToken);
-        if (wrapped.Length == 0) return "";
-        return mods.ToString() + wrapped;
+        var wrapped = keyTokens.Select(WrapKey).ToList();
+        if (wrapped.Count == 0 || wrapped.Any(w => w.Length == 0)) return "";
+        // Several keys ("Ctrl + A + B"): SendKeys cannot hold them together, the closest it
+        // has is the group form, which keeps the modifiers down across all of them.
+        if (wrapped.Count == 1) return mods.ToString() + wrapped[0];
+        return mods.Length == 0 ? string.Concat(wrapped) : mods + "(" + string.Concat(wrapped) + ")";
     }
 
     private static string WrapKey(string key)
@@ -114,8 +117,9 @@ public static class SendKeysTranslator
             return char.ToLower(c).ToString();
         }
 
-        // Unrecognized word: pass it as-is (the user can use placeholders
-        // like {ENTER} manually).
-        return key;
+        // Unrecognized word: nothing to send. Passing it through made SendKeys TYPE it — an
+        // imported "Ctrl + NUMPAD8" went out as Ctrl+N followed by the letters "UMPAD8". (A raw
+        // "{ENTER}"-style sequence never comes through here: RunShortcut sends it untranslated.)
+        return "";
     }
 }

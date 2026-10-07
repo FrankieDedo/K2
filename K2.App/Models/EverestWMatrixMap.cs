@@ -29,6 +29,12 @@ public static class EverestWMatrixMap
         {   5, 162 },  // LCtrl
         {   6, 144 },  // Num Lk
         {   7, 107 },  // Num +
+        // Media dock crown rotation. Not VK codes: 262/263 are Base Camp's own KeyIds for the
+        // two keys (same ids MatrixIdToDllKeyId below uses). From a real Base Camp XML export
+        // (2026-10-04); that the live callback reports the same 8/17 is assumed from the other
+        // dock keys in this table, not yet seen on hardware.
+        {   8, 263 },  // Scroll R (crown)
+        {  17, 262 },  // Scroll L (crown)
         {   9, 112 },  // F1
         {  10,  49 },  // 1
         {  11,  81 },  // Q
@@ -376,4 +382,13 @@ public static class EverestWMatrixMap
     /// instead — see MainWindow.DockActions.cs).</summary>
     public static int Translate(int wMatrix) =>
         Default.TryGetValue(wMatrix, out var vk) ? vk : wMatrix;
+
+    /// <summary>Strict form of <see cref="Translate"/> for the IMPORTERS: false when the wMatrix
+    /// has no VK translation. A binding must not be stored under the raw number — it lands in
+    /// the VK space on whatever key owns that code: before 8/17 were in the table, Base Camp's
+    /// "Scroll R" (media dock crown,
+    /// DLLMatrixIndex 8) became a binding on Backspace (VK 8), which stopped typing (user
+    /// report 2026-10-04).</summary>
+    public static bool TryTranslate(int wMatrix, out int matrixId) =>
+        Default.TryGetValue(wMatrix, out matrixId);
 }

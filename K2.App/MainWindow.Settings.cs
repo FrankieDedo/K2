@@ -401,6 +401,7 @@ public partial class MainWindow
         var parts = NativeDependencyResolver.BaseCampNativeDlls.Select(dll =>
             $"{dll}: {(NativeDependencyResolver.IsResolvableIn(dll, folder) ? Loc.Get("settings_bc_dll_found") : Loc.Get("settings_bc_dll_missing"))}");
         TxtBcDllStatus.Text = string.Join("   ", parts);
+        RefreshSdkMissingWarnings();
     }
 
     /// <summary>Fires when either "Base Camp DLL folder" radio is checked. Switching to
@@ -469,6 +470,8 @@ public partial class MainWindow
         CkCloseToTray.IsChecked = AppSettings.CloseToTray;
         CkStartMinToTray.IsChecked = AppSettings.StartMinimizedToTray;
         CkK2Autostart.IsChecked = Services.K2AutostartService.IsEnabled();
+        CkRememberWindowSize.IsChecked = AppSettings.RememberWindowSize;
+        CkStartMaximized.IsChecked = AppSettings.StartMaximized;
 
         CkSyncAcrossDevices.IsChecked = AppSettings.SyncAcrossDevices;
         CkGameProfilesEnabled.IsChecked = AppSettings.GameProfilesEnabled;
@@ -750,6 +753,41 @@ public partial class MainWindow
         AppSettings.SetStartMinimizedToTray(CkStartMinToTray.IsChecked == true);
     }
 
+    /// <summary>Persists "remember window size" — turning it OFF does not clear whatever
+    /// bounds are already saved (turning it back on later restores them), it just stops
+    /// MainWindow_SaveWindowBoundsOnClosing from writing new ones and ApplyStartupWindowBounds
+    /// from reading them. Use "Reset window size" below to actually clear them.</summary>
+    private void CkRememberWindowSize_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.SetRememberWindowSize(CkRememberWindowSize.IsChecked == true);
+    }
+
+    /// <summary>Persists "always start maximized". Takes effect at the next K2 launch
+    /// (see MainWindow.ApplyStartupWindowBounds) — not applied live, so toggling it
+    /// doesn't maximize/restore the window you're looking at right now.</summary>
+    private void CkStartMaximized_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.SetStartMaximized(CkStartMaximized.IsChecked == true);
+    }
+
+    /// <summary>"Reset window size" — clears whatever bounds are remembered (so the next
+    /// launch falls back to the default centered 1600x1024) and, if the window isn't
+    /// currently maximized, also re-centers and resizes it to that default right now —
+    /// maximized has no meaningful "size" to reset back to until the user restores it
+    /// down, so this only touches the live window in the non-maximized case.</summary>
+    private void BtnResetWindowSize_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.ResetWindowBounds();
+
+        if (WindowState != WindowState.Normal) return;
+
+        Width = DefaultWindowWidth;
+        Height = DefaultWindowHeight;
+        var area = System.Windows.Forms.Screen.FromHandle(_hWnd).WorkingArea;
+        Left = area.Left + (area.Width - Width) / 2;
+        Top = area.Top + (area.Height - Height) / 2;
+    }
+
     private void CkK2Autostart_Click(object sender, RoutedEventArgs e)
     {
         Services.K2AutostartService.SetEnabled(CkK2Autostart.IsChecked == true);
@@ -927,6 +965,9 @@ public partial class MainWindow
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
+
+    private void BtnAppBugReport_Click(object sender, RoutedEventArgs e)
+        => new BugReportDialog { Owner = this }.ShowDialog();
 
     private void CkBcAutostart_Click(object sender, RoutedEventArgs e)
     {

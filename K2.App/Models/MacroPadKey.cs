@@ -84,14 +84,14 @@ public sealed class MacroPadKey : INotifyPropertyChanged
         get
         {
             string body = HasAction ? ActionSummary : "(empty)";
-            return $"{KeyLabel}  —  {body}";
+            return $"{KeyLabel}:   {body}";
         }
     }
 
     /// <summary>Mirrors DisplayPadKey.ActionSummary/EverestKey.ActionSummary — every action
     /// type must resolve to something meaningful (e.g. "oscmd" showing the chosen system
     /// command name, not the raw tag; user report 2026-07-19).</summary>
-    private string ActionSummary => ActionTypeHelper.Summary(_actionType, _actionValue);
+    private string ActionSummary => ActionTypeHelper.ListSummary(_actionType, _actionValue);
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnChanged([CallerMemberName] string? name = null) =>

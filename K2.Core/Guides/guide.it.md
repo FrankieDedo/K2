@@ -278,6 +278,8 @@ decidere esattamente cosa fa.
   una macro registrata o una Multi-azione che concatena più passi.
 - **Contenuto** — inserisce testo o emoji nell'app che ha il focus, oppure
   apre il selettore emoji del DisplayPad.
+- **Illuminazione** — controlla la retroilluminazione dei dispositivi da un
+  tasto: luminosità su/giù o a ciclo, e cambio dell'effetto luminoso.
 - **Live tile** — tasti DisplayPad che mostrano dati in tempo reale invece di
   un'icona fissa: orologio, monitor PC, speed test di rete.
 - **App e servizi** — controlla un'app esterna o un servizio online: Google
@@ -351,6 +353,34 @@ l'app relativa, dove previsto).
 - **Monitor PC** — una lettura hardware (carico/temperatura CPU/GPU, RAM, un
   disco, o qualsiasi sensore tramite il selettore).
 - **Speed test** — esegue uno speed test di rete e ne mostra il risultato.
+
+@@@ picker:cat:lighting
+# Illuminazione
+
+Pilota la retroilluminazione di qualsiasi dispositivo connesso da un tasto.
+
+- **Luminosità** — aumenta, diminuisce o cicla la luminosità di un livello a
+  pressione, su un dispositivo o su più insieme.
+- **Effetto luminoso** — imposta un effetto specifico su un dispositivo, oppure
+  passa al successivo / precedente.
+
+@@@ picker:cat:makalu
+# Makalu
+
+Funzioni che il mouse esegue da solo. Vengono salvate nella memoria del mouse,
+quindi funzionano anche con K2 chiuso e su un altro PC. Si vedono solo quando
+si configura un tasto del Makalu.
+
+- **Tasto del mouse** — click sinistro, destro, centrale, indietro o avanti.
+- **Livello DPI** — livello DPI successivo o precedente.
+- **Rotella** — uno scatto su o giu'.
+- **Sniper** — finche' e' premuto, il mouse scende ai DPI che scrivi.
+- **Profilo del mouse** — profilo successivo o precedente.
+- **Illuminazione** — cicla luminosita' o effetto.
+- **Tasto disabilitato** — il tasto non fa nulla.
+
+Un'azione delle altre categorie la esegue invece K2, quindi funziona solo con
+K2 aperto.
 
 @@@ picker:cat:apps
 # App e servizi
@@ -435,6 +465,32 @@ le pagine dalla sezione **Pagine** del DisplayPad.
 Attiva un altro profilo. Aggiungi una o più righe di destinazione — ognuna
 punta a un dispositivo e a uno dei suoi profili — così un solo tasto può
 cambiare più dispositivi insieme.
+
+@@@ picker:act:light_brightness
+# Luminosità
+
+Cambia la luminosità della retroilluminazione a ogni pressione del tasto.
+
+- **Aumenta / Diminuisci** — un livello in su o in giù, fermandosi a 100% e 0%.
+- **Ciclo** — un livello in su a ogni pressione; arrivato al 100%, la pressione
+  successiva riparte da 0%.
+- **Applica a** — spunta i dispositivi da modificare, fra quelli connessi.
+  Quello a cui appartiene il tasto parte già spuntato.
+
+Un livello vale 25% su tutti i dispositivi (0, 25, 50, 75, 100%). Le pressioni
+rapide si sommano: premi tre volte di fila e il dispositivo salta direttamente
+di tre livelli, senza passare da quelli intermedi.
+
+@@@ picker:act:light_effect
+# Effetto luminoso
+
+Cambia l'effetto luminoso di un dispositivo. Scegli il dispositivo (quello
+del tasto è già selezionato), poi uno
+dei suoi effetti (lo stesso elenco della sua sezione Lighting) oppure
+**Effetto successivo** / **Effetto precedente** per scorrere l'elenco — dopo
+l'ultimo si riparte dal primo. Anche qui le pressioni rapide si sommano.
+L'effetto conserva i colori e la velocità con
+cui era stato configurato l'ultima volta.
 
 @@@ picker:act:browser
 # Apri browser

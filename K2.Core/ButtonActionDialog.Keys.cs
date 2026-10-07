@@ -19,20 +19,60 @@ public partial class ButtonActionDialog
 
     private static void PopulateKeyItems(ComboBox cb) => KeyCombo.Populate(cb);
 
+    /// <summary>How many keys one combination can hold — the combos share the width the single
+    /// one used to take, a fifth each.</summary>
+    private const int MaxKeys = 5;
+
+    /// <summary>The key combos currently shown, left to right. <c>CbKeyValue</c> is always the first.</summary>
+    private readonly List<ComboBox> _keyCombos = new();
+
     private void EnsureKeysPanel()
     {
         if (_keysPanelPopulated) return;
         _keysPanelPopulated = true;
         PopulateKeyItems(CbKeyValue);
+        _keyCombos.Add(CbKeyValue);
+    }
+
+    /// <summary>Grows or shrinks the row to <paramref name="count"/> combos, keeping the "+"
+    /// button right after the last one (gone once the row is full).</summary>
+    private void SetKeyComboCount(int count)
+    {
+        count = Math.Clamp(count, 1, MaxKeys);
+        while (_keyCombos.Count > count)
+        {
+            KeysRow.Children.Remove(_keyCombos[^1]);
+            _keyCombos.RemoveAt(_keyCombos.Count - 1);
+        }
+        while (_keyCombos.Count < count)
+        {
+            var cb = new ComboBox { IsEditable = true, Margin = CbKeyValue.Margin };
+            PopulateKeyItems(cb);
+            KeysRow.Children.Insert(_keyCombos.Count, cb);
+            _keyCombos.Add(cb);
+        }
+        BtnKeyAdd.Visibility = count < MaxKeys ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+    }
+
+    private void BtnKeyAdd_Click(object sender, System.Windows.RoutedEventArgs e)
+    {
+        EnsureKeysPanel();
+        SetKeyComboCount(_keyCombos.Count + 1);
+        _keyCombos[^1].Focus();
     }
 
     private void LoadKeysSpec(string value)
     {
         EnsureKeysPanel();
-        ParseShortcut(value, ChkKeyCtrl, ChkKeyShift, ChkKeyAlt, ChkKeyWin, CbKeyValue);
+        SetKeyComboCount(KeyCombo.KeyTokens(value).Count);
+        KeyCombo.Load(value, ChkKeyCtrl, ChkKeyShift, ChkKeyAlt, ChkKeyWin, _keyCombos);
     }
 
-    private string SaveKeysSpec() => BuildShortcut(ChkKeyCtrl, ChkKeyShift, ChkKeyAlt, ChkKeyWin, CbKeyValue);
+    private string SaveKeysSpec()
+    {
+        EnsureKeysPanel();
+        return KeyCombo.Save(ChkKeyCtrl, ChkKeyShift, ChkKeyAlt, ChkKeyWin, _keyCombos);
+    }
 
     /// <summary>Parses a human-syntax shortcut ("Ctrl + Shift + A") into the given modifier
     /// checkboxes + key combo. Kept as a name of its own because Hotkey Switch's two rows and the

@@ -1,0 +1,61 @@
+<Window x:Class="K2.App.StudioProfileConfigWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:K2.Core;assembly=K2.Core"
+        Title="{loc:Get studio_profile_config_title}"
+        Width="520" SizeToContent="Height"
+        MinWidth="480"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Style="{DynamicResource K2WindowStyle}">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>   <!-- 0 title -->
+            <RowDefinition Height="Auto"/>   <!-- 1 hint -->
+            <RowDefinition Height="Auto"/>   <!-- 2 return-to-profile row -->
+            <RowDefinition Height="Auto"/>   <!-- 3 foreground-only row -->
+            <RowDefinition Height="Auto"/>   <!-- 4 show-back-arrow row -->
+            <RowDefinition Height="Auto"/>   <!-- 5 connection: status + guide -->
+            <RowDefinition Height="Auto"/>   <!-- 6 buttons -->
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="{loc:Get studio_profile_config_title}" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+        <TextBlock Grid.Row="1" Text="{loc:Get studio_profile_config_hint}" TextWrapping="Wrap" Foreground="#9A9AA2" Margin="0,0,0,12"/>
+
+        <!-- Same three rows, in the same order, as the Spotify dedicated profile's popup. -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,4,0,0">
+            <CheckBox x:Name="CkReturn" Content="{loc:Get spotify_return_label}"
+                      VerticalAlignment="Center" Checked="ReturnEnabled_Changed" Unchecked="ReturnEnabled_Changed"/>
+            <TextBox x:Name="TxtReturnSec" Width="52" Height="23" Margin="8,0,6,0"
+                     VerticalContentAlignment="Center" TextAlignment="Center"
+                     MaxLength="4" PreviewTextInput="DigitsOnly_PreviewTextInput"/>
+            <TextBlock Text="{loc:Get unit_seconds}" VerticalAlignment="Center" Foreground="#9A9AA2"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get studio_return_hint}"/>
+        </StackPanel>
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,0">
+            <CheckBox x:Name="CkForeground" Content="{loc:Get studio_foreground_only_label}" VerticalAlignment="Center"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get studio_foreground_only_hint}"/>
+        </StackPanel>
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,10,0,0">
+            <CheckBox x:Name="CkBackArrow" Content="{loc:Get show_back_arrow_label}" VerticalAlignment="Center"/>
+            <Path Style="{DynamicResource K2HintIcon}" ToolTip="{loc:Get studio_back_arrow_hint}"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="5" Margin="0,18,0,0">
+            <TextBlock Text="{loc:Get studio_guide_title}" FontWeight="Bold" Margin="0,0,0,4"/>
+            <TextBlock x:Name="TxtStatus" Foreground="#9A9AA2" Margin="0,0,0,8" TextWrapping="Wrap"/>
+            <TextBlock Text="{loc:Get studio_guide_steps}" TextWrapping="Wrap" Foreground="#9A9AA2"/>
+            <TextBlock Margin="0,8,0,0">
+                <Hyperlink Click="LnkLoopMidi_Click" ToolTip="https://www.tobias-erichsen.de/software/loopmidi.html">
+                    <Run Text="{loc:Get studio_guide_download}"/>
+                </Hyperlink>
+            </TextBlock>
+        </StackPanel>
+
+        <Grid Grid.Row="6" Margin="0,16,0,0">
+            <Button Content="{loc:Get save}" Width="90" Padding="6,2" IsDefault="True"
+                    HorizontalAlignment="Right" Click="BtnSave_Click"/>
+        </Grid>
+    </Grid>
+</Window>

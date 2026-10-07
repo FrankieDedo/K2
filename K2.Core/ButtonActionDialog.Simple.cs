@@ -167,6 +167,9 @@ public partial class ButtonActionDialog
         "dp_zcstatus"  => ZcStatusOptions,
         KspTelemachus.ActionType => KspOptions(),
         ModLinkGames.ActionType => ModLinkGames.LiveItems().Select(i => new ComboOption(i.Value, i.LocKey)).ToArray(),
+        ModLinkGames.StudioActionType => ModLinkGames.StudioItems().Select(i => new ComboOption(i.Value, i.LocKey)).ToArray(),
+        _ when MakaluActionTypes.IsCombo(tag) => MakaluActionTypes.FunctionsOf(tag)
+            .Select(f => new ComboOption(f, MakaluActionTypes.FunctionLocKey(f))).ToArray(),
         "oscmd"   => OsCmdOptions,
         "media"   => MediaOptions,
         "mouse"   => MouseOptions,
@@ -179,6 +182,7 @@ public partial class ButtonActionDialog
 
     private static string LabelKeyFor(string tag) => tag switch
     {
+        _ when MakaluActionTypes.IsCombo(tag) => "act_" + tag,
         "oscmd"      => "act_oscmd",
         "media"      => "act_media",
         "mouse"      => "act_mouse",
@@ -198,6 +202,7 @@ public partial class ButtonActionDialog
         "dp_zcstatus"  => "act_dp_zcstatus",
         KspTelemachus.ActionType => "act_dp_ksp",
         ModLinkGames.ActionType => "act_dp_modlink",
+        ModLinkGames.StudioActionType => "act_dp_studio",
         _            => "dlg_value",
     };
 
@@ -303,6 +308,9 @@ public partial class ButtonActionDialog
         BtnCustomActionEdit.Visibility =
             tag == CustomActionType.Tag && _host?.SupportsCustomActions == true
                 ? Visibility.Visible : Visibility.Collapsed;
+        BtnStudioConfig.Visibility =
+            tag == ModLinkGames.StudioActionType && _host?.SupportsStudioConfig == true
+                ? Visibility.Visible : Visibility.Collapsed;
         BtnSpeedTestConfig.Visibility =
             tag == "dp_speedtest" && _host?.SupportsSpeedTestConfig == true
                 ? Visibility.Visible : Visibility.Collapsed;
@@ -312,6 +320,8 @@ public partial class ButtonActionDialog
     /// that supports it): opens the global endpoint/payload window via the host — the config is
     /// app-wide, not per key, so it lives here in the action picker rather than on the key.</summary>
     private void BtnSpeedTestConfig_Click(object sender, RoutedEventArgs e) => _host?.OpenSpeedTestConfig();
+
+    private void BtnStudioConfig_Click(object sender, RoutedEventArgs e) => _host?.OpenStudioConfig();
 
     /// <summary>"Choose sensor…" button in the "PC monitor" panel (shown while the "Sensor
     /// selection" card is active) — same effect as clicking the card itself.</summary>

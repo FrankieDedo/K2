@@ -19,7 +19,7 @@ public partial class NewDisplayPadProfileDialog : Window
     /// profile slot on the selected device. Add new dedicated profile types here; the combo shows
     /// them alphabetically (<see cref="NewDisplayPadProfileDialog()"/>), declaration order here
     /// doesn't matter.</summary>
-    private static readonly string[] DedicatedTypes = { "Spotify", "Discord" };
+    private static readonly string[] DedicatedTypes = { "Spotify", "Discord", "Studio Pro" };
 
     public bool IsDedicated { get; private set; }
     public string? DedicatedType { get; private set; }

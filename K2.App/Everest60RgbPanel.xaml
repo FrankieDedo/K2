@@ -55,7 +55,7 @@
                       Click="CkEv60AutoOffEnable_Click" VerticalAlignment="Center" Margin="0,0,14,0"/>
                     <TextBlock Text="{loc:Get backlight_auto_off_seconds}" Margin="0,0,6,0" VerticalAlignment="Center"/>
                     <TextBox x:Name="TxtEv60AutoOffSeconds" Width="70" TextAlignment="Center"
-                     LostFocus="TxtEv60AutoOffSeconds_LostFocus" VerticalAlignment="Center" Height="25" Text="60"/>
+                     LostFocus="TxtEv60AutoOffSeconds_LostFocus" VerticalAlignment="Center" VerticalContentAlignment="Center" Height="25" Text="60"/>
                     <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
                 </WrapPanel>
                 <!-- Normal-effect controls (Row 2 direction + Row 3 color mode) vs.

@@ -1584,6 +1584,132 @@ public static class LiveTileRenderer
         return p;
     }
 
+    // ─────────────────────────── Transport tiles (Fender Studio Pro) ───────────────────────────
+
+    /// <summary>A transport-style key: one flat pictogram on a plain field, no caption. Idle it is
+    /// <paramref name="color"/> on black; <paramref name="lit"/> swaps the two — the field takes the
+    /// colour and the pictogram goes white (black on a light colour). <paramref name="known"/>
+    /// false (the program is not connected) dims the pictogram.
+    ///
+    /// <para><paramref name="icon"/> names a pictogram drawn here; anything else is drawn as the
+    /// short <paramref name="label"/> text, so a new item never renders as an empty key.</para></summary>
+    public static bool TryRenderTransportTile(string icon, string label, Color color, bool lit, bool known,
+                                              int size, string outputPngPath)
+    {
+        try
+        {
+            using var canvas = new Bitmap(size, size);
+            using (var g = NewGraphics(canvas, size))
+            {
+                bool light = color.R * 0.299 + color.G * 0.587 + color.B * 0.114 > 170;
+                Color bg = lit ? color : Color.Black;
+                Color fg = lit ? (light ? Color.Black : Color.White) : color;
+                if (!known) fg = Dim(fg, 0.40f);
+
+                using (var field = new SolidBrush(bg)) g.FillRectangle(field, 0, 0, size, size);
+                DrawTransportIcon(g, icon, label, fg, size);
+            }
+            return Save(canvas, outputPngPath);
+        }
+        catch { return false; }
+    }
+
+    private static void DrawTransportIcon(Graphics g, string icon, string label, Color color, int size)
+    {
+        float s = size, c = size / 2f;
+        using var fill = new SolidBrush(color);
+        using var pen = new Pen(color, s * 0.075f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+
+        void Tri(float x0, float y0, float x1, float y1, float x2, float y2) =>
+            g.FillPolygon(fill, new[] { new PointF(x0, y0), new PointF(x1, y1), new PointF(x2, y2) });
+
+        // An arc of a circle ending in an arrowhead that points along the direction of travel.
+        void ArcArrow(float r, float startDeg, float sweepDeg)
+        {
+            g.DrawArc(pen, c - r, c - r, r * 2, r * 2, startDeg, sweepDeg);
+            double end = (startDeg + sweepDeg) * Math.PI / 180;
+            float nx = (float)Math.Cos(end), ny = (float)Math.Sin(end);
+            float dir = Math.Sign(sweepDeg);
+            float tx = -ny * dir, ty = nx * dir;
+            float px = c + r * nx, py = c + r * ny, a = s * 0.12f;
+            Tri(px + tx * a, py + ty * a, px + nx * a * 0.8f, py + ny * a * 0.8f, px - nx * a * 0.8f, py - ny * a * 0.8f);
+        }
+
+        switch (icon)
+        {
+            case "none":    // a key that keeps working with its mark switched off
+                break;
+            case "back":    // an arrow pointing left
+                g.DrawLine(pen, c + s * 0.24f, c, c - s * 0.12f, c);
+                Tri(c - s * 0.28f, c, c - s * 0.06f, c - s * 0.20f, c - s * 0.06f, c + s * 0.20f);
+                break;
+            case "record":
+                g.FillEllipse(fill, c - s * 0.27f, c - s * 0.27f, s * 0.54f, s * 0.54f);
+                break;
+            case "play":
+                Tri(c - s * 0.19f, c - s * 0.27f, c - s * 0.19f, c + s * 0.27f, c + s * 0.29f, c);
+                break;
+            case "stop":
+                g.FillRectangle(fill, c - s * 0.23f, c - s * 0.23f, s * 0.46f, s * 0.46f);
+                break;
+            case "rewind":
+                Tri(c, c - s * 0.22f, c, c + s * 0.22f, c - s * 0.30f, c);
+                Tri(c + s * 0.30f, c - s * 0.22f, c + s * 0.30f, c + s * 0.22f, c, c);
+                break;
+            case "forward":
+                Tri(c - s * 0.30f, c - s * 0.22f, c - s * 0.30f, c + s * 0.22f, c, c);
+                Tri(c, c - s * 0.22f, c, c + s * 0.22f, c + s * 0.30f, c);
+                break;
+            case "loop":
+                ArcArrow(s * 0.23f, 200, 130);
+                ArcArrow(s * 0.23f, 20, 130);
+                break;
+            case "undo":
+                ArcArrow(s * 0.22f, 100, -230);
+                break;
+            case "redo":
+                ArcArrow(s * 0.22f, 80, 230);
+                break;
+            case "click":   // metronome: the case and its pendulum
+                g.DrawPolygon(pen, new[]
+                {
+                    new PointF(c - s * 0.10f, c - s * 0.27f), new PointF(c + s * 0.10f, c - s * 0.27f),
+                    new PointF(c + s * 0.22f, c + s * 0.27f), new PointF(c - s * 0.22f, c + s * 0.27f),
+                });
+                g.DrawLine(pen, c, c + s * 0.14f, c + s * 0.17f, c - s * 0.22f);
+                break;
+            case "marker":  // a flag on its pole
+                g.DrawLine(pen, c - s * 0.17f, c - s * 0.28f, c - s * 0.17f, c + s * 0.28f);
+                Tri(c - s * 0.17f, c - s * 0.28f, c + s * 0.25f, c - s * 0.13f, c - s * 0.17f, c + s * 0.02f);
+                break;
+            case "save":    // a floppy disk
+                g.DrawRectangle(pen, c - s * 0.24f, c - s * 0.24f, s * 0.48f, s * 0.48f);
+                g.FillRectangle(fill, c - s * 0.12f, c - s * 0.24f, s * 0.24f, s * 0.15f);
+                g.FillRectangle(fill, c - s * 0.15f, c + s * 0.04f, s * 0.30f, s * 0.20f);
+                break;
+            case "zoom":    // a magnifier
+                g.DrawEllipse(pen, c - s * 0.24f, c - s * 0.24f, s * 0.34f, s * 0.34f);
+                g.DrawLine(pen, c + s * 0.06f, c + s * 0.06f, c + s * 0.25f, c + s * 0.25f);
+                break;
+            case "up":
+                Tri(c, c - s * 0.24f, c - s * 0.26f, c + s * 0.18f, c + s * 0.26f, c + s * 0.18f);
+                break;
+            case "down":
+                Tri(c, c + s * 0.24f, c - s * 0.26f, c - s * 0.18f, c + s * 0.26f, c - s * 0.18f);
+                break;
+            case "left":
+                Tri(c - s * 0.24f, c, c + s * 0.18f, c - s * 0.26f, c + s * 0.18f, c + s * 0.26f);
+                break;
+            case "right":
+                Tri(c + s * 0.24f, c, c - s * 0.18f, c - s * 0.26f, c - s * 0.18f, c + s * 0.26f);
+                break;
+            default:
+                DrawFitted(g, label, new RectangleF(s * 0.08f, s * 0.08f, s * 0.84f, s * 0.84f), s * 0.46f, color,
+                           semibold: true);
+                break;
+        }
+    }
+
     // ─────────────────────────── Drawing helpers ───────────────────────────
 
     /// <summary>Text/hand color — the per-key "Edit icon" text color when set, white otherwise

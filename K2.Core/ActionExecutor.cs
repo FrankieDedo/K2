@@ -90,12 +90,7 @@ public static class ActionExecutor
 
     private static void Start(string file, string args = "")
     {
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = file,
-            Arguments = args,
-            UseShellExecute = true
-        });
+        ShellLauncher.Start(file, args);
     }
 
     // ── Media keys ────────────────────────────────

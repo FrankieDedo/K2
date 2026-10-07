@@ -72,6 +72,7 @@ If you need a more detailed guide, check this out: <a href='https://github.com/F
   <li><strong>Third party application commands</strong> — Same as Base Camp, support Adobe Suite, DaVinci Resolve, Zoom, OBS, Twitch, Youtube, Spotify</li>
   <li><strong>Screen reading</strong> — capture a frame of any program's window, draw a rectangle over a bar, gauge or indicator, and the key shows that value live</li>
   <li><strong>Speed test</strong> — configurable server (Cloudflare, LibreSpeed, an Ookla-compatible server, a plain test file or a custom endpoint), transfer sizes and timeout, with a test button in the settings</li>
+  <li><strong>Lighting</strong> — change brightness (cycle, up, down) or lighting effect (next, previous, specific) of any of your devices from a key</li>
 </ul>
 </details>
 
@@ -109,6 +110,7 @@ If you need a more detailed guide, check this out: <a href='https://github.com/F
   <li>Button remap including sniper button</li>
   <li>Device settings: polling rate, debounce, lift-off, angle snapping</li>
   <li>Device image with clickable hotspots for selecting the button to remap</li>
+  <li>Buttons can also run any K2 action (shortcuts, apps, macros…), and a battery indicator shows the charge level (Max)</li>
 </ul>
 </details>
 
@@ -126,6 +128,7 @@ If you need a more detailed guide, check this out: <a href='https://github.com/F
   <li>PC Monitor key — pick any hardware sensor (live HWiNFO-style list with current/min/max/average) to display on a key</li>
   <li>Game profiles — ready-made per-game profiles (Elite Dangerous, Deadside, Zero Company, Kerbal Space Program) that take over while the game is running, with keys that follow the live in-game state, multiple pages, an auto-return timer and a "show only while the game is in front" option</li>
   <li>Default key background — one background image reused by every key that has no picture of its own</li>
+  <li>Fender Studio Pro profile — transport keys (record, play, stop, loop…) that light up with what Studio Pro is doing, via loopMIDI</li>
 </ul>
 </details>
 

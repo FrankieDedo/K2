@@ -58,6 +58,10 @@ public partial class ButtonActionDialog : Window
         // from the list entirely and the picker skips it with it.
         if (_host?.SupportsScreenProbes != true) RemoveType("dp_screen");
         if (_host?.SupportsCustomActions != true) RemoveType(CustomActionType.Tag);
+        if (_host?.SupportsMouseFirmwareActions != true)
+            foreach (var mk in MakaluActionTypes.All) RemoveType(mk);
+        if (_host?.Lighting is null)
+            foreach (var light in LightingActionTypes.All) RemoveType(light);
 
         // Set BEFORE SetType(): assigning CbType.SelectedItem below fires
         // CbType_SelectionChanged synchronously, which cascades into UpdatePanels() ->
@@ -95,15 +99,24 @@ public partial class ButtonActionDialog : Window
             LoadProfileSpec(ProfileTargetPayload.Parse(currentValue)
                 ?? LegacyProfileSpec(currentValue));
         }
+        else if (currentType == LightingActionTypes.Brightness)
+        {
+            LoadBrightnessSpec(BrightnessActionPayload.Parse(currentValue));
+        }
+        else if (currentType == LightingActionTypes.Effect)
+        {
+            LoadLightEffectSpec(LightEffectPayload.Parse(currentValue));
+        }
         // "dp_screen"/"dp_custom" are in this list too although their value list is built from a
         // host store rather than a fixed enum: without the load, CbComboValue stayed EMPTY on a
         // dialog opened on an existing key — the 3rd crumb showed nothing, the sub-action grid
         // opened blank, a game profile could not recognise the key as one of the game's own
         // commands (so the breadcrumb read "Live tiles > Generic" instead of the game's family),
         // and saving wrote the value back as "" (user report 2026-09-18).
-        else if (currentType is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
+        else if (MakaluActionTypes.IsCombo(currentType)
+                 || currentType is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
                  or "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus"
-                 or KspTelemachus.ActionType or ModLinkGames.ActionType or "dp_screen" or CustomActionType.Tag)
+                 or KspTelemachus.ActionType or ModLinkGames.ActionType or ModLinkGames.StudioActionType or "dp_screen" or CustomActionType.Tag)
         {
             LoadComboSpec(currentType, currentValue ?? "");
         }
@@ -215,10 +228,12 @@ public partial class ButtonActionDialog : Window
             "pyscript" => ("Python Script",                ""),
             "dp_emojibrowser" => ("Emoji browser (no payload)", ""),
             "disable"  => ("Key disabled (no payload)",    ""),
+            MakaluActionTypes.Sniper  => (Loc.Get("makalu_remap_sniper_dpi"), "400"),
+            MakaluActionTypes.Disable => (Loc.Get("act_mk_disable"), ""),
             _          => ("No action",                    "")
         };
         LblPayload.Text      = label;
-        TxtPayload.IsEnabled = tag is not ("none" or "disable" or "dp_emojibrowser");
+        TxtPayload.IsEnabled = tag is not ("none" or "disable" or "dp_emojibrowser" or MakaluActionTypes.Disable);
         if (string.IsNullOrEmpty(TxtPayload.Text)) TxtPayload.Tag = hint;
 
         UpdateBreadcrumb(tag);
@@ -235,13 +250,16 @@ public partial class ButtonActionDialog : Window
         bool page    = tag == "dp_folder";
         bool browser = tag == "browser";
         bool profile = tag == "profile";
+        bool brightness = tag == LightingActionTypes.Brightness;
+        bool lightEffect = tag == LightingActionTypes.Effect;
         // "dp_screen"/"dp_custom" belong here as well: their value lives in CbComboValue like every
         // other combo type, and ComboPanel is where their "Edit reading…"/"Edit action…" button and
         // their live readout sit. Leaving them out is what kept the combo unpopulated — see the
         // constructor's LoadComboSpec branch.
-        bool combo   = tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
+        bool combo   = MakaluActionTypes.IsCombo(tag)
+                       || tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
                               or "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus"
-                              or "dp_zcstatus" or KspTelemachus.ActionType or ModLinkGames.ActionType
+                              or "dp_zcstatus" or KspTelemachus.ActionType or ModLinkGames.ActionType or ModLinkGames.StudioActionType
                               or "dp_screen" or CustomActionType.Tag;
         bool sysmon  = tag == "dp_sysmon";
         bool keys    = tag == "keys";
@@ -256,7 +274,7 @@ public partial class ButtonActionDialog : Window
         // That is already the case now that it counts as a "combo" type: ComboPanel's label and
         // list are permanently Collapsed in XAML, so only the "Edit action…" button and the live
         // readout show, and it never falls through to the standard value box.
-        bool std     = !py && !exec && !folder && !page && !browser && !profile && !combo && !keys && !hotkeyswitch && !multi && !appShortcut && !youtube && !emoji && !emojiBrowser;
+        bool std     = !py && !exec && !folder && !page && !browser && !profile && !brightness && !lightEffect && !combo && !keys && !hotkeyswitch && !multi && !appShortcut && !youtube && !emoji && !emojiBrowser;
 
         PyPanel.Visibility       = py      ? Visibility.Visible : Visibility.Collapsed;
         ExecPanel.Visibility     = exec    ? Visibility.Visible : Visibility.Collapsed;
@@ -264,6 +282,8 @@ public partial class ButtonActionDialog : Window
         PagePanel.Visibility     = page    ? Visibility.Visible : Visibility.Collapsed;
         BrowserPanel.Visibility  = browser ? Visibility.Visible : Visibility.Collapsed;
         ProfilePanel.Visibility  = profile ? Visibility.Visible : Visibility.Collapsed;
+        BrightnessPanel.Visibility  = brightness  ? Visibility.Visible : Visibility.Collapsed;
+        LightEffectPanel.Visibility = lightEffect ? Visibility.Visible : Visibility.Collapsed;
         ComboPanel.Visibility    = combo   ? Visibility.Visible : Visibility.Collapsed;
         SysMonPanel.Visibility   = sysmon  ? Visibility.Visible : Visibility.Collapsed;
         KeysPanel.Visibility     = keys    ? Visibility.Visible : Visibility.Collapsed;
@@ -279,6 +299,8 @@ public partial class ButtonActionDialog : Window
         if (page) EnsurePagePanel();
         if (browser) EnsureBrowserChoicesPopulated();
         if (profile) EnsureProfileRows();
+        if (brightness) EnsureBrightnessPanel();
+        if (lightEffect) EnsureLightEffectPanel();
         if (multi) EnsureMultiPanel();
         if (combo) EnsureComboPanel(tag);
         if (sysmon) RefreshSysMonPanel();
@@ -368,8 +390,17 @@ public partial class ButtonActionDialog : Window
         {
             ActionValue = SaveProfileSpec().ToJson();
         }
-        else if (tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
-                 or "dp_clock" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus" or KspTelemachus.ActionType or ModLinkGames.ActionType)
+        else if (tag == LightingActionTypes.Brightness)
+        {
+            ActionValue = SaveBrightnessSpec().ToJson();
+        }
+        else if (tag == LightingActionTypes.Effect)
+        {
+            ActionValue = SaveLightEffectSpec().ToJson();
+        }
+        else if (MakaluActionTypes.IsCombo(tag)
+                 || tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
+                 or "dp_clock" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus" or KspTelemachus.ActionType or ModLinkGames.ActionType or ModLinkGames.StudioActionType)
         {
             ActionValue = SaveComboSpec();
         }
@@ -415,7 +446,7 @@ public partial class ButtonActionDialog : Window
             // binding is just the "open it" marker, with nothing to configure.
             ActionValue = "";
         }
-        else if (tag == "disable")
+        else if (tag is "disable" or MakaluActionTypes.Disable)
         {
             // Payload-less by definition — never carry over whatever the (disabled)
             // standard text box happened to still show from the previous type.

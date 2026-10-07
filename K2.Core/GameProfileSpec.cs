@@ -165,6 +165,7 @@ public static class GameProfileSpecs
             StyleAllTiles: true,
             CommandFamilies: ModLinkGames.Families(ModLinkGames.SpaceEngineers),
             RestingArtColor: "blue"),
+
     };
 
     /// <summary>

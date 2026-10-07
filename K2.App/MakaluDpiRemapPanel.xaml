@@ -35,11 +35,11 @@
              clutter/empty rows; MakaluDpiRemapPanel.xaml.cs's
              RefreshMkItemVisibility filters, _byIdx stays unfiltered so
              hotspot-click-to-configure still reaches every button
-             regardless), built by BuildMkButtonList. Configure opens
-             MakaluRemapConfigDialog (Makalu's own small firmware vocabulary,
-             not the shared ButtonActionDialog/K2Action — see that dialog's
-             doc comment); Remove resets the button back to its model
-             default. Clicking a hotspot on the device image
+             regardless), built by BuildMkButtonList. Configure opens the
+             shared ButtonActionDialog: the mouse's own firmware functions
+             are its "Makalu" category (K2.Core's MakaluActionTypes), any
+             other pick is a K2 action; Remove resets the button back to
+             its model default. Clicking a hotspot on the device image
              (MainWindow.Makalu.cs's MkHotspotClicked -> SelectRemapButton)
              selects the row AND opens Configure directly, same flow as
              Everest 60's SelectKey. -->

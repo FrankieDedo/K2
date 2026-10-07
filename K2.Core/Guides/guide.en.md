@@ -262,6 +262,8 @@ what it does.
   a Multi Action that chains several steps.
 - **Content** — put text or emoji into whatever app has focus, or open the
   DisplayPad emoji browser.
+- **Lighting** — control the backlight of your devices from a key: brightness
+  up/down or cycling, and switching lighting effect.
 - **Live tiles** — DisplayPad keys that show live data instead of a static
   icon: a clock, a PC monitor, a network speed test.
 - **Apps & Services** — control an external app or online service: Google
@@ -334,6 +336,34 @@ relevant app, where applicable).
 - **PC monitor** — a hardware reading (CPU/GPU load or temperature, RAM, a
   disk, or any sensor via the sensor picker).
 - **Speed test** — runs a network speed test and shows the result.
+
+@@@ picker:cat:lighting
+# Lighting
+
+Drive the backlight of any connected device from a key.
+
+- **Brightness** — raises, lowers or cycles the brightness one level per
+  press, on one device or several at once.
+- **Lighting effect** — sets a specific effect on a device, or moves to its
+  next / previous one.
+
+@@@ picker:cat:makalu
+# Makalu
+
+Functions the mouse performs by itself. They are saved in the mouse's memory,
+so they keep working with K2 closed and on another PC. Shown only when
+configuring a Makalu button.
+
+- **Mouse button** — left, right, middle, back or forward click.
+- **DPI level** — next or previous DPI level.
+- **Scroll wheel** — one step up or down.
+- **Sniper** — while held, the mouse drops to the DPI you type.
+- **Mouse profile** — next or previous profile.
+- **Lighting** — cycles brightness or effect.
+- **Button disabled** — the button does nothing.
+
+Any action from the other categories is run by K2 instead, so it works only
+while K2 is open.
 
 @@@ picker:cat:apps
 # Apps & Services
@@ -413,6 +443,31 @@ DisplayPad **Pages** section.
 Activates another profile. Add one or more target rows — each targets a
 device and one of its profiles — so a single key can switch several devices
 at once.
+
+@@@ picker:act:light_brightness
+# Brightness
+
+Changes the backlight brightness every time the key is pressed.
+
+- **Increase / Decrease** — one level up or down, stopping at 100% and 0%.
+- **Cycle** — one level up per press; once at 100%, the next press restarts
+  from 0%.
+- **Apply to** — tick the devices to change, among the connected ones. The
+  device the key belongs to starts ticked.
+
+A level is 25% on every device (0, 25, 50, 75, 100%). Quick presses add up:
+press three times in a row and the device jumps straight three levels,
+without passing through the ones in between.
+
+@@@ picker:act:light_effect
+# Lighting effect
+
+Changes the lighting effect of one device. Pick the device (the key's own
+is preselected), then either one
+of its effects (the same list as its Lighting section) or **Next effect** /
+**Previous effect** to step through the list — after the last one it starts
+again from the first. Quick presses add up here too. The effect keeps the colours and speed it was last
+configured with.
 
 @@@ picker:act:browser
 # Open browser

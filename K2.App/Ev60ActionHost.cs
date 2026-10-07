@@ -30,6 +30,7 @@ internal sealed class Ev60ActionHost : IActionHost
     private readonly Action<string, string> _switchProfileByKey;
     private readonly Func<IReadOnlyList<string>> _listMacroNames;
     private readonly Action<string> _playMacro;
+    private readonly ILightingController? _lighting;
 
     public Ev60ActionHost(
         Dispatcher dispatcher,
@@ -44,7 +45,8 @@ internal sealed class Ev60ActionHost : IActionHost
         Func<IReadOnlyList<ProfileTargetOption>> listAllProfileTargets,
         Action<string, string> switchProfileByKey,
         Func<IReadOnlyList<string>> listMacroNames,
-        Action<string> playMacro)
+        Action<string> playMacro,
+        ILightingController? lighting = null)
     {
         _dispatcher             = dispatcher;
         _log                    = log;
@@ -59,9 +61,12 @@ internal sealed class Ev60ActionHost : IActionHost
         _switchProfileByKey     = switchProfileByKey;
         _listMacroNames         = listMacroNames;
         _playMacro              = playMacro;
+        _lighting               = lighting;
     }
 
     Dispatcher IActionHost.Dispatcher => _dispatcher;
+
+    ILightingController? IActionHost.Lighting => _lighting;
 
     void IActionHost.Log(string message) => _log(message);
 

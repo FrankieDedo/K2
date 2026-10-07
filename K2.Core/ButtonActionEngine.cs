@@ -165,7 +165,7 @@ public sealed class ButtonActionEngine : IDisposable
         {
             case "url":
                 if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] url without payload"); break; }
-                Process.Start(new ProcessStartInfo { FileName = value, UseShellExecute = true });
+                ShellLauncher.Start(value);
                 Log($"[EXEC] url -> {value}");
                 break;
 
@@ -177,12 +177,7 @@ public sealed class ButtonActionEngine : IDisposable
 
             case "folder":
                 if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] folder without payload"); break; }
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "explorer.exe",
-                    Arguments = $"\"{value}\"",
-                    UseShellExecute = true
-                });
+                ShellLauncher.Start("explorer.exe", $"\"{value}\"");
                 Log($"[EXEC] folder -> {value}");
                 break;
 
@@ -194,16 +189,17 @@ public sealed class ButtonActionEngine : IDisposable
                 RunProfileSwitch(value, Log);
                 break;
 
+            case LightingActionTypes.Brightness:
+                RunBrightnessStep(value, Log);
+                break;
+
+            case LightingActionTypes.Effect:
+                RunLightEffect(value, Log);
+                break;
+
             case "command":
                 if (string.IsNullOrWhiteSpace(value)) { Log("[EXEC] command without payload"); break; }
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "cmd.exe",
-                    Arguments = "/c " + value,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WindowStyle = ProcessWindowStyle.Hidden
-                });
+                ShellLauncher.Start("cmd.exe", "/c " + value, null, hidden: true);
                 Log($"[EXEC] command -> {value}");
                 break;
 
@@ -565,14 +561,13 @@ public sealed class ButtonActionEngine : IDisposable
         switch (type)
         {
             case "url":
-                Process.Start(new ProcessStartInfo { FileName = value, UseShellExecute = true }); break;
+                ShellLauncher.Start(value); break;
             case "exec":
                 if (!string.IsNullOrWhiteSpace(value)) RunExecAction(value);
                 break;
             case "folder":
                 if (!string.IsNullOrWhiteSpace(value))
-                    Process.Start(new ProcessStartInfo { FileName = "explorer.exe",
-                        Arguments = $"\"{value}\"", UseShellExecute = true });
+                    ShellLauncher.Start("explorer.exe", $"\"{value}\"");
                 break;
             case "browser":
                 RunBrowserAction(value, Log);
@@ -631,6 +626,36 @@ public sealed class ButtonActionEngine : IDisposable
         }
     }
 
+    /// <summary>The device a lighting action row points at: its own key, or the host's own
+    /// device for an empty key. Null when the host cannot name itself.</summary>
+    private string? ResolveLightingKey(string key) =>
+        key.Length > 0 ? key
+        : _host.SelfTargetKey is { Length: > 0 } self ? self
+        : null;
+
+    /// <summary>Runs the <see cref="LightingActionTypes.Brightness"/> action on every target.</summary>
+    private void RunBrightnessStep(string value, Action<string> log)
+    {
+        if (_host.Lighting is not { } lighting) { log("[EXEC] brightness: host has no lighting"); return; }
+        var spec = BrightnessActionPayload.Parse(value);
+        foreach (var t in spec.Targets)
+        {
+            if (ResolveLightingKey(t) is not { } key) { log("[EXEC] brightness: no target device"); continue; }
+            try { lighting.StepBrightness(key, spec.Mode); }
+            catch (Exception ex) { log($"[EXEC] brightness: target \"{key}\" error: {ex.Message}"); }
+        }
+    }
+
+    /// <summary>Runs the <see cref="LightingActionTypes.Effect"/> action.</summary>
+    private void RunLightEffect(string value, Action<string> log)
+    {
+        if (_host.Lighting is not { } lighting) { log("[EXEC] effect: host has no lighting"); return; }
+        var spec = LightEffectPayload.Parse(value);
+        if (ResolveLightingKey(spec.Key) is not { } key) { log("[EXEC] effect: no target device"); return; }
+        try { lighting.SwitchEffect(key, spec.Target); }
+        catch (Exception ex) { log($"[EXEC] effect: target \"{key}\" error: {ex.Message}"); }
+    }
+
     /// <summary>
     /// Runs the "exec" action. .bat/.cmd scripts are launched hidden via cmd.exe by default
     /// (ShellExecute on a batch file always flashes a console window for an instant); the
@@ -645,19 +670,11 @@ public sealed class ButtonActionEngine : IDisposable
         var dir = Path.GetDirectoryName(path) ?? "";
         if (ExecActionPayload.IsBatch(path))
         {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "cmd.exe",
-                Arguments = $"/c \"{path}\"",
-                UseShellExecute = showConsole,
-                CreateNoWindow = !showConsole,
-                WindowStyle = showConsole ? ProcessWindowStyle.Normal : ProcessWindowStyle.Hidden,
-                WorkingDirectory = dir
-            });
+            ShellLauncher.Start("cmd.exe", $"/c \"{path}\"", dir, hidden: !showConsole);
         }
         else
         {
-            Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true, WorkingDirectory = dir });
+            ShellLauncher.Start(path, "", dir);
         }
     }
 
@@ -673,7 +690,7 @@ public sealed class ButtonActionEngine : IDisposable
         if (spec is null)
         {
             var url = string.IsNullOrWhiteSpace(value) ? "https://duckduckgo.com" : value;
-            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            ShellLauncher.Start(url);
             log($"[EXEC] browser -> {url}");
             return;
         }
@@ -687,17 +704,12 @@ public sealed class ButtonActionEngine : IDisposable
             // "Other" with no path (or a known browser that's no longer installed):
             // fall back to the OS default browser, same as the legacy behavior.
             var url = string.IsNullOrWhiteSpace(spec.Url) ? "https://duckduckgo.com" : spec.Url;
-            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            ShellLauncher.Start(url);
             log($"[EXEC] browser -> default -> {url}");
             return;
         }
 
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = exe,
-            Arguments = string.IsNullOrWhiteSpace(spec.Url) ? "" : spec.Url,
-            UseShellExecute = true
-        });
+        ShellLauncher.Start(exe, string.IsNullOrWhiteSpace(spec.Url) ? "" : spec.Url);
         log($"[EXEC] browser -> {exe} {spec.Url}");
     }
 

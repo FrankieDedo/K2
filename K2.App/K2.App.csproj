@@ -159,6 +159,8 @@
     <Resource Include="Assets\dock_bg.png" />
     <Resource Include="Assets\makalu_mouse.png" />
     <Resource Include="Assets\makalu_mouse_rainbow.png" />
+    <Resource Include="Assets\makalu_max_mouse.png" />
+    <Resource Include="Assets\makalu_max_mouse_rainbow.png" />
     <Resource Include="Assets\everest60_board.png" />
     <Resource Include="Assets\everest60_numpad.png" />
     <Resource Include="Assets\mountain_logo.png" />

@@ -79,7 +79,7 @@ internal static class DpDefaultIconRenderer
             // internally (see LiveTileRenderer.TryRenderEdStatus), keyed off their live state
             // rather than the static caption alone.
             if (spec.TextOnly && actionType is not ("dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus"
-                                                   or "dp_zcstatus" or KspTelemachus.ActionType or ModLinkGames.ActionType
+                                                   or "dp_zcstatus" or KspTelemachus.ActionType or ModLinkGames.ActionType or ModLinkGames.StudioActionType
                                                    or "dp_screen" or "dp_custom"))
             {
                 ok = IconImageGenerator.TryGenerateCaptionIcon(userText ?? caption ?? actionValue ?? "", iconSize, work);
@@ -141,6 +141,8 @@ internal static class DpDefaultIconRenderer
                             iconSize, work);
                     break;
                 case ModLinkGames.ActionType:
+                case ModLinkGames.StudioActionType:
+                    App.WriteCrashLog($"[ICON] modlink tile {actionValue}");
                     ok = DpLiveTileService.RenderModLinkTile(actionValue,
                             showCaption ? userText ?? DpLiveTileService.TileCaption(actionType, actionValue) : "",
                             iconSize, work);

@@ -24,11 +24,19 @@ internal sealed class MakaluService
     /// (controller.py: <c>detect_model()</c>/<c>REMAP_DEFAULTS_67</c>/<c>_MAX</c>).</summary>
     public readonly record struct DeviceInfo(Model Model, string Label, int ButtonCount, int DpiMin);
 
+    /// <summary>Debug (Settings &gt; Debug): with no real Makalu plugged in, report a
+    /// Makalu Max as connected so its UI can be looked at without the hardware. Only the
+    /// detection is faked — every command still fails with "not connected". Session-only.</summary>
+    public static bool SimulateMax { get; set; }
+
+    /// <summary>True while the "connected" Makalu is the <see cref="SimulateMax"/> one.</summary>
+    public bool IsSimulated => SimulateMax && MakaluHidNative.FindDevice() is null;
+
     public bool IsConnected(out DeviceInfo info)
     {
         var found = MakaluHidNative.FindDevice();
-        if (found is null) { info = default; return false; }
-        bool isMax = found.Value.Pid == MakaluHidNative.PidMakaluMax;
+        if (found is null && !SimulateMax) { info = default; return false; }
+        bool isMax = found is null || found.Value.Pid == MakaluHidNative.PidMakaluMax;
         info = isMax
             ? new DeviceInfo(Model.MakaluMax, "Makalu Max", 8, MakaluProtocol.DpiMinMax)
             : new DeviceInfo(Model.Makalu67, "Makalu 67", 6, MakaluProtocol.DpiMin67);
@@ -122,4 +130,19 @@ internal sealed class MakaluService
 
     public bool SetButtonSniper(int buttonIndex1Based, int sniperDpi, int dpiMin) =>
         WithDevice(h => MakaluProtocol.SetButtonSniper(h, buttonIndex1Based, sniperDpi, dpiMin));
+
+    public bool SetButtonHostAction(int buttonIndex1Based) =>
+        WithDevice(h => MakaluProtocol.SetButtonHostAction(h, buttonIndex1Based));
+
+    /// <summary>Sends a stored assignment string to the mouse, whatever its kind: a firmware
+    /// function ("left", "dpi+", ...), "sniper:{dpi}", or a K2 action
+    /// (<see cref="MakaluRemapData.IsAction"/>).</summary>
+    public bool ApplyAssignment(int buttonIndex1Based, string assignment, int dpiMin)
+    {
+        if (MakaluRemapData.IsAction(assignment))
+            return SetButtonHostAction(buttonIndex1Based);
+        if (assignment.StartsWith("sniper:") && int.TryParse(assignment.Split(':')[1], out int dpi))
+            return SetButtonSniper(buttonIndex1Based, dpi, dpiMin);
+        return SetButtonRemap(buttonIndex1Based, assignment);
+    }
 }

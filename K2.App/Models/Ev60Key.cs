@@ -90,7 +90,7 @@ public sealed class Ev60Key : INotifyPropertyChanged
         get
         {
             string body = string.IsNullOrEmpty(_actionType) ? "(empty)" : ActionSummary;
-            return $"{Name}  —  {body}";
+            return $"{Name}:   {body}";
         }
     }
 
@@ -98,7 +98,7 @@ public sealed class Ev60Key : INotifyPropertyChanged
     /// ActionSummary — every action type must resolve through ActionTypeHelper.Summary
     /// instead of falling back to the raw ActionType string (e.g. "oscmd" showing up as
     /// "oscmd" instead of the assigned command; user report 2026-07-22).</summary>
-    private string ActionSummary => ActionTypeHelper.Summary(_actionType, _actionValue);
+    private string ActionSummary => ActionTypeHelper.ListSummary(_actionType, _actionValue);
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnChanged([CallerMemberName] string? name = null) =>

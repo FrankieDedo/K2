@@ -51,6 +51,11 @@ public partial class MainWindow
     /// identity at all).</summary>
     private MakaluDpiButtonWatcher? _mkDpiWatcher;
 
+    /// <summary>Host + engine for the buttons that carry a K2 action instead of a
+    /// firmware function — see <see cref="MkActionHost"/>.</summary>
+    private MkActionHost? _mkActionHost;
+    private ButtonActionEngine? _mkEngine;
+
     /// <summary>One-shot flash timer for the DPI hotspot — that button has no distinct
     /// release edge (see MakaluDpiButtonWatcher's class doc), so its highlight is timed
     /// instead of press/release like the other 5.</summary>
@@ -78,6 +83,25 @@ public partial class MainWindow
         MkRgbSettings.Init(_makalu, LogMakalu, _mkStore, MkCurrentProfile);
         MkDpiRemap.Init(_makalu, LogMakalu, _mkStore, MkCurrentProfile);
         MkRgbSettings.PreviewChanged += MkUpdateLedRingPreview;
+
+        _mkActionHost = new MkActionHost(
+            dispatcher:            Dispatcher,
+            log:                   LogMakalu,
+            currentProfile:        MkCurrentProfile,
+            profileCount:          () => _mkStore.GetExistingProfiles().Count,
+            getButtons:            MkDpiRemap.GetHostButtons,
+            pressButton:           MkPressButton,
+            switchProfile:         MkSwitchProfile,
+            configuredPythonPath:  () => _store.GetSetting("python.exePath"),
+            listAllProfileTargets: ListAllProfileTargets,
+            switchProfileByKey:    SwitchProfileByKey,
+            listMacroNames:        ListAllMacroNames,
+            playMacro:             PlayMacroByName,
+            lighting:              this);
+        MkDpiRemap.SetActionHost(_mkActionHost);
+        _mkEngine = new ButtonActionEngine(_mkActionHost);
+        _mkEngine.Start();
+        Closed += (_, _) => { try { _mkEngine?.Dispose(); } catch { /* ignore */ } };
         BuildMkHotspots();
         InitMkSectionNav();
 
@@ -783,6 +807,7 @@ public partial class MainWindow
     private void MkUpdateMouseImage(bool isLighting)
     {
         if (ImgMkMouse is null) return;
+        _mkImageLighting = isLighting;
         // A plain relative Uri ("Assets/foo.png", UriKind.Relative) constructed in
         // code — as opposed to a XAML Source="..." attribute, which WPF's markup
         // extension resolves for you — has no base to resolve against and silently
@@ -792,9 +817,31 @@ public partial class MainWindow
         // and always show the opaque rainbow photo) is over: the Custom Lighting
         // squares added 2026-07-27 point leader lines at the ring, so it needs to
         // actually be visible again while the Lighting section is active.
-        string file = isLighting ? "makalu_mouse.png" : "makalu_mouse_rainbow.png";
+        // The Max has its own pair (Base Camp's images/Makalu/makalu_light.png and
+        // setting_mouse.png): a shorter, wider photo, centred in the same 190x422 space.
+        string model = MkIsMax ? "makalu_max_mouse" : "makalu_mouse";
+        string file = isLighting ? $"{model}.png" : $"{model}_rainbow.png";
         ImgMkMouse.Source = new BitmapImage(new Uri($"pack://application:,,,/Assets/{file}"));
+        Canvas.SetTop(ImgMkMouse, MkImageTop);
     }
+
+    /// <summary>Last value <see cref="MkUpdateMouseImage"/> was called with — lets a model
+    /// change redo the swap without knowing which section is open.</summary>
+    private bool _mkImageLighting;
+
+    private bool MkIsMax => _mkInfo.Model == MakaluService.Model.MakaluMax;
+
+    /// <summary>Makalu Max photo: 1261x2268 native, drawn 190 wide = ~342 tall.</summary>
+    private const double MkMaxImageScale = 190.0 / 1261.0;
+    private const double MkMaxImageTop = (422 - 2268 * MkMaxImageScale) / 2;
+
+    /// <summary>Canvas.Top of the photo inside the 190x422 space the ring and the hotspots
+    /// share with it.</summary>
+    private double MkImageTop => MkIsMax ? MkMaxImageTop : 0;
+
+    /// <summary>A point on the Max photo (native px) in that same space.</summary>
+    private static (double X, double Y) MkMaxPoint(double x, double y) =>
+        (x * MkMaxImageScale, y * MkMaxImageScale + MkMaxImageTop);
 
     private void ShowMkSection(FrameworkElement panel)
     {
@@ -812,7 +859,8 @@ public partial class MainWindow
     // sampling, 2026-07-11) to match Mountain's own numbered reference diagram
     // for the Makalu 67 (1/2 top buttons, 3 wheel, 5 above 4 on the side, 6
     // DPI button below the wheel). MkHotspotPosMax (8 buttons, different
-    // layout) is still hand-estimated — no equivalent reference diagram seen.
+    // layout) is placed by eye on the Max's own photo (native px, 2026-10-05) —
+    // no numbered reference diagram seen, and button 6 isn't visible from above.
     // ------------------------------------------------------------
 
     private static readonly Dictionary<int, (double X, double Y)> MkHotspotPos67 = new()
@@ -826,14 +874,14 @@ public partial class MainWindow
     };
     private static readonly Dictionary<int, (double X, double Y)> MkHotspotPosMax = new()
     {
-        [1] = (70, 90),    // left
-        [2] = (120, 90),   // right
-        [3] = (101, 75),    // middle/wheel
-        [4] = (101, 137),   // dpi
-        [5] = (175, 180),  // extra button 5
-        [6] = (175, 230),  // extra button 6
-        [7] = (15, 180),   // forward
-        [8] = (15, 230),   // back
+        [1] = MkMaxPoint(360, 570),   // left
+        [2] = MkMaxPoint(980, 570),   // right
+        [3] = MkMaxPoint(671, 440),   // middle/wheel
+        [4] = MkMaxPoint(671, 905),   // dpi
+        [5] = MkMaxPoint(671, 1080),  // button 5, behind dpi
+        [6] = MkMaxPoint(150, 1500),  // button 6, on the side below 7/8
+        [7] = MkMaxPoint(110, 850),   // forward
+        [8] = MkMaxPoint(150, 1230),  // back
     };
 
     private Dictionary<int, (double X, double Y)> MkHotspotPos =>
@@ -923,12 +971,53 @@ public partial class MainWindow
     /// silently doing nothing.</summary>
     private void OnMakaluButtonEvent(byte category, int buttonIndex1Based)
     {
+        // A button with a K2 action: the mouse only says "pressed", the action is K2's own
+        // (MakaluRemapData.MakeAction). Still acked, as Base Camp does after every such
+        // notification; the stored-path readback is skipped, there is none to read.
+        if (MkDpiRemap.TryGetAction(buttonIndex1Based, out string type, out string value))
+        {
+            LogMakalu($"[Makalu] button {buttonIndex1Based}: K2 action {type} (category 0x{category:X2})");
+            System.Threading.Tasks.Task.Run(() => AckMakaluButtonEvent(buttonIndex1Based));
+            _mkEngine?.Execute(type, value, buttonIndex1Based);
+            return;
+        }
+
         if (category != MakaluProtocol.CategoryRunProgramOrFolder)
         {
             LogMakalu($"[Makalu] button {buttonIndex1Based}: software action category 0x{category:X2} not yet implemented");
             return;
         }
         System.Threading.Tasks.Task.Run(() => RunMakaluButtonAction(buttonIndex1Based));
+    }
+
+    private void AckMakaluButtonEvent(int buttonIndex1Based)
+    {
+        var found = MakaluHidNative.FindDevice();
+        if (found is null) return;
+        using var h = MakaluHidNative.Open(found.Value.Path);
+        if (h is null || h.IsInvalid) return;
+        MakaluProtocol.AckButtonEvent(h, buttonIndex1Based);
+    }
+
+    /// <summary>IActionHost.PressButton — runs the K2 action on a button, if it has one.</summary>
+    private void MkPressButton(int buttonIndex1Based)
+    {
+        if (MkDpiRemap.TryGetAction(buttonIndex1Based, out string type, out string value))
+            _mkEngine?.Execute(type, value, buttonIndex1Based);
+    }
+
+    /// <summary>IActionHost.SwitchProfile on the Makalu itself: "Next" | "Previous" | slot.</summary>
+    private void MkSwitchProfile(string target)
+    {
+        var slots = _mkStore.GetExistingProfiles();
+        if (slots.Count == 0) return;
+        slots.Sort();
+        int at = Math.Max(0, slots.IndexOf(MkCurrentProfile()));
+        int slot;
+        if (target == "Next") slot = slots[(at + 1) % slots.Count];
+        else if (target == "Previous") slot = slots[(at - 1 + slots.Count) % slots.Count];
+        else if (!int.TryParse(target, out slot) || !slots.Contains(slot)) return;
+        MkSwitchProfileTo(slot);
     }
 
     /// <summary>Acks the notification, reads back the stored path, and launches it —
@@ -1051,10 +1140,8 @@ public partial class MainWindow
     /// (scale = 190/364) with a small overscan margin, per the user's own
     /// advice ("rendi l'anello leggermente più grande") so it fully covers
     /// the gap despite any residual sub-pixel misalignment.
-    /// NOT model-dependent: both Makalu 67 and Max show this same photo (Max
-    /// has no reference image of its own, see MkHotspotPosMax's doc
-    /// comment), so the ring aligns to the one image actually on screen
-    /// rather than to a per-model formula.</summary>
+    /// Those are the Makalu 67's; the Max has its own photo and its own numbers,
+    /// see the properties below.</summary>
     private const double MkRingImageScale = 190.0 / 364.0;
     private const double MkRingOverscan = 3.0; // extra canvas px on each side beyond the measured hole
     /// <summary>User-reported corrections (2026-07-13) against the measured
@@ -1063,10 +1150,20 @@ public partial class MainWindow
     /// overall against the actual on-screen render).</summary>
     private const double MkRingTopAdjustNative = -14.0;
     private const double MkRingHeightAdjustNative = -8.0;
-    private const double MkRingLeft = 152 * MkRingImageScale - MkRingOverscan;
-    private const double MkRingTop = (252 + MkRingTopAdjustNative) * MkRingImageScale - MkRingOverscan;
-    private const double MkRingWidth = 83 * MkRingImageScale + MkRingOverscan * 2;
-    private const double MkRingHeight = (273 + MkRingHeightAdjustNative) * MkRingImageScale + MkRingOverscan * 2;
+    // The Max values are the cutout's bounding box in ITS photo's alpha channel (native
+    // 546,296 251x909, measured 2026-10-05), not yet corrected against a real render.
+    private double MkRingLeft => MkIsMax
+        ? 546 * MkMaxImageScale - MkRingOverscan
+        : 152 * MkRingImageScale - MkRingOverscan;
+    private double MkRingTop => MkIsMax
+        ? 296 * MkMaxImageScale + MkMaxImageTop - MkRingOverscan
+        : (252 + MkRingTopAdjustNative) * MkRingImageScale - MkRingOverscan;
+    private double MkRingWidth => MkIsMax
+        ? 251 * MkMaxImageScale + MkRingOverscan * 2
+        : 83 * MkRingImageScale + MkRingOverscan * 2;
+    private double MkRingHeight => MkIsMax
+        ? 909 * MkMaxImageScale + MkRingOverscan * 2
+        : (273 + MkRingHeightAdjustNative) * MkRingImageScale + MkRingOverscan * 2;
 
     /// <summary>Builds the ring as 8 FILLED discrete cells (not a hollow
     /// stroke, not a smooth gradient) — one per physical LED, 4 stacked down
@@ -1165,9 +1262,8 @@ public partial class MainWindow
     /// <summary>Builds the 8 squares + their leader lines into CvsMkCustomSquares, 4 on
     /// each side, in the same visual top-to-bottom order as the ring's own cells
     /// (<see cref="MkCellLed"/>) so both always agree. Rebuilt whenever the ring itself
-    /// is (called from <see cref="BuildMkLedRing"/>) — cheap, and the geometry never
-    /// actually changes per model (ring position isn't model-dependent, see
-    /// MkRingLeft/Top's doc), so this is just "rebuild alongside", not a real need.</summary>
+    /// is (called from <see cref="BuildMkLedRing"/>), which a model change triggers: the ring sits
+    /// elsewhere on the Max photo.</summary>
     private void BuildMkCustomSquares()
     {
         CvsMkCustomSquares.Children.Clear();
@@ -1569,6 +1665,7 @@ public partial class MainWindow
             _mkInfo = info;
             MkRgbSettings.UpdateDeviceInfo(info);
             MkDpiRemap.UpdateDeviceInfo(info);
+            MkUpdateMouseImage(_mkImageLighting);
             BuildMkHotspots();
             // Reflect the actual connected model (Makalu Max vs 67 sit in the same tab
             // slot — only one is ever physically plugged in) unless the user renamed
@@ -1590,9 +1687,74 @@ public partial class MainWindow
         // mouse reflects it even if it was switched while disconnected.
         if (connected && !wasConnected)
             MkReloadProfile(MkCurrentProfile());
+
+        MkPollBattery();
+    }
+
+    // ------------------------------------------------------------
+    // Battery (Makalu Max only — the 67 is wired)
+    // ------------------------------------------------------------
+
+    private readonly MakaluMaxBattery _mkBattery = new();
+    private DateTime _mkBatteryNextPoll;
+    private bool _mkBatteryBusy;
+
+    /// <summary>Called on every status tick; actually reads once a minute (Base Camp: every
+    /// 3 minutes), sooner while no read has succeeded yet.</summary>
+    private async void MkPollBattery()
+    {
+        if (!_mkConnected || _mkInfo.Model != MakaluService.Model.MakaluMax)
+        {
+            PnlMkBattery.Visibility = Visibility.Collapsed;
+            _mkBatteryNextPoll = default;
+            return;
+        }
+        if (_makalu.IsSimulated)
+        {
+            MkShowBattery(new MakaluMaxBattery.Reading(72, Wired: false));
+            return;
+        }
+        if (_mkBatteryBusy || DateTime.UtcNow < _mkBatteryNextPoll) return;
+
+        _mkBatteryBusy = true;
+        try
+        {
+            // App.WriteLog, not LogMakalu: must reach the log file at any log level, since
+            // this protocol has never met real hardware (see MakaluMaxBattery).
+            var reading = await System.Threading.Tasks.Task.Run(() => _mkBattery.Read(App.WriteLog));
+            _mkBatteryNextPoll = DateTime.UtcNow.AddSeconds(reading is null ? 10 : 60);
+            // A failed read keeps the last level on screen: through the receiver a
+            // sleeping mouse simply doesn't answer.
+            if (reading is { } r && _mkConnected) MkShowBattery(r);
+        }
+        catch (Exception ex) { App.WriteLog($"[MakaluMaxBattery] read threw: {ex.Message}"); }
+        finally { _mkBatteryBusy = false; }
+    }
+
+    private void MkShowBattery(MakaluMaxBattery.Reading r)
+    {
+        // Segoe MDL2 Battery0..10 / BatteryCharging0..10 — the two ranges aren't contiguous.
+        int step = Math.Clamp((r.Percent + 5) / 10, 0, 10);
+        int glyph = r.Wired
+            ? step switch { 10 => 0xEA93, 9 => 0xE83E, _ => 0xE85A + step }
+            : step == 10 ? 0xE83F : 0xE850 + step;
+
+        TxtMkBatteryIcon.Text = char.ConvertFromUtf32(glyph);
+        TxtMkBattery.Text = r.Percent + "%";
+        var brush = (Brush)FindResource(!r.Wired && r.Percent < 10 ? "K2AccentBrush" : "K2TextMutedBrush");
+        TxtMkBatteryIcon.Foreground = brush;
+        TxtMkBattery.Foreground = brush;
+        PnlMkBattery.ToolTip = Loc.Get(r.Wired ? "makalu_battery_wired_tip" : "makalu_battery_tip");
+        PnlMkBattery.Visibility = Visibility.Visible;
     }
 
     private void BtnMkRefresh_Click(object sender, RoutedEventArgs e) => MkRefreshStatus();
+
+    private void CkDebugSimulateMakaluMax_Click(object sender, RoutedEventArgs e)
+    {
+        MakaluService.SimulateMax = CkDebugSimulateMakaluMax.IsChecked == true;
+        MkRefreshStatus();
+    }
 
     // ------------------------------------------------------------
     // Backlight auto-off (software idle timer — see _mkAutoOffTimer's doc)

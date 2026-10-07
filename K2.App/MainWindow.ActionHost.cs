@@ -59,6 +59,8 @@ public partial class MainWindow : IActionHost
     // MacroPad host: self-target is the active MacroPad (see ListAllProfileTargets).
     string IActionHost.SelfTargetKey => _activeMpDeviceId is int id ? $"macropad:{id}" : "";
 
+    ILightingController? IActionHost.Lighting => this;
+
     IReadOnlyList<HostButton> IActionHost.GetButtons()
         => _keys.Select(k => new HostButton(
                k.Index, k.KeyMatrix, false, null, k.ActionType, k.ActionValue))

@@ -191,7 +191,8 @@ public partial class MainWindow
             listAllProfileTargets: ListAllProfileTargets,
             switchProfileByKey:    SwitchProfileByKey,
             listMacroNames:        ListAllMacroNames,
-            playMacro:             PlayMacroByName);
+            playMacro:             PlayMacroByName,
+            lighting:              this);
         Ev60KeyBindingPanel.SetActionHost(_ev60ActionHost);
         Ev60KeyBindingPanel.SetMainBoardDisablePush(PushEv60DisabledKeysToDevice);
         Ev60KeyBindingPanel.SetMainKeyFactoryRestore(RestoreEv60MainKeyToFactory);

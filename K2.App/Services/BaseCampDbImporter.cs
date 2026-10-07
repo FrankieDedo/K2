@@ -1139,7 +1139,9 @@ public sealed class BaseCampDbImporter
             // EvTranslateMatrix) and that manually-created keys are already keyed by — without
             // this translation, an imported key's KeyMatrix never matches what a live press looks
             // up, so the action silently never fires (confirmed user report 2026-07-19).
-            int keyMatrix = Models.EverestWMatrixMap.Translate(b.DLLMatrixIndex);
+            // No translation = not a keyboard key (media dock crown/buttons): skipped, see
+            // TryTranslate's doc comment.
+            if (!Models.EverestWMatrixMap.TryTranslate(b.DLLMatrixIndex, out int keyMatrix)) continue;
             store.SaveKey(new EverestKeyRecord(slot, keyMatrix, null, at, av));
             regular++;
         }

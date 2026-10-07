@@ -362,6 +362,7 @@ internal sealed class Everest60SdkService : IDisposable
     /// <summary>Reads the Game Mode master state (reflects Fn+Win toggles). Null on failure.</summary>
     public bool? GetGameModeStatus()
     {
+        if (!NativeDependencyResolver.IsResolvable("Everest360_USB.dll")) return null;
         try
         {
             bool enabled = false;

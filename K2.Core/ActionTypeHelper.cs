@@ -43,7 +43,7 @@ public static class ActionTypeHelper
     /// "dp_folder".</summary>
     public static readonly string[] PageOnlyActionTypes =
         { "dp_folder", "dp_back", "dp_emojibrowser", "dp_clock", "dp_sysmon", "dp_speedtest",
-          "dp_edstatus", "dp_zcstatus", KspTelemachus.ActionType, ModLinkGames.ActionType, "dp_screen", CustomActionType.Tag };
+          "dp_edstatus", "dp_zcstatus", KspTelemachus.ActionType, ModLinkGames.ActionType, ModLinkGames.StudioActionType, "dp_screen", CustomActionType.Tag };
 
     /// <summary>
     /// True for a "macro" (Play Macro) action with no playable macro assigned — either no
@@ -823,6 +823,7 @@ public static class ActionTypeHelper
             "dp_zcstatus"  => Array.ConvertAll(ZcStatusItems, i => (i.Value, i.LocKey)),
             KspTelemachus.ActionType => KspTelemachus.AllItems().Select(i => (i.Value, i.LocKey)).ToArray(),
             ModLinkGames.ActionType => ModLinkGames.LiveItems().Select(i => (i.Value, i.LocKey)).ToArray(),
+            ModLinkGames.StudioActionType => ModLinkGames.StudioItems().Select(i => (i.Value, i.LocKey)).ToArray(),
             _              => Array.Empty<(string Value, string LocKey)>(),
         };
         foreach (var (v, locKey) in table)
@@ -857,7 +858,7 @@ public static class ActionTypeHelper
         string val = actionValue ?? "";
         return actionType switch
         {
-            "keys"     => val,
+            "keys"     => KeyCombo.Display(val),
             "hotkeyswitch" => HotkeySwitchSummary(actionValue),
             "multi"    => MultiSummary(actionValue),
             "adobe" or "davinci" or "zoom" => val,
@@ -866,6 +867,8 @@ public static class ActionTypeHelper
             "url"      => val,
             "browser"  => BrowserSummary(val),
             "profile"  => ProfileSummary(val),
+            LightingActionTypes.Brightness => BrightnessSummary(actionValue),
+            LightingActionTypes.Effect     => LightEffectSummary(actionValue),
             "oscmd"    => val,
             "media"    => MediaSummary(actionValue),
             "mouse"    => val,
@@ -884,10 +887,34 @@ public static class ActionTypeHelper
             "pyscript" => Loc.Get("act_pyscript"),
             "dp_emojibrowser" => Loc.Get("act_emojibrowser"),
             "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus"
-                or KspTelemachus.ActionType or ModLinkGames.ActionType or "dp_screen" or CustomActionType.Tag
+                or KspTelemachus.ActionType or ModLinkGames.ActionType or ModLinkGames.StudioActionType or "dp_screen" or CustomActionType.Tag
                        => LiveTileSummary(actionType, actionValue),
             _          => IsUnrecognized(actionType) ? Loc.Get("act_unrecognized") : actionType ?? "",
         };
+    }
+
+    /// <summary>User-facing name of an action TYPE ("Keys combination", "Open program / file"),
+    /// the same caption the action picker shows for it. Empty when the type has none (unknown
+    /// tag), so callers can simply leave the column out.</summary>
+    public static string TypeLabel(string? actionType)
+    {
+        if (string.IsNullOrEmpty(actionType) || IsUnrecognized(actionType)) return "";
+        string key = actionType == "dp_emojibrowser" ? "act_emojibrowser" : $"act_{actionType}";
+        string label = Loc.Get(key);
+        return label == $"[{key}]" ? "" : label;   // Loc's missing-key marker
+    }
+
+    /// <summary>"Type  —  Action" body of a mapped-keys list row, on every device. Collapses to
+    /// one part when the summary has nothing to add to the type ("Disabled key", an empty
+    /// media key) and drops the type a summary already leads with ("Play macro: X").</summary>
+    public static string ListSummary(string? actionType, string? actionValue)
+    {
+        string summary = Summary(actionType, actionValue);
+        string label = TypeLabel(actionType);
+        if (label.Length == 0 || summary == label) return summary;
+        if (summary.StartsWith(label + ": ", StringComparison.Ordinal))
+            summary = summary[(label.Length + 2)..];
+        return summary.Length == 0 ? label : $"{label}  —  {summary}";
     }
 
     /// <summary>Display text for an "emoji" action: the emoji itself plus its English name
@@ -920,7 +947,7 @@ public static class ActionTypeHelper
         var spec = HotkeySwitchPayload.Parse(actionValue);
         if (spec is null || (string.IsNullOrEmpty(spec.ShortcutA) && string.IsNullOrEmpty(spec.ShortcutB)))
             return Loc.Get("act_hotkeyswitch");
-        return $"{spec.ShortcutA} / {spec.ShortcutB}";
+        return $"{KeyCombo.Display(spec.ShortcutA)} / {KeyCombo.Display(spec.ShortcutB)}";
     }
 
     /// <summary>Display text for a "multi" action: how many steps are chained.</summary>
@@ -970,6 +997,34 @@ public static class ActionTypeHelper
         return payload.Targets.Count == 0
             ? Loc.Get("act_profile")
             : string.Join(", ", payload.Targets.ConvertAll(t => string.IsNullOrWhiteSpace(t.Name) ? t.Target : t.Name));
+    }
+
+    /// <summary>Display text for a "light_brightness" action: what a press does ("Cycle"),
+    /// plus the device count when it drives more than one.</summary>
+    public static string BrightnessSummary(string? actionValue)
+    {
+        var spec = BrightnessActionPayload.Parse(actionValue);
+        string mode = Loc.Get(spec.Mode switch
+        {
+            BrightnessActionPayload.Up   => "light_mode_up",
+            BrightnessActionPayload.Down => "light_mode_down",
+            _                            => "light_mode_cycle",
+        });
+        return spec.Targets.Count > 1 ? $"{mode} \u00b7 {Loc.Get("light_n_devices", spec.Targets.Count)}" : mode;
+    }
+
+    /// <summary>Display text for a "light_effect" action: the effect (or direction) and the
+    /// device it is set on.</summary>
+    public static string LightEffectSummary(string? actionValue)
+    {
+        var spec = LightEffectPayload.Parse(actionValue);
+        string what = spec.Target switch
+        {
+            LightEffectPayload.NextEffect     => Loc.Get("light_effect_next"),
+            LightEffectPayload.PreviousEffect => Loc.Get("light_effect_previous"),
+            _ => spec.Name.Length > 0 ? spec.Name : spec.Target,
+        };
+        return spec.Device.Length > 0 ? $"{what} \u2014 {spec.Device}" : what;
     }
 
     /// <summary>Normalizes Base Camp's "OS Commands" SubFunctionType/FunctionValue (e.g.

@@ -97,6 +97,11 @@ public interface IActionHost
     /// </summary>
     string SelfTargetKey => "";
 
+    /// <summary>Backlight control for the picker's "Lighting" category
+    /// (<see cref="LightingActionTypes"/>). Null on a host with no lighting to drive — the
+    /// category is then not offered at all.</summary>
+    ILightingController? Lighting => null;
+
     /// <summary>Button states for the current profile (for the <c>get_buttons</c> API).</summary>
     IReadOnlyList<HostButton> GetButtons();
 
@@ -168,6 +173,11 @@ public interface IActionHost
     /// hidden entirely: it would have nothing to offer and no way to create anything.</summary>
     bool SupportsScreenProbes => false;
 
+    /// <summary>True on the Makalu mouse's host: the picker then offers the "Makalu" category,
+    /// whose cards are functions stored in the mouse's own memory
+    /// (<see cref="MakaluActionTypes"/>) rather than actions K2 executes.</summary>
+    bool SupportsMouseFirmwareActions => false;
+
     /// <summary>The probes defined on this machine, as <c>(Id, Name)</c> — the picker's list for
     /// a <c>dp_screen</c> key. Empty on a host with no probe store.</summary>
     IReadOnlyList<(string Id, string Name)> ListScreenProbes() => System.Array.Empty<(string, string)>();
@@ -202,6 +212,14 @@ public interface IActionHost
     /// window (K2.App's DisplayPad host). When false the "Configure speed test…" button that
     /// <see cref="ButtonActionDialog"/> shows for a <c>dp_speedtest</c> action is hidden.</summary>
     bool SupportsSpeedTestConfig => false;
+
+    /// <summary>True on a host that has the Fender Studio Pro dedicated profile (K2.App's DisplayPad
+    /// host): the dialog of a <c>dp_studio</c> key then offers a button to its configuration.</summary>
+    bool SupportsStudioConfig => false;
+
+    /// <summary>Opens the Studio Pro profile's configuration window. No-op when
+    /// <see cref="SupportsStudioConfig"/> is false.</summary>
+    void OpenStudioConfig() { }
 
     /// <summary>Opens the speed-test configuration window (modal, owned by the active window),
     /// persisting and applying whatever the user saves. No-op when

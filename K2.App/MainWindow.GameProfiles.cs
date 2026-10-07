@@ -308,7 +308,12 @@ public partial class MainWindow
     // Every game-profile flag defaults ON, so an ABSENT setting must read as true — only an
     // explicit "0" turns one off. Reading absence as false would silently disable the feature
     // for everyone on first run.
-    private bool LoadEnabled(string profileId)    => _dpStore.GetSetting(EnabledKey(profileId))    is not "0";
+    // Mod-link games (Minecraft, Space Engineers) are opt-in: absent = off. Every other profile
+    // keeps absent = on.
+    private bool LoadEnabled(string profileId) =>
+        _dpStore.GetSetting(EnabledKey(profileId)) is { } v
+            ? v != "0"
+            : ModLinkGames.GameFor(profileId) is null;
     private bool LoadReturn(string profileId)     => _dpStore.GetSetting(ReturnKey(profileId))     is not "0";
 
     /// <summary>True when this profile is set to activate only on a manual pick (the "show the
@@ -945,7 +950,14 @@ public partial class MainWindow
         }
     }
 
-    private int EnsureGameSlot(int deviceId, GameProfileDefinition def)
+    // Slots whose twelve tiles have been rendered this session. A slot is filled the first time
+    // it is opened (its game starts, or it is picked by hand), never at startup.
+    private readonly HashSet<(int Device, int Slot)> _gameSlotFilled = new();
+
+    /// <summary>Finds or creates the profile's reserved slot WITHOUT rendering its tiles. A single
+    /// empty key is stored so the slot "exists" (the store lists a profile by its buttons) and
+    /// shows in the pad's game list; the real tiles are written by <see cref="EnsureGameSlot"/>.</summary>
+    private int ReserveGameSlot(int deviceId, GameProfileDefinition def)
     {
         string reserved = GameSlotName(def);
         var existing = _dpStore.GetExistingProfiles(deviceId);
@@ -955,8 +967,33 @@ public partial class MainWindow
         {
             slot = existing.Count > 0 ? existing.Max() + 1 : 1;
             _dpStore.SetProfileName(deviceId, slot, reserved);
+            _dpStore.SaveButton(deviceId, slot, 0, null, null, null);
             DpLog($"[GAME] device {deviceId}: reserved slot {slot} for \"{def.Name}\"");
         }
+        return slot;
+    }
+
+    /// <summary>Called at startup and on every refresh: reserves the slot, and re-renders it only
+    /// if it was already opened this session (so a saved edit still reaches the pad).</summary>
+    private int PrepareGameSlot(int deviceId, GameProfileDefinition def)
+    {
+        int slot = ReserveGameSlot(deviceId, def);
+        return _gameSlotFilled.Contains((deviceId, slot)) ? EnsureGameSlot(deviceId, def) : slot;
+    }
+
+    private void FillGameSlotIfNeeded(int deviceId, int slot)
+    {
+        if (_gameSlotFilled.Contains((deviceId, slot))) return;
+        string? name = _dpStore.GetProfileName(deviceId, slot);
+        var def = GameProfileCatalog.All.FirstOrDefault(d => GameSlotName(d) == name);
+        if (def is not null) EnsureGameSlot(deviceId, def);
+    }
+
+    private int EnsureGameSlot(int deviceId, GameProfileDefinition def)
+    {
+        int slot = ReserveGameSlot(deviceId, def);
+        App.WriteCrashLog($"[GAME] {def.Id}: rendering slot {slot}");
+        _gameSlotFilled.Add((deviceId, slot));
 
         // Every page, not just the first: a page the user added in the config popup is written to
         // the pad under its own page id, so it is real data on the device rather than something
@@ -1014,6 +1051,7 @@ public partial class MainWindow
                 _dpStore.SaveIconSpec(deviceId, slot, p, i, spec.ToJson());
             }
         }
+        App.WriteCrashLog($"[GAME] {def.Id}: slot {slot} rendered");
         return slot;
     }
 
@@ -1023,6 +1061,7 @@ public partial class MainWindow
     /// dedicated profile hit (see <c>DpSpotifySwitchTo</c>'s remarks).</summary>
     private void GameSwitchTo(int deviceId, int slot)
     {
+        FillGameSlotIfNeeded(deviceId, slot);
         bool isActive = deviceId == DpSelectedDeviceId();
         _dpStore.SetCurrentProfile(deviceId, slot);
         if (isActive)
@@ -1079,7 +1118,7 @@ public partial class MainWindow
                 // KeysWithPrefix sweep at the end of this method.
                 if (LoadActivationManual(def.Id))
                 {
-                    EnsureGameSlot(deviceId, def);
+                    PrepareGameSlot(deviceId, def);
                     PruneStrayGameSlots(def, keepDeviceId: deviceId);
                     GameRegNote($"{def.Id}: manual activation — slot kept, launch watcher not armed");
                     continue;
@@ -1090,13 +1129,13 @@ public partial class MainWindow
                 // the watcher on, and an empty target would match the first process it saw.
                 if (string.IsNullOrWhiteSpace(EffectiveExeTarget(def)))
                 {
-                    EnsureGameSlot(deviceId, def);
+                    PrepareGameSlot(deviceId, def);
                     PruneStrayGameSlots(def, keepDeviceId: deviceId);
                     GameRegNote($"{def.Id}: no process name — slot kept, launch watcher not armed");
                     continue;
                 }
 
-                int slot = EnsureGameSlot(deviceId, def);
+                int slot = PrepareGameSlot(deviceId, def);
                 PruneStrayGameSlots(def, keepDeviceId: deviceId);
                 string key = $"{scope}{def.Id}:{deviceId}";
                 currentKeys.Add(key);
@@ -1120,7 +1159,17 @@ public partial class MainWindow
             }
         }
 
-        else GameRegNote("game profiles are off (master switch, or no DisplayPad) — none armed");
+        else
+        {
+            GameRegNote("game profiles are off (master switch, or no DisplayPad) — none armed");
+
+            // Master switch off: the profiles become inactive, so their reserved slots leave the
+            // pads too (a pad showing one is moved off it first). The user's edits live under
+            // gameprofile.{id}.* and are untouched — turning the switch back on rebuilds them.
+            if (!AppSettings.GameProfilesEnabled)
+                foreach (var def in GameProfileCatalog.All)
+                    PruneStrayGameSlots(def, keepDeviceId: -1);
+        }
 
         foreach (var stale in ProfileLaunchWatcher.Instance.KeysWithPrefix(scope).Except(currentKeys))
             ProfileLaunchWatcher.Instance.RemoveRegistration(stale);
@@ -1424,6 +1473,7 @@ public static class GameProfileCatalog
     /// <summary>A mod-link tile (Minecraft, Space Engineers). No stored caption: the painter names
     /// it from <see cref="ModLinkGames"/>, in the UI language — same as <see cref="Ksp"/>.</summary>
     private static Tile Mod(string value) => new(ModLinkGames.ActionType, value, "", CaptionIsLocKey: false);
+
 
     /// <summary>A plain shortcut from a mod-link game's catalogue, carrying the game's shipped
     /// default; <see cref="MainWindow.SyncedBind"/> swaps it for the player's real bind.</summary>

@@ -122,7 +122,8 @@ public partial class MainWindow
             listAllProfileTargets: ListAllProfileTargets,
             switchProfileByKey:    SwitchProfileByKey,
             listMacroNames:        ListAllMacroNames,
-            playMacro:             PlayMacroByName);
+            playMacro:             PlayMacroByName,
+            lighting:              this);
 
         _evEngine = new ButtonActionEngine(_evActionHost);
         _evEngine.Start();
@@ -1196,6 +1197,9 @@ public partial class MainWindow
             if (kd.MatrixId == matrixId) return string.IsNullOrEmpty(kd.Label) ? null : kd.Label;
         foreach (var kd in EverestKeyboardLayout.BoardRight)
             if (kd.MatrixId == matrixId) return string.IsNullOrEmpty(kd.Label) ? null : kd.Label;
+        // Crown rotation bindings imported from Base Camp (EverestWMatrixMap.Default 17/8).
+        if (matrixId == 262) return "Crown ←";
+        if (matrixId == 263) return "Crown →";
         return null;
     }
 
@@ -1629,7 +1633,13 @@ public partial class MainWindow
                 // the DB import path. Without it an imported key's KeyMatrix never matches
                 // what a live press looks up, so the action silently never fires (this was
                 // missing here — confirmed real bug, 2026-07-26).
-                int keyMatrix = Models.EverestWMatrixMap.Translate(matrixId);
+                // No translation = not a keyboard key (media dock crown/buttons): skipped, see
+                // TryTranslate's doc comment.
+                if (!Models.EverestWMatrixMap.TryTranslate(matrixId, out int keyMatrix))
+                {
+                    App.WriteLog($"[IMP-XML] skipped \"{b.Element("KeyNameFull")?.Value}\" (DLLMatrixIndex {matrixId}): not a keyboard key");
+                    continue;
+                }
                 _evStore.SaveKey(new EverestKeyRecord(slot, keyMatrix, null, actionType, actionValue));
                 regular++;
             }

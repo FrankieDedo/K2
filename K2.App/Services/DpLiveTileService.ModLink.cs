@@ -20,6 +20,7 @@ internal static partial class DpLiveTileService
     internal static bool RenderModLinkTile(string? value, string caption, int size, string outputPngPath)
     {
         var hit = ModLinkGames.Find(value);
+        if (hit is { Game.Midi: true } studio) return RenderStudioTile(studio.Game, studio.Item, size, outputPngPath);
         string profileId = hit?.Game.ProfileId ?? "";
         var accent = GameProfileTheme.AccentFor(profileId);
         LiveTileRenderer.EdAccentOverride = accent;
@@ -108,6 +109,11 @@ internal static partial class DpLiveTileService
     private static string ModLinkStamp(string? value)
     {
         var hit = ModLinkGames.Find(value);
+        if (hit is { Game.Midi: true } studio)
+        {
+            var st = ModLinkClient.Want(studio.Game);
+            return $"{value}:{st.Alive}:{st.InGame}:{ModRead(studio.Game, studio.Item).Lamp}";
+        }
         if (hit is { Item.Format: ModLinkFormat.Bars } bars)
         {
             var (big, rows) = ModBars(bars.Game, bars.Item);
@@ -117,6 +123,65 @@ internal static partial class DpLiveTileService
         return $"{value}:{r.Text}:{r.Unit}:{r.Fraction?.ToString("0.00", CultureInfo.InvariantCulture)}:{r.Lamp}:{r.IconFile}:{r.Badge}:{r.Wear?.ToString("0.00", CultureInfo.InvariantCulture)}";
     }
 
+    // Discord's own red and green (DiscordTileRenderer's MutedRed / SpeakingGreen): the same
+    // "live / hot" colours the pad already uses for a call, so Record and Play read the same way.
+    private static readonly Color StudioRed    = Color.FromArgb(237, 66, 69);
+    private static readonly Color StudioGreen  = Color.FromArgb(59, 165, 93);
+    private static readonly Color StudioYellow = Color.FromArgb(250, 200, 40);
+    private static readonly Color StudioBlue   = Color.FromArgb(88, 101, 242);
+    private static readonly Color StudioWhite  = Color.FromArgb(235, 235, 240);
+
+    /// <summary>Raised with the pad's id when its back key is pressed. Set by MainWindow, which
+    /// owns profile switching; called on the key thread.</summary>
+    internal static Action<int>? StudioBackRequested;
+
+    /// <summary>A Fender Studio Pro key: the function's pictogram in its colour on black, and the
+    /// two swapped while the program's LED for it is on (see
+    /// <see cref="LiveTileRenderer.TryRenderTransportTile"/>). No caption and none of the icon
+    /// style: the picture is the label.</summary>
+    private static bool RenderStudioTile(ModLinkGame game, ModLinkItem item, int size, string outputPngPath)
+    {
+        var s = ModLinkClient.Want(game);
+        // The back key is K2's own: it works with no program behind it, so it never dims.
+        bool known = (s.Alive && s.InGame) || item.Mcu == ModLinkGames.McuBack;
+        // A command with no LED behind it (Save, Undo) never lights: it has no state to show.
+        bool lit = item.Read is not null &&
+                   ModRead(game, item).Lamp is LiveTileRenderer.EdState.On or LiveTileRenderer.EdState.Alarm;
+        var (icon, label, color) = StudioLook(item.Value);
+        if (IconStyleScope.Current is { } spec) spec.BgImagePath = null;
+        return LiveTileRenderer.TryRenderTransportTile(icon, label, color, lit, known, size, outputPngPath);
+    }
+
+    private static (string Icon, string Label, Color Color) StudioLook(string value)
+    {
+        string id = value.StartsWith("sp.", StringComparison.Ordinal) ? value[3..] : value;
+        string n = id.Length > 0 && char.IsDigit(id[^1]) ? id[^1..] : "";
+        return id switch
+        {
+            "back"   => ("back", "", StudioWhite),
+            "record" => ("record", "", StudioRed),
+            "play"   => ("play", "", StudioGreen),
+            "loop"   => ("loop", "", StudioBlue),
+            "click"  => ("click", "", StudioBlue),
+            "saveas" => ("", "SAVE AS", StudioWhite),
+            "timemode"   => ("", "TIME", StudioWhite),
+            "anysolo"    => ("", "SOLO", StudioYellow),
+            "bankprev"   => ("", "BANK ◀", StudioWhite),
+            "banknext"   => ("", "BANK ▶", StudioWhite),
+            "trackprev"  => ("", "TRK ◀", StudioWhite),
+            "tracknext"  => ("", "TRK ▶", StudioWhite),
+            "flip"       => ("", "FLIP", StudioBlue),
+            "globalview" => ("", "ALL", StudioBlue),
+            _ when id.StartsWith("arm", StringComparison.Ordinal)    => ("", "R" + n, StudioRed),
+            _ when id.StartsWith("solo", StringComparison.Ordinal)   => ("", "S" + n, StudioYellow),
+            _ when id.StartsWith("mute", StringComparison.Ordinal)   => ("", "M" + n, StudioBlue),
+            _ when id.StartsWith("select", StringComparison.Ordinal) => ("", n, StudioWhite),
+            // stop, rewind, forward, marker, save, undo, redo, zoom, up/down/left/right: the id IS
+            // the pictogram's name.
+            _ => (id, id.ToUpperInvariant(), StudioWhite),
+        };
+    }
+
     private static string ModLinkCaption(string? value) =>
         ModLinkGames.Find(value) is { } hit
             ? Loc.Get(hit.Item.LocKey).ToUpper(CultureInfo.CurrentCulture)
@@ -124,9 +189,27 @@ internal static partial class DpLiveTileService
 
     /// <summary>A key press: the shortcut pinned on the key, else the player's real bind, else the
     /// game's shipped default. A reading with no control behind it presses nothing.</summary>
-    private static void ModLinkPress(string value, Action<string> log)
+    private static void ModLinkPress(string value, Action<string> log, int deviceId)
     {
         if (ModLinkGames.Find(value) is not { } hit) return;
+
+        // A MIDI game (Fender Studio Pro) presses a Mackie Control button, not a keystroke.
+        if (hit.Game.Midi)
+        {
+            if (hit.Item.Mcu == ModLinkGames.McuBack)
+            {
+                log($"[MODLINK] btn press -> {hit.Item.Value}: back to the previous profile");
+                StudioBackRequested?.Invoke(deviceId);
+                return;
+            }
+            if (hit.Item.Mcu is { } note)
+                log(McuClient.Press(note)
+                    ? $"[MODLINK] btn press -> {hit.Item.Value} sends MCU note 0x{note & 0xFF:X2}{((note & ModLinkGames.McuShift) != 0 ? " +Shift" : "")}"
+                    : $"[MODLINK] btn press -> {hit.Item.Value} not sent: {McuClient.LastError}");
+            ModLinkClient.PollSoon(hit.Game);
+            return;
+        }
+
         var (_, pinned) = ModLinkGames.Split(value);
         string? keys = pinned ?? ModLinkBinds.For(hit.Game, hit.Item.Bind) ?? hit.Item.Keys;
         if (string.IsNullOrEmpty(keys)) return;

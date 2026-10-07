@@ -229,7 +229,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
             if (HasAction)
                 return _actionType switch
                 {
-                    "keys"      => _actionValue ?? "",
+                    "keys"      => K2.Core.KeyCombo.Display(_actionValue),
                     "url"       => "URL",
                     "exec"      => Path.GetFileName(K2.Core.ExecActionPayload.PathOf(_actionValue)),
                     "dp_folder" => "▸",   // folder — label comes from image
@@ -239,7 +239,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
                     // picture, so this only shows in the moment between assigning the action and
                     // the tile being rendered.
                     "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus"
-                        or K2.Core.KspTelemachus.ActionType or K2.Core.ModLinkGames.ActionType or "dp_screen" or "dp_custom"
+                        or K2.Core.KspTelemachus.ActionType or K2.Core.ModLinkGames.ActionType or ModLinkGames.StudioActionType or "dp_screen" or "dp_custom"
                                 => ActionTypeHelper.LiveTileSummary(_actionType, _actionValue),
                     "macro"     => ActionTypeHelper.MacroSummary(_actionValue),
                     _           => ActionTypeHelper.IsUnrecognized(_actionType) ? Loc.Get("act_unrecognized") : _actionType ?? "",
@@ -260,7 +260,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
         get
         {
             string body = HasAction ? ActionSummary : "(empty)";
-            return $"{Label}  —  {body}";
+            return $"{Label}:   {body}";
         }
     }
 
@@ -268,7 +268,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
     {
         "dp_folder" => "Folder",
         "dp_back"   => "Back",
-        _           => ActionTypeHelper.Summary(_actionType, _actionValue),
+        _           => ActionTypeHelper.ListSummary(_actionType, _actionValue),
     };
 
     /// <summary>Refreshes display-related bindings after a DebugMode change.</summary>

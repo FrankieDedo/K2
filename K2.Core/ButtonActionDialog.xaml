@@ -156,12 +156,24 @@
                    SelectionChanged="CbType_SelectionChanged">
             <ComboBoxItem Content="{loc:Get act_none}"                  Tag="none"/>
             <ComboBoxItem Content="{loc:Get act_disable}"           Tag="disable"/>
+            <!-- Makalu firmware functions (MakaluActionTypes) — removed in the constructor
+                 on every host but the Makalu's. -->
+            <ComboBoxItem Content="{loc:Get act_mk_mouse}"    Tag="mk_mouse"/>
+            <ComboBoxItem Content="{loc:Get act_mk_dpi}"      Tag="mk_dpi"/>
+            <ComboBoxItem Content="{loc:Get act_mk_scroll}"   Tag="mk_scroll"/>
+            <ComboBoxItem Content="{loc:Get act_mk_sniper}"   Tag="mk_sniper"/>
+            <ComboBoxItem Content="{loc:Get act_mk_profile}"  Tag="mk_profile"/>
+            <ComboBoxItem Content="{loc:Get act_mk_lighting}" Tag="mk_lighting"/>
+            <ComboBoxItem Content="{loc:Get act_mk_disable}"  Tag="mk_disable"/>
             <ComboBoxItem Content="{loc:Get act_url}"              Tag="url"/>
             <ComboBoxItem Content="{loc:Get act_exec}"   Tag="exec"/>
             <ComboBoxItem Content="{loc:Get act_folder}"           Tag="folder"/>
             <ComboBoxItem Content="{loc:Get act_page}"             Tag="dp_folder"/>
             <ComboBoxItem Content="{loc:Get act_browser}"          Tag="browser"/>
             <ComboBoxItem Content="{loc:Get act_profile}"        Tag="profile"/>
+            <!-- Removed in the constructor on a host with no IActionHost.Lighting. -->
+            <ComboBoxItem Content="{loc:Get act_light_brightness}" Tag="light_brightness"/>
+            <ComboBoxItem Content="{loc:Get act_light_effect}"     Tag="light_effect"/>
             <ComboBoxItem Content="{loc:Get act_oscmd}"        Tag="oscmd"/>
             <ComboBoxItem Content="{loc:Get act_media}"             Tag="media"/>
             <ComboBoxItem Content="{loc:Get act_mouse}"          Tag="mouse"/>
@@ -179,6 +191,7 @@
             <ComboBoxItem Content="{loc:Get act_dp_zcstatus}"     Tag="dp_zcstatus"/>
             <ComboBoxItem Content="{loc:Get act_dp_ksp}"          Tag="dp_ksp"/>
             <ComboBoxItem Content="{loc:Get act_dp_modlink}"      Tag="dp_modlink"/>
+            <ComboBoxItem Content="{loc:Get act_dp_studio}"       Tag="dp_studio"/>
             <!-- Both are removed in the constructor on a host that can't back them (see
                  IActionHost.SupportsScreenProbes / SupportsCustomActions): a type whose values
                  are USER-DEFINED has nothing to offer where they cannot be defined. -->
@@ -448,6 +461,37 @@
                         Click="BtnProfileAddRow_Click"/>
             </Grid>
 
+            <!-- Lighting > Brightness panel (see ButtonActionDialog.Lighting.cs) -->
+            <StackPanel x:Name="BrightnessPanel" Visibility="Collapsed">
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{loc:Get light_mode_label}"
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="CbBrightMode" Grid.Column="1" Height="25"
+                              VerticalContentAlignment="Center"/>
+                </Grid>
+                <TextBlock Text="{loc:Get light_targets_label}" Margin="0,0,0,6"/>
+                <StackPanel x:Name="PnlBrightTargets"/>
+                <TextBlock Text="{loc:Get light_step_hint}" TextWrapping="Wrap" Margin="0,10,0,0"
+                           FontSize="13" Foreground="{DynamicResource K2TextMutedBrush}"/>
+            </StackPanel>
+
+            <!-- Lighting > Effect panel (see ButtonActionDialog.Lighting.cs) -->
+            <StackPanel x:Name="LightEffectPanel" Visibility="Collapsed">
+                <TextBlock Text="{loc:Get light_device_label}" Margin="0,0,0,4"/>
+                <ComboBox x:Name="CbFxDevice" Height="25" Margin="0,0,0,10"
+                          DisplayMemberPath="Label" VerticalContentAlignment="Center"
+                          SelectionChanged="CbFxDevice_SelectionChanged"/>
+                <TextBlock Text="{loc:Get light_effect_label}" Margin="0,0,0,4"/>
+                <ComboBox x:Name="CbFxEffect" Height="25" VerticalContentAlignment="Center"/>
+                <TextBlock x:Name="LblFxNoDevice" Text="{loc:Get light_no_effect_device}"
+                           TextWrapping="Wrap" Margin="0,10,0,0" Visibility="Collapsed"
+                           FontSize="13" Foreground="{DynamicResource K2TextMutedBrush}"/>
+            </StackPanel>
+
             <!-- Simple selector panel (system command / media key / mouse action / macro / Google Home / OBS) -->
             <Grid x:Name="ComboPanel" Visibility="Collapsed">
                 <Grid.RowDefinitions>
@@ -499,6 +543,9 @@
                            Visibility="Collapsed" Click="BtnCustomActionEdit_Click"/>
                 <!-- "dp_speedtest" only: opens the global speed-test endpoint/payload config
                      window (host callback — K2.App only). -->
+                <Button    x:Name="BtnStudioConfig" Grid.Row="3" Margin="0,8,0,0"
+                           Content="{loc:Get studio_settings_button}" HorizontalAlignment="Left"
+                           Visibility="Collapsed" Click="BtnStudioConfig_Click"/>
                 <Button    x:Name="BtnSpeedTestConfig" Grid.Row="3" Margin="0,8,0,0"
                            Content="{loc:Get speedtest_config_button}" HorizontalAlignment="Left"
                            Visibility="Collapsed" Click="BtnSpeedTestConfig_Click"/>
@@ -628,7 +675,14 @@
                 </StackPanel>
 
                 <TextBlock Grid.Row="2" Text="{loc:Get keys_key_label}" Margin="0,0,0,4"/>
-                <ComboBox  x:Name="CbKeyValue" Grid.Row="3" IsEditable="True"/>
+                <!-- Up to 5 key combos sharing the row; "+" always sits right after the last one. -->
+                <UniformGrid x:Name="KeysRow" Grid.Row="3" Rows="1" Columns="5" Margin="0,0,-6,0">
+                    <ComboBox x:Name="CbKeyValue" IsEditable="True" Margin="0,0,6,0"/>
+                    <Button   x:Name="BtnKeyAdd" Content="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                              Foreground="{StaticResource K2TextBrush}" Padding="0" Cursor="Hand"
+                              Width="30" HorizontalAlignment="Left"
+                              ToolTip="{loc:Get keys_add_key_tip}" Click="BtnKeyAdd_Click"/>
+                </UniformGrid>
             </Grid>
 
             <!-- Hotkey Switch panel: two shortcuts, alternated on successive presses -->
@@ -866,8 +920,15 @@
                                 Cursor="Hand" Padding="6,2" Margin="0,0,10,0"
                                 ToolTip="{loc:Get picker_back}" Visibility="Collapsed"
                                 Click="BtnPickerBack_Click"/>
-                        <TextBlock x:Name="LblPickerTitle" Grid.Column="1" Text="{loc:Get picker_pick_category}"
-                                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="LblPickerTitle" Text="{loc:Get picker_pick_category}"
+                                       FontSize="14" FontWeight="SemiBold"/>
+                            <!-- Shown only inside the Makalu category: says where these
+                                 actions live (the mouse's memory, not K2). -->
+                            <TextBlock x:Name="LblPickerHint" Text="{loc:Get picker_makalu_hint}"
+                                       TextWrapping="Wrap" FontSize="11" Opacity="0.7"
+                                       Margin="0,2,0,0" Visibility="Collapsed"/>
+                        </StackPanel>
                         <Button x:Name="BtnPickerClose" Grid.Column="2" Content="&#xE711;"
                                 FontFamily="Segoe MDL2 Assets" FontSize="13"
                                 Background="Transparent" BorderThickness="0" Foreground="#9A9AA2"
