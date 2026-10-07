@@ -5,10 +5,10 @@ namespace K2.App.Services;
 
 /// <summary>
 /// Static remap tables shared between MakaluTabPanel (hotspot tooltips) and
-/// MakaluDpiRemapPanel (the button list + category/function dropdowns) —
-/// factored out so the two controls (kept separate deliberately, see
-/// MakaluDpiRemapPanel.xaml) don't duplicate this data. Mirrors panel.py's
-/// _REMAP_CATEGORIES/_FN_LANG_KEYS from BaseCampLinux.
+/// MakaluDpiRemapPanel (the button list) — factored out so the two controls
+/// (kept separate deliberately, see MakaluDpiRemapPanel.xaml) don't duplicate
+/// this data. The functions a button can take are listed in K2.Core's
+/// MakaluActionTypes, since the shared picker shows them.
 /// </summary>
 internal static class MakaluRemapData
 {
@@ -39,16 +39,6 @@ internal static class MakaluRemapData
     public static Dictionary<int, string> RemapDefaults(MakaluService.Model model) =>
         model == MakaluService.Model.MakaluMax ? RemapDefaultsMax : RemapDefaults67;
 
-    public static readonly Dictionary<string, string[]> RemapCategories = new()
-    {
-        ["Mouse"]   = new[] { "left", "right", "middle", "back", "forward", "disabled" },
-        ["DPI"]     = new[] { "dpi+", "dpi-", "disabled" },
-        ["Scroll"]  = new[] { "scroll_up", "scroll_down", "disabled" },
-        ["Sniper"]  = new[] { "sniper" },
-        ["Profile"] = new[] { "profile_next", "profile_prev", "disabled" },
-        ["Lighting"] = new[] { "brightness_cycle", "effect_cycle", "disabled" },
-    };
-
     private static readonly Dictionary<string, string> FnLangKeys = new()
     {
         ["left"] = "makalu_remap_fn_left", ["right"] = "makalu_remap_fn_right",
@@ -61,18 +51,90 @@ internal static class MakaluRemapData
         ["brightness_cycle"] = "makalu_remap_fn_brightness_cycle", ["effect_cycle"] = "makalu_remap_fn_effect_cycle",
     };
 
-    private static readonly Dictionary<string, string> CatLangKeys = new()
-    {
-        ["Mouse"] = "makalu_remap_cat_mouse", ["DPI"] = "makalu_remap_cat_dpi",
-        ["Scroll"] = "makalu_remap_cat_scroll", ["Sniper"] = "makalu_remap_cat_sniper",
-        ["Profile"] = "makalu_remap_cat_profile", ["Lighting"] = "makalu_remap_cat_lighting",
-    };
-
     public static string FnLabel(string key) => Loc.Get(FnLangKeys.GetValueOrDefault(key, key));
-    public static string CatLabel(string key) => Loc.Get(CatLangKeys.GetValueOrDefault(key, key));
+
+    // ---------------------------------------------------------------
+    // K2 actions on a button: the same K2Action (type + value) every other device stores,
+    // packed into the one assignment string the Remap table already holds —
+    // "action:{type}|{value}". The firmware only learns "notify the host"
+    // (MakaluProtocol.SetButtonHostAction); the action itself stays here.
+    // ---------------------------------------------------------------
+
+    private const string ActionPrefix = "action:";
+
+    public static bool IsAction(string assignment) => assignment.StartsWith(ActionPrefix);
+
+    public static string MakeAction(string type, string? value) => $"{ActionPrefix}{type}|{value}";
+
+    public static bool TryParseAction(string assignment, out string type, out string value)
+    {
+        type = value = "";
+        if (!IsAction(assignment)) return false;
+        string body = assignment[ActionPrefix.Length..];
+        int sep = body.IndexOf('|');
+        if (sep <= 0) return false;
+        type = body[..sep];
+        value = body[(sep + 1)..];
+        return true;
+    }
+
+    // ---------------------------------------------------------------
+    // Assignment string <-> what the shared picker (ButtonActionDialog) speaks. A firmware
+    // function shows up there as one of MakaluActionTypes' types (the "Makalu" category);
+    // anything else the picker returns is a K2 action.
+    // ---------------------------------------------------------------
+
+    /// <summary>The picker's (type, value) for a stored assignment.</summary>
+    public static (string Type, string Value) ToPicker(string assignment)
+    {
+        if (TryParseAction(assignment, out var type, out var value)) return (type, value);
+        if (assignment.StartsWith("sniper:")) return (MakaluActionTypes.Sniper, assignment.Split(':')[1]);
+        if (assignment == "disabled") return (MakaluActionTypes.Disable, "");
+        return MakaluActionTypes.GroupOf(assignment) is { } group ? (group, assignment) : ("none", "");
+    }
+
+    /// <summary>The assignment to store for what the picker returned, or null for "no action"
+    /// — which on a mouse means "back to the button's own function".</summary>
+    public static string? FromPicker(string? type, string? value, int dpiMin)
+    {
+        value ??= "";
+        if (string.IsNullOrEmpty(type) || type == "none") return null;
+        if (type is "disable" or MakaluActionTypes.Disable) return "disabled";
+        if (type == MakaluActionTypes.Sniper)
+        {
+            if (!int.TryParse(value.Trim(), out int dpi)) dpi = dpiMin;
+            dpi = System.Math.Clamp(MakaluProtocol.QuantizeDpiTiered(dpi), dpiMin, MakaluProtocol.DpiMax);
+            return $"sniper:{dpi}";
+        }
+        if (MakaluActionTypes.IsCombo(type))
+            return System.Array.IndexOf(MakaluActionTypes.FunctionsOf(type), value) >= 0 ? value : null;
+        return MakeAction(type, value);
+    }
+
+    /// <summary>User-facing text of any assignment string (function, sniper or K2 action).</summary>
+    public static string AssignmentLabel(string assignment)
+    {
+        if (TryParseAction(assignment, out var type, out var value))
+            return ActionTypeHelper.Summary(type, value);
+        return assignment.StartsWith("sniper:")
+            ? $"{FnLabel("sniper")} {assignment.Split(':')[1]}"
+            : FnLabel(assignment);
+    }
+
+    /// <summary>"Type  —  Action" body of the mapped-buttons list row: the function's category
+    /// (or the K2 action's type) in front of <see cref="AssignmentLabel"/>'s text.</summary>
+    public static string ListLabel(string assignment)
+    {
+        if (TryParseAction(assignment, out var type, out var value))
+            return ActionTypeHelper.ListSummary(type, value);
+        if (assignment.StartsWith("sniper:"))
+            return $"{Loc.Get("act_" + MakaluActionTypes.Sniper)}  —  {assignment.Split(':')[1]}";
+        // "disabled" belongs to no group: it is its own type.
+        return MakaluActionTypes.GroupOf(assignment) is { } group
+            ? $"{Loc.Get("act_" + group)}  —  {FnLabel(assignment)}"
+            : FnLabel(assignment);
+    }
 
     public static string RemapBtnText(string btnLabel, string assignment) =>
-        assignment.StartsWith("sniper:")
-            ? $"{btnLabel}\n{FnLabel("sniper")} {assignment.Split(':')[1]}"
-            : $"{btnLabel}\n{FnLabel(assignment)}";
+        $"{btnLabel}\n{AssignmentLabel(assignment)}";
 }

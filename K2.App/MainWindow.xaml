@@ -8,7 +8,7 @@
         Icon="Assets/K2_icon.ico"
         Tag="hide-titlebar-brand"
         Height="1024" Width="1600"
-        MinHeight="768" MinWidth="1280"
+        MinHeight="500" MinWidth="900"
         WindowStartupLocation="CenterScreen"
         Style="{StaticResource K2WindowStyle}">
 
@@ -1239,8 +1239,23 @@
                 </StackPanel>
             </Grid>
 
-            <!-- Content panels: one visible at a time -->
-            <Grid Grid.Row="2">
+            <!-- Content panels: one visible at a time. Wrapped in a ScrollViewer so a window
+                 shrunk below what the visible device panel needs (device box at its Viewbox
+                 floor + settings panel at its MinHeight) scrolls instead of clipping — see
+                 ScrContentHost_SizeChanged (MainWindow.xaml.cs) for why GrdContentHost.Height
+                 is set explicitly from code instead of left to the Grid's own "*" rows: a
+                 ScrollViewer gives its content infinite available height during measure, which
+                 would make every "*" row inside (here and in each device panel) collapse to its
+                 Auto/content size instead of sharing space proportionally (the exact bug already
+                 documented on BdrEvSettingsPanel below, one level down — this is the same trap
+                 one level up). Setting an explicit finite Height on GrdContentHost sidesteps it:
+                 star rows compute normally against that height, and only when the rows' own
+                 MinHeights don't fit inside it does the Grid's DesiredSize exceed the viewport
+                 and the scrollbar appears. -->
+            <ScrollViewer x:Name="ScrContentHost" Grid.Row="2"
+                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                          SizeChanged="ScrContentHost_SizeChanged">
+            <Grid x:Name="GrdContentHost">
 
                 <!-- ==================== Home ====================
                  Grid of cards, one per currently connected device (RefreshHomeTiles in
@@ -1337,6 +1352,14 @@
                             <!-- 3-pane main -->
                         </Grid.RowDefinitions>
 
+                        <!-- Shown (red) when the Base Camp DLL this device needs is not resolvable —
+                             see RefreshSdkMissingWarnings in MainWindow.xaml.cs. -->
+                        <TextBlock x:Name="TxtEvSdkMissing" Grid.Row="0" Visibility="Collapsed"
+                                   Foreground="#FF5A5A" FontWeight="SemiBold" VerticalAlignment="Top"
+                                   Margin="2,3,0,0" TextTrimming="CharacterEllipsis">
+                            <Run Text="SDKDLL.dll"/><Run Text=" "/><Run Text="{loc:Get sdk_dll_missing_warning}"/>
+                        </TextBlock>
+
                         <!-- ── Toolbar ── -->
                         <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
                             <!-- Debug-only: open/close driver manually -->
@@ -1402,12 +1425,18 @@
                             <!-- Right: device image (top, fixed height) + settings panel (bottom, grows) -->
                             <Grid Grid.Column="1">
                                 <Grid.RowDefinitions>
-                                    <!-- Fixed height across all devices, matching MacroPad's box height
-                                     when rotated to vertical orientation (Positioning section,
-                                     90°/270°): the canvas is 510x370, but RotateTransform swaps its
-                                     rendered footprint to 370x510, so 510 + 8px padding each side = 526
-                                     is the tallest a device box needs to be. -->
-                                    <RowDefinition Height="526"/>
+                                    <!-- 526 is the device box's NATURAL height (matches MacroPad's box
+                                     height rotated to vertical orientation, Positioning section,
+                                     90°/270°: the canvas is 510x370, but RotateTransform swaps its
+                                     rendered footprint to 370x510, so 510 + 8px padding each side =
+                                     526 is the tallest a device box needs to be). It's now a "*" row,
+                                     not fixed: it shares available height with the settings row below
+                                     and can shrink down to MinHeight when the window gets short, with
+                                     the Viewbox around the device graphic (BdrEvDeviceBox) scaling the
+                                     keyboard+numpad+dial down proportionally so it stays fully visible
+                                     instead of clipping. Below both rows' MinHeights, GrdContentHost's
+                                     ScrollViewer takes over (see its comment). -->
+                                    <RowDefinition Height="*" MinHeight="200" MaxHeight="526"/>
                                     <!-- device -->
                                     <RowDefinition Height="Auto"/>
                                     <!-- HW capture bar (media dock / crown only) -->
@@ -1428,6 +1457,15 @@
                                     PreviewMouseLeftButtonDown="EvDeviceBox_MouseDown"
                                     PreviewMouseMove="EvDeviceBox_MouseMove"
                                     PreviewMouseLeftButtonUp="EvDeviceBox_MouseUp">
+                                    <!-- Stretch="Uniform" + StretchDirection="DownOnly": scales the whole
+                                     keyboard+numpad+dial graphic down proportionally when the device row
+                                     above gets less height than this content's natural size (LayoutTransform
+                                     and all) needs, keeping it fully visible instead of clipping. Never
+                                     scales UP past natural size, so nothing changes on a normal/large
+                                     window. Existing hit-testing (rubber band, key Buttons) keeps working
+                                     unchanged, same as the ScaleTransform on SpEvLayout below — WPF maps
+                                     mouse coordinates through nested layout transforms automatically. -->
+                                    <Viewbox Stretch="Uniform" StretchDirection="DownOnly">
                                     <Grid>
                                         <DockPanel>
                                             <StackPanel x:Name="SpEvLayout" Orientation="Horizontal"
@@ -1516,6 +1554,7 @@
                                                StrokeDashArray="3 2" Fill="#335BBEC3"/>
                                         </Canvas>
                                     </Grid>
+                                    </Viewbox>
                                 </Border>
 
                                 <!-- HW capture bar: feedback-only text for the media dock / crown "Capture
@@ -1693,7 +1732,7 @@
                                                                 Click="CkEvAutoOffEnable_Click" VerticalAlignment="Center" Margin="16,0,10,0"/>
                                                             <TextBlock Text="{loc:Get backlight_auto_off_seconds}" Margin="0,0,6,0" VerticalAlignment="Center"/>
                                                             <TextBox x:Name="TxtEvAutoOffSeconds" Width="60" TextAlignment="Center"
-                                                                LostFocus="TxtEvAutoOffSeconds_LostFocus" VerticalAlignment="Center" Height="25" TextChanged="TxtEvAutoOffSeconds_TextChanged"/>
+                                                                LostFocus="TxtEvAutoOffSeconds_LostFocus" VerticalAlignment="Center" VerticalContentAlignment="Center" Height="25" TextChanged="TxtEvAutoOffSeconds_TextChanged"/>
                                                             <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                                         </StackPanel>
                                                         <!-- Position comes entirely from K2SyncCheckBox (see
@@ -2279,6 +2318,14 @@
                             <!-- sections/image/common columns -->
                         </Grid.RowDefinitions>
 
+                        <!-- Shown (red) when the Base Camp DLL this device needs is not resolvable —
+                             see RefreshSdkMissingWarnings in MainWindow.xaml.cs. -->
+                        <TextBlock x:Name="TxtEv60SdkMissing" Grid.Row="0" Visibility="Collapsed"
+                                   Foreground="#FF5A5A" FontWeight="SemiBold" VerticalAlignment="Top"
+                                   Margin="2,3,0,0" TextTrimming="CharacterEllipsis">
+                            <Run Text="Everest360_USB.dll"/><Run Text=" "/><Run Text="{loc:Get sdk_dll_missing_warning}"/>
+                        </TextBlock>
+
                         <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8"/>
 
                         <Grid Grid.Row="1">
@@ -2324,12 +2371,15 @@
                             <!-- CENTER: device image (top, fixed height) + selected section content (bottom, grows) -->
                             <Grid Grid.Column="1">
                                 <Grid.RowDefinitions>
-                                    <!-- Fixed height across all devices, matching MacroPad's box height
-                                     when rotated to vertical orientation (Positioning section,
-                                     90°/270°): the canvas is 510x370, but RotateTransform swaps its
-                                     rendered footprint to 370x510, so 510 + 8px padding each side = 526
-                                     is the tallest a device box needs to be. -->
-                                    <RowDefinition Height="526"/>
+                                    <!-- 526 is the device box's NATURAL height (matches MacroPad's box
+                                     height rotated to vertical orientation, Positioning section,
+                                     90°/270°: the canvas is 510x370, but RotateTransform swaps its
+                                     rendered footprint to 370x510, so 510 + 8px padding each side =
+                                     526 is the tallest a device box needs to be). "*" + MaxHeight so it
+                                     shares space with the section row and can shrink to MinHeight, with
+                                     the Viewbox around the device graphic scaling it down proportionally
+                                     instead of clipping — see Everest Max's identical comment. -->
+                                    <RowDefinition Height="*" MinHeight="200" MaxHeight="526"/>
                                     <!-- device -->
                                     <RowDefinition Height="*"/>
                                     <!-- section content: grows with window height -->
@@ -2359,6 +2409,10 @@
                                     PreviewMouseLeftButtonDown="Ev60DeviceBox_MouseDown"
                                     PreviewMouseMove="Ev60DeviceBox_MouseMove"
                                     PreviewMouseLeftButtonUp="Ev60DeviceBox_MouseUp">
+                                    <!-- Scales the graphic down when the device row gets less height than
+                                     it needs, instead of clipping — see Everest Max's identical comment
+                                     on BdrEvDeviceBox's Viewbox. -->
+                                    <Viewbox Stretch="Uniform" StretchDirection="DownOnly">
                                     <Grid>
                                         <StackPanel x:Name="SpEv60Layout" Orientation="Horizontal"
                                             HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -2427,6 +2481,7 @@
                                                StrokeDashArray="3 2" Fill="#335BBEC3"/>
                                         </Canvas>
                                     </Grid>
+                                    </Viewbox>
                                 </Border>
 
                                 <!-- Bottom section panel: grows with the window (Row="*" above); MinHeight
@@ -2749,13 +2804,16 @@
                             <!-- CENTER: interactive device image (top, fixed height) + selected section content (bottom, grows) -->
                             <Grid Grid.Column="1">
                                 <Grid.RowDefinitions>
-                                    <!-- Fixed height across all devices, matching MacroPad's box height
-                                     when rotated to vertical orientation (Positioning section,
-                                     90°/270°): the canvas is 510x370, but RotateTransform swaps its
-                                     rendered footprint to 370x510, so 510 + 8px padding each side = 526
-                                     is the tallest a device box needs to be — comfortably fits the
-                                     mouse image's 422px height too. -->
-                                    <RowDefinition Height="526"/>
+                                    <!-- 526 is the device box's NATURAL height (matches MacroPad's box
+                                     height rotated to vertical orientation, Positioning section,
+                                     90°/270°: the canvas is 510x370, but RotateTransform swaps its
+                                     rendered footprint to 370x510, so 510 + 8px padding each side =
+                                     526 is the tallest a device box needs to be — comfortably fits the
+                                     mouse image's 422px height too). "*" + MaxHeight so it shares space
+                                     with the section row and can shrink to MinHeight, with the Viewbox
+                                     around the mouse graphic scaling it down proportionally instead of
+                                     clipping — see Everest Max's identical comment. -->
+                                    <RowDefinition Height="*" MinHeight="200" MaxHeight="526"/>
                                     <!-- device -->
                                     <RowDefinition Height="*"/>
                                     <!-- section content: grows with window height -->
@@ -2774,6 +2832,20 @@
                                         PreviewMouseLeftButtonDown="BdrMkDeviceBox_MouseDown"
                                         PreviewMouseMove="BdrMkDeviceBox_MouseMove"
                                         PreviewMouseLeftButtonUp="BdrMkDeviceBox_MouseUp">
+                                    <!-- Scales the graphic down when the device row gets less height than
+                                     it needs, instead of clipping — see Everest Max's identical comment
+                                     on BdrEvDeviceBox's Viewbox. -->
+                                    <Grid>
+                                    <!-- Makalu Max only, shown once a battery read succeeds — see
+                                     MkPollBattery in MainWindow.Makalu.cs. Outside the Viewbox so it
+                                     stays in the box's corner at its own size. -->
+                                    <StackPanel x:Name="PnlMkBattery" Orientation="Horizontal" Visibility="Collapsed"
+                                            HorizontalAlignment="Left" VerticalAlignment="Top" Panel.ZIndex="1">
+                                        <TextBlock x:Name="TxtMkBatteryIcon" FontFamily="Segoe MDL2 Assets" FontSize="16"
+                                               VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtMkBattery" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <Viewbox Stretch="Uniform" StretchDirection="DownOnly">
                                     <!-- A Canvas (not a Grid) so the 190px-wide mouse image can sit
                                      offset within a wider host, leaving flanking columns for the
                                      Custom Lighting square overlay below (MkDeviceImageOffsetX in
@@ -2814,6 +2886,8 @@
                                            Stroke="#5BBEC3" StrokeThickness="1"
                                            StrokeDashArray="3 2" Fill="#335BBEC3"/>
                                     </Canvas>
+                                    </Viewbox>
+                                    </Grid>
                                 </Border>
 
                                 <!-- Bottom section panel: grows with the window (Row="*" above); MinHeight
@@ -2917,6 +2991,14 @@
                             <!-- main area -->
                         </Grid.RowDefinitions>
 
+                        <!-- Shown (red) when the Base Camp DLL this device needs is not resolvable —
+                             see RefreshSdkMissingWarnings in MainWindow.xaml.cs. -->
+                        <TextBlock x:Name="TxtMpSdkMissing" Grid.Row="0" Visibility="Collapsed"
+                                   Foreground="#FF5A5A" FontWeight="SemiBold" VerticalAlignment="Top"
+                                   Margin="2,3,0,0" TextTrimming="CharacterEllipsis">
+                            <Run Text="MacroPadSDK.dll"/><Run Text=" "/><Run Text="{loc:Get sdk_dll_missing_warning}"/>
+                        </TextBlock>
+
                         <!-- Toolbar -->
                         <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
                             <!-- Debug-only: open/close driver manually -->
@@ -2976,12 +3058,15 @@
                              margin, so this box is exactly as wide as Everest's. -->
                             <Grid Grid.Column="1">
                                 <Grid.RowDefinitions>
-                                    <!-- Fixed height across all devices: matches this canvas (510x370)
+                                    <!-- 526 is the device box's NATURAL height: this canvas (510x370)
                                      rotated to vertical orientation (Positioning section, 90°/270°) —
                                      RotateTransform swaps its rendered footprint to 370x510, so
                                      510 + 8px padding each side = 526 is the tallest this box (and
-                                     therefore every device's box) needs to be. -->
-                                    <RowDefinition Height="526"/>
+                                     therefore every device's box) needs to be. "*" + MaxHeight so it
+                                     shares space with the settings row and can shrink to MinHeight, with
+                                     the Viewbox around the key graphic scaling it down proportionally
+                                     instead of clipping — see Everest Max's identical comment. -->
+                                    <RowDefinition Height="*" MinHeight="200" MaxHeight="526"/>
                                     <!-- device -->
                                     <RowDefinition Height="*"/>
                                     <!-- settings: grows with window height -->
@@ -2998,6 +3083,10 @@
                                     PreviewMouseLeftButtonDown="MpDeviceBox_MouseDown"
                                     PreviewMouseMove="MpDeviceBox_MouseMove"
                                     PreviewMouseLeftButtonUp="MpDeviceBox_MouseUp">
+                                  <!-- Scales the graphic down when the device row gets less height than
+                                   it needs, instead of clipping — see Everest Max's identical comment
+                                   on BdrEvDeviceBox's Viewbox. -->
+                                  <Viewbox Stretch="Uniform" StretchDirection="DownOnly">
                                   <Grid>
                                     <Canvas x:Name="CvsMacroKeys" Width="510" Height="370" ClipToBounds="True"
                                         HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -3011,6 +3100,7 @@
                                                StrokeDashArray="3 2" Fill="#335BBEC3"/>
                                     </Canvas>
                                   </Grid>
+                                  </Viewbox>
                                 </Border>
 
                                 <!-- Bottom settings panel: grows with the window (Row="*" above); MinHeight
@@ -3119,7 +3209,7 @@
       Click="CkMacroAutoOffEnable_Click" VerticalAlignment="Center" Margin="16,0,10,0"/>
                                                         <TextBlock Text="{loc:Get backlight_auto_off_seconds}" Margin="0,0,6,0" VerticalAlignment="Center"/>
                                                         <TextBox x:Name="TxtMacroAutoOffSeconds" Width="60" TextAlignment="Center"
-     LostFocus="TxtMacroAutoOffSeconds_LostFocus" Text="5" VerticalAlignment="Center" Height="25"/>
+     LostFocus="TxtMacroAutoOffSeconds_LostFocus" Text="5" VerticalAlignment="Center" VerticalContentAlignment="Center" Height="25"/>
                                                         <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                                     </StackPanel>
 
@@ -3466,24 +3556,32 @@
                              margin, so this box is exactly as wide as Everest's. -->
                             <Grid Grid.Column="1">
                                 <Grid.RowDefinitions>
-                                    <!-- Fixed height across all devices: matches MacroPad's identical
+                                    <!-- 526 is the device box's NATURAL height: matches MacroPad's identical
                                      510x370 canvas rotated to vertical orientation (Positioning
                                      section, 90°/270°) — RotateTransform swaps its rendered footprint
                                      to 370x510, so 510 + 8px padding each side = 526 is the tallest
-                                     a device box needs to be. -->
-                                    <RowDefinition Height="526"/>
+                                     a device box needs to be. "*" + MaxHeight so it shares space with
+                                     the settings row and can shrink to MinHeight, with the Viewbox
+                                     around the key graphic scaling it down proportionally instead of
+                                     clipping — see Everest Max's identical comment. -->
+                                    <RowDefinition Height="*" MinHeight="200" MaxHeight="526"/>
                                     <!-- device -->
                                     <RowDefinition Height="*"/>
                                     <!-- settings: grows with window height -->
                                 </Grid.RowDefinitions>
 
                                 <Border Grid.Row="0" Background="#18181C" CornerRadius="6" Padding="8">
+                                    <!-- Scales the graphic down when the device row gets less height than
+                                     it needs, instead of clipping — see Everest Max's identical comment
+                                     on BdrEvDeviceBox's Viewbox. -->
+                                    <Viewbox Stretch="Uniform" StretchDirection="DownOnly">
                                     <Canvas x:Name="CvsDpKeys" Width="510" Height="370" ClipToBounds="True"
                                         HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <Canvas.Background>
                                             <ImageBrush ImageSource="Assets/mkd_bg.png" Stretch="Fill"/>
                                         </Canvas.Background>
                                     </Canvas>
+                                    </Viewbox>
                                 </Border>
 
                                 <!-- Bottom settings panel: grows with the window (Row="*" above); MinHeight
@@ -3577,7 +3675,7 @@
                                                       Click="CkDpAutoOffEnable_Click" VerticalAlignment="Center" Margin="0,0,14,0"/>
                                                     <TextBlock Text="{loc:Get backlight_auto_off_seconds}" Margin="0,0,6,0" VerticalAlignment="Center"/>
                                                     <TextBox x:Name="TxtDpAutoOffSeconds" Width="70" TextAlignment="Center"
-                                                     LostFocus="TxtDpAutoOffSeconds_LostFocus" Height="25" Text="5" VerticalAlignment="Center"/>
+                                                     LostFocus="TxtDpAutoOffSeconds_LostFocus" Height="25" Text="5" VerticalAlignment="Center" VerticalContentAlignment="Center"/>
                                                     <TextBlock Text="{loc:Get unit_seconds}" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                                 </WrapPanel>
 
@@ -4404,6 +4502,13 @@
                                     </StackPanel>
                                     <TextBlock x:Name="TxtDebugLocalUpdateZip" Foreground="#9A9AA2"
                                        TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12"/>
+                                    <!-- This session only, never saved — see MakaluService.SimulateMax. -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                        <CheckBox x:Name="CkDebugSimulateMakaluMax" Content="{loc:Get settings_debug_simulate_makalu_max}"
+                                          VerticalAlignment="Center" Click="CkDebugSimulateMakaluMax_Click"/>
+                                        <Path Style="{StaticResource K2HintIcon}"
+                                           ToolTip="{loc:Get settings_debug_simulate_makalu_max_hint}"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </GroupBox>
 
@@ -4456,6 +4561,19 @@
                                           Click="CkStartMinToTray_Click" FontSize="14"/>
                                         <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_start_min_tray_hint}"/>
                                     </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                        <CheckBox x:Name="CkRememberWindowSize" Content="{loc:Get settings_remember_window_size}"
+                                          Click="CkRememberWindowSize_Click" FontSize="14"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_remember_window_size_hint}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                        <CheckBox x:Name="CkStartMaximized" Content="{loc:Get settings_start_maximized}"
+                                          Click="CkStartMaximized_Click" FontSize="14"/>
+                                    </StackPanel>
+                                    <Button x:Name="BtnResetWindowSize" Content="{loc:Get settings_reset_window_size}"
+                                        Padding="8,4" HorizontalAlignment="Left" Margin="0,12,0,0"
+                                        Click="BtnResetWindowSize_Click"
+                                        Style="{StaticResource K2IconButton}" Tag="&#xE777;"/>
                                 </StackPanel>
                             </GroupBox>
 
@@ -4581,6 +4699,14 @@
                                         Click="BtnAppExportLog_Click"
                                         Style="{StaticResource K2IconButton}" Tag="&#xE898;"/>
                                         <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get settings_export_log_hint}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                        <Button x:Name="BtnAppBugReport" Content="{loc:Get bugreport_btn}"
+                                        Padding="8,4" VerticalAlignment="Center"
+                                        Click="BtnAppBugReport_Click"
+                                        Style="{StaticResource K2IconButton}" Tag="&#xE7BA;"/>
+                                        <Path Style="{StaticResource K2HintIcon}" ToolTip="{loc:Get bugreport_btn_hint}"/>
                                     </StackPanel>
                                 </StackPanel>
                             </GroupBox>
@@ -4743,6 +4869,7 @@
                 <!-- end PnlSettings -->
 
             </Grid>
+            </ScrollViewer>
             <!-- end content panels -->
         </Grid>
         <!-- end outer device Grid -->

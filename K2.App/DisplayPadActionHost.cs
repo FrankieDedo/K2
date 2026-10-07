@@ -41,6 +41,8 @@ internal sealed class DisplayPadActionHost : IActionHost
     // Foreground DisplayPad tab: self-target is the DisplayPad currently shown.
     string IActionHost.SelfTargetKey => _win._activeDpDeviceId is int id ? $"displaypad:{id}" : "";
 
+    ILightingController? IActionHost.Lighting => _win;
+
     IReadOnlyList<HostButton> IActionHost.GetButtons() =>
         _win._dpKeys.Select(k => new HostButton(
             k.Index, k.KeyMatrix, k.HasImage, k.ImagePath, k.ActionType, k.ActionValue))
@@ -122,6 +124,15 @@ internal sealed class DisplayPadActionHost : IActionHost
         return studio.SavedActionId;
     });
 
+    bool IActionHost.SupportsStudioConfig => true;
+
+    void IActionHost.OpenStudioConfig() => _win.Dispatcher.Invoke(() =>
+    {
+        var owner = System.Windows.Application.Current?.Windows
+            .OfType<System.Windows.Window>().FirstOrDefault(w => w.IsActive) ?? _win;
+        _win.DpShowStudioConfig(owner);
+    });
+
     bool IActionHost.SupportsSpeedTestConfig => true;
 
     void IActionHost.OpenSpeedTestConfig() => _win.Dispatcher.Invoke(() =>
@@ -199,6 +210,8 @@ internal sealed class DisplayPadBackgroundActionHost : IActionHost
 
     // Background host: self-target is the specific DisplayPad this host was created for.
     string IActionHost.SelfTargetKey => $"displaypad:{_deviceId}";
+
+    ILightingController? IActionHost.Lighting => _win;
 
     IReadOnlyList<HostButton> IActionHost.GetButtons()
     {

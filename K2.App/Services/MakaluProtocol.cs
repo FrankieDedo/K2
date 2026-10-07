@@ -367,6 +367,28 @@ internal static class MakaluProtocol
 
     public const byte CategoryRunProgramOrFolder = 0x23;
 
+    /// <summary>Turns a button into a "host action" button: the firmware stops sending its
+    /// click and raises the software-action notification instead, which K2 answers by running
+    /// the K2 action stored for that button (MainWindow.Makalu.cs, OnMakaluButtonEvent) — the
+    /// path string Base Camp stores next to it is never written, K2 keeps the action host-side.
+    /// <para><b>UNVERIFIED on hardware (2026-10-03).</b> The frame is <see cref="SetButtonRemap"/>'s
+    /// and the category is the confirmed <see cref="CategoryRunProgramOrFolder"/>, but the code
+    /// byte (<see cref="HostActionCode"/>) was NOT read from a capture: the captures that showed
+    /// Base Camp assigning Run Program (<c>makalu_azioni.pcapng</c>) are no longer on disk, and
+    /// Base Camp does the write inside <c>makalu_67_dll.dll</c> (<c>Set_button_run_program</c>),
+    /// so the decompile does not show the bytes. If the button stays mute after this write, the
+    /// fix is a fresh capture of Base Camp assigning Run Program — do not try other values blind.</para></summary>
+    public static bool SetButtonHostAction(SafeFileHandle h, int buttonIndex1Based)
+    {
+        var buf = NewBuf();
+        buf[1] = CmdRemap; buf[5] = 0x01; buf[6] = (byte)buttonIndex1Based;
+        buf[16] = CategoryRunProgramOrFolder; buf[17] = HostActionCode; buf[22] = 0x0F;
+        return Ack(MakaluHidNative.SendFeature(h, buf));
+    }
+
+    /// <summary>See <see cref="SetButtonHostAction"/> — unverified.</summary>
+    private const byte HostActionCode = 0x01;
+
     /// <summary>Parses the DPI-button collection's 8-byte "button event" report. Returns null
     /// for anything that isn't a genuine software-action notification: the DPI button's own
     /// native pulse (<see cref="MakaluDpiButtonWatcher"/>'s <c>03 02 01 00 00 00 00 00</c>)

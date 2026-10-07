@@ -1140,11 +1140,16 @@ public sealed class EverestService : IDisposable
         }
     }
 
+    /// <summary>True while <c>SDKDLL.dll</c> is not resolvable. The polled reads bail out
+    /// on it instead of throwing (and logging) a <see cref="DllNotFoundException"/> per tick;
+    /// re-checked every call so a folder picked later in Settings takes effect at once.</summary>
+    private static bool SdkDllMissing => !NativeDependencyResolver.IsResolvable("SDKDLL.dll");
+
     /// <summary>Reads the Game Mode master on/off state — reflects Fn+Pause toggles made
     /// on the keyboard. Returns null if the read could not be performed.</summary>
     public bool? GetGameModeStatus()
     {
-        if (!IsOpen) return null;
+        if (!IsOpen || SdkDllMissing) return null;
         if (!System.Threading.Monitor.TryEnter(_sdkLock)) return null;
         try
         {
@@ -1408,6 +1413,7 @@ public sealed class EverestService : IDisposable
     internal bool TryGetExtendInfo(out EverestSdkNative.FW_EXTEND_INFO info)
     {
         info = default;
+        if (SdkDllMissing) return false;
         lock (_sdkLock)
         try { return EverestSdkNative.GetExtendInfo(ref info); }
         catch (Exception ex)

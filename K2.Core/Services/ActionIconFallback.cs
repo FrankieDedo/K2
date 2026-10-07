@@ -359,6 +359,8 @@ public static class ActionIconFallback
         ["url"]          = "", // chain link
         ["browser"]      = "", // globe
         ["profile"]      = "", // person + switch arrows
+        [LightingActionTypes.Brightness] = "", // sun
+        [LightingActionTypes.Effect]     = "", // palette
         ["oscmd"]        = "", // PC
         ["media"]        = "", // music notes
         ["mouse"]        = "",

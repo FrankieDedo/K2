@@ -28,9 +28,17 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<MacroPadDeviceRow> _devices = new();
     private IntPtr _hWnd;
 
+    /// <summary>Default window size — must stay in sync with MainWindow.xaml's own
+    /// Height/Width attributes. Used by ApplyStartupWindowBounds when nothing is
+    /// remembered yet and by BtnResetWindowSize_Click (MainWindow.Settings.cs) to
+    /// restore this exact size on demand.</summary>
+    internal const double DefaultWindowWidth = 1600;
+    internal const double DefaultWindowHeight = 1024;
+
     public MainWindow()
     {
         InitializeComponent();
+        ApplyStartupWindowBounds();
         InitLanguageMenu();      // Language switcher in the status bar
         LvDevices.ItemsSource = _devices;
         IcHomeTiles.ItemsSource = _homeTiles;
@@ -59,13 +67,83 @@ public partial class MainWindow : Window
 
         Core.Services.AccentCatalog.Applied += RefreshNavTabAccentColors;
         Closed += OnWindowClosed;
+        Closing += MainWindow_SaveWindowBoundsOnClosing;
 
         CheckNativeDependency();
+        RefreshSdkMissingWarnings();
 
         // Deferred to Loaded (not run inline here) so the "Import from Base Camp?"
         // prompt (see MainWindow.Settings.cs) pops up over an already-visible main
         // window instead of blocking construction before the app is even shown.
         Loaded += (_, _) => CheckFirstRunBcImport();
+    }
+
+    /// <summary>
+    /// Applied once from the constructor, before InitializeComponent's own Height/Width/
+    /// WindowStartupLocation take visible effect. When <see cref="AppSettings.RememberWindowSize"/>
+    /// is on and a bounds set was actually saved, overrides the XAML defaults with it —
+    /// guarded by an on-screen check so a monitor that's since been unplugged (or a very
+    /// different display layout) can't strand the window off-screen with no way to drag
+    /// it back. <see cref="AppSettings.StartMaximized"/> (or a remembered maximized state)
+    /// is applied last, on top of whichever bounds end up set — WPF uses them as the
+    /// window's restore size for when the user un-maximizes it.
+    /// </summary>
+    private void ApplyStartupWindowBounds()
+    {
+        if (AppSettings.RememberWindowSize
+            && AppSettings.WindowLeft is double left
+            && AppSettings.WindowTop is double top
+            && AppSettings.WindowWidth is double width
+            && AppSettings.WindowHeight is double height)
+        {
+            var savedBounds = new Rect(left, top, width, height);
+            bool onScreen = System.Windows.Forms.Screen.AllScreens.Any(s =>
+                new Rect(s.WorkingArea.Left, s.WorkingArea.Top, s.WorkingArea.Width, s.WorkingArea.Height)
+                    .IntersectsWith(savedBounds));
+            if (onScreen)
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                Left = left;
+                Top = top;
+                Width = width;
+                Height = height;
+            }
+        }
+
+        if (AppSettings.StartMaximized || (AppSettings.RememberWindowSize && AppSettings.WindowWasMaximized))
+            WindowState = WindowState.Maximized;
+    }
+
+    /// <summary>Persists the window's current bounds/maximized state whenever
+    /// <see cref="AppSettings.RememberWindowSize"/> is on — fires on every Closing,
+    /// including a "close to tray" one that MainWindow_Closing (MainWindow.Tray.cs) then
+    /// cancels, which is harmless: the window hasn't moved, so it just re-saves the same
+    /// values. Uses <see cref="Window.RestoreBounds"/> instead of Left/Top/Width/Height
+    /// while maximized/minimized, since those properties report the CURRENT (e.g.
+    /// screen-filling) size in that state, not the size to come back to.</summary>
+    private void MainWindow_SaveWindowBoundsOnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (!AppSettings.RememberWindowSize) return;
+
+        bool maximized = WindowState == WindowState.Maximized;
+        var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
+        AppSettings.SaveWindowBounds(bounds.Left, bounds.Top, bounds.Width, bounds.Height, maximized);
+    }
+
+    /// <summary>
+    /// Feeds GrdContentHost (inside ScrContentHost, MainWindow.xaml) an explicit, finite
+    /// Height equal to the ScrollViewer's own rendered size. Needed because a ScrollViewer
+    /// measures its content with infinite available height, which would make every "*" row
+    /// inside GrdContentHost — and inside whichever device panel is currently visible —
+    /// collapse to its Auto/content size instead of sharing space proportionally (see the
+    /// comment on ScrContentHost in MainWindow.xaml). Passing a real number sidesteps that:
+    /// star rows size normally against it, and once their own MinHeights no longer fit inside
+    /// it, GrdContentHost's DesiredSize naturally exceeds the viewport and the scrollbar
+    /// appears — no manual floor arithmetic needed.
+    /// </summary>
+    private void ScrContentHost_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        GrdContentHost.Height = e.NewSize.Height;
     }
 
     /// <summary>Navigation keys whose default WPF behavior (focus movement, button
@@ -122,6 +200,22 @@ public partial class MainWindow : Window
         Log("     to the path of the Base Camp folder.");
         Log(NativeDependencyResolver.DescribeSearch(dll));
         Log("──────────────────────────────────────────────");
+    }
+
+    /// <summary>
+    /// Shows the red "DLL not found" line at the top of the Everest Max / Everest 60 /
+    /// MacroPad panels when the Base Camp DLL that device needs is not resolvable.
+    /// Without it the device still shows up as connected (raw HID opens fine) while every
+    /// SDK call fails silently — issue #24. Re-run when the DLL folder setting changes.
+    /// </summary>
+    private void RefreshSdkMissingWarnings()
+    {
+        static Visibility Vis(string dll) =>
+            NativeDependencyResolver.IsResolvable(dll) ? Visibility.Collapsed : Visibility.Visible;
+
+        TxtEvSdkMissing.Visibility   = Vis("SDKDLL.dll");
+        TxtEv60SdkMissing.Visibility = Vis("Everest360_USB.dll");
+        TxtMpSdkMissing.Visibility   = Vis("MacroPadSDK.dll");
     }
 
     /// <summary>
@@ -225,6 +319,7 @@ public partial class MainWindow : Window
         TcDevices.SelectedItem = TcDevices.Items.OfType<TabItem>()
             .FirstOrDefault(t => t.Visibility == Visibility.Visible);
         App.WriteLog("[AutoOpen] step: all drivers attempted, loading overlay hidden");
+        _ = System.Threading.Tasks.Task.Delay(4000).ContinueWith(_ => App.StartupSettled.Set());
     }
 
     // ---- Toolbar -----------------------------------------------------------

@@ -73,6 +73,10 @@ public partial class App : Application
     /// <summary>Separate crash log file for native/fatal crashes.</summary>
     public static readonly string CrashLogPath = Path.Combine(LogDir, "K2.App.crash.log");
 
+    /// <summary>Set a few seconds after every driver's AutoOpen has finished; the LHM sensor
+    /// backend waits on it so its ring0/PawnIO probing never overlaps the HID driver init.</summary>
+    internal static readonly ManualResetEventSlim StartupSettled = new(false);
+
     // Held for the process lifetime; released automatically by the OS on exit.
     private static Mutex? _singleInstanceMutex;
 
@@ -336,6 +340,11 @@ public partial class App : Application
         // page) is completely silent — see GoogleHomeBridge.Log.
         Core.Services.GoogleHomeBridge.Log = WriteLog;
 
+        // Pre-warm the hidden WebView2 trigger view now (no-op if the user never connected
+        // Google Home) so the WebView2 process spin-up + home.google.com load happens during
+        // startup instead of blocking the very first button press — see GoogleHomeBridge.WarmupAsync.
+        _ = Core.Services.GoogleHomeBridge.Instance.WarmupAsync();
+
         if (!_singleInstanceGranted)
         {
             // Second launch: hand the focus to the running K2 (which restores its
@@ -547,7 +556,10 @@ public partial class App : Application
             // Log fatal native exceptions so we can diagnose crashes that bypass the AV path.
             // Exclude CLR-internal exception wrappers (0xE0434352, 0xE0434F4D) and
             // informational codes (< 0x80000000) — those are internal CLR control-flow.
-            if (code >= 0xC0000000u && code != 0xC000008Cu /* guard-page AV, benign */
+            // 0x80131506 (COR_E_EXECUTIONENGINE) is explicitly allowed through despite being
+            // below 0xC0000000: it's the CLR's own fail-fast code for corrupted runtime state
+            // (usually a heap smashed by native code) and was slipping past unlogged.
+            if ((code >= 0xC0000000u || code == 0x80131506u) && code != 0xC000008Cu /* guard-page AV, benign */
                 && code != 0xE0434352u /* COMPLUS_EXCEPTION: SEH used by every managed throw/catch, not fatal */
                 && code != 0xE0434F4Du /* CLR notification exception (e.g. debugger), not fatal */
                 // 0xE06D7363 = 0xE0'msc' — the MSVC C++ `throw`, raised via RaiseException and
@@ -565,6 +577,7 @@ public partial class App : Application
                     0xC0000008u => "STATUS_INVALID_HANDLE",
                     0xC000001Du => "STATUS_ILLEGAL_INSTRUCTION",
                     0xC0000096u => "STATUS_PRIVILEGED_INSTRUCTION",
+                    0x80131506u => "COR_E_EXECUTIONENGINE (heap corruption / CLR fail-fast)",
                     _           => $"0x{code:X8}"
                 };
                 var addr2 = Marshal.ReadIntPtr(pRecord, 12);
@@ -579,7 +592,7 @@ public partial class App : Application
         var addr = Marshal.ReadIntPtr(pRecord, 12);
 
         // Identify the module and whether it is SDKDLL.dll
-        bool inSdkDll = false;
+        bool inSdkDll = false, inCoreClr = false;
         nint dllBase = 0, dllEnd = 0;
         string module = "???";
         try
@@ -592,6 +605,7 @@ public partial class App : Application
                 {
                     nint rvaInner = addr - baseAddr;
                     module = $"{m.ModuleName}+0x{rvaInner:X}";
+                    inCoreClr = m.ModuleName?.Equals("coreclr.dll", StringComparison.OrdinalIgnoreCase) == true;
                     if (m.ModuleName?.Equals("SDKDLL.dll", StringComparison.OrdinalIgnoreCase) == true)
                     {
                         inSdkDll = true;
@@ -655,8 +669,15 @@ public partial class App : Application
             // If MiniDumpWriteDump itself faults, the reentrancy guard in
             // VectoredExceptionHandler prevents a recursive VEH loop — worst case we
             // crash a few microseconds later than we would have anyway.
-            int dumpNo = System.Threading.Interlocked.Increment(ref _nonSdkAvDumpCount);
-            if (dumpNo <= MAX_NON_SDK_AV_DUMPS)
+            //
+            // ONLY for coreclr.dll, though. Anywhere else (issue #25: ntdll.dll+0x4FC7F
+            // while the Windows file picker was opening) the faulting thread may be
+            // holding an ntdll lock (heap / loader); MiniDumpWriteDump in-process then
+            // deadlocks on it and turns a first-chance AV that Windows would have
+            // handled on its own into a permanent UI freeze. The log line above is
+            // all we take in that case.
+            if (inCoreClr
+                && System.Threading.Interlocked.Increment(ref _nonSdkAvDumpCount) <= MAX_NON_SDK_AV_DUMPS)
                 TryWriteMiniDump("nonsdk_av");
             return EXCEPTION_CONTINUE_SEARCH;
         }

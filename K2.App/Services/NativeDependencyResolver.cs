@@ -64,6 +64,10 @@ internal static class NativeDependencyResolver
     private static bool _installed;
     private static string[]? _baseCampDirsCache;
 
+    // DLLs whose "NOT found" line is already in the log: a missing DLL is re-resolved
+    // on every P/Invoke, and the pollers would repeat the same lines forever (issue #24).
+    private static readonly HashSet<string> _loggedMissing = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Registers the resolver. Must be called exactly once, at app startup,
     /// before any P/Invoke to Base Camp's native DLLs.
@@ -95,13 +99,17 @@ internal static class NativeDependencyResolver
             if (File.Exists(candidate) && NativeLibrary.TryLoad(candidate, out var handle))
             {
                 App.WriteLog($"[NativeResolver] '{libraryName}' loaded from: {candidate}");
+                lock (_loggedMissing) _loggedMissing.Remove(libraryName);
                 return handle;
             }
         }
 
-        App.WriteLog($"[NativeResolver] '{libraryName}' NOT found. Paths tried:" +
-                     Environment.NewLine + "  " +
-                     string.Join(Environment.NewLine + "  ", CandidatePaths(libraryName)));
+        bool firstMiss;
+        lock (_loggedMissing) firstMiss = _loggedMissing.Add(libraryName);
+        if (firstMiss)
+            App.WriteLog($"[NativeResolver] '{libraryName}' NOT found. Paths tried:" +
+                         Environment.NewLine + "  " +
+                         string.Join(Environment.NewLine + "  ", CandidatePaths(libraryName)));
         // IntPtr.Zero -> the CLR will proceed and throw DllNotFoundException,
         // handled upstream with a clear message (MainWindow/MacroPadService).
         return IntPtr.Zero;

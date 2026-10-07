@@ -30,8 +30,8 @@ public sealed class MakaluButtonItem : INotifyPropertyChanged
     public string BaseLabel => Loc.Get(NameKey);
 
     private string _assignment = "left";
-    /// <summary>Raw assignment string — a plain function key ("left", "dpi+", ...)
-    /// or "sniper:{dpi}".</summary>
+    /// <summary>Raw assignment string — a plain function key ("left", "dpi+", ...),
+    /// "sniper:{dpi}", or a K2 action (<see cref="MakaluRemapData.MakeAction"/>).</summary>
     public string Assignment
     {
         get => _assignment;
@@ -44,13 +44,8 @@ public sealed class MakaluButtonItem : INotifyPropertyChanged
         }
     }
 
-    private string AssignmentLabel =>
-        Assignment.StartsWith("sniper:")
-            ? $"{MakaluRemapData.FnLabel("sniper")} {Assignment.Split(':')[1]}"
-            : MakaluRemapData.FnLabel(Assignment);
-
     /// <summary>Text shown in the key list.</summary>
-    public string Display => $"{BaseLabel}  —  {AssignmentLabel}";
+    public string Display => $"{BaseLabel}:   {MakaluRemapData.ListLabel(Assignment)}";
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnChanged([CallerMemberName] string? name = null) =>

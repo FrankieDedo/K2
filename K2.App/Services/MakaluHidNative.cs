@@ -289,6 +289,83 @@ internal static class MakaluHidNative
         return null;
     }
 
+    /// <summary>The Makalu Max collection Base Camp reads the battery from, plus whether
+    /// that device is the 2.4GHz receiver (<c>true</c>) or the mouse on its cable.</summary>
+    public readonly record struct MaxBatteryDevice(string Path, bool Wireless);
+
+    private static MaxBatteryDevice? _cachedMaxBattery;
+
+    /// <summary>bcdDevice at/above which Base Camp calls the device "Wireless" (the
+    /// receiver) instead of "Wired" — <c>Makalu.SetUseDevice</c>, decompiled Makalu.dll.</summary>
+    private const ushort MaxWirelessMinVersion = 0xD005;
+
+    /// <summary>
+    /// Finds the Makalu Max collection Base Camp's own Makalu.dll talks to: PID 0x0002,
+    /// interface 0, 9-byte Feature Reports (<c>HIDFunction.GetDevice</c> in
+    /// <c>_reference/BaseCamp_Decompiled/Makalu/</c>). NOT the mi_01/64-byte channel
+    /// <see cref="FindDevice"/> returns — the battery command only exists here.
+    /// </summary>
+    public static MaxBatteryDevice? FindMaxBatteryDevice(Action<string>? log = null)
+    {
+        if (_cachedMaxBattery is { } cached && StillValid(new FoundDevice(cached.Path, PidMakaluMax)))
+            return cached;
+
+        _cachedMaxBattery = FindMaxBatteryDeviceUncached(log);
+        return _cachedMaxBattery;
+    }
+
+    private static MaxBatteryDevice? FindMaxBatteryDeviceUncached(Action<string>? log)
+    {
+        HidD_GetHidGuid(out Guid hidGuid);
+        IntPtr devs = SetupDiGetClassDevsW(ref hidGuid, null, IntPtr.Zero,
+                                           DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+        if (devs == INVALID_HANDLE_VALUE) return null;
+        try
+        {
+            var ifData = new SP_DEVICE_INTERFACE_DATA { cbSize = Marshal.SizeOf<SP_DEVICE_INTERFACE_DATA>() };
+            for (uint i = 0; SetupDiEnumDeviceInterfaces(devs, IntPtr.Zero, ref hidGuid, i, ref ifData); i++)
+            {
+                var devInfo = new SP_DEVINFO_DATA { cbSize = Marshal.SizeOf<SP_DEVINFO_DATA>() };
+                string? path = GetInterfacePath(devs, ref ifData, ref devInfo);
+                if (path is null || !path.ToLowerInvariant().Contains("&mi_00")) continue;
+
+                using var h = OpenHandle(path, throwOnFail: false, queryOnly: true);
+                if (h is null || h.IsInvalid) continue;
+
+                var attrs = new HIDD_ATTRIBUTES { Size = Marshal.SizeOf<HIDD_ATTRIBUTES>() };
+                if (!HidD_GetAttributes(h, ref attrs) || attrs.VendorID != VID || attrs.ProductID != PidMakaluMax)
+                    continue;
+                if (!TryGetFeatureReportLength(h, out int len) || len != MakaluMaxBattery.ReportSize)
+                    continue;
+
+                bool wireless = attrs.VersionNumber >= MaxWirelessMinVersion;
+                log?.Invoke($"[MakaluNative] Max battery collection found (bcdDevice={attrs.VersionNumber:X4}, " +
+                            $"{(wireless ? "wireless" : "wired")})");
+                return new MaxBatteryDevice(path, wireless);
+            }
+        }
+        finally { SetupDiDestroyDeviceInfoList(devs); }
+        return null;
+    }
+
+    /// <summary>Opens a collection with no access rights. Enough for Feature Reports, and
+    /// the only way into interface 0: it is the mouse itself, which Windows holds
+    /// exclusively for read/write (Base Camp opens it the same way).</summary>
+    public static SafeFileHandle? OpenQueryOnly(string path) =>
+        OpenHandle(path, throwOnFail: false, queryOnly: true);
+
+    /// <summary>Set + get of a Feature Report on report ID 0, any length — the Makalu Max's
+    /// 9-byte channel (<see cref="SendFeature"/> is fixed to the 64-byte 0xA1 one).</summary>
+    public static byte[]? FeatureRoundTrip(SafeFileHandle h, byte[] report, int delayMs)
+    {
+        if (!HidD_SetFeature(h, report, report.Length))
+            return null;
+        Thread.Sleep(delayMs);
+
+        var resp = new byte[report.Length];
+        return HidD_GetFeature(h, resp, resp.Length) ? resp : null;
+    }
+
     /// <summary>Opens the DPI-button collection for a persistent blocking read loop (see
     /// <see cref="MakaluDpiButtonWatcher"/>) — plain synchronous handle, no
     /// FILE_FLAG_OVERLAPPED: a background thread blocks in ReadFile and Dispose()-ing the

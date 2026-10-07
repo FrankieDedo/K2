@@ -49,6 +49,13 @@ public static class AppSettings
         public bool AutoStopBaseCamp { get; set; } = true;
         public bool CloseToTray { get; set; }
         public bool StartMinimizedToTray { get; set; }
+        public bool RememberWindowSize { get; set; }
+        public bool StartMaximized { get; set; }
+        public double? WindowLeft { get; set; }
+        public double? WindowTop { get; set; }
+        public double? WindowWidth { get; set; }
+        public double? WindowHeight { get; set; }
+        public bool WindowWasMaximized { get; set; }
         public bool RestartBaseCampOnClose { get; set; }
         public bool SyncAcrossDevices { get; set; }
         public bool SyncLightingAcrossDevices { get; set; }
@@ -288,6 +295,92 @@ public static class AppSettings
             Save();
         }
         Changed?.Invoke();
+    }
+
+    /// <summary>When true, K2 persists the main window's position/size (and whether it
+    /// was maximized) every time it closes, and restores them the next time it starts —
+    /// instead of always opening at the default centered 1600x1024 (see
+    /// MainWindow.xaml's Height/Width). See <see cref="SaveWindowBounds"/> /
+    /// <see cref="WindowLeft"/> and friends.</summary>
+    public static bool RememberWindowSize
+    {
+        get { EnsureLoaded(); return _data.RememberWindowSize; }
+    }
+
+    public static void SetRememberWindowSize(bool value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.RememberWindowSize == value) return;
+            _data.RememberWindowSize = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>When true, the main window always opens maximized, regardless of
+    /// <see cref="RememberWindowSize"/> — restoring it down (double-click the title bar,
+    /// or the restore button) falls back to the remembered/default size.</summary>
+    public static bool StartMaximized
+    {
+        get { EnsureLoaded(); return _data.StartMaximized; }
+    }
+
+    public static void SetStartMaximized(bool value)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (_data.StartMaximized == value) return;
+            _data.StartMaximized = value;
+            Save();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>Last remembered window bounds/state — null fields mean "never saved",
+    /// so MainWindow falls back to its own XAML defaults. Only meaningful while
+    /// <see cref="RememberWindowSize"/> is on; MainWindow doesn't read these otherwise.</summary>
+    public static double? WindowLeft   { get { EnsureLoaded(); return _data.WindowLeft; } }
+    public static double? WindowTop    { get { EnsureLoaded(); return _data.WindowTop; } }
+    public static double? WindowWidth  { get { EnsureLoaded(); return _data.WindowWidth; } }
+    public static double? WindowHeight { get { EnsureLoaded(); return _data.WindowHeight; } }
+    public static bool WindowWasMaximized { get { EnsureLoaded(); return _data.WindowWasMaximized; } }
+
+    /// <summary>Persists the window's current position/size/maximized state — called
+    /// from MainWindow's Closing handler whenever <see cref="RememberWindowSize"/> is on.
+    /// One write for all five fields, rather than a setter per field like the rest of
+    /// this class, since they're always saved together.</summary>
+    public static void SaveWindowBounds(double left, double top, double width, double height, bool maximized)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            _data.WindowLeft = left;
+            _data.WindowTop = top;
+            _data.WindowWidth = width;
+            _data.WindowHeight = height;
+            _data.WindowWasMaximized = maximized;
+            Save();
+        }
+    }
+
+    /// <summary>Clears the remembered bounds — "Reset window size" button in the
+    /// Settings tab — so the next launch (or an immediate re-apply while not maximized,
+    /// see BtnResetWindowSize_Click) falls back to the default centered 1600x1024.</summary>
+    public static void ResetWindowBounds()
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            _data.WindowLeft = null;
+            _data.WindowTop = null;
+            _data.WindowWidth = null;
+            _data.WindowHeight = null;
+            _data.WindowWasMaximized = false;
+            Save();
+        }
     }
 
     /// <summary>

@@ -56,6 +56,22 @@ public partial class MainWindow
     {
         ("Spotify", SpotifyProfileName, "dedicated_spotify"),
         ("Discord", DiscordProfileName, "dedicated_discord"),
+        (StudioDedicatedId, StudioProfileName, "dedicated_studio"),
+    };
+
+    /// <summary>Fender Studio Pro's dedicated profile: an ordinary page of <c>dp_studio</c> keys
+    /// (see <see cref="ModLinkGames.StudioPro"/>) in a reserved slot, which takes the pad while
+    /// the program runs and hands it back when it closes (see <c>DpSyncLaunchRegistrations</c>'s
+    /// synthesized registration for this slot).</summary>
+    private const string StudioDedicatedId = "Studio Pro";
+    private const string StudioProfileName = "Fender Studio Pro";
+    private const string StudioExeName = "Studio Pro.exe";
+
+    /// <summary>The keys a new Studio Pro profile starts with, in pad order.</summary>
+    private static readonly string[] StudioSeedKeys =
+    {
+        "sp.record", "sp.play", "sp.stop", "sp.rewind", "sp.forward", "sp.loop",
+        "sp.click", "sp.marker", "sp.undo", "sp.redo", "sp.save", "sp.anysolo",
     };
 
     /// <summary>Reserved profile name of the Discord dedicated profile — see
@@ -90,6 +106,10 @@ public partial class MainWindow
     /// are none. Called by <c>DpRefreshProfiles</c>, which walks the same slot list.</summary>
     private void DpRefreshDedicated(int deviceId)
     {
+        // The Studio Pro back key is pressed inside a static service: hand it the way out from
+        // here, the first place that runs once a pad and its store are up.
+        DpLiveTileService.StudioBackRequested ??= id => Dispatcher.BeginInvoke(() => DpStudioLeave(id));
+
         _dpSuppressDedicated = true;
         try
         {
@@ -131,6 +151,10 @@ public partial class MainWindow
                 // Nothing to switch to — the panel is taken over by the call, not by the slot.
                 DvpReopen(id);
                 break;
+
+            case StudioDedicatedId:
+                DpStudioEnter(id, item.Slot);
+                break;
         }
     }
 
@@ -153,8 +177,9 @@ public partial class MainWindow
     private string? DpActiveDedicated(int deviceId)
     {
         if (DpDiscordRoomActive(deviceId)) return "Discord";
-        return _dpStore.GetProfileName(deviceId, _dpStore.GetCurrentProfile(deviceId)) == SpotifyProfileName
-            ? "Spotify" : null;
+        string? current = _dpStore.GetProfileName(deviceId, _dpStore.GetCurrentProfile(deviceId));
+        return current == SpotifyProfileName ? "Spotify"
+             : current == StudioProfileName ? StudioDedicatedId : null;
     }
 
     /// <summary>The user picked a normal profile: the panel goes back to it. For Discord that is
@@ -204,6 +229,25 @@ public partial class MainWindow
                 if (!DiscordStore.IsConnected) new DiscordSettingsWindow { Owner = this }.ShowDialog();
                 return;
             }
+
+            case StudioDedicatedId:
+            {
+                int slot = _dpStore.GetExistingProfiles(id)
+                    .FirstOrDefault(s => _dpStore.GetProfileName(id, s) == StudioProfileName);
+                if (slot == 0)
+                {
+                    slot = BaseCampDbImporter.FindFreeSlot(_dpStore.GetExistingProfiles(id), maxSlots: 999);
+                    _dpStore.ClearProfile(id, slot);
+                    _dpStore.SetProfileName(id, slot, StudioProfileName);
+                    for (int btn = 0; btn < StudioSeedKeys.Length; btn++)
+                        DpSeedSpotifyKey(id, slot, btn, ModLinkGames.StudioActionType, StudioSeedKeys[btn]);
+                    DpLog($"[UI] Studio Pro dedicated profile created: slot {slot} (device {id})");
+                }
+                DpStudioApplyBackKey(id);
+                DpRefreshProfiles(id);
+                DpStudioEnter(id, slot);
+                return;
+            }
         }
     }
 
@@ -242,6 +286,9 @@ public partial class MainWindow
                 break;
             case "Spotify":
                 DpShowSpotifyProfileConfig();
+                break;
+            case StudioDedicatedId:
+                DpShowStudioConfig(this);
                 break;
             default:
                 MessageBox.Show(Loc.Get("dedicated_no_config"), Loc.Get("dedicated_configure"),
@@ -282,6 +329,136 @@ public partial class MainWindow
         // the block/control keys just reseeded above.
         DpRefreshProfiles(id);
         DpRequestRepaint(id);
+    }
+
+    // ================================================================
+    // Fender Studio Pro
+    // ================================================================
+
+    /// <summary>Where each pad was before the Studio Pro profile took it — what its back key
+    /// returns to.</summary>
+    private readonly Dictionary<int, int> _dpStudioPrevProfile = new();
+
+    private StudioProfileConfig DpReadStudioConfig() => new(
+        _dpStore.GetSetting("studio.returnOn") == "1",
+        int.TryParse(_dpStore.GetSetting("studio.returnSec"), out int s) && s > 0
+            ? s : StudioProfileConfig.DefaultReturnSeconds,
+        _dpStore.GetSetting("studio.fgOnly") == "1",
+        _dpStore.GetSetting("studio.backArrow") != "0");      // absent = shown
+
+    /// <summary>The Studio Pro profile's configuration popup. Reached from the dedicated row's
+    /// gear and from a <c>dp_studio</c> key's own dialog (<see cref="IActionHost.OpenStudioConfig"/>).</summary>
+    internal void DpShowStudioConfig(Window owner)
+    {
+        var dlg = new StudioProfileConfigWindow(DpReadStudioConfig()) { Owner = owner };
+        if (dlg.ShowDialog() != true) return;
+
+        var cfg = dlg.Result;
+        _dpStore.SetSetting("studio.returnOn", cfg.ReturnEnabled ? "1" : "0");
+        _dpStore.SetSetting("studio.returnSec", cfg.ReturnSeconds.ToString());
+        _dpStore.SetSetting("studio.fgOnly", cfg.ForegroundOnly ? "1" : "0");
+        _dpStore.SetSetting("studio.backArrow", cfg.BackArrow ? "1" : "0");
+
+        // Picks up the new foreground / return settings in the launch watcher, and the back key.
+        // DpRefreshProfiles rebuilds the profile LIST of the tab, so it is only for the pad the tab
+        // is showing: calling it for every pad left the list on the last one's profiles (user
+        // report 2026-10-06). The others get their watcher registration refreshed directly.
+        int? selected = DpSelectedDeviceId();
+        foreach (int id in _dpDeviceIds.ToList())
+        {
+            DpStudioApplyBackKey(id);
+            if (id == selected) DpRefreshProfiles(id);
+            else DpRegisterProfileLaunchWatchers(id, _dpStore.GetExistingProfiles(id));
+            DpRequestRepaint(id);
+        }
+    }
+
+    /// <summary>Pad position of the back key: key 7, the first of the bottom row.</summary>
+    private const int StudioBackButton = 6;
+
+    /// <summary>Puts the back key on key 7 while "Show back arrow" is on, and gives that key its
+    /// stock function back when it is off. Turning it on overwrites whatever key 7 held — that is
+    /// what the option asks for; turning it off only touches the key if it still is the back key.</summary>
+    private void DpStudioApplyBackKey(int id)
+    {
+        int slot = _dpStore.GetExistingProfiles(id)
+            .FirstOrDefault(s => _dpStore.GetProfileName(id, s) == StudioProfileName);
+        if (slot == 0) return;
+
+        // A profile made before the back key moved to key 7 still has it on key 12.
+        const int legacyButton = 11;
+        var legacy = _dpStore.LoadPage(id, slot, 0).FirstOrDefault(b => b.ButtonIndex == legacyButton);
+        if (legacy?.ActionType == ModLinkGames.StudioActionType && legacy.ActionValue == "sp.back")
+            DpSeedSpotifyKey(id, slot, legacyButton, ModLinkGames.StudioActionType, StudioSeedKeys[legacyButton]);
+
+        var key = _dpStore.LoadPage(id, slot, 0).FirstOrDefault(b => b.ButtonIndex == StudioBackButton);
+        bool isBack = key?.ActionType == ModLinkGames.StudioActionType && key.ActionValue == "sp.back";
+        bool want = DpReadStudioConfig().BackArrow;
+        if (want == isBack) return;
+
+        DpSeedSpotifyKey(id, slot, StudioBackButton, ModLinkGames.StudioActionType,
+                         want ? "sp.back" : StudioSeedKeys[StudioBackButton]);
+        DpLog($"[STUDIO] device {id}: key 7 -> {(want ? "back" : StudioSeedKeys[StudioBackButton])}");
+    }
+
+    /// <summary>Switches <paramref name="id"/> to its Studio Pro slot, remembering where it came
+    /// from. Every way in goes through here — the row, the watcher, a "switch profile" key.</summary>
+    private void DpStudioEnter(int id, int slot)
+    {
+        DpStudioCancelReturnTimer(id);
+        int leaving = _dpStore.GetCurrentProfile(id);
+        if (leaving != slot) _dpStudioPrevProfile[id] = leaving;
+        DpSpotifySwitchTo(id, slot);
+    }
+
+    /// <summary>Pending "return to this profile after N s" countdowns, one per pad.</summary>
+    private readonly Dictionary<int, System.Windows.Threading.DispatcherTimer> _dpStudioReturnTimers = new();
+
+    private void DpStudioCancelReturnTimer(int id)
+    {
+        if (!_dpStudioReturnTimers.Remove(id, out var t)) return;
+        t.Stop();
+    }
+
+    /// <summary>Starts the countdown that brings the Studio Pro profile back after the back key.
+    /// A timer of our own, like Spotify's, and NOT the launch watcher's re-assert: that one only
+    /// counts while the program is running and not in foreground-only mode, so the profile
+    /// never came back when it had been opened by hand (user report 2026-10-06).</summary>
+    private void DpStudioArmReturnTimer(int id)
+    {
+        DpStudioCancelReturnTimer(id);
+        var cfg = DpReadStudioConfig();
+        if (!cfg.ReturnEnabled) return;
+
+        var timer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(Math.Max(1, cfg.ReturnSeconds)),
+        };
+        timer.Tick += (_, _) =>
+        {
+            DpStudioCancelReturnTimer(id);
+            int slot = _dpStore.GetExistingProfiles(id)
+                .FirstOrDefault(s => _dpStore.GetProfileName(id, s) == StudioProfileName);
+            if (slot == 0 || _dpStore.GetCurrentProfile(id) == slot) return;
+            DpLog($"[STUDIO] device {id}: return timer -> profile {slot}");
+            DpStudioEnter(id, slot);
+        };
+        _dpStudioReturnTimers[id] = timer;
+        timer.Start();
+        DpLog($"[STUDIO] device {id}: back in {cfg.ReturnSeconds}s");
+    }
+
+    /// <summary>The back key: hands the pad to the profile it was on, and starts the return
+    /// countdown when the profile is set to come back.</summary>
+    internal void DpStudioLeave(int id)
+    {
+        var ordinary = DpOrdinaryProfiles(id);
+        if (ordinary.Count == 0) { DpLog($"[STUDIO] device {id}: nothing to go back to"); return; }
+        int target = _dpStudioPrevProfile.TryGetValue(id, out int prev) && ordinary.Contains(prev)
+                     ? prev : ordinary[0];
+        DpSpotifySwitchTo(id, target);
+        DpLog($"[STUDIO] device {id}: back key -> profile {target}");
+        DpStudioArmReturnTimer(id);
     }
 
     private void DpDeleteDedicated(int deviceId, DpDedicatedItem item)

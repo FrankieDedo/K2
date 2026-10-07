@@ -77,8 +77,14 @@ public partial class ButtonActionDialog
         ("navigation", "🧭",  new[] { "dp_folder", "profile", "browser" }),
         ("input",      "⌨",  new[] { "keys", "hotkeyswitch", "mouse", "media", "multi", "macro" }),
         ("content",    "📝", new[] { "text", "emoji", "dp_emojibrowser" }),
+        // Backlight of any connected device. Both tags are dropped from CbType on a host with
+        // no IActionHost.Lighting, which hides the card.
+        ("lighting",   "💡", LightingActionTypes.All),
         ("live",       "📊", new[] { "dp_clock", "dp_sysmon", "dp_speedtest", "dp_screen", "dp_custom" }),
-        ("apps",       "🧩", new[] { "googlehome", "adobe", "davinci", "zoom", "obs", "twitch", "spotify", "discord", "youtube", "pyscript" }),
+        // The Makalu's own firmware functions. Every tag is dropped from CbType on any other
+        // host, which empties the category and hides its card — see ShowCategoryPicker.
+        ("makalu",     "🖱", MakaluActionTypes.All),
+        ("apps",       "🧩", new[] { "googlehome", "adobe", "davinci", "zoom", "obs", "twitch", "spotify", "discord", "youtube", "pyscript", ModLinkGames.StudioActionType }),
         // Game-specific commands — kept out of the generic categories above so a game's own
         // vocabulary (cockpit annunciators, in-game shortcuts) doesn't crowd the everyday
         // action list. dp_edstatus is the real "dynamic tile" action (its own sub-grid of
@@ -101,11 +107,16 @@ public partial class ButtonActionDialog
         ["text"] = "📝", ["emoji"] = "😀", ["dp_emojibrowser"] = "🙂",
         ["dp_clock"] = "🕐", ["dp_sysmon"] = "📊", ["dp_speedtest"] = "🚀", ["dp_screen"] = "🔍",
         ["dp_custom"] = "🎨",
+        [LightingActionTypes.Brightness] = "🔆", [LightingActionTypes.Effect] = "🌈",
         ["dp_edstatus"] = "🛸",
         ["dp_zcstatus"] = "🎖",
         [KspTelemachus.ActionType] = "🚀",
         [ModLinkGames.ActionType] = "🧩",
+        [ModLinkGames.StudioActionType] = "🎛",
         ["dp_ed_fsd"] = "🌌", ["dp_ed_heatsink"] = "❄", ["dp_ed_target"] = "🎯",
+        [MakaluActionTypes.Mouse] = "🖱", [MakaluActionTypes.Dpi] = "🎚", [MakaluActionTypes.Scroll] = "↕",
+        [MakaluActionTypes.Sniper] = "🎯", [MakaluActionTypes.Profile] = "👤",
+        [MakaluActionTypes.Lighting] = "💡", [MakaluActionTypes.Disable] = "🚫",
     };
 
     /// <summary>Elite Dangerous "quick command" presets: cards in the Games category that are
@@ -125,8 +136,10 @@ public partial class ButtonActionDialog
     /// the "combo" set UpdatePanels() already switches ComboPanel on for.</summary>
     private static readonly HashSet<string> ComboTags = new()
         { "oscmd", "media", "mouse", "macro", "googlehome", "obs", "twitch", "spotify", "discord", "audiodevice",
-          "dp_clock", "dp_sysmon", "dp_speedtest", "dp_edstatus", "dp_zcstatus", KspTelemachus.ActionType, ModLinkGames.ActionType, "dp_screen",
-          CustomActionType.Tag };
+          "dp_clock", "dp_sysmon", "dp_speedtest", "dp_edstatus", "dp_zcstatus", KspTelemachus.ActionType, ModLinkGames.ActionType, ModLinkGames.StudioActionType, "dp_screen",
+          CustomActionType.Tag,
+          MakaluActionTypes.Mouse, MakaluActionTypes.Dpi, MakaluActionTypes.Scroll,
+          MakaluActionTypes.Profile, MakaluActionTypes.Lighting };
 
     /// <summary>The two CbType tags whose loc key doesn't follow the plain "act_"+tag
     /// pattern the rest of the list uses (see the ComboBoxItem list in ButtonActionDialog.xaml) —
@@ -274,8 +287,14 @@ public partial class ButtonActionDialog
         OpenOverlay();
     }
 
+    /// <summary>The "saved in the mouse's memory" line under the picker title — on for the
+    /// Makalu category's own grids, off everywhere else.</summary>
+    private void SetPickerHint(string? categoryKey) =>
+        LblPickerHint.Visibility = categoryKey == "makalu" ? Visibility.Visible : Visibility.Collapsed;
+
     private void ShowCategoryPicker()
     {
+        SetPickerHint(null);
         // Only categories with at least one action still present in CbType.Items —
         // an allow-list (macro-step picker) or a page-less host can empty a whole
         // category, and an empty card that opens onto a blank grid is just a dead end.
@@ -309,6 +328,7 @@ public partial class ButtonActionDialog
         var category = PickerCategories.FirstOrDefault(c => c.Key == categoryKey);
         if (category.Tags is null) return;
         _pickerCategoryKey = categoryKey;
+        SetPickerHint(categoryKey);
 
         if (categoryKey == "games" && _gameProfile is { } gp)
         {
@@ -430,6 +450,7 @@ public partial class ButtonActionDialog
     private void ShowSubActionPicker()
     {
         _gameFamilyOpen = null;
+        SetPickerHint(CategoryKeyOf(CurrentTag()));
         IcPickerSubActions.ItemsSource = CbComboValue.Items.OfType<ComboBoxItem>()
             .Select(i => new SubActionCard { Value = (string?)i.Tag ?? "", Name = (string?)i.Content ?? "" })
             .ToList();

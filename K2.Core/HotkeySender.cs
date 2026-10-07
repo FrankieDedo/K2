@@ -34,12 +34,12 @@ public static class HotkeySender
     /// current keyboard layout. Blocks for a few ms — call it off the UI thread.</summary>
     public static bool TrySend(string? hotkey, out string error)
     {
-        if (!TryParse(hotkey, out var mods, out ushort key, out error)) return false;
+        if (!TryParse(hotkey, out var mods, out var keys, out error)) return false;
 
         foreach (var m in mods) { Send(m, down: true); Thread.Sleep(5); }
-        if (key != 0) Send(key, down: true);
+        foreach (var k in keys) { Send(k, down: true); Thread.Sleep(5); }
         Thread.Sleep(30);
-        if (key != 0) Send(key, down: false);
+        for (int i = keys.Count - 1; i >= 0; i--) { Send(keys[i], down: false); Thread.Sleep(5); }
         for (int i = mods.Count - 1; i >= 0; i--) { Thread.Sleep(5); Send(mods[i], down: false); }
         return true;
     }
@@ -49,9 +49,9 @@ public static class HotkeySender
     /// keys stay pressed system-wide.</summary>
     public static bool TryHoldDown(string? hotkey, out string error)
     {
-        if (!TryParse(hotkey, out var mods, out ushort key, out error)) return false;
+        if (!TryParse(hotkey, out var mods, out var keys, out error)) return false;
         foreach (var m in mods) { Send(m, down: true); Thread.Sleep(5); }
-        if (key != 0) Send(key, down: true);
+        foreach (var k in keys) { Send(k, down: true); Thread.Sleep(5); }
         return true;
     }
 
@@ -59,24 +59,25 @@ public static class HotkeySender
     /// in reverse order.</summary>
     public static bool TryHoldUp(string? hotkey, out string error)
     {
-        if (!TryParse(hotkey, out var mods, out ushort key, out error)) return false;
-        if (key != 0) Send(key, down: false);
+        if (!TryParse(hotkey, out var mods, out var keys, out error)) return false;
+        for (int i = keys.Count - 1; i >= 0; i--) { Send(keys[i], down: false); Thread.Sleep(5); }
         for (int i = mods.Count - 1; i >= 0; i--) { Thread.Sleep(5); Send(mods[i], down: false); }
         return true;
     }
 
-    /// <summary>Splits "Ctrl+Shift+V" into its modifier VKs and the single non-modifier key,
-    /// resolving each on the current keyboard layout. Shared by the one-shot and the hold paths.
-    /// <paramref name="key"/> comes back 0 for a modifier-only combination ("Alt", "Ctrl + Shift"),
-    /// which the callers send as just the modifiers.</summary>
-    private static bool TryParse(string? hotkey, out List<ushort> mods, out ushort key, out string error)
+    /// <summary>Splits "Ctrl+Shift+V" into its modifier VKs and its non-modifier keys (usually
+    /// one; "Ctrl + A + B" presses A then B, all held together), resolving each on the current
+    /// keyboard layout. Shared by the one-shot and the hold paths. <paramref name="keys"/> comes
+    /// back empty for a modifier-only combination ("Alt", "Ctrl + Shift"), which the callers send
+    /// as just the modifiers.</summary>
+    private static bool TryParse(string? hotkey, out List<ushort> mods, out List<ushort> keys, out string error)
     {
         mods = new List<ushort>();
-        key = 0;
+        keys = new List<ushort>();
         error = "";
         if (string.IsNullOrWhiteSpace(hotkey)) { error = "empty shortcut"; return false; }
 
-        foreach (var raw in hotkey.Split(new[] { '+', '-' }, StringSplitOptions.RemoveEmptyEntries))
+        foreach (var raw in KeyCombo.NormalizeMinus(hotkey).Split(new[] { '+', '-' }, StringSplitOptions.RemoveEmptyEntries))
         {
             string part = raw.Trim();
             if (part.Length == 0) continue;
@@ -87,14 +88,15 @@ public static class HotkeySender
                 case "ALT": mods.Add(VK_MENU); break;
                 case "WIN": case "GUI": case "META": case "CMD": mods.Add(VK_LWIN); break;
                 default:
-                    if (!TryResolveKey(part, out key)) { error = $"unknown key \"{part}\""; return false; }
+                    if (!TryResolveKey(part, out ushort key)) { error = $"unknown key \"{part}\""; return false; }
+                    if (!keys.Contains(key)) keys.Add(key);
                     break;
             }
         }
         // A BARE MODIFIER is a valid shortcut, not a broken one: "Alt" alone means "press Alt",
         // which is how a key gets remapped into another modifier (the Alt/Win swap users ask for).
         // Only a string that resolved to nothing at all is an error.
-        if (key == 0 && mods.Count == 0) { error = "no key in the shortcut"; return false; }
+        if (keys.Count == 0 && mods.Count == 0) { error = "no key in the shortcut"; return false; }
         return true;
     }
 
@@ -132,6 +134,10 @@ public static class HotkeySender
             return true;
         }
         if (Specials.TryGetValue(name, out var special)) { vk = special; return true; }
+        // Other spellings of a known key — notably Base Camp's "NUMPAD3"/"NUMPADDECIMAL", which
+        // imported profiles carry verbatim.
+        if (KeyCombo.Canonical(name) is { } canon && !canon.Equals(name, StringComparison.OrdinalIgnoreCase))
+            return TryResolveKey(canon, out vk);
         return false;
     }
 
@@ -160,6 +166,11 @@ public static class HotkeySender
         ["Num5"] = 0x65, ["Num6"] = 0x66, ["Num7"] = 0x67, ["Num8"] = 0x68, ["Num9"] = 0x69,
         ["NumMultiply"] = 0x6A, ["NumAdd"] = 0x6B, ["NumSubtract"] = 0x6D,
         ["NumDecimal"] = 0x6E, ["NumDivide"] = 0x6F, ["Minus"] = 0xBD,
+        // The picker's spelling of the same keypad keys (and Base Camp's, in upper case).
+        ["Numpad0"] = 0x60, ["Numpad1"] = 0x61, ["Numpad2"] = 0x62, ["Numpad3"] = 0x63, ["Numpad4"] = 0x64,
+        ["Numpad5"] = 0x65, ["Numpad6"] = 0x66, ["Numpad7"] = 0x67, ["Numpad8"] = 0x68, ["Numpad9"] = 0x69,
+        ["NumpadMultiply"] = 0x6A, ["NumpadAdd"] = 0x6B, ["NumpadSubtract"] = 0x6D,
+        ["NumpadDecimal"] = 0x6E, ["NumpadDivide"] = 0x6F,
     };
 
     /// <summary>Keys on the extended half of the keyboard need <c>KEYEVENTF_EXTENDEDKEY</c>, or the

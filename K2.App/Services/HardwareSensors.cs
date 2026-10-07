@@ -155,6 +155,10 @@ public static class HardwareSensors
     /// the UI thread.</summary>
     public static void Start()
     {
+        // Callers are all on background threads. Holding off until the HID drivers have finished
+        // their AutoOpen keeps LHM's ring0/PawnIO probing from overlapping their init.
+        if (!App.StartupSettled.IsSet) App.StartupSettled.Wait(TimeSpan.FromSeconds(30));
+
         Computer c;
         lock (_gate)
         {
@@ -162,6 +166,9 @@ public static class HardwareSensors
             _opening = true;
         }
 
+        // Breadcrumb in the cumulative crash log: a "begin" with no "done" after it means the
+        // process died inside the LHM open (a CLR fail-fast leaves no other trace).
+        App.WriteCrashLog("[HWSensors] LHM open begin");
         try
         {
             c = NewComputer();
@@ -171,8 +178,10 @@ public static class HardwareSensors
         {
             lock (_gate) _opening = false;
             App.WriteLog($"[HWSensors] LHM open failed: {ex.Message}");
+            App.WriteCrashLog($"[HWSensors] LHM open failed: {ex.Message}");
             return;
         }
+        App.WriteCrashLog("[HWSensors] LHM open done");
 
         lock (_gate)
         {

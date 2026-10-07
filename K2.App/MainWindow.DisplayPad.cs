@@ -1416,6 +1416,7 @@ public partial class MainWindow
         {
             if (dedName == SpotifyProfileName) DpSpotifySwitchTo(id, dedSlot);
             else if (dedName == DiscordProfileName) DvpReopen(id);
+            else if (dedName == StudioProfileName) DpStudioEnter(id, dedSlot);
             DpLog($"[EXEC] DisplayPad dedicated profile -> {dedName} (device {id})");
             return;
         }
@@ -2186,6 +2187,17 @@ public partial class MainWindow
                 restoreOnClose = false;
             }
 
+            // Same idea for Fender Studio Pro's dedicated profile: on the pad while the program
+            // runs, back to where it was when it closes.
+            bool isStudioSlot = _dpStore.GetProfileName(deviceId, slot) == StudioProfileName;
+            var studioCfg = isStudioSlot ? DpReadStudioConfig() : default;
+            if (isStudioSlot)
+            {
+                exe = StudioExeName;
+                focusOnly = studioCfg.ForegroundOnly;
+                restoreOnClose = true;
+            }
+
             if (string.IsNullOrWhiteSpace(exe)) continue;
             string key = scope + slot;
             currentKeys.Add(key);
@@ -2196,11 +2208,23 @@ public partial class MainWindow
             // no-opped (user report 2026-09-01: "show when Spotify is in front" never engaged).
             Action<string> switchTo = isSpotifySlot
                 ? t => { if (int.TryParse(t, out int ts)) DpSpotifySwitchTo(deviceId, ts); }
+                : isStudioSlot
+                ? t =>
+                {
+                    if (!int.TryParse(t, out int ts)) return;
+                    // INTO the Studio slot remembers where the pad was (the back key's target);
+                    // the watcher's own restore, out of it, is a plain switch.
+                    if (ts == capturedSlot) DpStudioEnter(deviceId, ts); else DpSpotifySwitchTo(deviceId, ts);
+                }
                 : t => DpSwitchProfile(deviceId, t);
             ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe, focusOnly, restoreOnClose,
                 capturedSlot.ToString(),
                 () => _dpStore.GetCurrentProfile(deviceId).ToString(),
-                switchTo);
+                switchTo,
+                // Studio Pro only: armed for as long as the program runs (K2 started after it
+                // must still bring the profile in). The "return after N seconds" of its back key
+                // is a timer of its own — see DpStudioArmReturnTimer.
+                keepWhileRunning: isStudioSlot && !focusOnly);
         }
         foreach (var staleKey in ProfileLaunchWatcher.Instance.KeysWithPrefix(scope).Except(currentKeys))
             ProfileLaunchWatcher.Instance.RemoveRegistration(staleKey);

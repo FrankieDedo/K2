@@ -102,7 +102,7 @@ public sealed class EverestKey : INotifyPropertyChanged
             string body = HasAction ? ActionSummary
                          : _hasImage ? Loc.Get("ev_display_key_icon_only")
                          : "(empty)";
-            return $"{Name}  —  {body}";
+            return $"{Name}:   {body}";
         }
     }
 
@@ -111,7 +111,7 @@ public sealed class EverestKey : INotifyPropertyChanged
     /// up as its raw internal tag (e.g. "exec", "keys") instead of something meaningful like
     /// the executable's filename (user report 2026-07-18; extended to cover every action
     /// type, e.g. "oscmd", via ActionTypeHelper.Summary — user report 2026-07-19).</summary>
-    private string ActionSummary => ActionTypeHelper.Summary(_actionType, _actionValue);
+    private string ActionSummary => ActionTypeHelper.ListSummary(_actionType, _actionValue);
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnChanged([CallerMemberName] string? name = null) =>

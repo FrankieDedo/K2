@@ -80,7 +80,7 @@ internal static class ModLinkClient
     private static async Task PollLoop(Channel ch)
     {
         string url = $"http://127.0.0.1:{ch.Game.Port}/state";
-        string where = ch.Game.Port > 0 ? $":{ch.Game.Port}" : "its state file";
+        string where = ch.Game.Midi ? "MIDI" : ch.Game.Port > 0 ? $":{ch.Game.Port}" : "its state file";
         bool? wasAlive = null;
         while (true)
         {
@@ -95,7 +95,8 @@ internal static class ModLinkClient
             Status next;
             try
             {
-                string? json = ch.Game.Port > 0
+                string? json = ch.Game.Midi ? McuClient.StateJson()
+                    : ch.Game.Port > 0
                     ? await Http.GetStringAsync(url).ConfigureAwait(false)
                     : ReadSpaceEngineersFile();
                 next = json is null ? Status.Offline : Parse(json, ch.Game);

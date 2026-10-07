@@ -191,7 +191,14 @@ public partial class MainWindow
     private void UpdateEverestLedPreviewActive(bool active)
     {
         if (_ledPoller == null) return;
+        bool wasEnabled = _ledPoller.EverestEnabled;
         _ledPoller.EverestEnabled = active && _everest.IsOpen;
+        // Re-arm on every entry into the section: anything that turned the color stream
+        // off behind K2's back (Base Camp opened alongside, a firmware picture write K2
+        // didn't make) otherwise leaves the preview frozen on its last frame for the rest
+        // of the session, with no way back short of restarting K2 (user report 2026-10-07).
+        if (!wasEnabled && _ledPoller.EverestEnabled)
+            EvReArmColorStreamAfterFlashWrite();
         if (!active)
             foreach (var kv in _evKeyVisuals)
                 ResetEverestKeyToOff(kv.Value);

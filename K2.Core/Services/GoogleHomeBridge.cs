@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
@@ -99,6 +100,38 @@ public sealed class GoogleHomeBridge
     public void Trigger(string bindingId, Action<string> log)
     {
         _ = TriggerAsync(bindingId, log);
+    }
+
+    /// <summary>Called once from <c>App.OnStartup</c> (fire-and-forget) so the WebView2
+    /// environment, hidden window and home.google.com navigation happen while the user is
+    /// still looking at K2's own window instead of on the first button press — without this,
+    /// the first Google Home trigger after every app launch pays that whole cost (WebView2
+    /// process spin-up + page load, sometimes exceeding TriggerFoyerAsync's/NavigateAsync's
+    /// own timeouts) and can appear to silently do nothing. Only worth paying for a user who
+    /// has actually set the feature up.</summary>
+    public async Task WarmupAsync()
+    {
+        if (!GoogleHomeStore.IsConnected) return;
+        try
+        {
+            var view = await EnsureTriggerViewAsync();
+            // DOM bindings need their own page loaded AND the Angular list rendered (the 1500ms
+            // settle in TriggerAsync); warming only "/" would leave exactly that cost on the
+            // first press. Pick the most common page among them.
+            string path = GoogleHomeStore.List()
+                .Where(b => string.Equals(b.Kind, "dom", StringComparison.Ordinal) && b.PagePath.Length > 0)
+                .GroupBy(b => b.PagePath)
+                .OrderByDescending(g => g.Count())
+                .Select(g => g.Key)
+                .FirstOrDefault() ?? "/";
+            await NavigateAsync(view, "https://home.google.com" + path);
+            _currentPath = path;
+            if (path != "/") await Task.Delay(1500);
+        }
+        catch (Exception ex)
+        {
+            Say($"warmup failed: {ex.Message}");
+        }
     }
 
     public async Task TriggerAsync(string bindingId, Action<string> log)
