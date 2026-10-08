@@ -429,7 +429,8 @@ internal static class SystemMonitor
             if (_volNotifyEndpoint is not null) return;
             try
             {
-                var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+                var enumerator = (IMMDeviceEnumerator)Activator.CreateInstance(
+                    Type.GetTypeFromCLSID(typeof(MMDeviceEnumerator).GUID, throwOnError: true)!)!;
                 if (enumerator.GetDefaultAudioEndpoint(ERender, EMultimedia, out var device) != 0 || device is null)
                     return;
                 var iid = typeof(IAudioEndpointVolume).GUID;
@@ -498,7 +499,8 @@ internal static class SystemMonitor
         object? volObj = null;
         try
         {
-            var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+            var enumerator = (IMMDeviceEnumerator)Activator.CreateInstance(
+                    Type.GetTypeFromCLSID(typeof(MMDeviceEnumerator).GUID, throwOnError: true)!)!;
             if (enumerator.GetDefaultAudioEndpoint(ERender, EMultimedia, out var device) != 0 || device is null)
                 return 0;
             var iid = typeof(IAudioEndpointVolume).GUID;
