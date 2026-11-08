@@ -62,6 +62,19 @@ internal static partial class DpLiveTileService
     private static readonly Dictionary<(int Device, int Button), string> _lastStamp = new();
 
     private static Timer? _timer;
+
+    /// <summary>Live keys of an OPEN action wheel, painted on top of the page underneath (whose
+    /// keys there are held, see DpKeyHold). Each tile is passed through <see cref="WheelCtx.Decorate"/>
+    /// (outline, 85% icon, mounting rotation) and uploaded at rotation 0. <c>Gen</c> tells a
+    /// paint job that the wheel it was started for has closed meanwhile.</summary>
+    private readonly record struct WheelCtx(IDisplayPadClient Client, Action<string> Log, LiveKey[] Keys,
+                                            string? DefaultBg, Func<string, int, bool, string?> Decorate, int Gen);
+    private static readonly Dictionary<int, WheelCtx> _wheels = new();
+    private static int _wheelGen;
+
+    /// <summary>Offset of the wheel keys in <see cref="_lastStamp"/>, so they never share a stamp
+    /// with the page key of the same button.</summary>
+    private const int WheelStampBase = 1000;
     private static bool _subscribedSpeedTest;
 
     /// <summary>True for the action types this service paints.</summary>
@@ -113,6 +126,19 @@ internal static partial class DpLiveTileService
     /// <summary>Paints every live tile of a device that <see cref="Sync"/> has registered —
     /// called at the tail of the repaint batch that page belongs to. No-op for devices with no
     /// live keys.</summary>
+    /// <summary>Repaints only <paramref name="button"/> (if it is a live key) — the action wheel
+    /// gives a key back without touching the others.</summary>
+    public static void RepaintKey(int deviceId, int button)
+    {
+        DeviceCtx ctx;
+        lock (_gate)
+        {
+            if (!_devices.TryGetValue(deviceId, out ctx)) return;
+            _lastStamp.Remove((deviceId, button));
+        }
+        Enqueue(() => PushDevice(deviceId, ctx));   // unchanged keys are skipped by their stamp
+    }
+
     public static void Repaint(int deviceId)
     {
         DeviceCtx ctx;
@@ -191,7 +217,20 @@ internal static partial class DpLiveTileService
             if (i < 0) return false;
             key = ctx.Keys[i];
         }
+        Press(deviceId, key, log);
+        return true;
+    }
 
+    /// <summary>A press on a live key of an action wheel: the key comes from the wheel page, not
+    /// from the page under it (<see cref="HandlePress"/> would find that page's key, or none).</summary>
+    public static void HandleWheelPress(int deviceId, DpButtonRecord row, Action<string> log) =>
+        Press(deviceId, ToKey(row), log);
+
+    private static LiveKey ToKey(DpButtonRecord r) =>
+        new(r.ButtonIndex, r.ActionType!, (r.ActionValue ?? "").Trim(), KeyIconSpec.FromJson(r.IconSpec));
+
+    private static void Press(int deviceId, LiveKey key, Action<string> log)
+    {
         if (key.Type == "dp_speedtest") SpeedTestService.Start(log);
         if (key.Type == "dp_edstatus") EdSendToggle(key.Value, log);
         if (key.Type == CustomActionType.Tag) CustomSendKeys(key.Value, log);
@@ -215,7 +254,85 @@ internal static partial class DpLiveTileService
             }
             else ZeroCompanyClient.Send(zcValue, log);
         }
-        return true;
+    }
+
+    // ─────────────────────────── Action wheel ───────────────────────────
+
+    /// <summary>Starts painting the live keys of an action wheel that just opened on
+    /// <paramref name="deviceId"/>. <paramref name="decorate"/> turns a rendered tile (path,
+    /// button, drawn-already-rotated) into the wheel tile to upload at rotation 0, or null.</summary>
+    public static void SetWheel(IDisplayPadClient client, Action<string> log, int deviceId,
+                                IEnumerable<DpButtonRecord> rows, string? defaultBgImage,
+                                Func<string, int, bool, string?> decorate)
+    {
+        var keys = rows.Where(r => IsLiveType(r.ActionType)).Select(ToKey).ToArray();
+        lock (_gate)
+        {
+            ClearWheelLocked(deviceId);
+            if (keys.Length > 0)
+                _wheels[deviceId] = new WheelCtx(client, log, keys, defaultBgImage, decorate, ++_wheelGen);
+            EnsureTimerLocked();
+        }
+        if (keys.Length == 0) return;
+        Enqueue(() => PushWheel(deviceId));
+        log($"[LIVE] device {deviceId} wheel: " + string.Join(", ", keys.Select(k => $"btn{k.Button}={k.Type}:{k.Value}")));
+    }
+
+    /// <summary>Stops painting the wheel's live keys (the wheel closed).</summary>
+    public static void ClearWheel(int deviceId)
+    {
+        lock (_gate) { ClearWheelLocked(deviceId); EnsureTimerLocked(); }
+    }
+
+    private static void ClearWheelLocked(int deviceId)
+    {
+        if (!_wheels.Remove(deviceId)) return;
+        foreach (var stale in _lastStamp.Keys.Where(k => k.Device == deviceId && k.Button >= WheelStampBase).ToList())
+            _lastStamp.Remove(stale);
+    }
+
+    /// <summary>Renders a wheel's live key right now (first frame of the wheel, before the timer
+    /// takes over). Null when it can't be rendered.</summary>
+    public static string? RenderWheelNow(int deviceId, DpButtonRecord row, string? defaultBgImage)
+    {
+        string path = Path.Combine(CacheDir, $"wheel_dev{deviceId}_btn{row.ButtonIndex}_first.png");
+        return Render(ToKey(row), DateTime.Now, path, defaultBgImage) ? path : null;
+    }
+
+    /// <summary>True when that live tile is drawn already rotated (Zero Company), so the wheel
+    /// must not rotate it again.</summary>
+    public static bool WheelSkipsRotation(DpButtonRecord row) => ZcSkipsRotation(ToKey(row));
+
+    /// <summary>Wheel counterpart of <see cref="PushDevice"/>: pump thread only.</summary>
+    private static void PushWheel(int deviceId)
+    {
+        WheelCtx w;
+        lock (_gate) { if (!_wheels.TryGetValue(deviceId, out w)) return; }
+        var now = DateTime.Now;
+        foreach (var key in w.Keys)
+        {
+            try
+            {
+                string stamp = StampOf(key, now, w.DefaultBg);
+                var sk = (deviceId, WheelStampBase + key.Button);
+                lock (_gate)
+                {
+                    if (_lastStamp.TryGetValue(sk, out string? last) && last == stamp) continue;
+                    _lastStamp[sk] = stamp;
+                }
+                string path = Path.Combine(CacheDir, $"wheel_dev{deviceId}_btn{key.Button}.png");
+                if (!Render(key, now, path, w.DefaultBg)) continue;
+                string? tile = w.Decorate(path, key.Button, ZcSkipsRotation(key));
+                if (tile is null) continue;
+                lock (_gate)
+                    if (!_wheels.TryGetValue(deviceId, out var cur) || cur.Gen != w.Gen) return;   // closed meanwhile
+                w.Client.UploadImage(deviceId, tile, key.Button, 0);
+            }
+            catch (Exception ex)
+            {
+                w.Log($"[LIVE] wheel btn{key.Button} failed: {ex.Message}");
+            }
+        }
     }
 
     public static void Stop(int deviceId)
@@ -238,9 +355,9 @@ internal static partial class DpLiveTileService
     /// goes. Call with <see cref="_gate"/> held.</summary>
     private static void EnsureTimerLocked()
     {
-        if (_devices.Count > 0 && _timer is null)
+        if (_devices.Count + _wheels.Count > 0 && _timer is null)
             _timer = new Timer(_ => Tick(), null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
-        else if (_devices.Count == 0 && _timer is not null)
+        else if (_devices.Count + _wheels.Count == 0 && _timer is not null)
         {
             _timer.Dispose();
             _timer = null;
@@ -253,10 +370,13 @@ internal static partial class DpLiveTileService
     private static void Tick()
     {
         List<(int Id, DeviceCtx Ctx)> targets;
+        List<int> wheels;
         lock (_gate)
         {
             targets = _devices.Select(kv => (kv.Key, kv.Value)).ToList();
+            wheels = _wheels.Keys.ToList();
         }
+        foreach (int wid in wheels) Enqueue(() => PushWheel(wid));
 
         // Fallback warm-up for any LHM-backed tile, in case Sync's fire-and-forget Start() lost
         // the race or failed. Fire-and-forget again (never block the tile timer — LHM's open can
@@ -278,6 +398,8 @@ internal static partial class DpLiveTileService
                 .Where(kv => kv.Value.Keys.Any(k => k.Type == "dp_speedtest"))
                 .Select(kv => (kv.Key, kv.Value))
                 .ToList();
+            foreach (var (wid, w) in _wheels)
+                if (w.Keys.Any(k => k.Type == "dp_speedtest")) Enqueue(() => PushWheel(wid));
         }
         foreach (var (id, ctx) in targets) Enqueue(() => PushDevice(id, ctx));
     }
@@ -321,6 +443,7 @@ internal static partial class DpLiveTileService
         var now = DateTime.Now;
         foreach (var key in ctx.Keys)
         {
+            if (DpKeyHold.IsHeld(deviceId, key.Button)) continue;   // under the action wheel
             try
             {
                 string stamp = StampOf(key, now, ctx.DefaultBg);

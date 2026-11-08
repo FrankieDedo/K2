@@ -49,6 +49,21 @@ internal static class EverestImageUploader
     /// <param name="picSlot">Image slot on the target (e.g. 0-3 for the 4 display keys).</param>
     /// <param name="subItem">Sub-item (used for numpad display keys: index 0-3).</param>
     /// <returns>true if the SDK accepted the upload.</returns>
+    /// <summary>Decodes, resizes and converts a picture to the target's RGB565 bytes,
+    /// without sending it.</summary>
+    internal static byte[] LoadRgb565(string imagePathOrBase64, PicTarget target)
+    {
+        byte[] rawBytes = imagePathOrBase64.Contains("data:image")
+            ? Convert.FromBase64String(imagePathOrBase64.Replace("data:image/png;base64,", "")
+                                                        .Replace("data:image/jpeg;base64,", ""))
+            : File.ReadAllBytes(imagePathOrBase64);
+        using var ms = new MemoryStream(rawBytes);
+        using var src = new Bitmap(ms);
+        var (w, h) = GetTargetSize(target);
+        using var resized = ResizeImage(src, w, h);
+        return BitmapToRgb565(resized);
+    }
+
     public static bool UploadImage(string imagePathOrBase64, PicTarget target, byte picSlot, byte subItem = 0)
     {
         // --- 1. Decode source image ---
@@ -201,6 +216,7 @@ internal static class EverestImageUploader
     private static bool UploadRgb565(byte[] rgb565, byte targetDev, byte targetPic, byte subItem)
     {
         IntPtr nativeBuf = Marshal.AllocHGlobal(rgb565.Length);
+        bool accepted = false;
         try
         {
             Marshal.Copy(rgb565, 0, nativeBuf, rgb565.Length);
@@ -214,11 +230,24 @@ internal static class EverestImageUploader
                 byTargetSubItem = subItem,
             };
 
-            return EverestSdkNative.StartPicUpdate(info);
+            accepted = EverestSdkNative.StartPicUpdate(info);
+            return accepted;
         }
         finally
         {
-            Marshal.FreeHGlobal(nativeBuf);
+            // StartPicUpdate can return before the transfer is done (issue #32: the 98KB
+            // Display Dial picture returned in ~25ms, then the SDK kept streaming from
+            // pImageData on its own thread). Freeing here made it read freed memory: the
+            // transfer stalled at 3% and the keyboard stopped answering. Base Camp never
+            // frees this buffer at all; we free it once the transfer is surely over.
+            if (accepted) FreeLater(nativeBuf);
+            else Marshal.FreeHGlobal(nativeBuf);
         }
+    }
+
+    private static void FreeLater(IntPtr buf)
+    {
+        System.Threading.Tasks.Task.Delay(TimeSpan.FromMinutes(2))
+            .ContinueWith(_ => Marshal.FreeHGlobal(buf));
     }
 }

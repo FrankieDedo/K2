@@ -95,13 +95,15 @@ public static class DpProfileExporter
 
                 if (rec is not null && !string.IsNullOrEmpty(rec.ActionType))
                 {
+                    // Long press / modifier extras don't exist in Base Camp: export the base action.
+                    var (bcType, bcValue) = TriggerPayload.Unwrap(rec.ActionType, rec.ActionValue);
                     if (bcCompatible)
                     {
-                        var mapped = MapActionToBc(rec.ActionType, rec.ActionValue, store);
+                        var mapped = MapActionToBc(bcType ?? "none", bcValue, store);
                         if (mapped is not null)
                         {
                             (functionType, subType, funcValue, optionalText) = mapped.Value;
-                            customUrl = ExtractCustomUrl(rec.ActionType, rec.ActionValue);
+                            customUrl = ExtractCustomUrl(bcType ?? "none", bcValue);
                             isAssigned = true;
                             exported++;
                         }
@@ -308,7 +310,7 @@ public static class DpProfileExporter
             case "text":
                 // Base Camp (FunctionType "Default") handles a single literal
                 // character per key: multi-character text has no equivalent.
-                return v.Length == 1 ? ("Default", v, v, null) : null;
+                { string t = TextActionPayload.TextOf(v); return t.Length == 1 ? ("Default", t, t, null) : null; }
 
             case "dp_folder":
             {

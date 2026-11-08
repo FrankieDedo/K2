@@ -267,12 +267,24 @@
                                  Clip geometry is required to actually round the Image underneath. -->
                             <Border Width="52" Height="52"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                                    IsHitTestVisible="False">
+                                    IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+                                <!-- smaller inside an action wheel's outline (preview only) -->
+                                <Border.RenderTransform>
+                                    <ScaleTransform ScaleX="{Binding WheelIconScale}" ScaleY="{Binding WheelIconScale}"/>
+                                </Border.RenderTransform>
                                 <Border.Clip>
                                     <RectangleGeometry Rect="0,0,52,52" RadiusX="9" RadiusY="9"/>
                                 </Border.Clip>
                                 <Image x:Name="ImgIcon" Source="{Binding Preview}" Stretch="UniformToFill"/>
                             </Border>
+
+                            <!-- 2b. Action-wheel outline (wheel pages only): each key of the wheel's
+                                 area draws only its edges facing outside the area, pushed out to the
+                                 middle of the gap (8 / 10 px) so the pieces join into one contour. -->
+                            <Border x:Name="WheelFrame" Margin="-4,-5,-4,-5"
+                                    BorderBrush="{Binding WheelFrame}" BorderThickness="{Binding WheelFrameSides}"
+                                    CornerRadius="{Binding WheelFrameCorners}"
+                                    IsHitTestVisible="False"/>
 
                             <!-- 3. Glossy overlay — simulates ::before with inset box-shadow #727272 -->
                             <Border Margin="4" CornerRadius="9"
@@ -316,6 +328,11 @@
                                      (MacroPad/Everest Max/Everest 60/NDK) — user request 2026-07-27. -->
                                 <Setter TargetName="SelBorder" Property="BorderBrush"     Value="{DynamicResource K2AccentBrush}"/>
                                 <Setter TargetName="SelBorder" Property="BorderThickness" Value="3"/>
+                            </DataTrigger>
+                            <!-- Wheel page's opening key: it has its own accent ring, so no
+                                 hover/selection border on top (declared after those two so it wins). -->
+                            <DataTrigger Binding="{Binding IsWheelAnchor}" Value="True">
+                                <Setter TargetName="SelBorder" Property="BorderBrush" Value="Transparent"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding HasImageNoAction}" Value="True">
                                 <Setter TargetName="WarnTriangle" Property="Visibility" Value="Visible"/>
@@ -3828,13 +3845,23 @@
                                                             Background="Transparent">
                                                                 <Grid MinWidth="200">
                                                                     <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto"/>
                                                                         <ColumnDefinition Width="*"/>
                                                                         <ColumnDefinition Width="Auto"/>
                                                                     </Grid.ColumnDefinitions>
-                                                                    <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                                                    <!-- page kind: folder = normal page, ring = action wheel -->
+                                                                    <TextBlock Grid.Column="0" Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets"
+                                                                       FontSize="12" Foreground="#9A9AA2" Margin="0,0,6,0"
+                                                                       VerticalAlignment="Center" Visibility="{Binding PageBadge}"
+                                                                       ToolTip="{loc:Get dp_page_kind_page}"/>
+                                                                    <TextBlock Grid.Column="0" Text="&#xEA3A;" FontFamily="Segoe MDL2 Assets"
+                                                                       FontSize="12" Foreground="{DynamicResource K2AccentHoverBrush}" Margin="0,0,6,0"
+                                                                       VerticalAlignment="Center" Visibility="{Binding WheelBadge}"
+                                                                       ToolTip="{loc:Get act_wheel}"/>
+                                                                    <TextBlock Grid.Column="1" Text="{Binding Name}"
                                                                        Foreground="#CCCCCC" VerticalAlignment="Center"
                                                                        TextTrimming="CharacterEllipsis"/>
-                                                                    <Button x:Name="BtnRowDelete" Grid.Column="1"
+                                                                    <Button x:Name="BtnRowDelete" Grid.Column="2"
                                                                     Content="{loc:Get dp_delete_page}"
                                                                     Style="{StaticResource K2IconButton}" Tag="&#xE74D;"
                                                                     Visibility="Collapsed" Margin="8,0,0,0"

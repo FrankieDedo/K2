@@ -1252,6 +1252,109 @@ public sealed class EverestService : IDisposable
     /// (SDKDLL has no export for it); the caller must already have switched the device to
     /// the profile it wants wiped.
     /// </summary>
+    /// <summary>Display Dial picture: factory logo (true) or the custom uploaded one
+    /// (false). See <see cref="EverestHidNative.Pad.SetDialPictureSource"/>.</summary>
+    public bool SetDialPictureSource(bool factoryLogo)
+    {
+        if (_nativePad is null) return false;
+        FlushSaveFlash();
+        lock (_sdkLock)
+        try
+        {
+            bool ok = _nativePad.SetDialPictureSource(factoryLogo);
+            App.WriteLog($"[Everest.SetDialPictureSource] factoryLogo={factoryLogo} -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.SetDialPictureSource] threw: " + ex);
+            return false;
+        }
+    }
+
+    /// <summary>Writes the Display Dial picture over the native channel (see
+    /// <see cref="EverestHidNative.Pad.UploadDialPicture"/>), then waits for the keyboard
+    /// to come back from its flash write and selects the custom picture. Holds the SDK
+    /// lock throughout so no SDK command reaches the keyboard mid-transfer. Worker thread
+    /// only. Returns false when the native channel is not open.</summary>
+    public bool HasNativeChannel => _nativePad is not null;
+
+    public bool UploadDialPictureNative(string imagePathOrBase64, Action<int>? progress)
+    {
+        if (_nativePad is null) return false;
+        // Base Camp's service reads FW_EXTEND_INFO (`11 14`) every second
+        // (BaseCampService.PcInfo_timer, Interval 1000) and skips only while ITS OWN upload
+        // runs (Common.IsUploadingImage). USB capture of K2's upload with the service up
+        // (2026-11-06): 114 of those polls landed mid-transfer and the dock rejected the
+        // picture; Base Camp's own uploads have zero. So stop it for the transfer and put
+        // it back afterwards if it was running (K2 runs as admin, sc.exe works).
+        bool bcServiceWasRunning = System.Diagnostics.Process.GetProcessesByName("BaseCamp.Service").Length > 0;
+        if (bcServiceWasRunning)
+        {
+            BaseCampProcessGuard.StopBaseCampService(App.WriteLog);
+            for (int i = 0; i < 20 && System.Diagnostics.Process.GetProcessesByName("BaseCamp.Service").Length > 0; i++)
+                Thread.Sleep(250);
+        }
+        try
+        {
+            return UploadDialPictureNativeCore(imagePathOrBase64, progress);
+        }
+        finally
+        {
+            if (bcServiceWasRunning) BaseCampProcessGuard.StartBaseCampService(App.WriteLog);
+        }
+    }
+
+    private bool UploadDialPictureNativeCore(string imagePathOrBase64, Action<int>? progress)
+    {
+        if (_nativePad is null) return false;
+        FlushSaveFlash();
+        lock (_sdkLock)
+        try
+        {
+            // A transfer cut short leaves the dock waiting for the rest of the picture: it
+            // then answers nothing (GetExtendInfo fails, K2 shows an "Everest Core") until
+            // the Display Dial alone is unplugged and replugged (it has its own MCU; the rest of the keyboard needs nothing). Starting another upload on top of that only
+            // stacks a second half-open session (issue #32, 2026-11-06), so don't.
+            if (!TryGetExtendInfo(out var ext) || ext.byMMDockPlug == 0)
+            {
+                App.WriteLog("[Everest.UploadDialPictureNative] dock not answering — upload skipped " +
+                             "(unplug and replug the Display Dial)");
+                return false;
+            }
+            byte[] rgb = EverestImageUploader.LoadRgb565(imagePathOrBase64,
+                EverestImageUploader.PicTarget.MMDockScreensaver);
+            // Stop the LED color stream (~100 reports/s on the same interface) for the
+            // transfer: Base Camp's uploads run without it (USB captures 2026-11-06), and
+            // K2's second pass kept failing with it on even once BaseCampService was out of
+            // the way. SetSyncEffect(false) is the first half of K2's own re-arm sequence;
+            // the caller re-arms afterwards (EvReArmColorStreamAfterFlashWrite).
+            long s0 = _nativePad.StreamReports;
+            try { EverestSdkNative.SetSyncEffect(false, 50); } catch (Exception ex) { App.WriteLog("[Everest.UploadDialPictureNative] SetSyncEffect(false) threw: " + ex.Message); }
+            Thread.Sleep(500);
+            long s1 = _nativePad.StreamReports;
+            Thread.Sleep(1000);
+            long s2 = _nativePad.StreamReports;
+            App.WriteLog($"[Everest.UploadDialPictureNative] color stream after SetSyncEffect(false): " +
+                         $"{s2 - s1} reports in the next second ({s1 - s0} in the first 0.5s)");
+            bool ok = _nativePad.UploadDialPicture(rgb, progress);
+            App.WriteLog($"[Everest.UploadDialPictureNative] color stream reports during upload: {_nativePad.StreamReports - s2}");
+            if (ok)
+            {
+                // Base Camp sends nothing after the last chunk but its usual 1s `11 14`
+                // poll (USB capture 2026-11-06) — no `13 41` source switch, so neither do we.
+                _nativePad.WaitResponsive(40_000);
+            }
+            App.WriteLog($"[Everest.UploadDialPictureNative] -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.UploadDialPictureNative] threw: " + ex);
+            return false;
+        }
+    }
+
     public bool ResetProfileContent()
     {
         if (_nativePad is null) return false;
@@ -1863,6 +1966,27 @@ public sealed class EverestService : IDisposable
     }
 
     /// <summary>Full reset of the Media Dock.</summary>
+    /// <summary>Puts the factory picture back on the Display Dial the way Base Camp does
+    /// (decompiled BaseCamp.UI: <c>ResetMMDockPic(1)</c> for "Reset" and for deleting the
+    /// screensaver image). Replaces the raw <c>13 41 00 00 01</c> K2 sent before, which
+    /// Base Camp never sends.</summary>
+    public bool ResetDialPicture()
+    {
+        FlushSaveFlash();
+        lock (_sdkLock)
+        try
+        {
+            bool ok = EverestSdkNative.ResetMMDockPic(1);
+            App.WriteLog($"[Everest.ResetDialPicture] ResetMMDockPic(1) -> {ok}");
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            App.WriteLog("[Everest.ResetDialPicture] threw: " + ex);
+            return false;
+        }
+    }
+
     public bool ResetMMDock()
     {
         lock (_sdkLock)

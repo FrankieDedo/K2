@@ -1061,6 +1061,8 @@ public partial class MainWindow
     /// dedicated profile hit (see <c>DpSpotifySwitchTo</c>'s remarks).</summary>
     private void GameSwitchTo(int deviceId, int slot)
     {
+        // An open action wheel holds the panel: the automatic switch waits until it closes.
+        if (DpWheelDefer(deviceId, () => GameSwitchTo(deviceId, slot))) return;
         FillGameSlotIfNeeded(deviceId, slot);
         bool isActive = deviceId == DpSelectedDeviceId();
         _dpStore.SetCurrentProfile(deviceId, slot);

@@ -28,7 +28,7 @@ public static class AudioDeviceService
         var result = new List<AudioDeviceInfo>();
         try
         {
-            var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
+            var enumerator = (IMMDeviceEnumerator)CreateCom(typeof(MMDeviceEnumeratorComObject).GUID);
             enumerator.EnumAudioEndpoints(EDataFlow.eRender, DeviceState.Active, out var collection);
             collection.GetCount(out int count);
             for (int i = 0; i < count; i++)
@@ -70,7 +70,7 @@ public static class AudioDeviceService
     {
         try
         {
-            var policyConfig = (IPolicyConfig)new CPolicyConfigClient();
+            var policyConfig = (IPolicyConfig)CreateCom(typeof(CPolicyConfigClient).GUID);
             int hr1 = policyConfig.SetDefaultEndpoint(deviceId, ERole.eConsole);
             int hr2 = policyConfig.SetDefaultEndpoint(deviceId, ERole.eMultimedia);
             int hr3 = policyConfig.SetDefaultEndpoint(deviceId, ERole.eCommunications);
@@ -79,6 +79,14 @@ public static class AudioDeviceService
         catch (COMException) { return false; }
         catch (InvalidCastException) { return false; }
     }
+
+    /// <summary>Creates a COM object as a plain <c>__ComObject</c> rather than through
+    /// <c>new</c> on a <c>[ComImport]</c> class. The same CLSID is also imported by
+    /// <c>SystemMonitor</c> and <c>AppAudioVolume</c> under their own class types; with
+    /// <c>new</c>, the runtime died with a fatal 0x80131506 inside the allocation helper
+    /// (issue #29) instead of throwing anything catchable.</summary>
+    private static object CreateCom(Guid clsid) =>
+        Activator.CreateInstance(Type.GetTypeFromCLSID(clsid, throwOnError: true)!)!;
 
     private static string? GetDeviceId(IMMDevice device)
     {
@@ -163,8 +171,12 @@ public static class AudioDeviceService
     }
 
     /// <summary>Minimal <c>PROPVARIANT</c> — only reads the <c>VT_LPWSTR</c> case, the only
-    /// one this file ever asks for (a device's friendly name).</summary>
-    [StructLayout(LayoutKind.Explicit)]
+    /// one this file ever asks for (a device's friendly name). <c>Size = 16</c> is
+    /// essential: a native PROPVARIANT is 16 bytes on both x86 and x64, but the explicit
+    /// fields alone span only 12 bytes on x86 (4-byte pointer), so the marshaler would
+    /// allocate a too-small buffer and <c>GetValue</c> would overrun it (stack corruption,
+    /// intermittent native crash with no managed exception).</summary>
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
     private struct PropVariant
     {
         [FieldOffset(0)] public short vt;

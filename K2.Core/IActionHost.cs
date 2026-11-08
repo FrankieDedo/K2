@@ -143,6 +143,20 @@ public interface IActionHost
     /// return false, rather than showing it non-functional/empty like "macro" does.</summary>
     bool SupportsPages { get; }
 
+    /// <summary>Border colour (0xRRGGBB) of an action wheel page's icons, or null = the app's
+    /// accent. Only a DisplayPad host has wheels.</summary>
+    int? GetWheelColor(int pageId) => null;
+
+    /// <summary>Stores a wheel page's border colour (null = back to the accent).</summary>
+    void SetWheelColor(int pageId, int? rgb) { }
+
+    /// <summary>The colour a wheel border falls back to (0xRRGGBB) when the page has none.</summary>
+    int DefaultWheelColor => 0x900000;
+
+    /// <summary>True while the key being configured sits on an action wheel page: a wheel can't
+    /// hold another page or wheel, so the dialog hides those two types.</summary>
+    bool OnWheelPage => false;
+
     /// <summary>True on a host that can show the hardware-sensor picker for a <c>dp_sysmon</c>
     /// tile (K2.App's DisplayPad host, backed by <c>K2.App.Services.HardwareSensors</c>). When
     /// false the "Choose sensor…" button is hidden and only the six built-in metrics
@@ -198,6 +212,18 @@ public interface IActionHost
     /// "Custom action" type is hidden entirely: there would be nothing to offer and no way to
     /// create anything.</summary>
     bool SupportsCustomActions => false;
+
+    /// <summary>True when this host's buttons report their UP edge to the engine
+    /// (<see cref="ButtonActionEngine.Release"/>), so a <see cref="TriggerPayload"/> key can time a
+    /// long press or a repeat. False on the Makalu, whose firmware only says "pressed": there the
+    /// hold options are offered disabled (modifier variants still work).</summary>
+    bool SupportsHoldTriggers => true;
+
+    /// <summary>Runs an action type the engine itself doesn't know — the DisplayPad's page actions
+    /// (open a page / go back / open an action wheel), which it normally dispatches before the
+    /// engine sees a press, but which can also be a long-press or modifier variant of another
+    /// action (<see cref="TriggerPayload"/>). False = not handled (the engine logs it).</summary>
+    bool TryRunHostAction(string actionType, string actionValue, int buttonIndex) => false;
 
     /// <summary>The custom actions defined on this machine, as <c>(Id, Name)</c> — the picker's
     /// list for a <c>dp_custom</c> key. Empty on a host with no studio.</summary>

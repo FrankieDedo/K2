@@ -956,6 +956,27 @@ public partial class MainWindow
         }
         _mkDpiFlashTimer.Stop();
         _mkDpiFlashTimer.Start();
+
+        // The firmware already switched level — read it back so the level tabs follow.
+        // Debounced: a burst of presses costs one HID read, after the last one.
+        if (_mkDpiSyncTimer is null)
+        {
+            _mkDpiSyncTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+            _mkDpiSyncTimer.Tick += (_, _) => { _mkDpiSyncTimer.Stop(); MkRgbSettings.SyncDpiFromDevice(); };
+        }
+        _mkDpiSyncTimer.Stop();
+        _mkDpiSyncTimer.Start();
+    }
+
+    private DispatcherTimer? _mkDpiSyncTimer;
+
+    /// <summary>Press-only notifications (no release edge) → 200 ms flash, one timer per call.</summary>
+    private void FlashMkHotspot(int btnIdx)
+    {
+        MkHighlightHotspot(btnIdx, true);
+        var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        t.Tick += (_, _) => { t.Stop(); MkHighlightHotspot(btnIdx, false); };
+        t.Start();
     }
 
     private void MkDpiFlashTimer_Tick(object? sender, EventArgs e)
@@ -971,6 +992,10 @@ public partial class MainWindow
     /// silently doing nothing.</summary>
     private void OnMakaluButtonEvent(byte category, int buttonIndex1Based)
     {
+        // Any button armed for a host action reports only through this notification (Raw Input
+        // never sees it, the firmware no longer sends a mouse click) — flash its hotspot here.
+        FlashMkHotspot(buttonIndex1Based);
+
         // A button with a K2 action: the mouse only says "pressed", the action is K2's own
         // (MakaluRemapData.MakeAction). Still acked, as Base Camp does after every such
         // notification; the stored-path readback is skipped, there is none to read.

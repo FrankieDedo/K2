@@ -127,6 +127,7 @@ public partial class DpKeyConfigDialog : Window
         // ControlsPanel (zoom slider) stays out of this popup entirely — only reparented into
         // "Edit icon" on demand.
 
+        UpdateModifierIconsButton();
         ChkDefaultIcon.IsChecked   = _spec.DefaultIcon;
         ChkSpotifyCover.IsChecked  = _spec.SpotifyCover;
 
@@ -166,7 +167,7 @@ public partial class DpKeyConfigDialog : Window
             RefreshActionSummary();
             // Re-render now that DefaultBgImagePath is known (constructor rendered without it),
             // and always for dp_folder (needs the owner's action host to resolve the name).
-            if (_spec.DefaultIcon && (DefaultBgImagePath is not null || ActionType == "dp_folder"))
+            if (_spec.DefaultIcon && (DefaultBgImagePath is not null || ActionType is "dp_folder" or "dp_wheel"))
             {
                 RegenerateDefaultIcon();
                 RefreshImagePreview();
@@ -256,6 +257,17 @@ public partial class DpKeyConfigDialog : Window
     {
         if (_loadingUi) return;
         _spec.SpotifyCover = ChkSpotifyCover.IsChecked == true;
+    }
+
+    /// <summary>Turns "default icon" on without running <see cref="ChkDefaultIcon_Changed"/> — the
+    /// caller renders the icon itself.</summary>
+    private void SetDefaultIconSilently()
+    {
+        _spec.DefaultIcon = true;
+        bool wasLoading = _loadingUi;
+        _loadingUi = true;
+        ChkDefaultIcon.IsChecked = true;
+        _loadingUi = wasLoading;
     }
 
     private void ChkDefaultIcon_Changed(object sender, RoutedEventArgs e)
@@ -544,20 +556,28 @@ public partial class DpKeyConfigDialog : Window
                    ?? (Application.Current?.MainWindow as MainWindow)?._dpActionHost;
         var dlg = new ButtonActionDialog(_keyIndex, ActionType, ActionValue,
             host, allowedCategories: _allowedCategories, gameProfile: _gameProfile) { Owner = this };
+        dlg.ModifierImages = ModifierImageContextForKey();   // its "Modifiers" popup edits the pictures too
         if (dlg.ShowDialog() != true) return;
+        ApplyModifierImages(dlg.ModifierImages);
 
         string? oldType = ActionType, oldValue = ActionValue;
         ActionType  = string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType == "none"
                       ? null : dlg.ActionType;
         ActionValue = ActionType is null ? null : dlg.ActionValue;
 
-        if (ActionType == "dp_folder") _dpFolderName = dlg.ResolvedPageName;
+        if (ActionType is "dp_folder" or "dp_wheel") _dpFolderName = dlg.ResolvedPageName;
 
         // A page rename keeps ActionType/ActionValue unchanged (same page id) but still
         // needs the icon's caption regenerated — dlg.PageIconNeedsRefresh is how the
         // "Page" action type surfaces that (see ButtonActionDialog.Page.cs).
         bool actionChanged = ActionType != oldType || ActionValue != oldValue;
-        if (actionChanged || (ActionType == "dp_folder" && dlg.PageIconNeedsRefresh))
+        // A key left with NO picture (its hand-made one removed, or "Remove action" used first)
+        // still had DefaultIcon off from that old picture, so the new action got no icon at all
+        // until the dialog was reopened — where a picture-less key does default to the action's
+        // icon (see the constructor). Apply that same rule here.
+        if (actionChanged && ActionType is not null && !_spec.DefaultIcon && string.IsNullOrEmpty(_pendingPath))
+            SetDefaultIconSilently();
+        if (actionChanged || (ActionType is "dp_folder" or "dp_wheel" && dlg.PageIconNeedsRefresh))
         {
             if (_spec.DefaultIcon)
             {
@@ -569,6 +589,7 @@ public partial class DpKeyConfigDialog : Window
         }
 
         RefreshActionSummary();
+        UpdateModifierIconsButton();        // modifier actions live in the action
         UpdateIconControlsAvailability();   // action may have changed to/from "spotify"
         UpdateLiveTimer();
     }
@@ -605,8 +626,8 @@ public partial class DpKeyConfigDialog : Window
         // NB: the resolved name is NOT cached back into _dpFolderName — the first call
         // happens from the constructor, where Owner (and therefore the action host) is
         // still null, so caching the numeric fallback there would stick forever.
-        LblActionSummary.Text = ActionType == "dp_folder"
-            ? $"Page: {_dpFolderName ?? ResolvePageName(ActionValue) ?? ActionValue}"
+        LblActionSummary.Text = ActionType is "dp_folder" or "dp_wheel"
+            ? $"{(ActionType == "dp_wheel" ? Loc.Get("act_wheel") : "Page")}: {_dpFolderName ?? ResolvePageName(ActionValue) ?? ActionValue}"
             : ActionTypeHelper.Summary(ActionType, ActionValue);
     }
 
@@ -664,7 +685,7 @@ public partial class DpKeyConfigDialog : Window
                 ? DefaultBgImagePath : null;
 
         // ActionValue is the bare page id for dp_folder — resolve it to a name here.
-        if (ActionType == "dp_folder")
+        if (ActionType is "dp_folder" or "dp_wheel")
             pageName ??= _dpFolderName ?? ResolvePageName(ActionValue);
 
         return DpDefaultIconRenderer.Render(ActionType, ActionValue, spec, pageName, DpHidNative.IconSize);
@@ -679,14 +700,14 @@ public partial class DpKeyConfigDialog : Window
         "dp_back"         => Loc.Get("dp_back"),
         "folder"          => string.IsNullOrWhiteSpace(ActionValue)
                              ? null : IconImageGenerator.GetDiskFolderCaption(ActionValue!),
-        "dp_folder"       => _dpFolderName ?? ResolvePageName(ActionValue) ?? ActionValue,
+        "dp_folder" or "dp_wheel" => _dpFolderName ?? ResolvePageName(ActionValue) ?? ActionValue,
         "googlehome"      => GoogleHomeIconCatalog.CaptionFor(ActionValue) ?? ActionValue,
         // Live tiles: the short symbol/abbreviation the tile carries by default ("CPU", "download"),
         // so "Edit icon" starts from the real wording. A clock face has none — it needs no label.
         "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus" or "dp_screen"
             or "dp_custom" or KspTelemachus.ActionType or ModLinkGames.ActionType or ModLinkGames.StudioActionType
                           => DpLiveTileService.TileCaption(ActionType!, ActionValue) is { Length: > 0 } c ? c : null,
-        "exec" or "emoji" => null,   // these tiles never draw a caption
+        "exec" or "emoji" or SteamLibrary.ActionType => null,   // these tiles never draw a caption
         _                 => ActionIconFallback.Caption(ActionType, ActionValue),
     };
 
@@ -736,7 +757,7 @@ public partial class DpKeyConfigDialog : Window
         _spec.BgImagePath = null;
         // No picture left = nothing to remember about how it looked — UNLESS "use Spotify cover"
         // is on, which is a picture in its own right (painted live by DpSpotifyCoverKeyService).
-        IconSpecJson = (NewImagePath is null && !_spec.SpotifyCover) ? null : _spec.ToJson();
+        IconSpecJson = (NewImagePath is null && !_spec.SpotifyCover && _spec.ModifierImages is null) ? null : _spec.ToJson();
 
         DialogResult = true;
     }

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using K2.Core;
 using Microsoft.Data.Sqlite;
 
@@ -130,6 +131,42 @@ ON CONFLICT(DeviceId, Profile, PageId, ButtonIndex) DO UPDATE SET
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>Removes a button's row from a page entirely (the key goes back to never-touched).</summary>
+    public void DeleteButton(int deviceId, int profile, int pageId, int btn)
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM Buttons WHERE DeviceId=$d AND Profile=$p AND PageId=$pg AND ButtonIndex=$b";
+        cmd.Parameters.AddWithValue("$d",  deviceId);
+        cmd.Parameters.AddWithValue("$p",  profile);
+        cmd.Parameters.AddWithValue("$pg", pageId);
+        cmd.Parameters.AddWithValue("$b",  btn);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Moves rows of one page to new key positions in one go (<paramref name="moves"/>:
+    /// from → to; every target must be free or itself moved away). Done through temporary indices
+    /// so overlapping shifts (1→2, 2→3) don't collide on the primary key.</summary>
+    public void MoveButtons(int deviceId, int profile, int pageId, IReadOnlyList<(int From, int To)> moves)
+    {
+        if (moves.Count == 0) return;
+        using var tx = _conn.BeginTransaction();
+        void Move(int from, int to)
+        {
+            using var cmd = _conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = "UPDATE Buttons SET ButtonIndex=$to WHERE DeviceId=$d AND Profile=$p AND PageId=$pg AND ButtonIndex=$from";
+            cmd.Parameters.AddWithValue("$d",  deviceId);
+            cmd.Parameters.AddWithValue("$p",  profile);
+            cmd.Parameters.AddWithValue("$pg", pageId);
+            cmd.Parameters.AddWithValue("$from", from);
+            cmd.Parameters.AddWithValue("$to",   to);
+            cmd.ExecuteNonQuery();
+        }
+        foreach (var (from, to) in moves) Move(from, 1000 + to);
+        foreach (var (_, to) in moves) Move(1000 + to, to);
+        tx.Commit();
+    }
+
     /// <summary>Backward-compat overload — saves to root page (pageId=0).</summary>
     public void SaveButton(int deviceId, int profile, int btn,
         string? imagePath, string? actionType, string? actionValue)
@@ -236,7 +273,7 @@ ON CONFLICT(DeviceId, Profile, PageId, ButtonIndex) DO UPDATE SET IconSpec=exclu
         using (var cmd = _conn.CreateCommand())
         {
             cmd.CommandText = @"SELECT MAX(CAST(ActionValue AS INTEGER)) FROM Buttons
-                                WHERE DeviceId=$d AND Profile=$p AND ActionType='dp_folder'";
+                                WHERE DeviceId=$d AND Profile=$p AND ActionType IN ('dp_folder','dp_wheel')";
             cmd.Parameters.AddWithValue("$d", deviceId);
             cmd.Parameters.AddWithValue("$p", profile);
             if (cmd.ExecuteScalar() is long l && l > max) max = (int)l;
@@ -486,6 +523,7 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
     public void DeletePage(int deviceId, int profile, int pageId)
     {
         ClearActionEverywhere(deviceId, profile, "dp_folder", pageId.ToString());
+        ClearActionEverywhere(deviceId, profile, "dp_wheel", pageId.ToString());   // an action wheel is a page too
 
         using (var cmd = _conn.CreateCommand())
         {
@@ -496,29 +534,65 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
             cmd.ExecuteNonQuery();
         }
         SetSetting($"folder.{pageId}.name", "");
+        SetWheelColor(pageId, null);
     }
 
-    /// <summary>All DisplayPad sub-pages reachable from this device+profile via a
-    /// "dp_folder" key (i.e. anything <see cref="AllocatePageId"/> could collide with) —
-    /// used to populate the "assign existing page" picker in <c>ButtonActionDialog</c>.
-    /// Falls back to "Page {id}" for a page whose name was never set.</summary>
+    /// <summary>One key that opens a sub-page: where it lives (profile, page, button), how it
+    /// opens it (<c>dp_folder</c> or <c>dp_wheel</c>) and which page it opens.</summary>
+    public readonly record struct PageRef(int Profile, int ParentPageId, int ButtonIndex, string Type, int ChildPageId);
+
+    /// <summary>Every key on this device that opens a sub-page — the plain <c>dp_folder</c>/
+    /// <c>dp_wheel</c> keys AND the ones that open it from a long-press or modifier variant
+    /// (the page action is then stored inside the <see cref="TriggerPayload"/> JSON). Missing
+    /// the trigger ones is what made a wheel opened by a long press look like an ordinary page
+    /// (no key lock, no "wheel" marker, not even listed under Pages).</summary>
+    public List<PageRef> ListPageRefs(int deviceId)
+    {
+        var refs = new List<PageRef>();
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = @"SELECT Profile, PageId, ButtonIndex, ActionType, ActionValue FROM Buttons
+                            WHERE DeviceId=$d AND ActionType IN ('dp_folder','dp_wheel',$trig)";
+        cmd.Parameters.AddWithValue("$d", deviceId);
+        cmd.Parameters.AddWithValue("$trig", TriggerPayload.Tag);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            int profile = r.GetInt32(0), parent = r.IsDBNull(1) ? 0 : r.GetInt32(1), btn = r.GetInt32(2);
+            string type = r.GetString(3);
+            string? value = r.IsDBNull(4) ? null : r.GetString(4);
+
+            void Add(string? t, string? v)
+            {
+                if (t is "dp_folder" or "dp_wheel" && int.TryParse(v, out int child))
+                    refs.Add(new PageRef(profile, parent, btn, t, child));
+            }
+
+            if (type != TriggerPayload.Tag) { Add(type, value); continue; }
+            if (TriggerPayload.Parse(value) is not { } trig) continue;
+            Add(trig.Type, trig.Value);
+            if (trig.Hold == TriggerPayload.HoldMode.Long) Add(trig.LongType, trig.LongValue);
+            foreach (var m in trig.Mods) Add(m.Type, m.Value);
+        }
+        return refs;
+    }
+
+    /// <summary>The key a wheel page opens from on this device+profile, or null when the page
+    /// is not a wheel (no key opens it as one).</summary>
+    public int? WheelAnchor(int deviceId, int profile, int pageId)
+    {
+        foreach (var pr in ListPageRefs(deviceId))
+            if (pr.Type == "dp_wheel" && pr.Profile == profile && pr.ChildPageId == pageId)
+                return pr.ButtonIndex;
+        return null;
+    }
+
+    /// <summary>All DisplayPad sub-pages reachable from this device+profile (see
+    /// <see cref="ListPageRefs"/>) — used to populate the "assign existing page" picker in
+    /// <c>ButtonActionDialog</c>. Falls back to "Page {id}" for a page whose name was never set.</summary>
     public List<(int PageId, string Name)> ListPages(int deviceId, int profile)
     {
-        var ids = new List<int>();
-        using (var cmd = _conn.CreateCommand())
-        {
-            cmd.CommandText = @"SELECT DISTINCT ActionValue FROM Buttons
-                                WHERE DeviceId=$d AND Profile=$p AND ActionType='dp_folder'";
-            cmd.Parameters.AddWithValue("$d", deviceId);
-            cmd.Parameters.AddWithValue("$p", profile);
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
-                if (!r.IsDBNull(0) && int.TryParse(r.GetString(0), out int pageId))
-                    ids.Add(pageId);
-        }
-
         var result = new List<(int, string)>();
-        foreach (int pageId in ids)
+        foreach (int pageId in ListPageRefs(deviceId).Where(r => r.Profile == profile).Select(r => r.ChildPageId).Distinct())
             result.Add((pageId, GetFolderName(pageId) ?? $"Page {pageId}"));
         result.Sort((a, b) => string.Compare(a.Item2, b.Item2, StringComparison.CurrentCultureIgnoreCase));
         return result;
@@ -526,47 +600,33 @@ ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value";
 
     /// <summary>Every DisplayPad sub-page on this device, across ALL profiles (each row
     /// carries the profile that owns it, needed to delete it from the right slot) — used by
-    /// the "Pages" sidebar section, which lists them all rather than just the current
-    /// profile's. Same name fallback as <see cref="ListPages"/>.</summary>
+    /// the "Pages" sidebar section. Same name fallback as <see cref="ListPages"/>.</summary>
     public List<(int PageId, string Name, int Profile)> ListAllPages(int deviceId)
     {
-        var raw = new List<(int Profile, int PageId)>();
-        using (var cmd = _conn.CreateCommand())
-        {
-            cmd.CommandText = @"SELECT DISTINCT Profile, ActionValue FROM Buttons
-                                WHERE DeviceId=$d AND ActionType='dp_folder'";
-            cmd.Parameters.AddWithValue("$d", deviceId);
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
-                if (!r.IsDBNull(1) && int.TryParse(r.GetString(1), out int pageId))
-                    raw.Add((r.GetInt32(0), pageId));
-        }
-
         var result = new List<(int, string, int)>();
-        foreach (var (profile, pageId) in raw)
+        foreach (var (profile, pageId) in ListPageRefs(deviceId).Select(r => (r.Profile, r.ChildPageId)).Distinct())
             result.Add((pageId, GetFolderName(pageId) ?? $"Page {pageId}", profile));
         result.Sort((a, b) => string.Compare(a.Item2, b.Item2, StringComparison.CurrentCultureIgnoreCase));
         return result;
     }
 
-    /// <summary>Every parent→child page link on this device: one row per "dp_folder" button —
+    /// <summary>Every parent→child page link on this device (see <see cref="ListPageRefs"/>) —
     /// the page the button lives on is <c>ParentPageId</c> (0 = that profile's root), the page
-    /// it opens is <c>ChildPageId</c>. Lets the "Pages" tree mirror the real folder nesting
-    /// instead of showing every page flat. Not de-duplicated: a page reachable from two
-    /// parents legitimately appears under both.</summary>
-    public List<(int Profile, int ParentPageId, int ChildPageId)> ListPageLinks(int deviceId)
-    {
-        var links = new List<(int, int, int)>();
-        using var cmd = _conn.CreateCommand();
-        cmd.CommandText = @"SELECT Profile, PageId, ActionValue FROM Buttons
-                            WHERE DeviceId=$d AND ActionType='dp_folder'";
-        cmd.Parameters.AddWithValue("$d", deviceId);
-        using var r = cmd.ExecuteReader();
-        while (r.Read())
-            if (!r.IsDBNull(2) && int.TryParse(r.GetString(2), out int child))
-                links.Add((r.GetInt32(0), r.IsDBNull(1) ? 0 : r.GetInt32(1), child));
-        return links;
-    }
+    /// it opens is <c>ChildPageId</c>. Not de-duplicated: a page reachable from two parents
+    /// legitimately appears under both.</summary>
+    public List<(int Profile, int ParentPageId, int ChildPageId)> ListPageLinks(int deviceId) =>
+        ListPageRefs(deviceId).Select(r => (r.Profile, r.ParentPageId, r.ChildPageId)).ToList();
+
+    // ---------- action wheel border colour (per page) ----------
+
+    /// <summary>Border colour drawn around a wheel's icons (0xRRGGBB), or null = the app's
+    /// accent colour.</summary>
+    public int? GetWheelColor(int pageId) =>
+        int.TryParse(GetSetting($"folder.{pageId}.wheelColor"), System.Globalization.NumberStyles.HexNumber, null, out int rgb)
+            ? rgb : null;
+
+    public void SetWheelColor(int pageId, int? rgb) =>
+        SetSetting($"folder.{pageId}.wheelColor", rgb is int v ? v.ToString("X6") : "");
 
     // ---------- fullscreen image (whole 2×6 panel, per device+profile+page) ----------
 

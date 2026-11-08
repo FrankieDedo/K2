@@ -228,6 +228,8 @@ J'aime et Ajouter/Retirer de la playlist ne sont PAS disponibles : Spotify bloqu
   <string name="youtube_chat_message_label">Message de chat en direct :</string>
   <string name="act_command">Commande shell</string>
   <string name="act_text">Coller du texte</string>
+  <string name="text_type_instead">Taper au lieu de coller</string>
+  <string name="text_type_instead_tip">Envoie le texte sous forme de frappes, d'un seul coup, au lieu de le coller avec Ctrl+V. Utile là où le collage ne fonctionne pas (terminaux, jeux). Ne touche pas au presse-papiers.</string>
   <string name="act_emoji">Emoji</string>
   <string name="act_macro">Lire une macro</string>
 
@@ -624,6 +626,8 @@ J'aime et Ajouter/Retirer de la playlist ne sont PAS disponibles : Spotify bloqu
   <string name="dial_pcinfo_ram">Info PC - RAM</string>
   <string name="dial_load_image">Charger une image</string>
   <string name="dial_load_image_title">Choisir l'image de l'économiseur d'écran (240×204 px)</string>
+  <string name="dial_not_responding_title">Le Display Dial ne répond pas</string>
+  <string name="dial_not_responding">Le Display Dial ne répond pas. Débranche-le du clavier (seulement le dial), attends quelques secondes, rebranche-le et réessaie.</string>
   <string name="dial_clock_section">Type d'horloge</string>
   <string name="dial_clock_label">Horloge :</string>
   <string name="dial_clock_style_label">Style :</string>
@@ -793,10 +797,10 @@ J'aime et Ajouter/Retirer de la playlist ne sont PAS disponibles : Spotify bloqu
   <string name="dp_imported_xml">Profil '{0}' importé dans le slot {1}.</string>
   <string name="dp_choose_image">Choisir une image pour la touche #{0}</string>
   <string name="dp_key_button_label">Touche {0}</string>
-  <string name="dp_load_image">Charger une image…</string>
+  <string name="dp_load_image">Choisir une image</string>
   <string name="dp_rotate_image">Pivoter l'image :</string>
   <string name="dp_action_section">Action</string>
-  <string name="dp_configure_action">Configurer l'action…</string>
+  <string name="dp_configure_action">Configurer l'action</string>
   <string name="dp_remove_action">Supprimer l'action</string>
   <string name="act_copy_action">Copier l’action</string>
   <string name="act_cut_action">Couper l’action</string>
@@ -804,7 +808,7 @@ J'aime et Ajouter/Retirer de la playlist ne sont PAS disponibles : Spotify bloqu
   <string name="paste_unsupported_title">Collage impossible</string>
   <string name="paste_unsupported_message">Cette action n’est pas prise en charge sur cet appareil.</string>
   <string name="dp_change_image">Changer l'image…</string>
-  <string name="dp_emoji_image">Emoji comme image…</string>
+  <string name="dp_emoji_image">Choisir un emoji comme image</string>
   <string name="dp_remove_image">Supprimer l'image</string>
   <string name="dp_create_folder">Créer une page dossier…</string>
   <string name="dp_create_folder_title">Créer une page dossier</string>
@@ -815,7 +819,7 @@ J'aime et Ajouter/Retirer de la playlist ne sont PAS disponibles : Spotify bloqu
   <string name="dp_delete_page">Supprimer</string>
   <string name="dp_delete_page_title">Supprimer la page</string>
   <string name="dp_delete_page_confirm">Supprimer la page "{0}" ? Toute touche qui l'ouvre cessera de fonctionner.</string>
-  <string name="dp_add_text">Ajouter du texte…</string>
+  <string name="dp_add_text">Modifier l'icône</string>
   <string name="txt_dialog_title">Insérer du texte</string>
   <string name="txt_label">Texte :</string>
   <string name="txt_font_label">Police :</string>
@@ -989,6 +993,8 @@ J'aime et Ajouter/Retirer de la playlist ne sont PAS disponibles : Spotify bloqu
   <string name="act_discord">Discord</string>
   <string name="act_audiodevice">Périphérique audio</string>
   <string name="audiodevice_refresh_button">Actualiser les périphériques</string>
+  <string name="act_steamgame">Jeu Steam</string>
+  <string name="steam_game_not_installed">non installé</string>
   <string name="discord_settings_title">Paramètres Discord</string>
   <string name="discord_hint">Les commandes vocales pilotent l'application DE BUREAU Discord via son canal RPC local et nécessitent votre propre application Discord ; « Envoyer un message » ne nécessite que l'URL du webhook d'un salon.</string>
   <string name="discord_setup_guide">1. Allez sur discord.com/developers/applications et cliquez sur « New Application ».
@@ -2262,4 +2268,40 @@ Les lectures qui l'utilisent — dans cette touche ou une autre — cesseront d'
   <string name="studio_guide_title">Connexion à Studio Pro</string>
   <string name="studio_guide_steps">K2 dialogue avec Studio Pro comme une surface Mackie Control via deux ports MIDI virtuels.&#10;1. Installez loopMIDI et ouvrez-le.&#10;2. Créez deux ports avec exactement ces noms : K2 to Studio et Studio to K2.&#10;3. Dans Studio Pro, ouvrez Options &gt; Périphériques externes &gt; Ajouter et choisissez Mackie Control.&#10;4. Réglez Réception de = K2 to Studio et Envoi vers = Studio to K2, puis confirmez.&#10;loopMIDI doit être lancé chaque fois que vous utilisez le profil.</string>
   <string name="studio_guide_download">Télécharger loopMIDI</string>
+  <string name="act_wheel">Roue d'actions</string>
+  <string name="dp_wheel_locked_key">Une roue d'actions ne peut utiliser que les touches autour de la touche qui l'ouvre.</string>
+  <string name="dp_wheel_anchor_key">C'est la touche qui ouvre la roue : elle devient sa touche retour.</string>
+  <string name="dp_page_kind_page">Page</string>
+  <string name="wheel_border_color_label">Couleur de bordure de la roue :</string>
+  <string name="wheel_border_color_pick">Choisir la couleur de la bordure autour des icônes de la roue</string>
+  <string name="wheel_border_color_default">Par défaut</string>
+  <string name="trig_summary_suffix">(+ maintien/modificateurs)</string>
+  <string name="trig_button">Appui long</string>
+  <string name="trig_button_tooltip">Donnez à cette touche une autre action quand elle est maintenue, ou répétez son action tant qu'elle est maintenue.</string>
+  <string name="trig_title">Appui long</string>
+  <string name="trig_hold_label">Quand la touche est maintenue</string>
+  <string name="trig_hold_none">Rien</string>
+  <string name="trig_hold_long">Lancer une autre action (appui long)</string>
+  <string name="trig_hold_repeat">Répéter l'action</string>
+  <string name="trig_hold_ms">Durée d'appui (ms)</string>
+  <string name="trig_repeat_delay">Répéter après (ms)</string>
+  <string name="trig_repeat_ms">Répéter toutes les (ms)</string>
+  <string name="trig_long_action">Action d'appui long</string>
+  <string name="trig_choose">Choisir</string>
+  <string name="trig_clear_hint">Clic droit pour retirer</string>
+  <string name="trig_mod_ctrl">Ctrl</string>
+  <string name="trig_mod_shift">Maj</string>
+  <string name="trig_mod_alt">Alt</string>
+  <string name="trig_mod_win">Win</string>
+  <string name="trig_mods_note">Le modificateur reste enfoncé pendant l'action : une combinaison de touches devient modificateur + combinaison.</string>
+  <string name="trig_hold_unsupported">Cet appareil ne signale pas quand un bouton est relâché ; il ne peut donc pas savoir combien de temps il est maintenu.</string>
+  <string name="trig_type_unsupported">Ce type d'action ne peut pas être utilisé ici.</string>
+  <string name="dp_mod_icons">Modificateurs</string>
+  <string name="dp_mod_icons_tooltip">Ce que fait cette touche, et l'image qu'elle affiche, pendant que Ctrl, Maj, Alt ou Win est maintenu sur le clavier.</string>
+  <string name="dp_mod_icons_hint">Cochez un modificateur pour l'utiliser. Tant que vous le maintenez sur le clavier, la touche lance son action et affiche son image à la place de la sienne (tant que vous n'en choisissez pas, l'image est créée à partir de l'action). Fn ne peut pas être utilisée : le clavier la gère en interne et Windows ne la voit jamais.</string>
+  <string name="dp_mod_icons_clear">Retirer</string>
+  <string name="dp_mod_icons_filter">Images</string>
+  <string name="dp_mod_hint_actions">Cochez un modificateur pour l'utiliser. Tant que vous le maintenez sur le clavier, la touche lance son action au lieu de l'habituelle. Fn ne peut pas être utilisée : le clavier la gère en interne et Windows ne la voit jamais.</string>
+  <string name="dp_mod_no_actions">L'action de cette touche ne peut pas avoir d'actions par modificateur (aucune action, une page ou une tuile dynamique) : seules les images peuvent être définies.</string>
+  <string name="dp_mod_action">Choisir une action</string>
 </strings>

@@ -69,6 +69,7 @@
 // "Analog" button never did anything. Both names and the hardcode are fixed now.
 
 using System;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -668,6 +669,12 @@ public partial class MainWindow
 
     private void CbDialScreenSaverFunction_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        // "Load image" only makes sense when the screensaver shows the custom picture.
+        // Fires for programmatic selections too (profile load, read from device), so this
+        // single spot keeps the button in sync everywhere.
+        int idx = CbDialScreenSaverFunction.SelectedIndex;
+        BtnDialLoadImage.Visibility = idx >= 0 && DialFunctions[idx].Value == "image"
+            ? Visibility.Visible : Visibility.Collapsed;
         SaveAndApplyDial();
     }
 
@@ -715,6 +722,9 @@ public partial class MainWindow
     private void BtnDialLoadImage_Click(object sender, RoutedEventArgs e)
     {
         const int W = 240, H = 204;
+        // Check before the file picker and crop: no point preparing a picture the dial
+        // can't take.
+        if (!EnsureDialResponsive()) return;
         var dlg = new OpenFileDialog
         {
             Title  = Loc.Get("dial_load_image_title"),
@@ -722,28 +732,153 @@ public partial class MainWindow
         };
         if (dlg.ShowDialog(this) != true) return;
 
-        string? cropped = ImageCropDialog.Show(this, dlg.FileName, W, H, Loc.Get("crop_title", W, H));
+        string? cropped = ImageCropDialog.Show(this, dlg.FileName, W, H, Loc.Get("crop_title", W, H),
+            dialFace: true);
         if (cropped is null) return;
         string picked = cropped;
 
-        if (_everest is null) return;
-        // StartPicUpdate (the SDK's picture-upload export) is synchronous and takes ~2s —
-        // same blocking contract as the Everest numpad display keys, see NdkApplyImage's
-        // doc comment (MainWindow.NumpadDisplayKeys.cs).
-        bool ok = RunHwBusy(Loc.Get("hw_busy_uploading_image"), () => _everest.UploadMMDockScreensaver(picked));
-        LogEverest($"[DIAL] UploadMMDockScreensaver -> {ok}");
-        // Same flash-write side effect as the numpad display key icons — see
-        // EvReArmColorStreamAfterFlashWrite's doc comment (MainWindow.LedPreview.cs).
-        EvReArmColorStreamAfterFlashWrite();
+        if (_everest is null || !_everest.IsOpen) return;
+        // Issue #32: StartPicUpdate returns after ~25ms for this 98KB picture while the
+        // transfer keeps running in the SDK. Anything K2 sent the keyboard meanwhile (the 3s
+        // accessory poll, the Media Dock poll, the color-stream re-arm) landed mid-transfer:
+        // the dial froze and lighting commands timed out until a profile rewrite. So: same
+        // guards as NdkApplyImage, and keep the overlay up until the transfer is over.
+        _ndkUploadBusy = true;
+        _evPicBusyMessage = Loc.Get("hw_busy_uploading_image");
+        try
+        {
+            bool ok = RunHwBusy(_evPicBusyMessage, () =>
+            {
+                // Native feature-report upload (BaseCampLinux protocol): one pass, ~50s.
+                // The SDK route below ran two passes (~105s) and left the logo on the dial.
+                if (_everest.HasNativeChannel)
+                {
+                    string msg = _evPicBusyMessage!;
+                    return _everest.UploadDialPictureNative(picked, pct =>
+                        Dispatcher.BeginInvoke(() => TxtHwBusyMessage.Text = $"{msg} ({pct}%)"));
+                }
+                _everest.FlushSaveFlash();
+                Interlocked.Exchange(ref _evPicProgressTicks, 0);
+                Volatile.Write(ref _evPicProgressPercent, 0);
+                Interlocked.Exchange(ref _evPicProgressCount, 0);
+                Volatile.Write(ref _evPicPhase2, false);
+                _evPicLastPct = 0;
+                long start = DateTime.UtcNow.Ticks;
+                bool accepted = RetryNdkWrite(() => _everest.UploadMMDockScreensaver(picked));
+                if (!accepted) return false;
+                WaitEverestPicTransfer(start);
+                // Switch the dial to the custom picture: after a logo reset the upload
+                // alone keeps showing the Mountain logo (issue #32).
+                bool shown = RetryNdkWrite(() => _everest.SetDialPictureSource(factoryLogo: false),
+                                           maxAttempts: 5);
+                LogEverestSafe($"[DIAL] custom picture enabled -> {shown}");
+                return true;
+            });
+            LogEverest($"[DIAL] UploadMMDockScreensaver -> {ok}");
+        }
+        finally
+        {
+            _evPicBusyMessage = null;
+            _ndkUploadBusy = false;
+            UpdateKeyboardLayout();
+            // The native dial upload switches the LED color stream off (EverestService.
+            // UploadDialPictureNative): turn it back on whatever section is showing, with
+            // the same sequence StartLedPreview uses.
+            if (_everest.IsOpen)
+            {
+                try { _everest.SetSyncEffect(false, 50); } catch { }
+                try { _everest.SetSyncEffect(true, 50); } catch { }
+                try { _everest.EnableColorStream(10); } catch { }
+                App.WriteLog("[DIAL] color stream re-armed after picture upload");
+            }
+        }
+    }
+
+    /// <summary>UTC ticks / percent of the latest picture-transfer progress message
+    /// (see WndProc). Written on the UI thread, read from RunHwBusy's worker.</summary>
+    private long _evPicProgressTicks;
+    private int _evPicProgressPercent;
+    /// <summary>Overlay text while a dial upload runs; null otherwise.</summary>
+    private string? _evPicBusyMessage;
+    private bool _evPicPhase2;
+    private int _evPicLastPct;
+    private int _evPicProgressCount;
+
+    /// <summary>Message 21506 from SDKDLL.dll during a picture transfer: wParam=3 (always,
+    /// probably the "picture" kind), lParam=percent. Seen on hw (issue #32), dial picture:
+    /// phase 1 0→99 (~40s), ~10s pause, phase 2 10→99 (~45s, pauses up to 6s), then
+    /// lParam=-1 once it is all over.</summary>
+    private void NoteEverestPicProgress(IntPtr wParam, IntPtr lParam)
+    {
+        int w = (int)wParam.ToInt64();
+        int pct = (int)lParam.ToInt64();
+        if (w != 3) return;
+        Volatile.Write(ref _evPicProgressPercent, pct);
+        Interlocked.Exchange(ref _evPicProgressTicks, DateTime.UtcNow.Ticks);
+        if (pct >= 0) Interlocked.Increment(ref _evPicProgressCount);
+        if (_evPicBusyMessage is not null && pct is >= 0 and <= 100)
+        {
+            // Two phases each counting to 100: show one 0-100 bar across both.
+            bool phase2 = Volatile.Read(ref _evPicPhase2);
+            if (!phase2 && pct < 50 && _evPicLastPct >= 90) Volatile.Write(ref _evPicPhase2, phase2 = true);
+            _evPicLastPct = pct;
+            int overall = phase2 ? 50 + pct / 2 : pct / 2;
+            TxtHwBusyMessage.Text = $"{_evPicBusyMessage} ({overall}%)";
+        }
+        App.WriteLog($"[Everest] [PIC ] progress wParam={w} lParam={pct}");
+    }
+
+    /// <summary>Blocks (worker thread) until the picture transfer started at
+    /// <paramref name="startTicks"/> is over: the final lParam=-1 (or 100) arrived, or no
+    /// progress message for 25s (the pause between the two phases is ~10s), capped at
+    /// 4 minutes. Never returns early because of a short pause.</summary>
+    private void WaitEverestPicTransfer(long startTicks)
+    {
+        var start = new DateTime(startTicks, DateTimeKind.Utc);
+        var maxEnd = start.AddMinutes(4);
+        while (DateTime.UtcNow < maxEnd)
+        {
+            Thread.Sleep(200);
+            long last = Interlocked.Read(ref _evPicProgressTicks);
+            int pct = Volatile.Read(ref _evPicProgressPercent);
+            if (last != 0 && Volatile.Read(ref _evPicProgressCount) > 0 && (pct < 0 || pct >= 100))
+            {
+                Thread.Sleep(1000);   // let the firmware finish the flash write
+                break;
+            }
+            var since = new DateTime(last != 0 ? last : startTicks, DateTimeKind.Utc);
+            if (DateTime.UtcNow - since > TimeSpan.FromSeconds(25)) break;
+        }
+        LogEverestSafe($"[DIAL] picture transfer wait done after " +
+            $"{(DateTime.UtcNow.Ticks - startTicks) / TimeSpan.TicksPerMillisecond}ms, " +
+            $"last progress={Volatile.Read(ref _evPicProgressPercent)}");
     }
 
     private void BtnDialRead_Click(object sender, RoutedEventArgs e) => ReadDialFromDevice();
 
+    /// <summary>True when the Display Dial answers. A transfer cut short leaves the dock
+    /// waiting for the rest of the picture: from then on GetExtendInfo fails and every dial
+    /// command (Reset, upload) times out, across K2 and PC restarts, until the dial alone is
+    /// unplugged and replugged — no software command is known to close that session. Tell
+    /// the user instead of failing silently.</summary>
+    private bool EnsureDialResponsive()
+    {
+        if (_everest is null || !_everest.IsOpen) return false;
+        if (_everest.TryGetExtendInfo(out var info) && info.byMMDockPlug != 0) return true;
+        LogEverest("[DIAL] dock not answering — asked the user to replug the Display Dial");
+        MessageBox.Show(this, Loc.Get("dial_not_responding"), Loc.Get("dial_not_responding_title"),
+            MessageBoxButton.OK, MessageBoxImage.Warning);
+        return false;
+    }
+
     private void BtnDialReset_Click(object sender, RoutedEventArgs e)
     {
         if (_everest is null) return;
-        bool ok = _everest.ResetMMDock();
-        LogEverest($"[DIAL] ResetMMDock -> {ok}");
+        if (!EnsureDialResponsive()) return;
+        // SDKDLL has no ResetMMDock export (EntryPointNotFound, issue #32). Base Camp's own
+        // Reset calls ResetMMDockPic(1), which does exist — same call here.
+        bool ok = _everest.ResetDialPicture();
+        LogEverest($"[DIAL] ResetDialPicture -> {ok}");
         if (ok) ReadDialFromDevice();
     }
 

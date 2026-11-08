@@ -227,6 +227,7 @@ public partial class MainWindow
         DpRebuildKeyGrid();
         DpApplyDefaultKeyMap();
         DpInitLiveKeyPreviewTimer();
+        DpInitModIcons();
 
         // Speed-test endpoint/payload config is global (one SpeedTestService for the whole app);
         // load whatever the user last saved so dp_speedtest keys use it from the first press.
@@ -247,6 +248,7 @@ public partial class MainWindow
             k.PropertyChanged += (_, ev) =>
             {
                 if (ev.PropertyName == nameof(DisplayPadKey.HasAction)) RefreshDpMappedKeys();
+                if (ev.PropertyName == nameof(DisplayPadKey.HasImage) && _dpWheelEdit is not null) DpRefreshWheelOutline();
             };
 
         // The Google Home account can be connected/disconnected from the setup window at any
@@ -1086,7 +1088,7 @@ public partial class MainWindow
         if (!_dpDeviceIds.Contains(id)) return;
         // The emoji browser owns the panel while it is up; waking from the screensaver
         // repaints the stored page, which would silently drop the browser under the user.
-        if (DpEmojiBrowserActive(id)) return;
+        if (DpEmojiBrowserActive(id) || DpWheelActive(id)) return;
         int profile = _dpStore.GetCurrentProfile(id);
         int pageId = DpCurrentPageIdFor(id);
         var image = _dpStore.GetFullscreenImage(id, profile, pageId);
@@ -1138,6 +1140,7 @@ public partial class MainWindow
 
     private void DpAutoOffTimeout(int id)
     {
+        if (DpWheelActive(id)) return;   // an open action wheel counts as "in use"
         _dpSavedBrightness[id] = DpBrightnessOf(id);
         DpLog($"[UI] auto-off: SetBrightness(id={id}, 0) -> {_dpClient.SetBrightness(id, 0)}");
     }
@@ -1300,7 +1303,7 @@ public partial class MainWindow
             var spec = KeyIconSpec.FromJson(r.IconSpec);
             if (spec is not { DefaultIcon: true } || spec.NoDefaultBg) continue;
 
-            string? pageName = r.ActionType == "dp_folder" && int.TryParse(r.ActionValue, out int pg)
+            string? pageName = r.ActionType is "dp_folder" or "dp_wheel" && int.TryParse(r.ActionValue, out int pg)
                 ? _dpStore.GetFolderName(pg) : null;
 
             string? dest = DpDefaultIconRenderer.Render(
@@ -1321,6 +1324,9 @@ public partial class MainWindow
     {
         if (DpSelectedDeviceId() is not int id) return;
         DpActivateDevice(id);
+        // The "Pages" list is per-device and otherwise only rebuilt when the section opens.
+        if (_activeDpSection == PnlDpSecPages)
+            RefreshDpPagesList();
     }
 
     /// <summary>
@@ -1667,6 +1673,7 @@ public partial class MainWindow
                 return;
             }
             DpLog($"[SPT] device {id}: return timer elapsed — back to the Spotify profile");
+            if (DpWheelDefer(id, () => DpSpotifySwitchTo(id, slot))) return;
             DpSpotifySwitchTo(id, slot);
         };
         _dpSpotifyReturnTimers[id] = timer;
@@ -2217,6 +2224,9 @@ public partial class MainWindow
                     if (ts == capturedSlot) DpStudioEnter(deviceId, ts); else DpSpotifySwitchTo(deviceId, ts);
                 }
                 : t => DpSwitchProfile(deviceId, t);
+            // An open action wheel holds the panel: an automatic switch waits until it closes.
+            var switchNow = switchTo;
+            switchTo = t => { if (!DpWheelDefer(deviceId, () => switchNow(t))) switchNow(t); };
             ProfileLaunchWatcher.Instance.UpdateRegistration(key, exe, focusOnly, restoreOnClose,
                 capturedSlot.ToString(),
                 () => _dpStore.GetCurrentProfile(deviceId).ToString(),
@@ -2778,13 +2788,14 @@ public partial class MainWindow
         if (sender is not Button btn || btn.Tag is not DisplayPadKey key) return;
         if (DpSelectedDeviceId() is not int id) { DpLog("[WARN] Select a device first."); return; }
 
-        // Handle folder/back navigation on click
-        if (key.ActionType == "dp_folder" && int.TryParse(key.ActionValue, out int pageId))
+        // Handle folder/back navigation on click (an action wheel opens as its page, to edit it)
+        if (key.ActionType is "dp_folder" or "dp_wheel" && int.TryParse(key.ActionValue, out int pageId))
         {
             DpNavigateToPage(pageId, _dpStore.GetFolderName(pageId));
             return;
         }
-        if (key.ActionType == "dp_back")
+        // A wheel page's opening key is its back key, whatever row sits there.
+        if (key.ActionType == "dp_back" || _dpWheelEdit is { } we && we.Anchor == key.Index)
         {
             DpNavigateBack();
             return;
@@ -3012,6 +3023,13 @@ public partial class MainWindow
     /// the pre-swap pictures). Mirrors the standalone K2.DisplayPad's SwapCells.</summary>
     private void DpSwapKeys(int id, int profile, DisplayPadKey a, DisplayPadKey b)
     {
+        // Wheels opened by either key: their keys must follow the opening key to its new spot.
+        var wheels = _dpStore.ListPageRefs(id)
+            .Where(r => r.Type == "dp_wheel" && r.Profile == profile && r.ParentPageId == _currentDpPageId
+                        && (r.ButtonIndex == a.Index || r.ButtonIndex == b.Index))
+            .Select(r => (Page: r.ChildPageId, From: r.ButtonIndex, To: r.ButtonIndex == a.Index ? b.Index : a.Index))
+            .Distinct().ToList();
+
         (a.ActionType, b.ActionType)   = (b.ActionType, a.ActionType);
         (a.ActionValue, b.ActionValue) = (b.ActionValue, a.ActionValue);
 
@@ -3043,6 +3061,7 @@ public partial class MainWindow
         }
 
         DpLog($"[ACT] swapped key #{a.Index} <-> #{b.Index}");
+        foreach (var w in wheels) DpWheelRelayout(id, profile, w.Page, w.To, w.From);
     }
 
     /// <summary>Configure/Remove only make sense with a row selected — mirrors
@@ -3422,6 +3441,24 @@ public partial class MainWindow
     /// <summary>Facade for <see cref="DisplayPadActionHost"/>'s <c>IActionHost.RenamePage</c>.</summary>
     internal void DpRenamePage(int pageId, string name) => _dpStore.RenamePage(pageId, name);
 
+    internal int? DpGetWheelColor(int pageId) => _dpStore.GetWheelColor(pageId);
+
+    /// <summary>Stores a wheel page's border colour and refreshes the preview border if that
+    /// page is on screen (the device picks it up the next time the wheel opens).</summary>
+    internal void DpSetWheelColor(int pageId, int? rgb)
+    {
+        if (_dpStore.GetWheelColor(pageId) == rgb) return;
+        _dpStore.SetWheelColor(pageId, rgb);
+        if (DpSelectedDeviceId() is int id && _currentDpPageId == pageId)
+            DpApplyWheelEditLock(id, DpCurrentProfile(), pageId);
+    }
+
+    internal int DpDefaultWheelColor()
+    {
+        var c = K2.Core.Services.AccentCatalog.Resolve(AppSettings.AccentTheme).Accent;
+        return (c.R << 16) | (c.G << 8) | c.B;
+    }
+
     // ================================================================
     // Pages section (list + delete existing folder sub-pages)
     // ================================================================
@@ -3441,6 +3478,8 @@ public partial class MainWindow
         if (DpSelectedDeviceId() is int id)
         {
             string PageName(int pid) => _dpStore.GetFolderName(pid) ?? $"Page {pid}";
+            var wheels = _dpStore.ListPageRefs(id).Where(r => r.Type == "dp_wheel")
+                                 .Select(r => (r.Profile, r.ChildPageId)).ToHashSet();
 
             foreach (var byProfile in _dpStore.ListPageLinks(id)
                                              .GroupBy(l => l.Profile)
@@ -3474,7 +3513,8 @@ public partial class MainWindow
                     if (!childrenOf.TryGetValue(parentPageId, out var kids)) return;
                     foreach (int childId in kids.OrderBy(PageName, StringComparer.CurrentCultureIgnoreCase))
                     {
-                        var row = new DpPageRow { PageId = childId, Name = PageName(childId), Profile = profile };
+                        var row = new DpPageRow { PageId = childId, Name = PageName(childId), Profile = profile,
+                                                  IsWheel = wheels.Contains((profile, childId)) };
                         target.Add(row);
                         if (ancestry.Add(childId))
                         {
@@ -3495,7 +3535,8 @@ public partial class MainWindow
                 Collect(group.Pages);
                 foreach (int orphan in everyChild.Where(c => !placed.Contains(c))
                                                  .OrderBy(PageName, StringComparer.CurrentCultureIgnoreCase))
-                    group.Pages.Add(new DpPageRow { PageId = orphan, Name = PageName(orphan), Profile = profile });
+                    group.Pages.Add(new DpPageRow { PageId = orphan, Name = PageName(orphan), Profile = profile,
+                                                    IsWheel = wheels.Contains((profile, orphan)) });
 
                 _dpPageGroups.Add(group);
             }
@@ -3655,12 +3696,24 @@ public partial class MainWindow
     private void DpEnsureDefaultBackButton(int id, int profile, int pageId)
     {
         if (pageId == 0) return; // root page has nowhere to go back to
-        if (_dpStore.LoadPage(id, profile, pageId).Any(r => r.ButtonIndex == 0)) return;
+        // An action wheel's back key is the key that opens it, not key #0.
+        int? anchor = DpWheelAnchor(id, profile, pageId);
+        int backKey = anchor ?? 0;
+        var rows = _dpStore.LoadPage(id, profile, pageId);
+        if (anchor is int a)
+        {
+            // The opening key was moved: its old back tells where it was, and the wheel's keys
+            // follow it (see DpWheelRelayout).
+            int? oldAnchor = rows.FirstOrDefault(r => r.ActionType == "dp_back" && r.ButtonIndex != a)?.ButtonIndex;
+            DpWheelRelayout(id, profile, pageId, a, oldAnchor);
+            rows = _dpStore.LoadPage(id, profile, pageId);
+        }
+        if (rows.Any(r => r.ButtonIndex == backKey)) return;
 
         string? imagePath = DpGenDefaultIcon(id, "dp_back", null);
-        _dpStore.SaveButton(id, profile, pageId, 0, imagePath, "dp_back", null);
-        _dpStore.SaveIconSpec(id, profile, pageId, 0, new KeyIconSpec { DefaultIcon = true }.ToJson());
-        DpLog($"[ACT] device {id} page {pageId}: key #0 defaulted to dp_back");
+        _dpStore.SaveButton(id, profile, pageId, backKey, imagePath, "dp_back", null);
+        _dpStore.SaveIconSpec(id, profile, pageId, backKey, new KeyIconSpec { DefaultIcon = true }.ToJson());
+        DpLog($"[ACT] device {id} page {pageId}: key #{backKey} defaulted to dp_back");
     }
 
     /// <summary>
@@ -3880,6 +3933,8 @@ public partial class MainWindow
         if (DpSelectedDeviceId() is not int id) return;
         DpEmojiBrowserAbandon(id);   // see DpRequestRepaint
         DvpAbandon(id);
+        DpWheelAbandon(id);
+        DpModIconsAfterRepaint(id);
         int profile = DpCurrentProfile();
         int pageId = _currentDpPageId;
         int rotation = _dpRotation;
@@ -3887,6 +3942,7 @@ public partial class MainWindow
         foreach (var k in _dpKeys) { k.ImagePath = null; k.ActionType = null; k.ActionValue = null; }
         var rows = _dpStore.LoadPage(id, profile, pageId);
         DpLog($"[DB] loaded {rows.Count} records for device={id} profile={profile} page={pageId}");
+        DpApplyWheelEditLock(id, profile, pageId);
         DiscordVoiceKeyService.Sync(_dpClient, DpLogAsync, id, rotation, rows);   // see DpUploadPageForDevice
         DpLiveTileService.Sync(_dpClient, DpLogAsync, id, rotation, rows, _dpStore.GetDefaultBgImage(id)); // clock/monitor/speed-test keys
         DpSpotifyCoverKeyService.Sync(_dpClient, DpLogAsync, id, rotation, rows); // "spotify" keys with the album-cover icon option
@@ -4066,6 +4122,9 @@ public partial class MainWindow
         // put BACK once the repaint has run (see the continuation below): a call still owns
         // the panel, and losing the page to an unrelated repaint would strand the user on a
         // profile they can't see their call on.
+        // An open action wheel holds the panel: the repaint waits for it to close (closing only
+        // puts back the wheel's own keys, so the full repaint asked for still has to run).
+        if (DpWheelDefer(id, () => DpRequestRepaint(id))) return;
         DpEmojiBrowserAbandon(id);
         DvpAbandon(id);
         if (_dpRepaintBusy.GetValueOrDefault(id))
@@ -4163,6 +4222,8 @@ public partial class MainWindow
     {
         DpEmojiBrowserAbandon(id);   // this page's icons take the panel back — see DpRequestRepaint
         DvpAbandon(id);
+        DpWheelAbandon(id);
+        DpModIconsAfterRepaint(id);
         DpEnsureDefaultBackButton(id, profile, pageId);
         int rotation = _dpStore.GetRotation(id);
         var rows = _dpStore.LoadPage(id, profile, pageId);
@@ -4258,7 +4319,9 @@ public partial class MainWindow
         // the key has an action, mirroring an icon-only (no-action) key on the foreground tab.
         DpUploadPressVisualForDevice(devId, idx, row?.ImagePath, _dpStore.GetRotation(devId), pressed);
 
-        if (!pressed || row is null) return;
+        // Up edge: a long-press / repeat key (TriggerPayload) is timed by the engine.
+        if (!pressed) { DpEngineFor(devId).Release(idx); return; }
+        if (row is null) return;
 
         if (AppSettings.LogLevel == K2LogLevel.Verbose)
             DpLog($"[KEY][bg {devId}] matrix 0x{matrix:X2} down");
@@ -4267,6 +4330,8 @@ public partial class MainWindow
             DpBgNavigateToPage(devId, folderPageId);
         else if (row.ActionType == "dp_back")
             DpBgNavigateBack(devId);
+        else if (row.ActionType == "dp_wheel" && int.TryParse(row.ActionValue, out int wheelPage))
+            DpWheelOpen(devId, idx, wheelPage);
         else if (row.ActionType == "dp_emojibrowser")
             DpEmojiBrowserOpen(devId);
         else if (DvpIsVoicePageAction(row.ActionType, row.ActionValue))
@@ -4274,7 +4339,7 @@ public partial class MainWindow
         else if (DpLiveTileService.IsLiveType(row.ActionType))
             DpLiveTileService.HandlePress(devId, idx, DpLogAsync);   // speed-test keys only; clock/monitor readouts ignore the press
         else
-            DpEngineFor(devId).Execute(row.ActionType, row.ActionValue, idx);
+            DpEngineFor(devId).Execute(row.ActionType, row.ActionValue, idx, releaseFollows: true);
     }
 
     private void DpBgNavigateToPage(int devId, int pageId)
@@ -4342,7 +4407,8 @@ public partial class MainWindow
         bool inFolder = _currentDpPageId != 0;
         BtnDpBack.Visibility = inFolder ? Visibility.Visible : Visibility.Collapsed;
         string name = _currentDpFolderName ?? $"Page {_currentDpPageId}";
-        LblDpBreadcrumb.Text = inFolder ? $"▸ {name}" : "";
+        bool wheel = inFolder && DpSelectedDeviceId() is int id && DpIsWheelPage(id, DpCurrentProfile(), _currentDpPageId);
+        LblDpBreadcrumb.Text = !inFolder ? "" : wheel ? $"▸ {name}  ({Loc.Get("act_wheel")})" : $"▸ {name}";
     }
 
     private void BtnDpBack_Click(object sender, RoutedEventArgs e) => DpNavigateBack();
@@ -4393,6 +4459,15 @@ public partial class MainWindow
             // underlying page's bindings must not fire behind the overlay. Uses the
             // foreground tab's (possibly remapped) matrix table when this IS the visible
             // tab, the default map otherwise — same split as the dispatch below.
+            // The action wheel (MainWindow.DisplayPad.Wheel.cs) owns its pad's keys the same way.
+            if (DpWheelActive(evtDevId))
+            {
+                var whMap = DpSelectedDeviceId() == evtDevId ? _dpMatrixToIndex : DpDefaultMatrixToIndex;
+                if (whMap.TryGetValue(matrix, out int whIdx) && whIdx < 12)
+                    DpWheelKey(evtDevId, whIdx, pressed);
+                return;
+            }
+
             if (DpEmojiBrowserActive(evtDevId))
             {
                 var embMap = DpSelectedDeviceId() == evtDevId ? _dpMatrixToIndex : DpDefaultMatrixToIndex;
@@ -4468,6 +4543,8 @@ public partial class MainWindow
                         DpNavigateToPage(pageId, _dpStore.GetFolderName(pageId));
                     else if (action == "dp_back")
                         DpNavigateBack();
+                    else if (action == "dp_wheel" && int.TryParse(value, out int wheelPage))
+                        DpWheelOpen(selId, hi, wheelPage);
                     else if (DpLiveTileService.IsLiveType(action))
                         DpLiveTileService.HandlePress(selId, hi, DpLogAsync);   // see DpHandleBackgroundKey
                     else if (action == "dp_emojibrowser")
@@ -4475,8 +4552,9 @@ public partial class MainWindow
                     else if (DvpIsVoicePageAction(action, value))
                         DvpReopen(selId);
                     else
-                        _dpEngine?.Execute(action, value, hi);
+                        _dpEngine?.Execute(action, value, hi, releaseFollows: true);
                 }
+                else _dpEngine?.Release(hi);
             }
         });
 
@@ -4512,7 +4590,8 @@ public partial class MainWindow
 
         imgPath = DiscordVoiceKeyService.CurrentIconPath(id, btnIndex)
                   ?? DpLiveTileService.CurrentIconPath(id, btnIndex)
-                  ?? DpSpotifyCoverKeyService.CurrentIconPath(id, btnIndex) ?? imgPath;
+                  ?? DpSpotifyCoverKeyService.CurrentIconPath(id, btnIndex)
+                  ?? DpModIconShownFor(id, btnIndex) ?? imgPath;
 
         if (string.IsNullOrEmpty(imgPath) || !File.Exists(imgPath)) return;
         if (DpGifAnimator.IsAnimatedGif(imgPath)) return;
@@ -4716,6 +4795,10 @@ public sealed class DpPageRow
     public int PageId { get; init; }
     public string Name { get; init; } = "";
     public int Profile { get; init; }
+    /// <summary>An action wheel page (opened by a <c>dp_wheel</c> key), not a normal one.</summary>
+    public bool IsWheel { get; init; }
+    public System.Windows.Visibility WheelBadge => IsWheel ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+    public System.Windows.Visibility PageBadge => IsWheel ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
     public ObservableCollection<DpPageRow> Children { get; } = new();
     // Every level starts expanded (TreeViewItem.IsExpanded binds here two-way); still
     // collapsible by hand. Reset to true on each RefreshDpPagesList since page rows are

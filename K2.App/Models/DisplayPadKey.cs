@@ -46,6 +46,49 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
         }
     }
 
+    private Brush? _wheelFrame;
+    /// <summary>Action-wheel border around this key's icon in the editor preview (null = none).
+    /// Set by MainWindow on a wheel page; never baked into the icon file.</summary>
+    public Brush? WheelFrame
+    {
+        get => _wheelFrame;
+        set { if (Equals(_wheelFrame, value)) return; _wheelFrame = value; OnChanged(); }
+    }
+
+    private System.Windows.CornerRadius _wheelFrameCorners;
+    /// <summary>Rounded corners of the wheel outline (only where two drawn edges meet).</summary>
+    public System.Windows.CornerRadius WheelFrameCorners
+    {
+        get => _wheelFrameCorners;
+        set { if (_wheelFrameCorners == value) return; _wheelFrameCorners = value; OnChanged(); }
+    }
+
+    private double _wheelIconScale = 1.0;
+    /// <summary>Icon scale in the editor preview: smaller inside a wheel's outline, 1 otherwise.</summary>
+    public double WheelIconScale
+    {
+        get => _wheelIconScale;
+        set { if (_wheelIconScale == value) return; _wheelIconScale = value; OnChanged(); }
+    }
+
+    private bool _isWheelAnchor;
+    /// <summary>The opening key of the wheel page being edited: it already wears the accent ring,
+    /// so the hover/selection border is not drawn on it (it would read as a second border).</summary>
+    public bool IsWheelAnchor
+    {
+        get => _isWheelAnchor;
+        set { if (_isWheelAnchor == value) return; _isWheelAnchor = value; OnChanged(); }
+    }
+
+    private System.Windows.Thickness _wheelFrameSides;
+    /// <summary>Which edges of this key draw the wheel's outline (only those facing outside the
+    /// wheel's area), in physical panel directions.</summary>
+    public System.Windows.Thickness WheelFrameSides
+    {
+        get => _wheelFrameSides;
+        set { if (_wheelFrameSides == value) return; _wheelFrameSides = value; OnChanged(); }
+    }
+
     public ImageSource? Preview
     {
         get
@@ -231,9 +274,12 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
                 {
                     "keys"      => K2.Core.KeyCombo.Display(_actionValue),
                     "url"       => "URL",
+                    K2.Core.Services.SteamLibrary.ActionType => ActionTypeHelper.SteamGameSummary(_actionValue),
                     "exec"      => Path.GetFileName(K2.Core.ExecActionPayload.PathOf(_actionValue)),
                     "dp_folder" => "▸",   // folder — label comes from image
                     "dp_back"   => "◂",   // back — label comes from image
+                    "dp_wheel"  => "◎",   // action wheel — label comes from image
+                    TriggerPayload.Tag => ActionTypeHelper.Summary(_actionType, _actionValue),
                     "dp_emojibrowser" => "☺",  // emoji browser — label comes from image
                     // Live tiles (clock / PC monitor / speed test): normally they DO have a
                     // picture, so this only shows in the moment between assigning the action and
@@ -268,6 +314,7 @@ public sealed class DisplayPadKey : INotifyPropertyChanged
     {
         "dp_folder" => "Folder",
         "dp_back"   => "Back",
+        "dp_wheel"  => Loc.Get("act_wheel"),
         _           => ActionTypeHelper.ListSummary(_actionType, _actionValue),
     };
 

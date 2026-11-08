@@ -227,6 +227,8 @@
   <string name="youtube_chat_message_label">实时聊天消息:</string>
   <string name="act_command">Shell 命令</string>
   <string name="act_text">粘贴文本</string>
+  <string name="text_type_instead">输入而不是粘贴</string>
+  <string name="text_type_instead_tip">以按键方式一次性发送文本，而不是用 Ctrl+V 粘贴。适用于无法粘贴的地方（终端、游戏）。不会改动剪贴板。</string>
   <string name="act_emoji">表情符号</string>
   <string name="act_macro">播放宏</string>
 
@@ -623,6 +625,8 @@
   <string name="dial_pcinfo_ram">电脑信息 - 内存</string>
   <string name="dial_load_image">加载图片</string>
   <string name="dial_load_image_title">选择屏幕保护程序图片（240×204 px）</string>
+  <string name="dial_not_responding_title">Display Dial 无响应</string>
+  <string name="dial_not_responding">Display Dial 无响应。请仅将旋钮从键盘上拔下，等待几秒后重新插上，然后再试一次。</string>
   <string name="dial_clock_section">时钟类型</string>
   <string name="dial_clock_label">时钟:</string>
   <string name="dial_clock_style_label">样式:</string>
@@ -793,10 +797,10 @@
   <string name="dp_imported_xml">配置文件 '{0}' 已导入到槽位 {1}。</string>
   <string name="dp_choose_image">为按键 #{0} 选择图片</string>
   <string name="dp_key_button_label">按键 {0}</string>
-  <string name="dp_load_image">加载图片…</string>
+  <string name="dp_load_image">选择图片</string>
   <string name="dp_rotate_image">旋转图片：</string>
   <string name="dp_action_section">动作</string>
-  <string name="dp_configure_action">配置动作…</string>
+  <string name="dp_configure_action">配置动作</string>
   <string name="dp_remove_action">删除动作</string>
   <string name="act_copy_action">复制动作</string>
   <string name="act_cut_action">剪切动作</string>
@@ -804,7 +808,7 @@
   <string name="paste_unsupported_title">无法粘贴</string>
   <string name="paste_unsupported_message">此设备不支持该动作。</string>
   <string name="dp_change_image">更改图片…</string>
-  <string name="dp_emoji_image">表情符号作为图片…</string>
+  <string name="dp_emoji_image">选择表情作为图片</string>
   <string name="dp_remove_image">删除图片</string>
   <string name="dp_create_folder">创建文件夹页面…</string>
   <string name="dp_create_folder_title">创建文件夹页面</string>
@@ -815,7 +819,7 @@
   <string name="dp_delete_page">删除</string>
   <string name="dp_delete_page_title">删除页面</string>
   <string name="dp_delete_page_confirm">删除页面 "{0}"？打开该页面的所有按键都将停止工作。</string>
-  <string name="dp_add_text">添加文字…</string>
+  <string name="dp_add_text">编辑图标</string>
   <string name="txt_dialog_title">插入文字</string>
   <string name="txt_label">文字:</string>
   <string name="txt_font_label">字体:</string>
@@ -989,6 +993,8 @@
   <string name="act_discord">Discord</string>
   <string name="act_audiodevice">音频设备</string>
   <string name="audiodevice_refresh_button">刷新设备</string>
+  <string name="act_steamgame">Steam 游戏</string>
+  <string name="steam_game_not_installed">未安装</string>
   <string name="discord_settings_title">Discord 设置</string>
   <string name="discord_hint">语音指令通过本地 RPC 管道操作 Discord 桌面应用，需要你自己的 Discord 应用程序；"发送消息"只需要频道的 webhook URL。</string>
   <string name="discord_setup_guide">1. 前往 discord.com/developers/applications 并点击 "New Application"。
@@ -2262,5 +2268,41 @@
   <string name="studio_guide_title">连接到 Studio Pro</string>
   <string name="studio_guide_steps">K2 通过两个虚拟 MIDI 端口,以 Mackie Control 控制界面的方式与 Studio Pro 通信。&#10;1. 安装并打开 loopMIDI。&#10;2. 创建两个端口,名称必须完全一致:K2 to Studio 和 Studio to K2。&#10;3. 在 Studio Pro 中打开 选项 &gt; 外部设备 &gt; 添加,选择 Mackie Control。&#10;4. 将接收自设为 K2 to Studio,发送到设为 Studio to K2,然后确认。&#10;使用此配置文件时,loopMIDI 必须保持运行。</string>
   <string name="studio_guide_download">下载 loopMIDI</string>
+  <string name="act_wheel">动作轮盘</string>
+  <string name="dp_wheel_locked_key">动作轮盘只能使用打开它的按键周围的按键。</string>
+  <string name="dp_wheel_anchor_key">这是打开轮盘的按键：它会成为轮盘的返回键。</string>
+  <string name="dp_page_kind_page">页面</string>
+  <string name="wheel_border_color_label">轮盘边框颜色：</string>
+  <string name="wheel_border_color_pick">选择轮盘图标周围边框的颜色</string>
+  <string name="wheel_border_color_default">默认</string>
+  <string name="trig_summary_suffix">（+ 长按/修饰键）</string>
+  <string name="trig_button">长按</string>
+  <string name="trig_button_tooltip">为此按键设置长按时的另一个动作，或在按住时重复它的动作。</string>
+  <string name="trig_title">长按</string>
+  <string name="trig_hold_label">按住按键时</string>
+  <string name="trig_hold_none">无</string>
+  <string name="trig_hold_long">执行另一个动作（长按）</string>
+  <string name="trig_hold_repeat">重复该动作</string>
+  <string name="trig_hold_ms">长按时间 (ms)</string>
+  <string name="trig_repeat_delay">开始重复前 (ms)</string>
+  <string name="trig_repeat_ms">重复间隔 (ms)</string>
+  <string name="trig_long_action">长按动作</string>
+  <string name="trig_choose">选择</string>
+  <string name="trig_clear_hint">右键单击以清除</string>
+  <string name="trig_mod_ctrl">Ctrl</string>
+  <string name="trig_mod_shift">Shift</string>
+  <string name="trig_mod_alt">Alt</string>
+  <string name="trig_mod_win">Win</string>
+  <string name="trig_mods_note">动作执行期间修饰键保持按下，因此组合键会变成“修饰键 + 组合键”。</string>
+  <string name="trig_hold_unsupported">此设备不会报告按钮何时松开，因此无法判断按住了多久。</string>
+  <string name="trig_type_unsupported">此类动作不能在这里使用。</string>
+  <string name="dp_mod_icons">修饰键</string>
+  <string name="dp_mod_icons_tooltip">在键盘上按住 Ctrl、Shift、Alt 或 Win 时，此按键执行的动作和显示的图片。</string>
+  <string name="dp_mod_icons_hint">勾选要使用的修饰键。在键盘上按住它时，此按键会执行它的动作，并显示它的图片而不是自己的图片（在你选择图片之前，会根据动作生成图片）。无法使用 Fn：它由键盘内部处理，Windows 永远看不到。</string>
+  <string name="dp_mod_icons_clear">移除</string>
+  <string name="dp_mod_icons_filter">图片</string>
+  <string name="dp_mod_hint_actions">勾选要使用的修饰键。在键盘上按住它时，此按键会执行它的动作而不是平常的动作。无法使用 Fn：它由键盘内部处理，Windows 永远看不到。</string>
+  <string name="dp_mod_no_actions">此按键的动作不能设置修饰键动作（无动作、页面或动态磁贴）：只能设置图片。</string>
+  <string name="dp_mod_action">选择动作</string>
 </strings>
 

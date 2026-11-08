@@ -437,6 +437,20 @@ Turns the key into a folder: pressing it shows another page of the pad. Pick
 an existing page or type a name to create a new one. Manage pages from the
 DisplayPad **Pages** section.
 
+@@@ picker:act:dp_wheel
+# Action wheel (DisplayPad)
+
+A small page that opens on top of the current one. Pressing the key turns the
+keys around it (diagonals included) into the wheel's actions, framed by a
+coloured border; the rest of the pad stays as it is. The key you pressed becomes
+**back**; pressing it or any key outside the wheel closes the wheel, pressing a
+wheel key runs it. Edit the wheel like a page (click the key, or open it from
+**Pages**, where wheels are marked with a ring): only the keys around it can be
+used. The border colour is the app's accent by default and can be changed in
+the wheel's page settings.
+Tip: use it as the **long press** action of a key, so a short press keeps doing
+its usual job.
+
 @@@ picker:act:profile
 # Switch profile
 
@@ -520,8 +534,11 @@ travel with it. Record and edit macros from the Macro icon next to Settings.
 @@@ picker:act:text
 # Paste text
 
-Outputs a block of text into the focused app — typed key by key, or pasted
-via the clipboard for long text. Define the text in the action's panel.
+Outputs a block of text into the focused app, all in one go. By default it is
+pasted through the clipboard (Ctrl+V), and your clipboard is put back right
+after. Tick **Type it instead of pasting** to send it as keystrokes instead —
+for terminals, games or fields where pasting doesn't work; the clipboard is
+not touched. Define the text in the action's panel.
 
 @@@ picker:act:emoji
 # Emoji

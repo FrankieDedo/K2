@@ -42,7 +42,7 @@ public static class ActionTypeHelper
     /// key context menu's "Set as back") since it is just as DisplayPad-page-specific as
     /// "dp_folder".</summary>
     public static readonly string[] PageOnlyActionTypes =
-        { "dp_folder", "dp_back", "dp_emojibrowser", "dp_clock", "dp_sysmon", "dp_speedtest",
+        { "dp_folder", "dp_back", "dp_wheel", "dp_emojibrowser", "dp_clock", "dp_sysmon", "dp_speedtest",
           "dp_edstatus", "dp_zcstatus", KspTelemachus.ActionType, ModLinkGames.ActionType, ModLinkGames.StudioActionType, "dp_screen", CustomActionType.Tag };
 
     /// <summary>
@@ -124,6 +124,10 @@ public static class ActionTypeHelper
         var payload = AudioDevicePayload.Parse(actionValue);
         return payload is not null && payload.Name.Length > 0 ? payload.Name : Loc.Get("act_audiodevice");
     }
+
+    /// <summary>Display text for a "steamgame" action: the game's name as stored with the key.</summary>
+    public static string SteamGameSummary(string? actionValue) =>
+        SteamLibrary.ParseValue(actionValue) is { } g && g.Name.Length > 0 ? g.Name : Loc.Get("act_steamgame");
 
     /// <summary>K2's OBS Studio command vocabulary — the single source of truth shared by
     /// <see cref="ButtonActionDialog"/>'s picker (<c>ButtonActionDialog.Simple</c>'s
@@ -855,6 +859,11 @@ public static class ActionTypeHelper
     /// types (DisplayPad's "dp_folder"/"dp_back" page navigation) before falling back here.</summary>
     public static string Summary(string? actionType, string? actionValue)
     {
+        if (actionType == TriggerPayload.Tag)
+        {
+            var (bt, bv) = TriggerPayload.Unwrap(actionType, actionValue);
+            return $"{Summary(bt, bv)}  {Loc.Get("trig_summary_suffix")}";
+        }
         string val = actionValue ?? "";
         return actionType switch
         {
@@ -873,9 +882,10 @@ public static class ActionTypeHelper
             "media"    => MediaSummary(actionValue),
             "mouse"    => val,
             "audiodevice" => AudioDeviceSummary(actionValue),
+            SteamLibrary.ActionType => SteamGameSummary(actionValue),
             "disable"  => Loc.Get("act_disable"),
-            "text"     => val,
-            "emoji"    => EmojiSummary(actionValue),
+            "text"     => SingleLine(TextActionPayload.TextOf(val)),
+            "emoji"   => EmojiSummary(actionValue),
             "command"  => val,
             "macro"    => MacroSummary(actionValue),
             "googlehome" => GoogleHomeSummary(actionValue),
@@ -893,12 +903,18 @@ public static class ActionTypeHelper
         };
     }
 
+    /// <summary>Line breaks turned into spaces: a multi-line "text" payload must not wrap the
+    /// one-line row of the mapped-keys list.</summary>
+    private static string SingleLine(string s) =>
+        s.Replace("\r\n", " ").Replace('\r', ' ').Replace('\n', ' ');
+
     /// <summary>User-facing name of an action TYPE ("Keys combination", "Open program / file"),
     /// the same caption the action picker shows for it. Empty when the type has none (unknown
     /// tag), so callers can simply leave the column out.</summary>
     public static string TypeLabel(string? actionType)
     {
         if (string.IsNullOrEmpty(actionType) || IsUnrecognized(actionType)) return "";
+        if (actionType == TriggerPayload.Tag) return "";   // ListSummary reads the wrapped type
         string key = actionType == "dp_emojibrowser" ? "act_emojibrowser" : $"act_{actionType}";
         string label = Loc.Get(key);
         return label == $"[{key}]" ? "" : label;   // Loc's missing-key marker
@@ -910,7 +926,7 @@ public static class ActionTypeHelper
     public static string ListSummary(string? actionType, string? actionValue)
     {
         string summary = Summary(actionType, actionValue);
-        string label = TypeLabel(actionType);
+        string label = TypeLabel(TriggerPayload.Unwrap(actionType, actionValue).Type);
         if (label.Length == 0 || summary == label) return summary;
         if (summary.StartsWith(label + ": ", StringComparison.Ordinal))
             summary = summary[(label.Length + 2)..];

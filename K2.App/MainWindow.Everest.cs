@@ -164,7 +164,9 @@ public partial class MainWindow
         _evPollTimer.Tick += (_, _) =>
         {
             EvRefreshConnectionStatus();
-            SyncEverestGameModeStatusFromDevice();   // reflect Fn+Pause toggles
+            // Not while a picture transfer runs: a command mid-transfer stalls it (issue #32).
+            if (!_ndkUploadBusy)
+                SyncEverestGameModeStatusFromDevice();   // reflect Fn+Pause toggles
         };
         _evPollTimer.Start();
         EvRefreshConnectionStatus();
@@ -2745,6 +2747,9 @@ public partial class MainWindow
         {
             if (AppSettings.LogLevel == K2LogLevel.Verbose)
                 LogEverest($"[KEY ] key 0x{key.KeyMatrix:X2} duplicate press ignored");
+            // The glitch's up edge already reached the engine: tell a long-press/repeat key the
+            // key is in fact still held.
+            _evEngine?.ResumeHold(_evKeys.IndexOf(key));
             return;
         }
         _evLastExecuted = (key.KeyMatrix, now);

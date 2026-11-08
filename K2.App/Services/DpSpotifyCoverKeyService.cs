@@ -71,11 +71,11 @@ internal static class DpSpotifyCoverKeyService
 
     /// <summary>Paints the cover on every registered key of a device — called at the tail of the
     /// repaint batch that page belongs to. No-op for devices with no cover keys.</summary>
-    public static void Repaint(int deviceId)
+    public static void Repaint(int deviceId, int? onlyButton = null)
     {
         DeviceCtx ctx;
         lock (_gate) { if (!_devices.TryGetValue(deviceId, out ctx)) return; }
-        PushDevice(deviceId, ctx);
+        PushDevice(deviceId, ctx, onlyButton);
     }
 
     /// <summary>True when this overlay currently owns that key — repaint paths use it to SKIP
@@ -137,7 +137,7 @@ internal static class DpSpotifyCoverKeyService
         foreach (var (id, ctx) in targets) PushDevice(id, ctx);
     }
 
-    private static void PushDevice(int deviceId, DeviceCtx ctx)
+    private static void PushDevice(int deviceId, DeviceCtx ctx, int? onlyButton = null)
     {
         bool have;
         lock (_gate) have = _haveCover;
@@ -145,6 +145,8 @@ internal static class DpSpotifyCoverKeyService
 
         foreach (int btn in ctx.Buttons)
         {
+            if (onlyButton is int only && btn != only) continue;
+            if (DpKeyHold.IsHeld(deviceId, btn)) continue;   // under the action wheel
             bool ok = ctx.Client.UploadImage(deviceId, CoverPath, btn, ctx.Rotation);
             ctx.Log($"[Spotify] cover key dev={deviceId} btn={btn} uploaded={ok}");
         }

@@ -33,6 +33,7 @@ public static class ActionIconFallback
     /// so it can be chained after them with a plain <c>||</c>.</summary>
     public static bool TryGenerate(string? actionType, string? actionValue, int size, string outputPngPath, bool showCaption = true)
     {
+        (actionType, actionValue) = TriggerPayload.Unwrap(actionType, actionValue);
         // The media transport keys and single-target "profile: Next/Previous" get the emoji
         // browser's own bold hand-drawn shapes instead of thin MDL2 outline glyphs — same
         // family used for its scroll keys (see MainWindow.DisplayPad.EmojiBrowser.cs's
@@ -155,7 +156,7 @@ public static class ActionIconFallback
     /// <summary>True when this class has a glyph for the action — lets a caller decide
     /// whether a default icon is available without rendering it.</summary>
     public static bool CanGenerate(string? actionType, string? actionValue) =>
-        ResolveGlyph(actionType, actionValue) is not null;
+        ResolveGlyph(TriggerPayload.Unwrap(actionType, actionValue).Type, TriggerPayload.Unwrap(actionType, actionValue).Value) is not null;
 
     /// <summary>True for a transport/volume/repeat control — "media" or the matching "spotify"
     /// command (<see cref="CanonicalControlValue"/>) — regardless of which shape/glyph ends up
@@ -257,6 +258,7 @@ public static class ActionIconFallback
     /// text" instead of stacking new text on top of it.</summary>
     public static string Caption(string? actionType, string? actionValue)
     {
+        (actionType, actionValue) = TriggerPayload.Unwrap(actionType, actionValue);
         string type = (actionType ?? "").ToLowerInvariant();
         string value = (actionValue ?? "").Trim();
 
@@ -378,6 +380,7 @@ public static class ActionIconFallback
         ["youtube"]      = "",
         ["discord"]      = "", // headset
         ["audiodevice"]  = "", // speaker (Segoe MDL2 "Volume")
+        [SteamLibrary.ActionType] = "", // game controller (Segoe MDL2 "Game")
         ["adobe"]        = "",
         ["davinci"]      = "",
         ["zoom"]         = "",

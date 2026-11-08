@@ -227,6 +227,8 @@
   <string name="youtube_chat_message_label">ライブチャットメッセージ:</string>
   <string name="act_command">シェルコマンド</string>
   <string name="act_text">テキストを貼り付ける</string>
+  <string name="text_type_instead">貼り付けずに入力する</string>
+  <string name="text_type_instead_tip">Ctrl+Vで貼り付ける代わりに、テキストをキー入力としてまとめて送信します。貼り付けが使えない場所（ターミナル、ゲーム）で便利です。クリップボードは変更されません。</string>
   <string name="act_emoji">絵文字</string>
   <string name="act_macro">マクロを再生</string>
 
@@ -619,6 +621,8 @@
   <string name="dial_pcinfo_ram">PC 情報 - RAM</string>
   <string name="dial_load_image">画像を読み込む</string>
   <string name="dial_load_image_title">スクリーンセーバー画像を選択 (240×204 px)</string>
+  <string name="dial_not_responding_title">Display Dial が応答しません</string>
+  <string name="dial_not_responding">Display Dial が応答しません。キーボードからダイヤルだけを取り外し、数秒待ってから取り付け直して、もう一度お試しください。</string>
   <string name="dial_clock_section">時計の種類</string>
   <string name="dial_clock_label">時計:</string>
   <string name="dial_clock_style_label">スタイル:</string>
@@ -786,10 +790,10 @@
   <string name="dp_imported_xml">プロファイル '{0}' をスロット {1} にインポートしました。</string>
   <string name="dp_choose_image">キー #{0} の画像を選択</string>
   <string name="dp_key_button_label">ボタン {0}</string>
-  <string name="dp_load_image">画像を読み込む…</string>
+  <string name="dp_load_image">画像を選択</string>
   <string name="dp_rotate_image">画像を回転:</string>
   <string name="dp_action_section">アクション</string>
-  <string name="dp_configure_action">アクションを設定…</string>
+  <string name="dp_configure_action">アクションを設定</string>
   <string name="dp_remove_action">アクションを削除</string>
   <string name="act_copy_action">アクションをコピー</string>
   <string name="act_cut_action">アクションを切り取り</string>
@@ -797,7 +801,7 @@
   <string name="paste_unsupported_title">貼り付けできません</string>
   <string name="paste_unsupported_message">このアクションはこのデバイスではサポートされていません。</string>
   <string name="dp_change_image">画像を変更…</string>
-  <string name="dp_emoji_image">絵文字を画像に…</string>
+  <string name="dp_emoji_image">絵文字を画像として選択</string>
   <string name="dp_remove_image">画像を削除</string>
   <string name="dp_create_folder">フォルダーページを作成…</string>
   <string name="dp_create_folder_title">フォルダーページを作成</string>
@@ -808,7 +812,7 @@
   <string name="dp_delete_page">削除</string>
   <string name="dp_delete_page_title">ページを削除</string>
   <string name="dp_delete_page_confirm">ページ "{0}" を削除しますか？ このページを開くキーは機能しなくなります。</string>
-  <string name="dp_add_text">テキストを追加…</string>
+  <string name="dp_add_text">アイコンを編集</string>
   <string name="txt_dialog_title">テキストを挿入</string>
   <string name="txt_label">テキスト:</string>
   <string name="txt_font_label">フォント:</string>
@@ -980,6 +984,8 @@
   <string name="act_discord">Discord</string>
   <string name="act_audiodevice">オーディオデバイス</string>
   <string name="audiodevice_refresh_button">デバイスを更新</string>
+  <string name="act_steamgame">Steam ゲーム</string>
+  <string name="steam_game_not_installed">未インストール</string>
   <string name="discord_settings_title">Discord設定</string>
   <string name="discord_hint">音声コマンドはローカルRPCパイプ経由でDiscordデスクトップアプリを操作するため、独自のDiscordアプリケーションが必要です。「メッセージを送信」はチャンネルのWebhook URLのみが必要です。</string>
   <string name="discord_setup_guide">1. discord.com/developers/applications にアクセスし、「New Application」をクリックします。
@@ -2253,4 +2259,40 @@
   <string name="studio_guide_title">Studio Proへの接続</string>
   <string name="studio_guide_steps">K2は2つの仮想MIDIポートを介して、Mackie ControlサーフェスとしてStudio Proと通信します。&#10;1. loopMIDIをインストールして開きます。&#10;2. 次の名前で2つのポートを作成します: K2 to Studio と Studio to K2。&#10;3. Studio Proで[オプション] &gt; [外部デバイス] &gt; [追加]を開き、Mackie Controlを選択します。&#10;4. 受信元 = K2 to Studio、送信先 = Studio to K2に設定して確定します。&#10;プロファイルを使う間は、loopMIDIを起動したままにしてください。</string>
   <string name="studio_guide_download">loopMIDIをダウンロード</string>
+  <string name="act_wheel">アクションホイール</string>
+  <string name="dp_wheel_locked_key">アクションホイールは、それを開くキーの周りのキーだけを使えます。</string>
+  <string name="dp_wheel_anchor_key">ホイールを開くキーです。戻るキーになります。</string>
+  <string name="dp_page_kind_page">ページ</string>
+  <string name="wheel_border_color_label">ホイールの枠の色:</string>
+  <string name="wheel_border_color_pick">ホイールのアイコンを囲む枠の色を選択</string>
+  <string name="wheel_border_color_default">既定</string>
+  <string name="trig_summary_suffix">（＋長押し/修飾キー）</string>
+  <string name="trig_button">長押し</string>
+  <string name="trig_button_tooltip">このキーを押し続けたときに別のアクションを割り当てるか、押している間アクションを繰り返します。</string>
+  <string name="trig_title">長押し</string>
+  <string name="trig_hold_label">キーを押し続けたとき</string>
+  <string name="trig_hold_none">なし</string>
+  <string name="trig_hold_long">別のアクションを実行（長押し）</string>
+  <string name="trig_hold_repeat">アクションを繰り返す</string>
+  <string name="trig_hold_ms">長押し時間 (ms)</string>
+  <string name="trig_repeat_delay">繰り返し開始まで (ms)</string>
+  <string name="trig_repeat_ms">繰り返し間隔 (ms)</string>
+  <string name="trig_long_action">長押しのアクション</string>
+  <string name="trig_choose">選択</string>
+  <string name="trig_clear_hint">右クリックで削除</string>
+  <string name="trig_mod_ctrl">Ctrl</string>
+  <string name="trig_mod_shift">Shift</string>
+  <string name="trig_mod_alt">Alt</string>
+  <string name="trig_mod_win">Win</string>
+  <string name="trig_mods_note">アクションの実行中も修飾キーは押されたままです。キーの組み合わせは「修飾キー＋組み合わせ」になります。</string>
+  <string name="trig_hold_unsupported">このデバイスはボタンを離したことを通知しないため、押している時間を判定できません。</string>
+  <string name="trig_type_unsupported">この種類のアクションはここでは使えません。</string>
+  <string name="dp_mod_icons">修飾キー</string>
+  <string name="dp_mod_icons_tooltip">キーボードの Ctrl・Shift・Alt・Win を押している間に、このキーが行う動作と表示する画像。</string>
+  <string name="dp_mod_icons_hint">使う修飾キーにチェックを入れます。キーボードでそのキーを押している間、このキーはそのアクションを実行し、自分の画像の代わりにその画像を表示します（画像を選ぶまではアクションから作成されます）。Fn は使えません。キーボード内部で処理され、Windows からは見えないためです。</string>
+  <string name="dp_mod_icons_clear">削除</string>
+  <string name="dp_mod_icons_filter">画像</string>
+  <string name="dp_mod_hint_actions">使う修飾キーにチェックを入れます。キーボードでそのキーを押している間、このキーは通常のアクションの代わりにそのアクションを実行します。Fn は使えません。キーボード内部で処理され、Windows からは見えないためです。</string>
+  <string name="dp_mod_no_actions">このキーのアクションには修飾キー用アクションを設定できません（アクションなし、ページ、ライブタイル）。画像だけ設定できます。</string>
+  <string name="dp_mod_action">アクションを選択</string>
 </strings>

@@ -17,7 +17,7 @@ namespace K2.Core;
 /// playback) to the <see cref="IActionHost"/>. Also encapsulates the Python
 /// bridge (<see cref="PyBridge"/>).
 /// </summary>
-public sealed class ButtonActionEngine : IDisposable
+public sealed partial class ButtonActionEngine : IDisposable
 {
     private static readonly char[] SendKeysMeta = { '^', '%', '{', '~' };
 
@@ -67,14 +67,23 @@ public sealed class ButtonActionEngine : IDisposable
     /// <param name="momentary">True when the caller is a physical key that will send a matching
     /// <see cref="Release"/> on its up edge (MacroPad / Everest Max / Everest 60). A "keys" action
     /// is then pressed-and-held instead of tapped; every other action type still fires once.</param>
-    public void Execute(string? actionType, string? actionValue, int buttonIndex = -1, bool momentary = false)
+    /// <param name="releaseFollows">True when a <see cref="Release"/> will follow on the up edge
+    /// even though the caller does not want <paramref name="momentary"/> key holding (the
+    /// DisplayPad). Only a <see cref="TriggerPayload"/> key cares: without an up edge it cannot
+    /// time a long press or a repeat, so it runs its base action at once. Defaults to
+    /// <paramref name="momentary"/>.</param>
+    public void Execute(string? actionType, string? actionValue, int buttonIndex = -1, bool momentary = false,
+                        bool? releaseFollows = null)
     {
         if (string.IsNullOrEmpty(actionType)) return;
         SweepStaleHeld();
         var value = actionValue ?? "";
         try
         {
-            Dispatch(actionType, value, buttonIndex, momentary);
+            if (actionType == TriggerPayload.Tag)
+                PressTrigger(value, buttonIndex, momentary, releaseFollows ?? momentary);
+            else
+                Dispatch(actionType, value, buttonIndex, momentary);
         }
         catch (Exception ex)
         {
@@ -87,6 +96,7 @@ public sealed class ButtonActionEngine : IDisposable
     public void Release(int buttonIndex)
     {
         if (buttonIndex < 0) return;
+        ReleaseTrigger(buttonIndex);
         if (!_heldShortcuts.TryGetValue(buttonIndex, out var held)) return;
         _heldShortcuts.Remove(buttonIndex);
         HotkeySender.TryHoldUp(held.Value, out _);
@@ -97,6 +107,7 @@ public sealed class ButtonActionEngine : IDisposable
     /// disconnect so a combination can't stay pressed system-wide.</summary>
     public void ReleaseAllHeld()
     {
+        CancelAllTriggers();
         if (_heldShortcuts.Count == 0) return;
         foreach (var kv in _heldShortcuts) HotkeySender.TryHoldUp(kv.Value.Value, out _);
         _host.Log($"[EXEC] released {_heldShortcuts.Count} held shortcut(s)");
@@ -156,6 +167,16 @@ public sealed class ButtonActionEngine : IDisposable
             log($"[EXEC] keys hold-down failed ({err}) — one-shot");
         }
         RunShortcut(value, log);
+    }
+
+    /// <summary>A "text" action, all in one go either way: pasted through the clipboard, or —
+    /// <paramref name="typed"/> — injected as one batch of keystrokes, for targets where Ctrl+V
+    /// doesn't paste (terminals, games). A paste that cannot take the clipboard falls back to
+    /// typing.</summary>
+    private static void RunText(string text, bool typed, Action<string> log)
+    {
+        if (!typed && ActionExecutor.PasteText(text, log)) return;
+        ActionExecutor.TypeText(text, log);
     }
 
     private void Dispatch(string type, string value, int buttonIndex, bool momentary)
@@ -222,9 +243,9 @@ public sealed class ButtonActionEngine : IDisposable
 
             case "text":
             {
-                if (string.IsNullOrEmpty(value)) { Log("[EXEC] text without payload"); break; }
-                System.Windows.Forms.SendKeys.SendWait(EscapeSendKeysLiteral(value));
-                Log($"[EXEC] text -> \"{value}\"");
+                var (text, typed) = TextActionPayload.Parse(value);
+                if (string.IsNullOrEmpty(text)) { Log("[EXEC] text without payload"); break; }
+                RunText(text, typed, Log);
                 break;
             }
 
@@ -277,6 +298,12 @@ public sealed class ButtonActionEngine : IDisposable
 
             case "audiodevice":
                 ActionExecutor.SetAudioDevice(value, Log);
+                break;
+
+            case Services.SteamLibrary.ActionType:
+                if (Services.SteamLibrary.ParseValue(value) is not { } game) { Log("[EXEC] steamgame without payload"); break; }
+                ShellLauncher.Start(Services.SteamLibrary.LaunchUri(game.AppId));
+                Log($"[EXEC] steamgame -> {game.AppId} ({game.Name})");
                 break;
 
             case "obs":
@@ -504,6 +531,7 @@ public sealed class ButtonActionEngine : IDisposable
                 break;
 
             default:
+                if (_host.TryRunHostAction(type, value, buttonIndex)) break;
                 Log($"[EXEC] unknown action type: {type}");
                 break;
         }
@@ -562,6 +590,10 @@ public sealed class ButtonActionEngine : IDisposable
         {
             case "url":
                 ShellLauncher.Start(value); break;
+            case Services.SteamLibrary.ActionType:
+                if (Services.SteamLibrary.ParseValue(value) is { } steamGame)
+                    ShellLauncher.Start(Services.SteamLibrary.LaunchUri(steamGame.AppId));
+                break;
             case "exec":
                 if (!string.IsNullOrWhiteSpace(value)) RunExecAction(value);
                 break;
@@ -577,7 +609,11 @@ public sealed class ButtonActionEngine : IDisposable
                 RunShortcut(value, Log);
                 break;
             case "text":
-                System.Windows.Forms.SendKeys.SendWait(EscapeSendKeysLiteral(value)); break;
+            {
+                var (text, typed) = TextActionPayload.Parse(value);
+                if (text.Length > 0) RunText(text, typed, Log);
+                break;
+            }
             case "emoji": ActionExecutor.SendUnicodeText(value, Log); break;
             case "oscmd": ActionExecutor.RunOsCommand(value, Log); break;
             case "media": ActionExecutor.SendMediaKey(value, Log); break;
@@ -713,25 +749,4 @@ public sealed class ButtonActionEngine : IDisposable
         log($"[EXEC] browser -> {exe} {spec.Url}");
     }
 
-    private static string EscapeSendKeysLiteral(string input)
-    {
-        var sb = new StringBuilder(input.Length + 8);
-        foreach (var ch in input)
-        {
-            switch (ch)
-            {
-                case '{': case '}':
-                case '(': case ')':
-                case '+': case '^':
-                case '%': case '~':
-                case '[': case ']':
-                    sb.Append('{').Append(ch).Append('}');
-                    break;
-                default:
-                    sb.Append(ch);
-                    break;
-            }
-        }
-        return sb.ToString();
-    }
 }

@@ -567,6 +567,311 @@ internal static class EverestHidNative
         /// drop the single call site (see <c>MainWindow.Everest.cs</c>,
         /// LstEvProfile_SelectionChanged's IsNew branch) rather than this primitive.</para>
         /// </summary>
+        /// <summary>
+        /// Display Dial picture source: wire cmd <c>13 41 00 00 [01|00]</c>. <c>01</c> puts
+        /// the factory Mountain logo back; <c>00</c> switches to the custom uploaded picture.
+        /// From BaseCampLinux (<c>reset_dial_image</c> / <c>--activate-custom</c>): after a
+        /// logo reset an upload alone keeps showing the logo (issue #32). Same 13 4x family
+        /// as <see cref="ResetFlash"/> (13 40) and <see cref="ResetDisplayKeyPic"/> (13 42).
+        /// </summary>
+        public bool SetDialPictureSource(bool factoryLogo)
+        {
+            var ok = SendCmdAcked(Cmd(0x13, 0x41, 0x00, 0x00, (byte)(factoryLogo ? 1 : 0)), timeoutMs: 4000);
+            _log($"[EvNative] SetDialPictureSource(factoryLogo={factoryLogo}) -> {ok}");
+            return ok;
+        }
+
+        /// <summary>LED color stream reports (ids 02-0A) seen by the reader so far.</summary>
+        private long _streamReports;
+        public long StreamReports => Interlocked.Read(ref _streamReports);
+
+        /// <summary>Size of the Display Dial picture: 240x204 RGB565 little-endian.</summary>
+        public const int DialPictureBytes = 240 * 204 * 2;
+
+        /// <summary>
+        /// Writes the Display Dial picture over HID feature reports, the way BaseCampLinux
+        /// does (<c>_upload_main_display_image</c>): <c>AA 55 21 03</c> session,
+        /// <c>AA 55 22 00</c> slot, a descriptor with length 0x017E80 and a 16-bit byte-sum
+        /// checksum, then the picture in 64-byte chunks. Each chunk is answered on the next
+        /// GET_REPORT with <c>10 FA</c> (taken, move on) or <c>10 FB</c> (busy, resend the
+        /// same chunk).
+        /// <para>Replaces SDKDLL's <c>StartPicUpdate</c> for the dial (issue #32): on hw the
+        /// SDK ran two passes (~105s), finished with its "done" message, and the dial still
+        /// showed the Mountain logo — even with nothing else talking to the keyboard.</para>
+        /// <para>Blocks for the whole transfer: call it from a worker thread.</para>
+        /// </summary>
+        public bool UploadDialPicture(byte[] rgb565, Action<int>? progress = null)
+        {
+            if (rgb565.Length != DialPictureBytes)
+            {
+                _log($"[EvNative] UploadDialPicture: wrong size {rgb565.Length}");
+                return false;
+            }
+            // Own synchronous handle: HidD_Set/GetFeature are plain IOCTLs, and the
+            // command handle is overlapped and busy with the reader thread.
+            var h = CreateFileW(_path, GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
+            if (h.IsInvalid)
+            {
+                _log($"[EvNative] UploadDialPicture: open failed win32={Marshal.GetLastWin32Error()}");
+                h.Dispose();
+                return false;
+            }
+            using (h)
+            {
+                // Base Camp runs TWO full sessions with the same picture (USB capture of a
+                // real picture, _reference/usb_dumps/everest_dial.pcapng, 2026-11-06):
+                //   1) 21 03, 22 00, descriptor, all chunks -> final 80 7E 01 00 00 FB
+                //      (exactly what K2 got and took for a failure);
+                //   2) `1D 00` on the command channel, answered `FF AA`;
+                //   3) 21 03 (NO 22 00), same descriptor, all chunks again
+                //      -> final 80 7E 01 <chk> FA, and the picture shows.
+                var first = UploadDialPictureOnce(h, rgb565, openSlot: true, progress, 0, 50);
+                if (first == DialUploadResult.Shown) return true;
+                if (first == DialUploadResult.Failed) return false;
+                Thread.Sleep(40);   // BC: 40ms between the pass-1 final answer and 1D 00
+                var ack = SendCommand(Cmd(0x1D, 0x00), r => r.Length > 1 && r[0] == 0xFF && r[1] == 0xAA, 3000);
+                _log($"[EvNative] UploadDialPicture: 1D 00 between passes -> {(ack is null ? "no FF AA answer" : "FF AA")}");
+                var second = UploadDialPictureOnce(h, rgb565, openSlot: false, progress, 50, 100);
+                if (second == DialUploadResult.Shown) return true;
+                if (second == DialUploadResult.ChecksumRejected)
+                    _log("[EvNative] UploadDialPicture: dock rejected the checksum on the second pass too");
+                return false;
+            }
+        }
+
+        private enum DialUploadResult { Shown, ChecksumRejected, Failed }
+
+        private DialUploadResult UploadDialPictureOnce(SafeFileHandle h, byte[] rgb565, bool openSlot,
+                                                      Action<int>? progress, int pctFrom, int pctTo)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            // Base Camp's wire timing (USB capture, medians): SET start -> GET completion
+            // 3.0ms (= ~2ms from SET start to GET start), GET completion -> next SET 2.0ms. K2 used to SET again 0.04ms after a GET (and GET 5ms after a SET):
+            // the only measurable difference left from Base Camp's wire, and a plausible
+            // way to spoil chunk data that a white test picture could never show. Thread
+            // .Sleep is too coarse at this scale, so these waits spin on a Stopwatch.
+            const double SetToGetMs = 2.0, GetToSetMs = 2.0;
+            var since = System.Diagnostics.Stopwatch.StartNew();
+            progress?.Invoke(pctFrom);
+            // Base Camp gets `21 FA` and `22 FA 03` straight away (capture 2026-11-06).
+            // Right after a Reset the dock may still be busy: on hw the very first call
+            // failed 12s after one. Retry instead of giving up — but nothing is open
+            // yet at this point, so failing here is harmless.
+            if (!OpenStep(h, 0x21, 0x03, 20_000) || (openSlot && !OpenStep(h, 0x22, 0x00, 20_000)))
+            {
+                _log("[EvNative] UploadDialPicture: session open failed");
+                return DialUploadResult.Failed;
+            }
+
+            int sum = 0;
+            foreach (byte b in rgb565) sum += b;
+            ushort chk = (ushort)(sum & 0xFFFF);
+            var desc = new byte[] { 0xAA, 0x55, 0x10, 0x80, 0x7E, 0x01,
+                                    (byte)(chk & 0xFF), (byte)(chk >> 8),
+                                    0x00, 0x00, 0x02, 0x01, 0x00 };
+            if (!SetFeature64(h, desc)) { _log("[EvNative] UploadDialPicture: descriptor write failed"); return DialUploadResult.Failed; }
+            // Base Camp: FB after ~120ms, resend, FA (capture). The session is open from
+            // here on and an abandoned one freezes the dial, so be patient (60s).
+            bool ready = false;
+            int descTries = 0;
+            string lastDesc = "-";
+            var descSw = System.Diagnostics.Stopwatch.StartNew();
+            while (!ready && descSw.ElapsedMilliseconds < 60_000)
+            {
+                Thread.Sleep(122);   // BC: SET -> GET ~122ms
+                descTries++;
+                if (GetFeature64(h, out var r))
+                {
+                    lastDesc = BitConverter.ToString(r, 1, 6);
+                    if (IsAck(r, 0xFA)) { ready = true; break; }
+                }
+                else lastDesc = $"GET failed win32={Marshal.GetLastWin32Error()}";
+                Thread.Sleep(123);   // BC: GET -> SET ~123ms (K2 used to resend at once)
+                SetFeature64(h, desc);
+            }
+            _log($"[EvNative] UploadDialPicture: descriptor {(ready ? "acknowledged" : "NEVER acknowledged")} " +
+                 $"after {descTries} tries / {descSw.ElapsedMilliseconds}ms (last answer {lastDesc}), checksum {chk:X4}");
+            if (!ready) return DialUploadResult.Failed;
+
+            // Chunk stream, Base Camp's timing (two USB captures, 2026-11-06):
+            //  - SET a chunk, ONE GET ~2ms later. 10 FA + 24-bit LE offset = bytes stored so
+            //    far (the next chunk starts there); 10 FB = SET the same chunk again. About
+            //    3 FB per chunk is normal (~20ms per chunk, ~38s per pass).
+            //  - Polling GET without a new SET never turns FB into FA.
+            //  - Chunk 0 waits for the erase (~3-4s) and the last one for the commit: there
+            //    the gap grows 2ms per FB after the first three.
+            //  - A chunk is never abandoned before ChunkTimeoutMs: a half-sent picture
+            //    freezes the dial until it is unplugged.
+            //  - Final FA: 80 7E 01 <chk lo> <chk hi> FA/FB. FB is the normal end of pass 1
+            //    (see UploadDialPicture); pass 2 ends with the checksum echo and FA.
+            // (Before the second capture K2 tried 30/60/80/150ms gaps and quiet pauses to
+            // "fix" the pass-1 FB - none of that mattered, the second pass was missing.)
+            const int chunks = DialPictureBytes / 64;
+            const int MaxChunkWaitMs = 150, ChunkTimeoutMs = 90_000;
+            int offset = 0, lastPct = -1, sends = 0, busy = 0, odd = 0, offsetJumps = 0;
+            int maxSendsPerChunk = 0;
+            var sendsHist = new int[6];   // chunks taken with 1,2,3,4,5,6+ SETs
+            long slowestChunkMs = 0;
+            byte[] final = Array.Empty<byte>();
+            var chunk = new byte[64];
+            var chunkSw = new System.Diagnostics.Stopwatch();
+            timeBeginPeriod(1);   // Sleep(n) really ~n ms, not rounded to 15.6ms
+            try
+            {
+                while (offset < DialPictureBytes)
+                {
+                    Buffer.BlockCopy(rgb565, offset, chunk, 0, 64);
+                    chunkSw.Restart();
+                    double wait = SetToGetMs; int thisSends = 0;
+                    int next = -1;
+                    while (chunkSw.ElapsedMilliseconds < ChunkTimeoutMs)
+                    {
+                        SpinUntil(since, GetToSetMs);
+                        since.Restart();   // SET start -> GET start; the capture's 3ms SET->GET
+                                           // runs from SET start to GET completion (~1ms GET)
+                        if (!SetFeature64(h, chunk))
+                        {
+                            // e.g. a transfer Windows cancelled after a ~5s stall: retry the
+                            // same chunk (bounded by ChunkTimeoutMs) instead of walking away
+                            // from an open session, which would freeze the dial.
+                            if (++odd <= 5) _log($"[EvNative] UploadDialPicture: chunk write failed at {offset} win32={Marshal.GetLastWin32Error()}, retrying");
+                            since.Restart();
+                            continue;
+                        }
+                        sends++; thisSends++;
+                        if (wait > 10) Thread.Sleep((int)wait - 2);
+                        SpinUntil(since, wait);
+                        bool gotAnswer = GetFeature64(h, out var r);
+                        since.Restart();   // the next SET waits GetToSetMs from here
+                        if (!gotAnswer)
+                        {
+                            if (++odd <= 5) _log($"[EvNative] UploadDialPicture: GET failed at {offset} win32={Marshal.GetLastWin32Error()} after {chunkSw.ElapsedMilliseconds}ms");
+                            continue;
+                        }
+                        if (IsAck(r, 0xFA))
+                        {
+                            next = r[5] | (r[6] << 8) | (r[7] << 16);
+                            final = r;
+                            break;
+                        }
+                        if (IsAck(r, 0xFB)) busy++;
+                        else if (++odd <= 5) _log($"[EvNative] UploadDialPicture: odd answer at {offset}: {BitConverter.ToString(r, 1, 10)}");
+                        // BC: same gap for the first FBs, then +2ms per FB (erase/commit).
+                        if (thisSends > 3) wait = Math.Min(MaxChunkWaitMs, wait + 2);
+                    }
+                    slowestChunkMs = Math.Max(slowestChunkMs, chunkSw.ElapsedMilliseconds);
+                    maxSendsPerChunk = Math.Max(maxSendsPerChunk, thisSends);
+                    sendsHist[Math.Min(thisSends, 6) - 1]++;
+                    if (next < 0)
+                    {
+                        _log($"[EvNative] UploadDialPicture: chunk at {offset} not taken in {ChunkTimeoutMs}ms");
+                        break;
+                    }
+                    // The dock says how far it got; trust it if it is sane, else step 64.
+                    int expected = offset + 64;
+                    if (next != expected)
+                    {
+                        offsetJumps++;
+                        if (offsetJumps <= 5)
+                            _log($"[EvNative] UploadDialPicture: dock reports {next}, expected {expected}");
+                        if (next % 64 != 0 || next <= offset - 64 * 4 || next > DialPictureBytes) next = expected;
+                    }
+                    offset = next;
+                    int pct = pctFrom + (int)((long)offset * (pctTo - pctFrom) / DialPictureBytes);
+                    if (pct != lastPct) { lastPct = pct; progress?.Invoke(pct); }
+                }
+            }
+            finally { timeEndPeriod(1); }
+            bool ok = offset >= DialPictureBytes;
+            string finalHex = final.Length > 10 ? BitConverter.ToString(final, 1, 10) : "-";
+            bool chkOk = final.Length > 10 && final[8] == (chk & 0xFF) && final[9] == (chk >> 8) && final[10] == 0xFA;
+            _log($"[EvNative] UploadDialPicture -> {ok} in {sw.ElapsedMilliseconds}ms " +
+                 $"({offset / 64}/{chunks} chunks, {sends} sends, {busy} busy, {odd} odd answers, " +
+                 $"pass {(openSlot ? 1 : 2)}, chunks by SETs needed 1/2/3/4/5/6+: " +
+                 $"{string.Join("/", sendsHist)}, slowest chunk {slowestChunkMs}ms, " +
+                 $"offset corrections {offsetJumps}) final answer {finalHex} checksum ok={chkOk}");
+            if (!ok) return DialUploadResult.Failed;
+            return chkOk ? DialUploadResult.Shown : DialUploadResult.ChecksumRejected;
+        }
+
+        /// <summary>Busy-waits until <paramref name="sw"/> reads at least
+        /// <paramref name="ms"/> milliseconds (sub-millisecond accurate, unlike Sleep).</summary>
+        private static void SpinUntil(System.Diagnostics.Stopwatch sw, double ms)
+        {
+            while (sw.Elapsed.TotalMilliseconds < ms) Thread.SpinWait(20);
+        }
+
+        private static bool IsAck(byte[] r, byte code) =>
+            // r[0] = report id; BaseCampLinux's r[2:4] is r[3], r[4] here.
+            r.Length > 4 && r[3] == 0x10 && r[4] == code;
+
+        /// <summary>One session-open step (<c>AA 55 cmd arg</c>), retried until the dock
+        /// answers <c>cmd FA</c> or <paramref name="timeoutMs"/> runs out. Logs what came back.</summary>
+        private bool OpenStep(SafeFileHandle h, byte cmd, byte arg, int timeoutMs)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            string last = "-";
+            int tries = 0;
+            while (sw.ElapsedMilliseconds < timeoutMs)
+            {
+                tries++;
+                if (!SetFeature64(h, new byte[] { 0xAA, 0x55, cmd, arg }))
+                    last = $"SET failed win32={Marshal.GetLastWin32Error()}";
+                else if (!GetFeature64(h, out var r))
+                    last = $"GET failed win32={Marshal.GetLastWin32Error()}";
+                else
+                {
+                    last = BitConverter.ToString(r, 1, 6);
+                    if (r[3] == cmd && r[4] == 0xFA)
+                    {
+                        if (tries > 1) _log($"[EvNative] UploadDialPicture: step {cmd:X2} ok after {tries} tries / {sw.ElapsedMilliseconds}ms");
+                        return true;
+                    }
+                }
+                Thread.Sleep(250);
+            }
+            _log($"[EvNative] UploadDialPicture: step {cmd:X2} failed after {tries} tries (last {last})");
+            return false;
+        }
+
+        private static bool FeatureCall(SafeFileHandle h, byte[] data, out byte[] resp)
+        {
+            resp = Array.Empty<byte>();
+            return SetFeature64(h, data) && GetFeature64(h, out resp);
+        }
+
+        private static bool SetFeature64(SafeFileHandle h, byte[] data)
+        {
+            var buf = new byte[PktSize + 1];
+            Buffer.BlockCopy(data, 0, buf, 1, Math.Min(data.Length, PktSize));
+            return HidD_SetFeature(h, buf, buf.Length);
+        }
+
+        private static bool GetFeature64(SafeFileHandle h, out byte[] resp)
+        {
+            resp = new byte[PktSize + 1];
+            return HidD_GetFeature(h, resp, resp.Length);
+        }
+
+        /// <summary>Waits until the keyboard answers <c>11 14</c> again (it goes quiet while
+        /// it writes a picture to flash), up to <paramref name="maxMs"/>.</summary>
+        public bool WaitResponsive(int maxMs)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < maxMs)
+            {
+                if (SendCmdAcked(Cmd(0x11, 0x14), timeoutMs: 1000))
+                {
+                    _log($"[EvNative] responsive after {sw.ElapsedMilliseconds}ms");
+                    return true;
+                }
+                Thread.Sleep(500);
+            }
+            _log($"[EvNative] still not responsive after {maxMs}ms");
+            return false;
+        }
+
         public bool ResetProfileContent()
         {
             var ok = SendCmdAcked(Cmd(0x13, 0x40, 0x00, 0x00, 0x00), timeoutMs: 4000);
@@ -964,10 +1269,12 @@ internal static class EverestHidNative
                 // wire data = buf[1..read] (Windows report-ID prefix stripped)
                 if (buf[1] == 0x01)
                 {
+                    DiagFnBytes(buf, read); // TEMP: Fn layer investigation
                     DecodeKeyBitmap(buf, read);
                     if (read >= 44) DecodeNumpadButtons(buf);
                 }
 
+                if (buf[1] >= 0x02 && buf[1] <= 0x0A) Interlocked.Increment(ref _streamReports);
                 var wire = new byte[read - 1];
                 Buffer.BlockCopy(buf, 1, wire, 0, wire.Length);
                 if (K2.Core.AppSettings.LogLevel == K2.Core.K2LogLevel.Verbose && _rxLogCount < 40)
@@ -979,6 +1286,49 @@ internal static class EverestHidNative
                 _resp.Enqueue(wire);
                 _respSignal.Release();
             }
+        }
+
+        // ---- TEMP diagnostic: does the firmware report Fn anywhere in report 0x01? ----
+        // Logs (via App.WriteLog, so it shows at log level Off) every edge in the decoded
+        // key bitmap (wire bytes 1..29) and every change in the never-decoded bytes
+        // (wire 30+ except 42, which holds D1-D4). Remove once the Fn question is settled.
+        private byte[]? _diagPrev;
+        private int _diagLines;
+        private const int DiagMaxLines = 400;
+
+        private void DiagFnBytes(byte[] winBuf, int read)
+        {
+            if (_diagLines >= DiagMaxLines) return;
+            int wireLen = read - 1;
+            var wire = new byte[wireLen];
+            Buffer.BlockCopy(winBuf, 1, wire, 0, wireLen);
+            var prev = _diagPrev;
+            _diagPrev = wire;
+            if (prev == null) { DiagLog($"baseline len={wireLen} {Convert.ToHexString(wire)}"); return; }
+
+            var sb = new System.Text.StringBuilder();
+            int n = Math.Min(prev.Length, wire.Length);
+            for (int i = 1; i < n; i++)
+            {
+                if (wire[i] == prev[i]) continue;
+                if (i <= KeyBitmapBytes)
+                {
+                    byte changed = (byte)(wire[i] ^ prev[i]);
+                    for (int bit = 0; bit < 8; bit++)
+                        if ((changed & (1 << bit)) != 0)
+                            sb.Append($" key 0x{(i - 1) * 8 + bit:X2}{((wire[i] & (1 << bit)) != 0 ? "↓" : "↑")}");
+                }
+                else if (i != 42)
+                    sb.Append($" [wire{i}] {prev[i]:X2}->{wire[i]:X2}");
+            }
+            if (prev.Length != wire.Length) sb.Append($" len {prev.Length}->{wire.Length}");
+            if (sb.Length > 0) DiagLog(sb.ToString().TrimStart());
+        }
+
+        private void DiagLog(string msg)
+        {
+            K2.App.App.WriteLog("[EvFnDiag] " + msg);
+            if (++_diagLines == DiagMaxLines) K2.App.App.WriteLog("[EvFnDiag] capped, no more lines this session");
         }
 
         /// <summary>(HID usage id, pressed) for an ordinary keyboard key — see
@@ -1112,6 +1462,18 @@ internal static class EverestHidNative
 
     [DllImport("hid.dll")]
     private static extern void HidD_GetHidGuid(out Guid guid);
+
+    [DllImport("winmm.dll")]
+    private static extern uint timeBeginPeriod(uint ms);
+
+    [DllImport("winmm.dll")]
+    private static extern uint timeEndPeriod(uint ms);
+
+    [DllImport("hid.dll", SetLastError = true)]
+    private static extern bool HidD_SetFeature(SafeFileHandle h, byte[] buf, int len);
+
+    [DllImport("hid.dll", SetLastError = true)]
+    private static extern bool HidD_GetFeature(SafeFileHandle h, byte[] buf, int len);
 
     [DllImport("hid.dll")]
     private static extern bool HidD_GetAttributes(SafeFileHandle h, ref HIDD_ATTRIBUTES attrs);

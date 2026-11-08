@@ -120,7 +120,7 @@ internal static class BaseCampProcessGuard
     /// <summary>Stops the Base Camp Windows service via <c>sc.exe</c> (avoids pulling in
     /// the System.ServiceProcess NuGet package for a single best-effort call). Requires
     /// admin rights; fails silently (logged, not thrown) otherwise.</summary>
-    private static void StopBaseCampService(Action<string>? log)
+    internal static void StopBaseCampService(Action<string>? log)
     {
         try
         {
@@ -146,7 +146,7 @@ internal static class BaseCampProcessGuard
     /// <summary>Starts the Base Camp Windows service via <c>sc.exe</c> (mirror of
     /// <see cref="StopBaseCampService"/>). Requires admin rights; fails silently
     /// (logged, not thrown) otherwise.</summary>
-    private static void StartBaseCampService(Action<string>? log)
+    internal static void StartBaseCampService(Action<string>? log)
     {
         try
         {

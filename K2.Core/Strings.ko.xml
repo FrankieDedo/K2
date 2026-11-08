@@ -226,6 +226,8 @@
   <string name="youtube_chat_message_label">실시간 채팅 메시지:</string>
   <string name="act_command">셸 명령</string>
   <string name="act_text">텍스트 붙여넣기</string>
+  <string name="text_type_instead">붙여넣기 대신 입력</string>
+  <string name="text_type_instead_tip">Ctrl+V로 붙여넣는 대신 텍스트를 키 입력으로 한 번에 보냅니다. 붙여넣기가 안 되는 곳(터미널, 게임)에 유용합니다. 클립보드는 그대로 유지됩니다.</string>
   <string name="act_emoji">이모지</string>
   <string name="act_macro">매크로 재생</string>
 
@@ -618,6 +620,8 @@
   <string name="dial_pcinfo_ram">PC 정보 - RAM</string>
   <string name="dial_load_image">이미지 불러오기</string>
   <string name="dial_load_image_title">화면 보호기 이미지 선택 (240×204 px)</string>
+  <string name="dial_not_responding_title">Display Dial이 응답하지 않습니다</string>
+  <string name="dial_not_responding">Display Dial이 응답하지 않습니다. 키보드에서 다이얼만 분리하고 몇 초 기다린 뒤 다시 연결한 다음 다시 시도하세요.</string>
   <string name="dial_clock_section">시계 유형</string>
   <string name="dial_clock_label">시계:</string>
   <string name="dial_clock_style_label">스타일:</string>
@@ -785,10 +789,10 @@
   <string name="dp_imported_xml">프로파일 '{0}'이(가) 슬롯 {1}에 가져와졌습니다.</string>
   <string name="dp_choose_image">키 #{0}의 이미지 선택</string>
   <string name="dp_key_button_label">버튼 {0}</string>
-  <string name="dp_load_image">이미지 불러오기…</string>
+  <string name="dp_load_image">이미지 선택</string>
   <string name="dp_rotate_image">이미지 회전:</string>
   <string name="dp_action_section">동작</string>
-  <string name="dp_configure_action">동작 구성…</string>
+  <string name="dp_configure_action">동작 구성</string>
   <string name="dp_remove_action">동작 삭제</string>
   <string name="act_copy_action">작업 복사</string>
   <string name="act_cut_action">작업 잘라내기</string>
@@ -796,7 +800,7 @@
   <string name="paste_unsupported_title">붙여넣을 수 없음</string>
   <string name="paste_unsupported_message">이 작업은 이 장치에서 지원되지 않습니다.</string>
   <string name="dp_change_image">이미지 변경…</string>
-  <string name="dp_emoji_image">이모지를 이미지로…</string>
+  <string name="dp_emoji_image">이모지를 이미지로 선택</string>
   <string name="dp_remove_image">이미지 삭제</string>
   <string name="dp_create_folder">폴더 페이지 만들기…</string>
   <string name="dp_create_folder_title">폴더 페이지 만들기</string>
@@ -807,7 +811,7 @@
   <string name="dp_delete_page">삭제</string>
   <string name="dp_delete_page_title">페이지 삭제</string>
   <string name="dp_delete_page_confirm">페이지 "{0}"을(를) 삭제하시겠습니까? 이 페이지를 여는 키는 더 이상 작동하지 않습니다.</string>
-  <string name="dp_add_text">텍스트 추가…</string>
+  <string name="dp_add_text">아이콘 편집</string>
   <string name="txt_dialog_title">텍스트 삽입</string>
   <string name="txt_label">텍스트:</string>
   <string name="txt_font_label">글꼴:</string>
@@ -979,6 +983,8 @@
   <string name="act_discord">Discord</string>
   <string name="act_audiodevice">오디오 장치</string>
   <string name="audiodevice_refresh_button">장치 새로고침</string>
+  <string name="act_steamgame">Steam 게임</string>
+  <string name="steam_game_not_installed">설치되지 않음</string>
   <string name="discord_settings_title">Discord 설정</string>
   <string name="discord_hint">음성 명령은 로컬 RPC 파이프를 통해 Discord 데스크톱 앱을 제어하며 자신만의 Discord 애플리케이션이 필요합니다. "메시지 보내기"는 채널 웹훅 URL만 있으면 됩니다.</string>
   <string name="discord_setup_guide">1. discord.com/developers/applications 로 이동하여 "New Application"을 클릭하세요.
@@ -2252,4 +2258,40 @@
   <string name="studio_guide_title">Studio Pro 연결</string>
   <string name="studio_guide_steps">K2는 두 개의 가상 MIDI 포트를 통해 Mackie Control 서피스로 Studio Pro와 통신합니다.&#10;1. loopMIDI를 설치하고 실행합니다.&#10;2. 정확히 다음 이름으로 포트 두 개를 만듭니다: K2 to Studio 및 Studio to K2.&#10;3. Studio Pro에서 옵션 &gt; 외부 장치 &gt; 추가를 열고 Mackie Control을 선택합니다.&#10;4. 수신 = K2 to Studio, 송신 = Studio to K2로 설정하고 확인합니다.&#10;프로필을 사용하는 동안에는 loopMIDI가 실행 중이어야 합니다.</string>
   <string name="studio_guide_download">loopMIDI 다운로드</string>
+  <string name="act_wheel">액션 휠</string>
+  <string name="dp_wheel_locked_key">액션 휠은 이를 여는 키 주변의 키만 사용할 수 있습니다.</string>
+  <string name="dp_wheel_anchor_key">휠을 여는 키입니다. 뒤로 키가 됩니다.</string>
+  <string name="dp_page_kind_page">페이지</string>
+  <string name="wheel_border_color_label">휠 테두리 색상:</string>
+  <string name="wheel_border_color_pick">휠 아이콘 주위 테두리의 색상 선택</string>
+  <string name="wheel_border_color_default">기본값</string>
+  <string name="trig_summary_suffix">(+ 길게 누르기/보조 키)</string>
+  <string name="trig_button">길게 누르기</string>
+  <string name="trig_button_tooltip">이 키를 길게 누를 때 다른 동작을 지정하거나, 누르고 있는 동안 동작을 반복합니다.</string>
+  <string name="trig_title">길게 누르기</string>
+  <string name="trig_hold_label">키를 누르고 있을 때</string>
+  <string name="trig_hold_none">없음</string>
+  <string name="trig_hold_long">다른 동작 실행 (길게 누르기)</string>
+  <string name="trig_hold_repeat">동작 반복</string>
+  <string name="trig_hold_ms">누름 시간 (ms)</string>
+  <string name="trig_repeat_delay">반복 시작 (ms)</string>
+  <string name="trig_repeat_ms">반복 간격 (ms)</string>
+  <string name="trig_long_action">길게 누르기 동작</string>
+  <string name="trig_choose">선택</string>
+  <string name="trig_clear_hint">마우스 오른쪽 클릭으로 제거</string>
+  <string name="trig_mod_ctrl">Ctrl</string>
+  <string name="trig_mod_shift">Shift</string>
+  <string name="trig_mod_alt">Alt</string>
+  <string name="trig_mod_win">Win</string>
+  <string name="trig_mods_note">동작이 실행되는 동안 보조 키는 계속 눌린 상태이므로, 키 조합은 보조 키 + 조합이 됩니다.</string>
+  <string name="trig_hold_unsupported">이 장치는 버튼을 놓았을 때를 알리지 않아 얼마나 오래 눌렀는지 알 수 없습니다.</string>
+  <string name="trig_type_unsupported">이 유형의 동작은 여기에서 사용할 수 없습니다.</string>
+  <string name="dp_mod_icons">보조 키</string>
+  <string name="dp_mod_icons_tooltip">키보드에서 Ctrl, Shift, Alt 또는 Win을 누르고 있는 동안 이 키가 하는 동작과 표시하는 이미지입니다.</string>
+  <string name="dp_mod_icons_hint">사용할 보조 키에 체크하세요. 키보드에서 그 키를 누르고 있는 동안 이 키는 해당 동작을 실행하고 자신의 이미지 대신 해당 이미지를 표시합니다 (이미지를 고르기 전까지는 동작에서 만들어집니다). Fn은 사용할 수 없습니다. 키보드 내부에서 처리되어 Windows에서는 보이지 않기 때문입니다.</string>
+  <string name="dp_mod_icons_clear">제거</string>
+  <string name="dp_mod_icons_filter">이미지</string>
+  <string name="dp_mod_hint_actions">사용할 보조 키에 체크하세요. 키보드에서 그 키를 누르고 있는 동안 이 키는 평소 동작 대신 해당 동작을 실행합니다. Fn은 사용할 수 없습니다. 키보드 내부에서 처리되어 Windows에서는 보이지 않기 때문입니다.</string>
+  <string name="dp_mod_no_actions">이 키의 동작에는 보조 키 동작을 지정할 수 없습니다 (동작 없음, 페이지 또는 라이브 타일). 이미지만 설정할 수 있습니다.</string>
+  <string name="dp_mod_action">동작 선택</string>
 </strings>

@@ -986,6 +986,37 @@ public partial class MakaluRgbSettingsPanel : UserControl
         _log($"[DPI ] GetDpi -> levels=[{string.Join(",", _mkDpiValues)}] active={_mkDpiActive} count={_mkDpiCount}");
     }
 
+    /// <summary>The mouse's own DPI button cycled the level in firmware — read it back and
+    /// mirror it in the level tabs (no write to the device), keeping the stored profile in
+    /// step so a later profile reload doesn't revert it. Called by MainWindow.Makalu.cs
+    /// shortly after MakaluDpiButtonWatcher's pulse.</summary>
+    internal void SyncDpiFromDevice()
+    {
+        var result = _makalu.GetDpi(_mkInfo.DpiMin);
+        if (result is null) { _log("[DPI ] sync after DPI button -> GetDpi failed"); return; }
+        int count  = Math.Clamp(result.Value.Count, 1, MaxDpiLevels);
+        int active = Math.Clamp(result.Value.Active, 0, count - 1);
+        if (count != _mkDpiCount || !result.Value.Levels.AsSpan(0, count).SequenceEqual(_mkDpiValues.AsSpan(0, count)))
+        {
+            _mkDpiValues = result.Value.Levels;
+            _mkDpiCount  = count;
+            _mkDpiActive = active;
+            BuildMkDpiLevelButtons();
+        }
+        else if (active != _mkDpiActive)
+        {
+            _mkDpiActive = active;
+            MkUpdateDpiButtonLabels();
+        }
+        else return;
+        _mkSuppress = true;
+        try { SldMkDpi.Value = _mkDpiValues[_mkDpiActive]; } finally { _mkSuppress = false; }
+        TxtMkDpi.Text = _mkDpiValues[_mkDpiActive].ToString();
+        if (_mkDpiActive < _mkDpiLevelButtons.Count) _mkDpiLevelButtons[_mkDpiActive].BringIntoView();
+        _mkStore?.SaveDpi(CurrentSlot, new MakaluDpiRecord(_mkDpiValues[.._mkDpiCount], _mkDpiActive));
+        _log($"[DPI ] DPI button -> active={_mkDpiActive + 1} ({_mkDpiValues[_mkDpiActive]})");
+    }
+
     // ------------------------------------------------------------
     // Profile switch: push a stored slot's lighting/DPI/settings into this
     // panel's controls, then re-apply everything to hardware (if connected).

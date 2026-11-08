@@ -35,6 +35,7 @@ internal static class DpDefaultIconRenderer
     internal static string? Render(string? actionType, string? actionValue, KeyIconSpec spec,
         string? pageName, int iconSize)
     {
+        (actionType, actionValue) = TriggerPayload.Unwrap(actionType, actionValue);   // a long-press/modifier key looks like its base action
         if (string.IsNullOrEmpty(actionType)) return null;
 
         // Caption for the two payload-less action types ("dp_emojibrowser"/"dp_back"), which
@@ -47,7 +48,7 @@ internal static class DpDefaultIconRenderer
         };
         // Only the generators that DRAW FROM the value need one; every other type can still
         // get its glyph tile from ActionIconFallback with an empty value (e.g. "disable").
-        bool needsValue = actionType is "exec" or "folder" or "dp_folder" or "googlehome" or "emoji";
+        bool needsValue = actionType is "exec" or "folder" or "dp_folder" or "googlehome" or "emoji" or SteamLibrary.ActionType;
         if (needsValue && string.IsNullOrWhiteSpace(actionValue)) return null;
 
         bool showCaption = spec.ShowText;
@@ -98,11 +99,20 @@ internal static class DpDefaultIconRenderer
                 case "exec":
                     ok = IconImageGenerator.TryGenerateExecIcon(actionValue!, iconSize, work);
                     break;
+                // The game's own icon; with none on disk, the generic glyph tile with its name.
+                case SteamLibrary.ActionType:
+                    ok = IconImageGenerator.TryGenerateSteamGameIcon(actionValue!, iconSize, work)
+                         || ActionIconFallback.TryGenerate(actionType, actionValue, iconSize, work, showCaption);
+                    break;
                 case "folder":
                     ok = IconImageGenerator.TryGenerateDiskFolderIcon(actionValue!, iconSize, work, showCaption);
                     break;
                 case "dp_folder":
                     ok = IconImageGenerator.TryGenerateFolderIcon(pageName ?? actionValue!, iconSize, work, showCaption);
+                    break;
+                case "dp_wheel":   // action wheel: "all apps" grid glyph + the wheel page's name
+                    ok = IconImageGenerator.TryGenerateGlyphIcon("", userText ?? pageName ?? Loc.Get("act_wheel"),
+                            iconSize, work, showCaption);
                     break;
                 case "googlehome":
                     ok = GoogleHomeIconCatalog.TryGenerateKeyIcon(actionValue!, iconSize, work, showCaption);
@@ -226,7 +236,7 @@ internal static class DpDefaultIconRenderer
     /// cache key is built from the action and its style, neither of which moves when the drawing
     /// code does — dropping the Elite annunciator square (2026-09-05) left every already-rendered
     /// tile showing it.</summary>
-    private const int RendererVersion = 3;
+    private const int RendererVersion = 5;
 
     private static string CachePath(string kind, string sourceValue)
     {

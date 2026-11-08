@@ -293,7 +293,9 @@ internal static class DpGifAnimator
                 // Fast path: raw bytes straight to the wire (native engine). Falls back to
                 // the pre-rotated PNG file (rotation already baked in -> pass 0 here) for
                 // backends that don't support raw uploads (satellite/SDK).
-                if (!client.TryUploadRawBgr(deviceId, frame.Bgr, btn))
+                // A key under the action wheel keeps its timing but paints nothing.
+                if (DpKeyHold.IsHeld(deviceId, btn)) { }
+                else if (!client.TryUploadRawBgr(deviceId, frame.Bgr, btn))
                     client.UploadImage(deviceId, frame.PngPath, btn, 0);
                 idx = (idx + 1) % frames.Count;
                 if (token.WaitHandle.WaitOne(frame.DelayMs)) return;   // cancelled while waiting

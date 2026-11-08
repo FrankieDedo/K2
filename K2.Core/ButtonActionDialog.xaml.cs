@@ -24,10 +24,18 @@ public partial class ButtonActionDialog : Window
     /// and Game controls only. Null keeps the ordinary set.</param>
     public ButtonActionDialog(int buttonIndex, string? currentType, string? currentValue, IActionHost? host = null,
         string[]? allowedTypes = null, string[]? allowedCategories = null,
-        GamePickerProfile? gameProfile = null)
+        GamePickerProfile? gameProfile = null, bool allowTriggers = true)
     {
         InitializeComponent();
         _host = host;
+        // A long-press / modifier key: the panels below edit its BASE action, the extras live in
+        // _trigger and are re-wrapped on save (ButtonActionDialog.Triggers.cs).
+        _allowTriggers = allowTriggers;
+        if (currentType == TriggerPayload.Tag)
+        {
+            _trigger = TriggerPayload.Parse(currentValue);
+            (currentType, currentValue) = (_trigger?.Type ?? "none", _trigger?.Value ?? "");
+        }
         _allowedCategories = allowedCategories;
         _gameProfile = gameProfile;
         LblHeader.Text = Loc.Get("dlg_button_label").Replace("#?", $"#{buttonIndex}");
@@ -58,6 +66,10 @@ public partial class ButtonActionDialog : Window
         // from the list entirely and the picker skips it with it.
         if (_host?.SupportsScreenProbes != true) RemoveType("dp_screen");
         if (_host?.SupportsCustomActions != true) RemoveType(CustomActionType.Tag);
+        // No page or wheel inside an action wheel (a key already set that way keeps its type).
+        if (_host?.OnWheelPage == true)
+            foreach (var pg in new[] { "dp_folder", "dp_wheel" })
+                if (currentType != pg) RemoveType(pg);
         if (_host?.SupportsMouseFirmwareActions != true)
             foreach (var mk in MakaluActionTypes.All) RemoveType(mk);
         if (_host?.Lighting is null)
@@ -67,7 +79,7 @@ public partial class ButtonActionDialog : Window
         // CbType_SelectionChanged synchronously, which cascades into UpdatePanels() ->
         // EnsurePagePanel() — that needs _originalPageId already resolved to pre-select
         // the right page in the combo.
-        if (currentType == "dp_folder")
+        if (currentType is "dp_folder" or "dp_wheel")
             _originalPageId = int.TryParse(currentValue, out int pid) ? pid : (int?)null;
 
         SetType(currentType ?? "none");
@@ -114,7 +126,7 @@ public partial class ButtonActionDialog : Window
         // commands (so the breadcrumb read "Live tiles > Generic" instead of the game's family),
         // and saving wrote the value back as "" (user report 2026-09-18).
         else if (MakaluActionTypes.IsCombo(currentType)
-                 || currentType is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
+                 || currentType is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice" or Services.SteamLibrary.ActionType
                  or "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus"
                  or KspTelemachus.ActionType or ModLinkGames.ActionType or ModLinkGames.StudioActionType or "dp_screen" or CustomActionType.Tag)
         {
@@ -143,6 +155,12 @@ public partial class ButtonActionDialog : Window
         else if (currentType == "emoji")
         {
             LoadEmojiSpec(currentValue ?? "");
+        }
+        else if (currentType == "text")
+        {
+            var (text, typed) = TextActionPayload.Parse(currentValue);
+            TxtPayload.Text        = text;
+            ChkTextTyped.IsChecked = typed;
         }
         else
         {
@@ -202,7 +220,7 @@ public partial class ButtonActionDialog : Window
             "url"      => ("URL to open:",                 "https://example.com"),
             "exec"     => ("Executable / file path:",      @"C:\Program Files\App\app.exe"),
             "folder"   => ("Folder path:",                 @"C:\Users\Francesco\Documents"),
-            "dp_folder"=> ("Page:",                        ""),
+            "dp_folder" or "dp_wheel" => ("Page:",         ""),
             "browser"  => ("Initial URL (optional):",      "https://duckduckgo.com"),
             "profile"  => ("Target profile:",              "Next | Previous | 1..5"),
             "oscmd"    => ("System command:",               "Calculator | Task Manager | Lock | Sleep | Hibernate | Shutdown"),
@@ -224,6 +242,7 @@ public partial class ButtonActionDialog : Window
             "discord"    => ("Discord action:",             ""),
             "spotify"    => ("Spotify action:",             ""),
             "audiodevice" => ("Windows audio device:",      ""),
+            Services.SteamLibrary.ActionType => ("Steam game:", ""),
             "youtube"    => ("YouTube live chat message:",  ""),
             "pyscript" => ("Python Script",                ""),
             "dp_emojibrowser" => ("Emoji browser (no payload)", ""),
@@ -244,10 +263,11 @@ public partial class ButtonActionDialog : Window
     {
         if (PyPanel is null || StandardPanel is null) return;
         var tag = CurrentTag();
+        UpdateTriggerButton(tag);
         bool py      = tag == "pyscript";
         bool exec    = tag == "exec";
         bool folder  = tag == "folder";
-        bool page    = tag == "dp_folder";
+        bool page    = tag is "dp_folder" or "dp_wheel";   // an action wheel is a page too
         bool browser = tag == "browser";
         bool profile = tag == "profile";
         bool brightness = tag == LightingActionTypes.Brightness;
@@ -257,7 +277,7 @@ public partial class ButtonActionDialog : Window
         // their live readout sit. Leaving them out is what kept the combo unpopulated — see the
         // constructor's LoadComboSpec branch.
         bool combo   = MakaluActionTypes.IsCombo(tag)
-                       || tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
+                       || tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice" or Services.SteamLibrary.ActionType
                               or "dp_clock" or "dp_sysmon" or "dp_speedtest" or "dp_edstatus"
                               or "dp_zcstatus" or KspTelemachus.ActionType or ModLinkGames.ActionType or ModLinkGames.StudioActionType
                               or "dp_screen" or CustomActionType.Tag;
@@ -293,6 +313,7 @@ public partial class ButtonActionDialog : Window
         YoutubePanel.Visibility  = youtube ? Visibility.Visible : Visibility.Collapsed;
         EmojiPanel.Visibility    = emoji   ? Visibility.Visible : Visibility.Collapsed;
         StandardPanel.Visibility = std     ? Visibility.Visible : Visibility.Collapsed;
+        ChkTextTyped.Visibility  = tag == "text" ? Visibility.Visible : Visibility.Collapsed;
 
         if (exec) RefreshExecPanel();
         if (folder) RefreshFolderPanel();
@@ -378,7 +399,7 @@ public partial class ButtonActionDialog : Window
             ActionValue = TxtFolderPath.Text?.Trim() ?? "";
             if (ActionValue.Length > 0) AppSettings.AddRecentFolderPath(ActionValue);
         }
-        else if (tag == "dp_folder")
+        else if (tag is "dp_folder" or "dp_wheel")
         {
             ActionValue = SavePageSpec();
         }
@@ -399,7 +420,7 @@ public partial class ButtonActionDialog : Window
             ActionValue = SaveLightEffectSpec().ToJson();
         }
         else if (MakaluActionTypes.IsCombo(tag)
-                 || tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice"
+                 || tag is "oscmd" or "media" or "mouse" or "macro" or "googlehome" or "obs" or "twitch" or "spotify" or "discord" or "audiodevice" or Services.SteamLibrary.ActionType
                  or "dp_clock" or "dp_speedtest" or "dp_edstatus" or "dp_zcstatus" or KspTelemachus.ActionType or ModLinkGames.ActionType or ModLinkGames.StudioActionType)
         {
             ActionValue = SaveComboSpec();
@@ -452,10 +473,17 @@ public partial class ButtonActionDialog : Window
             // standard text box happened to still show from the previous type.
             ActionValue = "";
         }
+        else if (tag == "text")
+        {
+            ActionValue = TextActionPayload.Build(TxtPayload.Text ?? "", ChkTextTyped.IsChecked == true);
+        }
         else
         {
             ActionValue = TxtPayload.Text ?? "";
         }
+
+        if (_allowTriggers)
+            (ActionType, ActionValue) = TriggerPayload.Wrap(ActionType, ActionValue, _trigger);
 
         DialogResult = true;
         Close();

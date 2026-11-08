@@ -459,6 +459,20 @@ Trasforma il tasto in una cartella: premerlo mostra un'altra pagina del pad.
 Scegli una pagina esistente o digita un nome per crearne una nuova. Gestisci
 le pagine dalla sezione **Pagine** del DisplayPad.
 
+@@@ picker:act:dp_wheel
+# Ruota azioni (DisplayPad)
+
+Una piccola pagina che si apre sopra quella corrente. Premendo il tasto, i
+tasti intorno (diagonali comprese) diventano le azioni della ruota, con un
+bordo colorato; il resto del pad resta com'è. Il tasto premuto diventa
+**indietro**: premerlo, o premere un tasto fuori dalla ruota, la chiude;
+premere un tasto della ruota lo esegue. Modifica la ruota come una pagina (clic
+sul tasto, o aprila da **Pagine**, dove le ruote hanno un cerchio): si possono
+usare solo i tasti intorno. Il colore del bordo è quello dell'interfaccia, e si
+cambia nelle impostazioni della pagina della ruota.
+Suggerimento: usala come azione di **pressione lunga** di un tasto, così la
+pressione breve continua a fare il suo lavoro.
+
 @@@ picker:act:profile
 # Cambia profilo
 
@@ -544,8 +558,11 @@ modifica le macro dall'icona Macro accanto a Impostazioni.
 @@@ picker:act:text
 # Incolla testo
 
-Emette un blocco di testo nell'app che ha il focus — digitato tasto per tasto,
-o incollato dagli appunti per i testi lunghi. Definisci il testo nel pannello
+Emette un blocco di testo nell'app che ha il focus, tutto in un colpo. Di
+default viene incollato dagli appunti (Ctrl+V), e subito dopo gli appunti
+tornano com'erano. Spunta **Digita invece di incollare** per inviarlo invece
+come tasti premuti — per terminali, giochi o campi dove incollare non
+funziona; gli appunti non vengono toccati. Definisci il testo nel pannello
 dell'azione.
 
 @@@ picker:act:emoji

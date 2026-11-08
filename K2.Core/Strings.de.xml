@@ -227,6 +227,8 @@ Wiedergabe/Pause, Weiter/Zurück, Zufall, Wiederholen und Lautstärke funktionie
   <string name="youtube_chat_message_label">Live-Chat-Nachricht:</string>
   <string name="act_command">Shell-Befehl</string>
   <string name="act_text">Text einfügen</string>
+  <string name="text_type_instead">Tippen statt einfügen</string>
+  <string name="text_type_instead_tip">Sendet den Text auf einmal als Tastenanschläge, statt ihn mit Strg+V einzufügen. Nützlich, wo Einfügen nicht funktioniert (Terminals, Spiele). Die Zwischenablage bleibt unverändert.</string>
   <string name="act_emoji">Emoji</string>
   <string name="act_macro">Makro abspielen</string>
 
@@ -631,6 +633,8 @@ Wiedergabe/Pause, Weiter/Zurück, Zufall, Wiederholen und Lautstärke funktionie
   <string name="dial_pcinfo_ram">PC-Info - RAM</string>
   <string name="dial_load_image">Bild laden</string>
   <string name="dial_load_image_title">Bildschirmschoner-Bild auswählen (240×204 px)</string>
+  <string name="dial_not_responding_title">Display Dial reagiert nicht</string>
+  <string name="dial_not_responding">Das Display Dial reagiert nicht. Trenne es von der Tastatur (nur das Dial), warte ein paar Sekunden, schließe es wieder an und versuche es erneut.</string>
   <string name="dial_clock_section">Uhrentyp</string>
   <string name="dial_clock_label">Uhr:</string>
   <string name="dial_clock_style_label">Stil:</string>
@@ -805,10 +809,10 @@ Wiedergabe/Pause, Weiter/Zurück, Zufall, Wiederholen und Lautstärke funktionie
   <string name="dp_imported_xml">Profil '{0}' in Slot {1} importiert.</string>
   <string name="dp_choose_image">Bild für Taste #{0} auswählen</string>
   <string name="dp_key_button_label">Taste {0}</string>
-  <string name="dp_load_image">Bild laden…</string>
+  <string name="dp_load_image">Bild auswählen</string>
   <string name="dp_rotate_image">Bild drehen:</string>
   <string name="dp_action_section">Aktion</string>
-  <string name="dp_configure_action">Aktion konfigurieren…</string>
+  <string name="dp_configure_action">Aktion konfigurieren</string>
   <string name="dp_remove_action">Aktion entfernen</string>
   <string name="act_copy_action">Aktion kopieren</string>
   <string name="act_cut_action">Aktion ausschneiden</string>
@@ -816,7 +820,7 @@ Wiedergabe/Pause, Weiter/Zurück, Zufall, Wiederholen und Lautstärke funktionie
   <string name="paste_unsupported_title">Einfügen nicht möglich</string>
   <string name="paste_unsupported_message">Diese Aktion wird auf diesem Gerät nicht unterstützt.</string>
   <string name="dp_change_image">Bild ändern…</string>
-  <string name="dp_emoji_image">Emoji als Bild…</string>
+  <string name="dp_emoji_image">Emoji als Bild auswählen</string>
   <string name="dp_remove_image">Bild entfernen</string>
   <string name="dp_create_folder">Ordnerseite erstellen…</string>
   <string name="dp_create_folder_title">Ordnerseite erstellen</string>
@@ -827,7 +831,7 @@ Wiedergabe/Pause, Weiter/Zurück, Zufall, Wiederholen und Lautstärke funktionie
   <string name="dp_delete_page">Löschen</string>
   <string name="dp_delete_page_title">Seite löschen</string>
   <string name="dp_delete_page_confirm">Seite "{0}" löschen? Jede Taste, die sie öffnet, funktioniert danach nicht mehr.</string>
-  <string name="dp_add_text">Text hinzufügen…</string>
+  <string name="dp_add_text">Symbol bearbeiten</string>
   <string name="txt_dialog_title">Text einfügen</string>
   <string name="txt_label">Text:</string>
   <string name="txt_font_label">Schriftart:</string>
@@ -1003,6 +1007,8 @@ Wiedergabe/Pause, Weiter/Zurück, Zufall, Wiederholen und Lautstärke funktionie
   <string name="act_discord">Discord</string>
   <string name="act_audiodevice">Audiogerät</string>
   <string name="audiodevice_refresh_button">Geräte aktualisieren</string>
+  <string name="act_steamgame">Steam-Spiel</string>
+  <string name="steam_game_not_installed">nicht installiert</string>
   <string name="discord_settings_title">Discord-Einstellungen</string>
   <string name="discord_hint">Sprachbefehle steuern die Discord-DESKTOP-App über ihre lokale RPC-Pipe und benötigen eine eigene Discord-Anwendung; „Nachricht senden“ benötigt nur die Webhook-URL eines Kanals.</string>
   <string name="discord_setup_guide">1. Gehe zu discord.com/developers/applications und klicke auf „New Application“.
@@ -2280,4 +2286,40 @@ Ablesungen, die ihn verwenden — in dieser oder einer anderen Kachel — zeigen
   <string name="studio_guide_title">Verbindung zu Studio Pro</string>
   <string name="studio_guide_steps">K2 spricht mit Studio Pro als Mackie-Control-Oberfläche über zwei virtuelle MIDI-Ports.&#10;1. Installiere loopMIDI und öffne es.&#10;2. Erstelle zwei Ports mit genau diesen Namen: K2 to Studio und Studio to K2.&#10;3. Öffne in Studio Pro Optionen &gt; Externe Geräte &gt; Hinzufügen und wähle Mackie Control.&#10;4. Setze Empfangen von = K2 to Studio und Senden an = Studio to K2 und bestätige.&#10;loopMIDI muss laufen, solange du das Profil verwendest.</string>
   <string name="studio_guide_download">loopMIDI herunterladen</string>
+  <string name="act_wheel">Aktionsrad</string>
+  <string name="dp_wheel_locked_key">Ein Aktionsrad kann nur die Tasten rund um die Taste verwenden, die es öffnet.</string>
+  <string name="dp_wheel_anchor_key">Diese Taste öffnet das Rad und wird zu seiner Zurück-Taste.</string>
+  <string name="dp_page_kind_page">Seite</string>
+  <string name="wheel_border_color_label">Rahmenfarbe des Rads:</string>
+  <string name="wheel_border_color_pick">Farbe des Rahmens um die Symbole des Rads wählen</string>
+  <string name="wheel_border_color_default">Standard</string>
+  <string name="trig_summary_suffix">(+ Halten/Modifikatoren)</string>
+  <string name="trig_button">Langes Drücken</string>
+  <string name="trig_button_tooltip">Gib dieser Taste eine weitere Aktion beim Gedrückthalten oder wiederhole ihre Aktion, solange sie gehalten wird.</string>
+  <string name="trig_title">Langes Drücken</string>
+  <string name="trig_hold_label">Wenn die Taste gehalten wird</string>
+  <string name="trig_hold_none">Nichts</string>
+  <string name="trig_hold_long">Andere Aktion ausführen (langes Drücken)</string>
+  <string name="trig_hold_repeat">Aktion wiederholen</string>
+  <string name="trig_hold_ms">Haltezeit (ms)</string>
+  <string name="trig_repeat_delay">Wiederholen nach (ms)</string>
+  <string name="trig_repeat_ms">Wiederholen alle (ms)</string>
+  <string name="trig_long_action">Aktion bei langem Drücken</string>
+  <string name="trig_choose">Auswählen</string>
+  <string name="trig_clear_hint">Rechtsklick zum Entfernen</string>
+  <string name="trig_mod_ctrl">Strg</string>
+  <string name="trig_mod_shift">Umschalt</string>
+  <string name="trig_mod_alt">Alt</string>
+  <string name="trig_mod_win">Win</string>
+  <string name="trig_mods_note">Der Modifikator bleibt gedrückt, während die Aktion läuft: Eine Tastenkombination wird zu Modifikator + Kombination.</string>
+  <string name="trig_hold_unsupported">Dieses Gerät meldet nicht, wann eine Taste losgelassen wird, und kann daher nicht erkennen, wie lange sie gehalten wird.</string>
+  <string name="trig_type_unsupported">Diese Art von Aktion kann hier nicht verwendet werden.</string>
+  <string name="dp_mod_icons">Modifikatoren</string>
+  <string name="dp_mod_icons_tooltip">Was diese Taste tut und welches Bild sie zeigt, während Strg, Umschalt, Alt oder Win auf der Tastatur gehalten wird.</string>
+  <string name="dp_mod_icons_hint">Hake einen Modifikator an, um ihn zu verwenden. Solange du ihn auf der Tastatur hältst, führt die Taste seine Aktion aus und zeigt sein Bild statt ihres eigenen (bis du eines wählst, wird das Bild aus der Aktion erzeugt). Fn ist nicht möglich: Die Tastatur verarbeitet sie intern und Windows sieht sie nie.</string>
+  <string name="dp_mod_icons_clear">Entfernen</string>
+  <string name="dp_mod_icons_filter">Bilder</string>
+  <string name="dp_mod_hint_actions">Hake einen Modifikator an, um ihn zu verwenden. Solange du ihn auf der Tastatur hältst, führt die Taste seine Aktion statt der üblichen aus. Fn ist nicht möglich: Die Tastatur verarbeitet sie intern und Windows sieht sie nie.</string>
+  <string name="dp_mod_no_actions">Die Aktion dieser Taste kann keine Modifikator-Aktionen haben (keine Aktion, eine Seite oder eine Live-Kachel): Nur die Bilder lassen sich festlegen.</string>
+  <string name="dp_mod_action">Aktion auswählen</string>
 </strings>

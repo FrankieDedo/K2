@@ -21,10 +21,16 @@
 // AddIcon therefore falls back to plain (hWnd, uID) identity when the GUID form
 // is refused — no worse than the old behaviour.
 //
-// Everything else mirrors what NotifyIcon did: a hidden message-only window
-// receives the callback message, the WinForms ContextMenuStrip is reused as-is
-// (shown by hand on WM_CONTEXTMENU), and the icon is re-added when Explorer
-// restarts ("TaskbarCreated").
+// Everything else mirrors what NotifyIcon did: a hidden window receives the
+// callback message, the WinForms ContextMenuStrip is reused as-is (shown by hand
+// on WM_CONTEXTMENU), and the icon is re-added when Explorer restarts
+// ("TaskbarCreated").
+//
+// TaskbarCreated pitfalls (icon vanished for good after an Explorer restart):
+// - it is a broadcast, and message-only windows (HWND_MESSAGE parent) never get
+//   broadcasts, so the window must be a regular top-level one (never shown);
+// - K2 runs elevated and Explorer does not, so UIPI drops the message unless the
+//   window explicitly allows it (ChangeWindowMessageFilterEx).
 
 using System;
 using System.Drawing;
@@ -100,6 +106,13 @@ internal sealed class TrayIconNative : IDisposable
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool ChangeWindowMessageFilterEx(IntPtr hWnd, int message, int action, IntPtr pChangeFilterStruct);
+
+    private const int MSGFLT_ALLOW       = 1;
+    private const int WS_POPUP           = unchecked((int)0x80000000);
+    private const int WS_EX_TOOLWINDOW   = 0x00000080;
+
     private static readonly int WmTaskbarCreated = RegisterWindowMessageW("TaskbarCreated");
 
     private sealed class MessageWindow : NativeWindow
@@ -109,8 +122,13 @@ internal sealed class TrayIconNative : IDisposable
         public MessageWindow(TrayIconNative owner)
         {
             _owner = owner;
-            // Message-only window (HWND_MESSAGE parent): never shown, never taskbar-listed.
-            CreateHandle(new CreateParams { Parent = new IntPtr(-3) });
+            // Top-level (not message-only, see header) but never shown; the tool-window
+            // style keeps it out of the taskbar and Alt+Tab even if something shows it.
+            CreateHandle(new CreateParams { Style = WS_POPUP, ExStyle = WS_EX_TOOLWINDOW });
+
+            // Let the non-elevated Explorer reach an elevated K2 (UIPI).
+            if (!ChangeWindowMessageFilterEx(Handle, WmTaskbarCreated, MSGFLT_ALLOW, IntPtr.Zero))
+                App.WriteLog($"[Tray] ChangeWindowMessageFilterEx failed (win32={Marshal.GetLastWin32Error()})");
         }
 
         protected override void WndProc(ref Message m)
@@ -130,6 +148,7 @@ internal sealed class TrayIconNative : IDisposable
                 // Explorer restarted: every icon registration was dropped with it.
                 _owner._added = false;
                 _owner.AddIcon();
+                App.WriteLog($"[Tray] Explorer restarted (TaskbarCreated): icon re-added={_owner._added}");
                 return;
             }
             base.WndProc(ref m);

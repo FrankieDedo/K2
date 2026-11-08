@@ -19,11 +19,24 @@ cd /d "%~dp0.."
 set "ROOT=%CD%"
 set "PUB=%ROOT%\Installer\publish"
 set "OUT=%ROOT%\Installer\output"
+REM Inno Setup installs either per-user (%LOCALAPPDATA%\Programs) or for all users
+REM (Program Files), depending on what was picked in its own setup: try both.
 set "ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
+if not exist "%ISCC%" set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
+if not exist "%ISCC%" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
 set "VER=%~1"
 
+where dotnet >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: the .NET SDK was not found ^("dotnet" is not on PATH^).
+    echo Install the .NET SDK 8 or newer from https://dotnet.microsoft.com/download
+    echo and run this script again. See docs\Building.md.
+    pause
+    exit /b 1
+)
+
 if not exist "%ISCC%" (
-    echo ERROR: Inno Setup compiler not found at "%ISCC%"
+    echo ERROR: Inno Setup 6 compiler ^(ISCC.exe^) not found.
     echo Install it from https://jrsoftware.org/isinfo.php, or edit the ISCC
     echo path at the top of this script if you installed it elsewhere.
     pause

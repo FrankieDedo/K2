@@ -110,7 +110,8 @@ public static class AppAudioVolume
         int hits = 0;
         try
         {
-            var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+            var enumerator = (IMMDeviceEnumerator)Activator.CreateInstance(
+                    Type.GetTypeFromCLSID(typeof(MMDeviceEnumerator).GUID, throwOnError: true)!)!;
             if (enumerator.GetDefaultAudioEndpoint(DataFlowRender, RoleMultimedia, out var device) != 0
                 || device is null)
                 return false;

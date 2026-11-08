@@ -8,9 +8,9 @@
          releases overwrite this via "dotnet publish -p:Version=X.Y.Z" from
          build-installer.bat, so the shipped exe's AssemblyVersion always matches the
          GitHub release tag the Settings tab's update-checker compares itself against
-         (see Services/UpdateChecker.cs). Bump this alongside a release if it drifts
-         too far, but it only matters for unstamped local builds. -->
-    <Version>1.0.3</Version>
+         (see Services/UpdateChecker.cs). Bump this in the release PR so unstamped local test
+         builds report the same version as the shipped release. -->
+    <Version>1.4.3</Version>
     <!-- ColorDialog nativo (System.Windows.Forms.ColorDialog) usato dal
          pannello "Illuminazione RGB" del tab Everest Max: WPF non ne include
          uno e introdurre una libreria NuGet sarebbe overkill. -->

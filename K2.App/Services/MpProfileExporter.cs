@@ -78,13 +78,15 @@ public static class MpProfileExporter
 
             if (rec is not null && !string.IsNullOrEmpty(rec.ActionType))
             {
+                // Long press / modifier extras don't exist in Base Camp: export the base action.
+                var (bcType, bcValue) = TriggerPayload.Unwrap(rec.ActionType, rec.ActionValue);
                 if (bcCompatible)
                 {
-                    var mapped = MapActionToBc(rec.ActionType, rec.ActionValue);
+                    var mapped = MapActionToBc(bcType ?? "none", bcValue);
                     if (mapped is not null)
                     {
                         (functionType, subType, funcValue) = mapped.Value;
-                        customUrl = ExtractCustomUrl(rec.ActionType, rec.ActionValue);
+                        customUrl = ExtractCustomUrl(bcType ?? "none", bcValue);
                         isAssigned = true;
                         exported++;
                     }
@@ -253,7 +255,7 @@ public static class MpProfileExporter
             }
 
             case "text":
-                return v.Length == 1 ? ("Default", v, v) : null;
+            { string t = TextActionPayload.TextOf(v); return t.Length == 1 ? ("Default", t, t) : null; }
 
             // Base Camp's own "Disable" function — see Ev60ProfileExporter's twin arm.
             case "disable":
