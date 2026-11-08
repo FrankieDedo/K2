@@ -742,6 +742,12 @@ public partial class MainWindow : Window
         if (msg == MacroPadSdkNative.WM_DEVICE_PLUG || msg == MacroPadSdkNative.WM_FW_PROGRESS)
             _macroPad.HandleWindowMessage(msg, wParam, lParam);
 
+        // SDKDLL.dll posts the same message number while an Everest picture transfer runs
+        // (seen only right after a Display Dial upload, issue #32) — the dial upload waits
+        // on these to know when the transfer is over.
+        if (msg == MacroPadSdkNative.WM_FW_PROGRESS)
+            NoteEverestPicProgress(wParam, lParam);
+
         // Everest Max Display Dial actions (profile/effect/brightness changed ON the
         // keyboard) — see HandleEverestDockMessage in MainWindow.MediaDock.cs. Only the
         // Everest is a consumer of this message today; the MacroPad SDK shares the

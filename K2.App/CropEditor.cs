@@ -54,6 +54,7 @@ internal sealed class CropEditor
     private int _srcW, _srcH;
     private readonly bool _animateGifs;
     private readonly bool _bakeRoundedCorners;
+    private readonly bool _dialFace;
     private bool _isGif;
     private List<(BitmapSource Frame, int DelayMs)>? _gifFrames;
     private DispatcherTimer? _gifTimer;
@@ -78,6 +79,7 @@ internal sealed class CropEditor
 
     private readonly Image _img = new() { Stretch = Stretch.Fill };
     private readonly Canvas _gridOverlay = new() { IsHitTestVisible = false, Visibility = Visibility.Collapsed };
+    private readonly Canvas _dialMask = new() { IsHitTestVisible = false };
     private readonly Canvas _viewport;
     private readonly Border _viewportBorder;
     private readonly Slider _zoomSlider;
@@ -140,18 +142,24 @@ internal sealed class CropEditor
     /// DisplayPad key popup, 2026-08-24 rework: "insert as-is" became <c>ResetView</c> on an
     /// external "Reset icon" button, "show key outline" was removed outright) — the checkboxes
     /// are then never created and every check against them below treats them as unchecked.</param>
+    /// <param name="dialFace">Everest Max Display Dial: the viewport becomes a targetW×targetW
+    /// square, a mask dims everything outside the real screen (circle inscribed in the square,
+    /// cut flat at targetH), and the output is the top targetW×targetH strip of that square.
+    /// The key-outline toggle is hidden (it has no meaning on the dial).</param>
     public CropEditor(int targetW, int targetH, double maxViewportPx = 260, bool animateGifs = false,
-        bool bakeRoundedCorners = false, bool showLegacyToggles = true)
+        bool bakeRoundedCorners = false, bool showLegacyToggles = true, bool dialFace = false)
     {
         _targetW = targetW;
         _targetH = targetH;
         _maxViewportPx = maxViewportPx;
         _animateGifs = animateGifs;
         _bakeRoundedCorners = bakeRoundedCorners;
+        _dialFace = dialFace;
 
         _viewport = new Canvas { ClipToBounds = true, Background = Brushes.Black, Cursor = Cursors.SizeAll };
         _viewport.Children.Add(_img);
         _viewport.Children.Add(_gridOverlay);   // added after _img -> renders on top
+        if (_dialFace) _viewport.Children.Add(_dialMask);
         _viewportBorder = new Border
         {
             Child = _viewport,
@@ -204,7 +212,7 @@ internal sealed class CropEditor
         _controlsPanel = new StackPanel();
         _controlsPanel.Children.Add(_zoomSlider);
         if (_chkNoCrop is not null) _controlsPanel.Children.Add(_chkNoCrop);
-        if (_chkShowGrid is not null) _controlsPanel.Children.Add(_chkShowGrid);
+        if (_chkShowGrid is not null && !_dialFace) _controlsPanel.Children.Add(_chkShowGrid);
         _controlsPanel.Children.Add(_hint);
 
         ResizeViewport();
@@ -241,14 +249,14 @@ internal sealed class CropEditor
     private void UpdateViewportClip()
     {
         double vw = _viewport.Width, vh = _viewport.Height;
-        _viewport.Clip = _gridRows == 1 && _gridCols == 1 && vw > 0 && vh > 0
+        _viewport.Clip = !_dialFace && _gridRows == 1 && _gridCols == 1 && vw > 0 && vh > 0
             ? new RectangleGeometry(new Rect(0, 0, vw, vh), Math.Min(vw, vh) * KeyCornerRadiusRatio, Math.Min(vw, vh) * KeyCornerRadiusRatio)
             : null;
     }
 
     private void ResizeViewport()
     {
-        double aspect = (double)_targetW / _targetH;
+        double aspect = _dialFace ? 1.0 : (double)_targetW / _targetH;
         double vw = _maxViewportPx, vh = _maxViewportPx / aspect;
         if (vh > _maxViewportPx) { vh = _maxViewportPx; vw = _maxViewportPx * aspect; }
         _viewport.Width = vw;
@@ -258,8 +266,42 @@ internal sealed class CropEditor
         _zoomSlider.Width = vw;
         _gridOverlay.Width = vw;
         _gridOverlay.Height = vh;
+        _dialMask.Width = vw;
+        _dialMask.Height = vh;
         UpdateViewportClip();
         RebuildGridOverlay();
+        RebuildDialMask();
+    }
+
+    /// <summary>Height (viewport px) of the strip that becomes the output picture: the whole
+    /// viewport normally, the top targetH/targetW of the square in dial mode.</summary>
+    private double CropViewportHeight =>
+        _dialFace ? _viewport.Width * _targetH / _targetW : _viewport.Height;
+
+    /// <summary>Dial mode: dims everything outside the physical screen (a circle inscribed in
+    /// the square viewport, cut flat at the output height) and outlines its edge.</summary>
+    private void RebuildDialMask()
+    {
+        _dialMask.Children.Clear();
+        if (!_dialFace) return;
+        double vw = _viewport.Width, vh = _viewport.Height;
+        if (vw <= 0 || vh <= 0) return;
+        var screen = new CombinedGeometry(GeometryCombineMode.Intersect,
+            new EllipseGeometry(new Point(vw / 2, vw / 2), vw / 2, vw / 2),
+            new RectangleGeometry(new Rect(0, 0, vw, CropViewportHeight)));
+        var outside = new CombinedGeometry(GeometryCombineMode.Exclude,
+            new RectangleGeometry(new Rect(0, 0, vw, vh)), screen);
+        _dialMask.Children.Add(new System.Windows.Shapes.Path
+        {
+            Data = outside,
+            Fill = new SolidColorBrush(Color.FromArgb(0xB0, 0x00, 0x00, 0x00)),
+        });
+        _dialMask.Children.Add(new System.Windows.Shapes.Path
+        {
+            Data = screen,
+            Stroke = new SolidColorBrush(Color.FromArgb(0xE0, 0xFF, 0xC1, 0x07)),
+            StrokeThickness = 1.5,
+        });
     }
 
     private void RebuildGridOverlay()
@@ -584,12 +626,14 @@ internal sealed class CropEditor
         System.Drawing.RectangleF rect;
         if (noCrop)
         {
-            rect = new System.Drawing.RectangleF(0, 0, _srcW, _srcH);
+            // Dial: the stretched source fills the square, only its top strip is the screen.
+            rect = new System.Drawing.RectangleF(0, 0, _srcW,
+                _dialFace ? (float)((double)_srcH * _targetH / _targetW) : _srcH);
         }
         else
         {
             double srcX = -_tx / _scale, srcY = -_ty / _scale;
-            double cropW = _viewport.Width / _scale, cropH = _viewport.Height / _scale;
+            double cropW = _viewport.Width / _scale, cropH = CropViewportHeight / _scale;
             rect = System.Drawing.RectangleF.Intersect(
                 new System.Drawing.RectangleF((float)srcX, (float)srcY, (float)cropW, (float)cropH),
                 new System.Drawing.RectangleF(0, 0, _srcW, _srcH));
@@ -629,7 +673,9 @@ internal sealed class CropEditor
             // sub-rect there instead of stretching to fill (which would distort the icon).
             var dest = noCrop
                 ? new System.Drawing.Rectangle(0, 0, _targetW, _targetH)
-                : FitRect(rect.Width, rect.Height, _targetW, _targetH);
+                : _dialFace
+                    ? ViewportToTarget(rect)
+                    : FitRect(rect.Width, rect.Height, _targetW, _targetH);
             g.DrawImage(srcBmp, dest, rect.X, rect.Y, rect.Width, rect.Height, System.Drawing.GraphicsUnit.Pixel);
         }
 
@@ -639,7 +685,7 @@ internal sealed class CropEditor
         Directory.CreateDirectory(cacheDir);
         long mtime = 0;
         try { mtime = File.GetLastWriteTimeUtc(_sourcePath).Ticks; } catch { }
-        string key = $"{_sourcePath}|{mtime}|{_targetW}x{_targetH}|{(roundCorners ? "round" : "square")}|" +
+        string key = $"{_sourcePath}|{mtime}|{_targetW}x{_targetH}|{(roundCorners ? "round" : "square")}|{(_dialFace ? "dial|" : "")}" +
                      (noCrop ? "nocrop" : $"{rect.X:F1},{rect.Y:F1},{rect.Width:F1},{rect.Height:F1}");
         string name = Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(key))).ToLowerInvariant() + ".png";
         string outPath = System.IO.Path.Combine(cacheDir, name);
@@ -659,6 +705,19 @@ internal sealed class CropEditor
         if (srcAspect > dstAspect) { w = dstW; h = Math.Max(1, (int)Math.Round(dstW / srcAspect)); }
         else { h = dstH; w = Math.Max(1, (int)Math.Round(dstH * srcAspect)); }
         return new System.Drawing.Rectangle((dstW - w) / 2, (dstH - h) / 2, w, h);
+    }
+
+    /// <summary>Dial mode: maps a source-pixel rect to where it sits in the output, exactly as
+    /// in the viewport (keeps a letterboxed image anchored to the square's top instead of
+    /// re-centering it in the shorter output strip like <see cref="FitRect"/>).</summary>
+    private System.Drawing.Rectangle ViewportToTarget(System.Drawing.RectangleF rect)
+    {
+        double k = _targetW / _viewport.Width;
+        int x = (int)Math.Round((rect.X * _scale + _tx) * k);
+        int y = (int)Math.Round((rect.Y * _scale + _ty) * k);
+        int w = Math.Max(1, (int)Math.Round(rect.Width * _scale * k));
+        int h = Math.Max(1, (int)Math.Round(rect.Height * _scale * k));
+        return new System.Drawing.Rectangle(x, y, w, h);
     }
 
     /// <summary>Builds a rounded-rectangle path for <see cref="GetResultPath"/>'s corner

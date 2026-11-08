@@ -89,6 +89,14 @@ public sealed class KeyIconSpec
     /// profile so its twelve keys read as backlit HUD tiles instead of a mismatched icon set.</summary>
     public bool TextOnly { get; set; }
 
+    /// <summary>DisplayPad only: the picture the key shows INSTEAD of its own while a keyboard
+    /// modifier is held — modifier name (<see cref="TriggerPayload.Modifiers"/>: ctrl / shift /
+    /// alt / win) → ready-to-upload PNG at the pad's icon size. Lets a key that does something
+    /// else with Ctrl/Shift (a <see cref="TriggerPayload"/> modifier action, or a game's own
+    /// Ctrl+key binding) show it. Not part of <see cref="StyleFingerprint"/>: it never changes
+    /// the key's own icon.</summary>
+    public System.Collections.Generic.Dictionary<string, string>? ModifierImages { get; set; }
+
     // -----------------------------------------------------------------
     // Serialization — one JSON blob stored in a single DB column, so adding a field later
     // needs no schema migration.

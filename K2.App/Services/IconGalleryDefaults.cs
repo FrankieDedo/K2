@@ -33,6 +33,8 @@ public static class IconGalleryDefaults
     /// no row in <c>icon_mapping.xml</c> covers this specific value.</summary>
     public static string? Resolve(string actionType, string? actionValue)
     {
+        var (ut, uv) = TriggerPayload.Unwrap(actionType, actionValue);
+        actionType = ut ?? ""; actionValue = uv;
         string style = AppSettings.IconGalleryStyle;
 
         // Rows whose value starts with "ref:" are reference-only (see IconMappingConfig docs)

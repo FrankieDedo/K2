@@ -177,9 +177,48 @@ public static class IconImageGenerator
                 PaintTileBackground(g, size);
                 ClipToRoundedTile(g, size);
 
-                int iconSize = (int)(size * 0.72);
-                int offset = (size - iconSize) / 2;
-                g.DrawImage(icon, offset, offset, iconSize, iconSize);
+                g.DrawImage(icon, 0, 0, size, size);   // full tile: the app/game icon IS the picture
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);
+            canvas.Save(outputPngPath, ImageFormat.Png);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The "steamgame" tile: the game's icon (see <see cref="Services.SteamLibrary.LoadBestIcon"/>)
+    /// filling the whole key — a game icon is square artwork, not a glyph that needs a margin.
+    /// False when no picture of the game is on disk (the caller then falls back to the generic
+    /// glyph tile).
+    /// </summary>
+    public static bool TryGenerateSteamGameIcon(string actionValue, int size, string outputPngPath)
+    {
+        try
+        {
+            if (Services.SteamLibrary.ParseValue(actionValue) is not { } game) return false;
+            using var icon = Services.SteamLibrary.LoadBestIcon(game.AppId);
+            if (icon is null) return false;
+
+            using var canvas = new Bitmap(size, size);
+            using (var g = Graphics.FromImage(canvas))
+            {
+                g.SmoothingMode = SmoothingMode.HighQuality;
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                PaintTileBackground(g, size);
+                ClipToRoundedTile(g, size);
+
+                // TileFlipXY: without it bicubic sampling blends the transparent outside into the
+                // outermost row/column, which shows as a faint frame once the icon fills the key.
+                using var wrap = new ImageAttributes();
+                wrap.SetWrapMode(WrapMode.TileFlipXY);
+                g.DrawImage(icon, new Rectangle(0, 0, size, size), 0, 0, icon.Width, icon.Height,
+                    GraphicsUnit.Pixel, wrap);
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(outputPngPath)!);

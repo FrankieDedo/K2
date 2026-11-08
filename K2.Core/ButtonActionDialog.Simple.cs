@@ -193,6 +193,7 @@ public partial class ButtonActionDialog
         "spotify"    => "act_spotify",
         "discord"    => "act_discord",
         "audiodevice" => "act_audiodevice",
+        Services.SteamLibrary.ActionType => "act_steamgame",
         "dp_clock"     => "act_dp_clock",
         "dp_sysmon"    => "act_dp_sysmon",
         "dp_speedtest" => "act_dp_speedtest",
@@ -638,6 +639,30 @@ public partial class ButtonActionDialog
                     Tag = new AudioDevicePayload { Id = dev.Id, Name = dev.Name }.ToJson(),
                 });
         }
+        else if (tag == Services.SteamLibrary.ActionType)
+        {
+            // Installed games, read from Steam's own files (no login). Tag = "<appid>|<name>".
+            foreach (var game in Services.SteamLibrary.InstalledGames())
+                CbComboValue.Items.Add(new ComboBoxItem
+                {
+                    Content = game.Name,
+                    Tag = Services.SteamLibrary.ToValue(game),
+                });
+
+            // A key bound to a game that is no longer installed keeps its binding (pressing it
+            // still opens Steam on the game), flagged, instead of being rebound to item 0.
+            if (Services.SteamLibrary.ParseValue(selectValue) is { } boundGame &&
+                !CbComboValue.Items.OfType<ComboBoxItem>().Any(
+                    i => Services.SteamLibrary.ParseValue((string?)i.Tag)?.AppId == boundGame.AppId))
+            {
+                CbComboValue.Items.Add(new ComboBoxItem
+                {
+                    Content = (boundGame.Name.Length > 0 ? boundGame.Name : boundGame.AppId)
+                              + "  (" + Loc.Get("steam_game_not_installed") + ")",
+                    Tag = selectValue,
+                });
+            }
+        }
         else
         {
             foreach (var opt in OptionsFor(tag))
@@ -692,6 +717,12 @@ public partial class ButtonActionDialog
             match = CbComboValue.Items.OfType<ComboBoxItem>().FirstOrDefault(
                 i => ActionTypeHelper.ParseScreenValue((string?)i.Tag)?.Id == wantedProbe.Id);
 
+        // A Steam game matches on its AppID (the stored name may predate a rename on the store).
+        if (match is null && tag == Services.SteamLibrary.ActionType &&
+            Services.SteamLibrary.ParseValue(selectValue) is { } wantedGame)
+            match = CbComboValue.Items.OfType<ComboBoxItem>().FirstOrDefault(
+                i => Services.SteamLibrary.ParseValue((string?)i.Tag)?.AppId == wantedGame.AppId);
+
         // Same rule for a custom action whose stored label is stale (renamed in the studio):
         // match on the id, and saving refreshes the label.
         if (match is null && tag == CustomActionType.Tag &&
@@ -728,7 +759,7 @@ public partial class ButtonActionDialog
         // item in the list here would silently bind the key to an unrelated target the
         // moment the user opens and saves the dialog without noticing. Fixed enums
         // (oscmd/media/mouse) keep the old fallback since a mismatch there shouldn't happen.
-        bool dynamicList = tag is "macro" or "googlehome" or "audiodevice";
+        bool dynamicList = tag is "macro" or "googlehome" or "audiodevice" or Services.SteamLibrary.ActionType;
         CbComboValue.SelectedItem = match ?? (dynamicList ? null : (CbComboValue.Items.Count > 0 ? CbComboValue.Items[0] : null));
     }
 

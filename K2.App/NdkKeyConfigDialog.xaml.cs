@@ -358,7 +358,21 @@ public partial class NdkKeyConfigDialog : Window
                       ? null : dlg.ActionType;
         ActionValue = ActionType is null ? null : dlg.ActionValue;
 
-        if ((ActionType != oldType || ActionValue != oldValue) && _spec.DefaultIcon)
+        bool actionChanged = ActionType != oldType || ActionValue != oldValue;
+        // A key left with NO picture (its hand-made one removed, or "Remove action" used first)
+        // still had DefaultIcon off from that old picture, so the new action got no icon at all
+        // until the dialog was reopened — where a picture-less key does default to the action's
+        // icon (see the constructor, and DpKeyConfigDialog). Apply that same rule here.
+        if (actionChanged && ActionType is not null && !_spec.DefaultIcon && string.IsNullOrEmpty(_pendingPath))
+        {
+            _spec.DefaultIcon = true;
+            _loadingUi = true;
+            ChkDefaultIcon.IsChecked = true;
+            _loadingUi = false;
+            UpdateIconControlsAvailability();
+        }
+
+        if (actionChanged && _spec.DefaultIcon)
         {
             // A caption typed for the PREVIOUS action doesn't describe the new one.
             _spec.Text = null;
@@ -420,7 +434,7 @@ public partial class NdkKeyConfigDialog : Window
 
         // Only the generators that DRAW FROM the value need one; every other type can still
         // get its glyph tile from ActionIconFallback with an empty value (e.g. "disable").
-        bool needsValue = ActionType is "exec" or "folder" or "googlehome" or "emoji";
+        bool needsValue = ActionType is "exec" or "folder" or "googlehome" or "emoji" or SteamLibrary.ActionType;
         if (needsValue && string.IsNullOrWhiteSpace(ActionValue)) return null;
 
         bool showCaption = spec.ShowText;
@@ -439,6 +453,10 @@ public partial class NdkKeyConfigDialog : Window
             {
                 case "exec":
                     ok = IconImageGenerator.TryGenerateExecIcon(ActionValue!, IconSize, dest);
+                    break;
+                case SteamLibrary.ActionType:
+                    ok = IconImageGenerator.TryGenerateSteamGameIcon(ActionValue!, IconSize, dest)
+                         || ActionIconFallback.TryGenerate(ActionType!, ActionValue, IconSize, dest, showCaption);
                     break;
                 case "folder":
                     ok = IconImageGenerator.TryGenerateDiskFolderIcon(ActionValue!, IconSize, dest, showCaption);
@@ -480,7 +498,7 @@ public partial class NdkKeyConfigDialog : Window
         "folder"          => string.IsNullOrWhiteSpace(ActionValue)
                              ? null : IconImageGenerator.GetDiskFolderCaption(ActionValue!),
         "googlehome"      => GoogleHomeIconCatalog.CaptionFor(ActionValue) ?? ActionValue,
-        "exec" or "emoji" => null,   // these tiles never draw a caption
+        "exec" or "emoji" or SteamLibrary.ActionType => null,   // these tiles never draw a caption
         _                 => ActionIconFallback.Caption(ActionType, ActionValue),
     };
 
@@ -492,7 +510,7 @@ public partial class NdkKeyConfigDialog : Window
         long mtime = 0;
         if (kind == "exec") { try { mtime = File.GetLastWriteTimeUtc(ExecActionPayload.PathOf(sourceValue)).Ticks; } catch { } }
         byte[] hash = System.Security.Cryptography.SHA1.HashData(
-            System.Text.Encoding.UTF8.GetBytes($"{kind}|{sourceValue}|{mtime}|{IconSize}"));
+            System.Text.Encoding.UTF8.GetBytes($"{kind}|{sourceValue}|{mtime}|{IconSize}|v2"));
         return Path.Combine(cacheRoot, Convert.ToHexString(hash).ToLowerInvariant() + $"_{kind}.png");
     }
 

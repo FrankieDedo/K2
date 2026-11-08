@@ -51,7 +51,7 @@ public partial class MainWindow
         "url", "exec", "folder", "browser", "profile", "oscmd", "media", "mouse",
         "keys", "hotkeyswitch", "multi", "command", "text", "googlehome",
         "adobe", "davinci", "zoom", "obs", "twitch", "spotify", "discord",
-        "audiodevice", "youtube", "pyscript"
+        "audiodevice", "steamgame", "youtube", "pyscript"
     };
 
     // ─────────────────────── Init ───────────────────────
@@ -731,7 +731,7 @@ public partial class MainWindow
     /// if cancelled / left at "none".</summary>
     private MacroInput? PromptForK2Action()
     {
-        var dlg = new ButtonActionDialog(0, "none", "", this, MacroK2AllowedTypes) { Owner = this };
+        var dlg = new ButtonActionDialog(0, "none", "", this, MacroK2AllowedTypes, allowTriggers: false) { Owner = this };
         if (dlg.ShowDialog() != true) return null;
         if (string.IsNullOrEmpty(dlg.ActionType) || dlg.ActionType is "none" or "disable")
             return null;

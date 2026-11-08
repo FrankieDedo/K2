@@ -108,4 +108,5 @@ internal sealed class MkActionHost : IActionHost
 
     // The one host that offers the picker's "Makalu" category (firmware functions).
     bool IActionHost.SupportsMouseFirmwareActions => true;
+    bool IActionHost.SupportsHoldTriggers => false;
 }

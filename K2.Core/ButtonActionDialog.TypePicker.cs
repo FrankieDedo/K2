@@ -66,6 +66,8 @@ public partial class ButtonActionDialog
         public string Value { get; init; } = "";
         public string Name { get; init; } = "";
         public string Glyph { get; init; } = "";
+        /// <summary>A picture shown in place of the glyph (a Steam game's icon), or null.</summary>
+        public System.Windows.Media.ImageSource? Image { get; init; }
     }
 
     /// <summary>Category key -> ordered action tags. Tags not present in CbType.Items at
@@ -74,7 +76,7 @@ public partial class ButtonActionDialog
     private static readonly (string Key, string Glyph, string[] Tags)[] PickerCategories =
     {
         ("system",     "🖥",  new[] { "none", "disable", "url", "exec", "folder", "oscmd", "command", "audiodevice" }),
-        ("navigation", "🧭",  new[] { "dp_folder", "profile", "browser" }),
+        ("navigation", "🧭",  new[] { "dp_folder", "dp_wheel", "profile", "browser" }),
         ("input",      "⌨",  new[] { "keys", "hotkeyswitch", "mouse", "media", "multi", "macro" }),
         ("content",    "📝", new[] { "text", "emoji", "dp_emojibrowser" }),
         // Backlight of any connected device. Both tags are dropped from CbType on a host with
@@ -84,7 +86,7 @@ public partial class ButtonActionDialog
         // The Makalu's own firmware functions. Every tag is dropped from CbType on any other
         // host, which empties the category and hides its card — see ShowCategoryPicker.
         ("makalu",     "🖱", MakaluActionTypes.All),
-        ("apps",       "🧩", new[] { "googlehome", "adobe", "davinci", "zoom", "obs", "twitch", "spotify", "discord", "youtube", "pyscript", ModLinkGames.StudioActionType }),
+        ("apps",       "🧩", new[] { "googlehome", "adobe", "davinci", "zoom", "obs", "twitch", "spotify", "discord", "youtube", Services.SteamLibrary.ActionType, "pyscript", ModLinkGames.StudioActionType }),
         // Game-specific commands — kept out of the generic categories above so a game's own
         // vocabulary (cockpit annunciators, in-game shortcuts) doesn't crowd the everyday
         // action list. dp_edstatus is the real "dynamic tile" action (its own sub-grid of
@@ -135,7 +137,7 @@ public partial class ButtonActionDialog
     /// than typed free-hand — these get the 3rd breadcrumb crumb + sub-action grid. Matches
     /// the "combo" set UpdatePanels() already switches ComboPanel on for.</summary>
     private static readonly HashSet<string> ComboTags = new()
-        { "oscmd", "media", "mouse", "macro", "googlehome", "obs", "twitch", "spotify", "discord", "audiodevice",
+        { "oscmd", "media", "mouse", "macro", "googlehome", "obs", "twitch", "spotify", "discord", "audiodevice", Services.SteamLibrary.ActionType,
           "dp_clock", "dp_sysmon", "dp_speedtest", "dp_edstatus", "dp_zcstatus", KspTelemachus.ActionType, ModLinkGames.ActionType, ModLinkGames.StudioActionType, "dp_screen",
           CustomActionType.Tag,
           MakaluActionTypes.Mouse, MakaluActionTypes.Dpi, MakaluActionTypes.Scroll,
@@ -148,6 +150,7 @@ public partial class ButtonActionDialog
     private static string LocKeyForTag(string tag) => tag switch
     {
         "dp_folder" => "act_page",
+        "dp_wheel" => "act_wheel",
         "dp_emojibrowser" => "act_emojibrowser",
         _ => "act_" + tag,
     };
@@ -452,7 +455,11 @@ public partial class ButtonActionDialog
         _gameFamilyOpen = null;
         SetPickerHint(CategoryKeyOf(CurrentTag()));
         IcPickerSubActions.ItemsSource = CbComboValue.Items.OfType<ComboBoxItem>()
-            .Select(i => new SubActionCard { Value = (string?)i.Tag ?? "", Name = (string?)i.Content ?? "" })
+            .Select(i => new SubActionCard
+            {
+                Value = (string?)i.Tag ?? "", Name = (string?)i.Content ?? "",
+                Image = CurrentTag() == Services.SteamLibrary.ActionType ? SteamCardImage((string?)i.Tag) : null,
+            })
             .ToList();
 
         LblPickerTitle.Text = Loc.Get(LocKeyForTag(CurrentTag()));
@@ -460,6 +467,29 @@ public partial class ButtonActionDialog
         IcPickerCategories.Visibility = Visibility.Collapsed;
         IcPickerActions.Visibility = Visibility.Collapsed;
         IcPickerSubActions.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>A Steam game's icon for its picker card — the same picture its key gets
+    /// (<see cref="Services.SteamLibrary.LoadBestIcon"/>). Null when there is none.</summary>
+    private static System.Windows.Media.ImageSource? SteamCardImage(string? value)
+    {
+        if (Services.SteamLibrary.ParseValue(value) is not { } game) return null;
+        try
+        {
+            using var icon = Services.SteamLibrary.LoadBestIcon(game.AppId);
+            if (icon is null) return null;
+            using var png = new System.IO.MemoryStream();
+            icon.Save(png, System.Drawing.Imaging.ImageFormat.Png);
+            png.Position = 0;
+            var img = new BitmapImage();
+            img.BeginInit();
+            img.CacheOption = BitmapCacheOption.OnLoad;
+            img.StreamSource = png;
+            img.EndInit();
+            img.Freeze();
+            return img;
+        }
+        catch { return null; }
     }
 
     private void CategoryCard_Click(object sender, RoutedEventArgs e)

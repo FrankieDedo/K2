@@ -550,6 +550,7 @@ internal static class SpotifyCoverService
             $"{cacheKey}_r{ctx.Rotation}_{ctx.Cfg.LayoutToken}{ctx.Cfg.BackArrowToken}.png");
         try { final.Save(cachePath, ImageFormat.Png); } catch { }
 
+        if (DpKeyHold.IsHeld(deviceId, btn)) return;   // under the action wheel
         byte[] bgr = ExtractBgr24(final);
         if (!ctx.Client.TryUploadRawBgr(deviceId, bgr, btn))
             ctx.Client.UploadImage(deviceId, cachePath, btn, 0);
@@ -857,6 +858,7 @@ internal static class SpotifyCoverService
                     frame.Dispose();
                     continue;
                 }
+                if (DpKeyHold.IsHeld(id, qb[i + 1])) { frame.Dispose(); continue; }   // under the action wheel
                 try
                 {
                     RotateForDevice(frame, ctx.Rotation);

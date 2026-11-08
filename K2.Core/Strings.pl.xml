@@ -227,6 +227,8 @@ Polub oraz Dodaj/Usuń z playlisty NIE są dostępne: Spotify blokuje endpointy 
   <string name="youtube_chat_message_label">Wiadomość na czacie na żywo:</string>
   <string name="act_command">Polecenie powłoki</string>
   <string name="act_text">Wklej tekst</string>
+  <string name="text_type_instead">Wpisz zamiast wklejać</string>
+  <string name="text_type_instead_tip">Wysyła tekst jako naciśnięcia klawiszy, od razu w całości, zamiast wklejać go przez Ctrl+V. Przydatne tam, gdzie wklejanie nie działa (terminale, gry). Nie zmienia schowka.</string>
   <string name="act_emoji">Emoji</string>
   <string name="act_macro">Odtwórz makro</string>
 
@@ -631,6 +633,8 @@ Polub oraz Dodaj/Usuń z playlisty NIE są dostępne: Spotify blokuje endpointy 
   <string name="dial_pcinfo_ram">Info PC - RAM</string>
   <string name="dial_load_image">Wczytaj obraz</string>
   <string name="dial_load_image_title">Wybierz obraz wygaszacza ekranu (240×204 px)</string>
+  <string name="dial_not_responding_title">Display Dial nie odpowiada</string>
+  <string name="dial_not_responding">Display Dial nie odpowiada. Odłącz go od klawiatury (tylko pokrętło), odczekaj kilka sekund, podłącz ponownie i spróbuj jeszcze raz.</string>
   <string name="dial_clock_section">Typ zegara</string>
   <string name="dial_clock_label">Zegar:</string>
   <string name="dial_clock_style_label">Styl:</string>
@@ -806,10 +810,10 @@ Polub oraz Dodaj/Usuń z playlisty NIE są dostępne: Spotify blokuje endpointy 
   <string name="dp_imported_xml">Profil '{0}' zaimportowany do slotu {1}.</string>
   <string name="dp_choose_image">Wybierz obraz dla klawisza #{0}</string>
   <string name="dp_key_button_label">Przycisk {0}</string>
-  <string name="dp_load_image">Wczytaj obraz…</string>
+  <string name="dp_load_image">Wybierz obraz</string>
   <string name="dp_rotate_image">Obróć obraz:</string>
   <string name="dp_action_section">Akcja</string>
-  <string name="dp_configure_action">Konfiguruj akcję…</string>
+  <string name="dp_configure_action">Konfiguruj akcję</string>
   <string name="dp_remove_action">Usuń akcję</string>
   <string name="act_copy_action">Kopiuj akcję</string>
   <string name="act_cut_action">Wytnij akcję</string>
@@ -817,7 +821,7 @@ Polub oraz Dodaj/Usuń z playlisty NIE są dostępne: Spotify blokuje endpointy 
   <string name="paste_unsupported_title">Nie można wkleić</string>
   <string name="paste_unsupported_message">Ta akcja nie jest obsługiwana na tym urządzeniu.</string>
   <string name="dp_change_image">Zmień obraz…</string>
-  <string name="dp_emoji_image">Emoji jako obraz…</string>
+  <string name="dp_emoji_image">Wybierz emoji jako obraz</string>
   <string name="dp_remove_image">Usuń obraz</string>
   <string name="dp_create_folder">Utwórz stronę folderu…</string>
   <string name="dp_create_folder_title">Utwórz stronę folderu</string>
@@ -828,7 +832,7 @@ Polub oraz Dodaj/Usuń z playlisty NIE są dostępne: Spotify blokuje endpointy 
   <string name="dp_delete_page">Usuń</string>
   <string name="dp_delete_page_title">Usuń stronę</string>
   <string name="dp_delete_page_confirm">Usunąć stronę "{0}"? Każdy klawisz, który ją otwiera, przestanie działać.</string>
-  <string name="dp_add_text">Dodaj tekst…</string>
+  <string name="dp_add_text">Edytuj ikonę</string>
   <string name="txt_dialog_title">Wstaw tekst</string>
   <string name="txt_label">Tekst:</string>
   <string name="txt_font_label">Czcionka:</string>
@@ -1004,6 +1008,8 @@ Polub oraz Dodaj/Usuń z playlisty NIE są dostępne: Spotify blokuje endpointy 
   <string name="act_discord">Discord</string>
   <string name="act_audiodevice">Urządzenie audio</string>
   <string name="audiodevice_refresh_button">Odśwież urządzenia</string>
+  <string name="act_steamgame">Gra Steam</string>
+  <string name="steam_game_not_installed">nie zainstalowano</string>
   <string name="discord_settings_title">Ustawienia Discorda</string>
   <string name="discord_hint">Polecenia głosowe sterują aplikacją DESKTOPOWĄ Discorda przez jej lokalny kanał RPC i wymagają własnej aplikacji Discord; "Wyślij wiadomość" wymaga jedynie adresu URL webhooka kanału.</string>
   <string name="discord_setup_guide">1. Przejdź na discord.com/developers/applications i kliknij "New Application".
@@ -2284,4 +2290,40 @@ Odczyty, które go używają — w tym kafelku lub innym — przestaną pokazywa
   <string name="studio_guide_title">Połączenie ze Studio Pro</string>
   <string name="studio_guide_steps">K2 komunikuje się ze Studio Pro jako powierzchnia Mackie Control przez dwa wirtualne porty MIDI.&#10;1. Zainstaluj loopMIDI i go otwórz.&#10;2. Utwórz dwa porty o dokładnie takich nazwach: K2 to Studio i Studio to K2.&#10;3. W Studio Pro otwórz Opcje &gt; Urządzenia zewnętrzne &gt; Dodaj i wybierz Mackie Control.&#10;4. Ustaw Odbieraj z = K2 to Studio oraz Wysyłaj do = Studio to K2, po czym zatwierdź.&#10;loopMIDI musi działać za każdym razem, gdy używasz profilu.</string>
   <string name="studio_guide_download">Pobierz loopMIDI</string>
+  <string name="act_wheel">Koło akcji</string>
+  <string name="dp_wheel_locked_key">Koło akcji może używać tylko klawiszy wokół klawisza, który je otwiera.</string>
+  <string name="dp_wheel_anchor_key">To klawisz, który otwiera koło: staje się jego klawiszem powrotu.</string>
+  <string name="dp_page_kind_page">Strona</string>
+  <string name="wheel_border_color_label">Kolor obramowania koła:</string>
+  <string name="wheel_border_color_pick">Wybierz kolor obramowania wokół ikon koła</string>
+  <string name="wheel_border_color_default">Domyślny</string>
+  <string name="trig_summary_suffix">(+ przytrzymanie/modyfikatory)</string>
+  <string name="trig_button">Długie naciśnięcie</string>
+  <string name="trig_button_tooltip">Przypisz temu klawiszowi inną akcję przy przytrzymaniu lub powtarzaj jego akcję, dopóki jest przytrzymany.</string>
+  <string name="trig_title">Długie naciśnięcie</string>
+  <string name="trig_hold_label">Gdy klawisz jest przytrzymany</string>
+  <string name="trig_hold_none">Nic</string>
+  <string name="trig_hold_long">Uruchom inną akcję (długie naciśnięcie)</string>
+  <string name="trig_hold_repeat">Powtarzaj akcję</string>
+  <string name="trig_hold_ms">Czas przytrzymania (ms)</string>
+  <string name="trig_repeat_delay">Powtarzaj po (ms)</string>
+  <string name="trig_repeat_ms">Powtarzaj co (ms)</string>
+  <string name="trig_long_action">Akcja długiego naciśnięcia</string>
+  <string name="trig_choose">Wybierz</string>
+  <string name="trig_clear_hint">Kliknij prawym przyciskiem, aby usunąć</string>
+  <string name="trig_mod_ctrl">Ctrl</string>
+  <string name="trig_mod_shift">Shift</string>
+  <string name="trig_mod_alt">Alt</string>
+  <string name="trig_mod_win">Win</string>
+  <string name="trig_mods_note">Modyfikator pozostaje wciśnięty podczas wykonywania akcji: skrót klawiszowy staje się modyfikatorem + skrótem.</string>
+  <string name="trig_hold_unsupported">To urządzenie nie zgłasza zwolnienia przycisku, więc nie może określić, jak długo jest przytrzymany.</string>
+  <string name="trig_type_unsupported">Tego rodzaju akcji nie można tu użyć.</string>
+  <string name="dp_mod_icons">Modyfikatory</string>
+  <string name="dp_mod_icons_tooltip">Co robi ten klawisz i jaki obraz pokazuje, gdy na klawiaturze trzymasz Ctrl, Shift, Alt lub Win.</string>
+  <string name="dp_mod_icons_hint">Zaznacz modyfikator, aby go użyć. Gdy trzymasz go na klawiaturze, klawisz wykonuje jego akcję i pokazuje jego obraz zamiast własnego (dopóki go nie wybierzesz, obraz powstaje z akcji). Fn nie da się użyć: klawiatura obsługuje go wewnętrznie i Windows nigdy go nie widzi.</string>
+  <string name="dp_mod_icons_clear">Usuń</string>
+  <string name="dp_mod_icons_filter">Obrazy</string>
+  <string name="dp_mod_hint_actions">Zaznacz modyfikator, aby go użyć. Gdy trzymasz go na klawiaturze, klawisz wykonuje jego akcję zamiast zwykłej. Fn nie da się użyć: klawiatura obsługuje go wewnętrznie i Windows nigdy go nie widzi.</string>
+  <string name="dp_mod_no_actions">Akcja tego klawisza nie może mieć akcji dla modyfikatorów (brak akcji, strona lub kafelek na żywo): można ustawić tylko obrazy.</string>
+  <string name="dp_mod_action">Wybierz akcję</string>
 </strings>

@@ -68,13 +68,15 @@ public static class Ev60ProfileExporter
             string? functionType = null, subType = null, funcValue = null, customUrl = null;
             bool isAssigned = false;
 
+            // Long press / modifier extras don't exist in Base Camp: export the base action.
+            var (bcType, bcValue) = TriggerPayload.Unwrap(k.ActionType, k.ActionValue);
             if (bcCompatible)
             {
-                var mapped = MapActionToBc(k.ActionType, k.ActionValue);
+                var mapped = MapActionToBc(bcType ?? "none", bcValue);
                 if (mapped is not null)
                 {
                     (functionType, subType, funcValue) = mapped.Value;
-                    customUrl = ExtractCustomUrl(k.ActionType, k.ActionValue);
+                    customUrl = ExtractCustomUrl(bcType ?? "none", bcValue);
                     isAssigned = true;
                     exported++;
                 }
@@ -344,7 +346,7 @@ public static class Ev60ProfileExporter
             }
 
             case "text":
-                return v.Length == 1 ? ("Default", v, v) : null;
+            { string t = TextActionPayload.TextOf(v); return t.Length == 1 ? ("Default", t, t) : null; }
 
             // Base Camp's own "Disable" function — real exports carry it with the
             // FunctionValue repeated as the label (confirmed in ev60_test.xml).

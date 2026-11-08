@@ -169,6 +169,7 @@
             <ComboBoxItem Content="{loc:Get act_exec}"   Tag="exec"/>
             <ComboBoxItem Content="{loc:Get act_folder}"           Tag="folder"/>
             <ComboBoxItem Content="{loc:Get act_page}"             Tag="dp_folder"/>
+            <ComboBoxItem Content="{loc:Get act_wheel}"            Tag="dp_wheel"/>
             <ComboBoxItem Content="{loc:Get act_browser}"          Tag="browser"/>
             <ComboBoxItem Content="{loc:Get act_profile}"        Tag="profile"/>
             <!-- Removed in the constructor on a host with no IActionHost.Lighting. -->
@@ -207,6 +208,7 @@
             <ComboBoxItem Content="{loc:Get act_spotify}"          Tag="spotify"/>
             <ComboBoxItem Content="{loc:Get act_discord}"          Tag="discord"/>
             <ComboBoxItem Content="{loc:Get act_audiodevice}"      Tag="audiodevice"/>
+            <ComboBoxItem Content="{loc:Get act_steamgame}"        Tag="steamgame"/>
             <ComboBoxItem Content="{loc:Get act_youtube}"          Tag="youtube"/>
             <ComboBoxItem Content="{loc:Get act_pyscript}"         Tag="pyscript"/>
         </ComboBox>
@@ -220,6 +222,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <TextBlock x:Name="LblPayload" Grid.Row="0" Text="{loc:Get dlg_value}" Margin="0,0,0,4"/>
                 <TextBox   x:Name="TxtPayload" Grid.Row="1"
@@ -228,6 +231,11 @@
                            VerticalScrollBarVisibility="Auto"
                            FontFamily="Consolas"
                            MinHeight="60"/>
+                <!-- "text" only: type the text as keystrokes instead of pasting it. -->
+                <CheckBox  x:Name="ChkTextTyped" Grid.Row="2" Margin="0,8,0,0"
+                           Content="{loc:Get text_type_instead}"
+                           ToolTip="{loc:Get text_type_instead_tip}"
+                           Visibility="Collapsed"/>
             </Grid>
 
             <!-- Open program / file panel -->
@@ -400,6 +408,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
@@ -409,6 +418,21 @@
 
                 <TextBlock Grid.Row="2" Text="{loc:Get page_name_label}" Margin="0,0,0,4"/>
                 <TextBox   x:Name="TxtPageName" Grid.Row="3" Height="25" VerticalContentAlignment="Center"/>
+
+                <!-- Action wheel only: border colour drawn around the wheel's icons on the device
+                     and in the device preview (never baked into the icon files). -->
+                <StackPanel x:Name="WheelColorRow" Grid.Row="4" Margin="0,10,0,0" Visibility="Collapsed">
+                    <TextBlock Text="{loc:Get wheel_border_color_label}" Margin="0,0,0,4"/>
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="BtnWheelColor" Width="44" Height="25" Padding="0"
+                                Click="BtnWheelColor_Click" ToolTip="{loc:Get wheel_border_color_pick}">
+                            <Border x:Name="SwWheelColor" Width="30" Height="15" CornerRadius="2"
+                                    BorderBrush="#60FFFFFF" BorderThickness="1"/>
+                        </Button>
+                        <Button x:Name="BtnWheelColorReset" Content="{loc:Get wheel_border_color_default}"
+                                Margin="8,0,0,0" Height="25" Padding="10,0" Click="BtnWheelColorReset_Click"/>
+                    </StackPanel>
+                </StackPanel>
             </Grid>
 
             <!-- Open browser panel -->
@@ -888,6 +912,14 @@
             </Grid>
         </Grid>
 
+        <!-- Long press / repeat / modifier variants of the action (ButtonActionDialog.Triggers.cs). -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,12,0,0">
+            <Button x:Name="BtnTriggers" Padding="10,2" Visibility="Collapsed" Click="BtnTriggers_Click"
+                    ToolTip="{loc:Get trig_button_tooltip}"/>
+            <Button x:Name="BtnModifiers" Padding="10,2" Margin="8,0,0,0" Visibility="Collapsed"
+                    Click="BtnModifiers_Click" ToolTip="{loc:Get dp_mod_icons_tooltip}"/>
+        </StackPanel>
+
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button x:Name="BtnGuide" Style="{DynamicResource GuideBarButton}"
                     Content="{loc:Get guide_button}" ToolTip="{loc:Get guide_tooltip}"
@@ -1046,6 +1078,9 @@
                                                 <TextBlock Text="{Binding Glyph}" FontSize="20"
                                                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
                                                            Margin="0,0,10,8"/>
+                                                <Image Source="{Binding Image}" Width="32" Height="32"
+                                                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                       Margin="0,0,10,8" RenderOptions.BitmapScalingMode="HighQuality"/>
                                                 <TextBlock x:Name="TxtName" Text="{Binding Name}"
                                                            FontSize="13" FontWeight="SemiBold"
                                                            Foreground="{StaticResource K2TextBrush}"

@@ -116,30 +116,40 @@
                 <StackPanel x:Name="PreviewHost" HorizontalAlignment="Center"/>
             </StackPanel>
 
-            <!-- Right column: every remaining image control, spanning checkbox + preview. -->
-            <StackPanel Grid.Row="1" Grid.RowSpan="2" Grid.Column="2" VerticalAlignment="Top">
+            <!-- Right column: every remaining image control, lined up with the preview (same
+                 row, buttons spread evenly over its height; the -3/+3 margins keep the outer
+                 edges flush with the icon). -->
+            <UniformGrid Grid.Row="2" Grid.Column="2" Columns="1" VerticalAlignment="Stretch"
+                         MinHeight="150" Margin="0,-3">
 
                 <Button x:Name="BtnLoadImage"
                         Content="{loc:Get dp_load_image}"
+                        Margin="0,3"
                         Click="BtnLoadImage_Click"/>
 
                 <!-- "Emoji as image": the same emoji picker the "Emoji" action uses, but here
                      the emoji is ONLY the key's picture — the action stays whatever it is. -->
                 <Button x:Name="BtnEmojiImage"
                         Content="{loc:Get dp_emoji_image}"
-                        Margin="0,6,0,0"
+                        Margin="0,3"
                         Click="BtnEmojiImage_Click"/>
 
                 <Button x:Name="BtnRemoveImage"
                         Content="{loc:Get dp_remove_image}"
-                        Margin="0,6,0,0"
+                        Margin="0,3"
                         Click="BtnRemoveImage_Click"/>
 
                 <Button x:Name="BtnEditIcon"
                         Content="{loc:Get dp_add_text}"
-                        Margin="0,6,0,0"
+                        Margin="0,3"
                         Click="BtnAddText_Click"/>
-            </StackPanel>
+
+                <!-- Pictures shown while Ctrl/Shift/Alt/Win is held (DpKeyConfigDialog.ModIcons.cs). -->
+                <Button x:Name="BtnModifierIcons"
+                        Margin="0,3"
+                        ToolTip="{loc:Get dp_mod_icons_tooltip}"
+                        Click="BtnModifierIcons_Click"/>
+            </UniformGrid>
         </Grid>
 
         <!-- OK / Cancel -->

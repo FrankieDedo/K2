@@ -229,6 +229,8 @@ Me gusta y Anadir/Quitar de la lista NO estan disponibles: Spotify bloquea los e
   <string name="youtube_chat_message_label">Mensaje de chat en vivo:</string>
   <string name="act_command">Comando de shell</string>
   <string name="act_text">Pegar texto</string>
+  <string name="text_type_instead">Escribir en lugar de pegar</string>
+  <string name="text_type_instead_tip">Envía el texto como pulsaciones de teclas, todo de una vez, en lugar de pegarlo con Ctrl+V. Útil donde pegar no funciona (terminales, juegos). No modifica el portapapeles.</string>
   <string name="act_emoji">Emoji</string>
   <string name="act_macro">Reproducir macro</string>
 
@@ -633,6 +635,8 @@ Me gusta y Anadir/Quitar de la lista NO estan disponibles: Spotify bloquea los e
   <string name="dial_pcinfo_ram">Info PC - RAM</string>
   <string name="dial_load_image">Cargar imagen</string>
   <string name="dial_load_image_title">Elige la imagen del salvapantallas (240×204 px)</string>
+  <string name="dial_not_responding_title">El Display Dial no responde</string>
+  <string name="dial_not_responding">El Display Dial no responde. Desconéctalo del teclado (solo el dial), espera unos segundos, vuelve a conectarlo e inténtalo de nuevo.</string>
   <string name="dial_clock_section">Tipo de reloj</string>
   <string name="dial_clock_label">Reloj:</string>
   <string name="dial_clock_style_label">Estilo:</string>
@@ -807,10 +811,10 @@ Me gusta y Anadir/Quitar de la lista NO estan disponibles: Spotify bloquea los e
   <string name="dp_imported_xml">Perfil '{0}' importado al slot {1}.</string>
   <string name="dp_choose_image">Elegir imagen para la tecla #{0}</string>
   <string name="dp_key_button_label">Tecla {0}</string>
-  <string name="dp_load_image">Cargar imagen…</string>
+  <string name="dp_load_image">Elegir imagen</string>
   <string name="dp_rotate_image">Rotar imagen:</string>
   <string name="dp_action_section">Acción</string>
-  <string name="dp_configure_action">Configurar acción…</string>
+  <string name="dp_configure_action">Configurar acción</string>
   <string name="dp_remove_action">Eliminar acción</string>
   <string name="act_copy_action">Copiar acción</string>
   <string name="act_cut_action">Cortar acción</string>
@@ -818,7 +822,7 @@ Me gusta y Anadir/Quitar de la lista NO estan disponibles: Spotify bloquea los e
   <string name="paste_unsupported_title">No se puede pegar</string>
   <string name="paste_unsupported_message">Esta acción no es compatible con este dispositivo.</string>
   <string name="dp_change_image">Cambiar imagen…</string>
-  <string name="dp_emoji_image">Emoji como imagen…</string>
+  <string name="dp_emoji_image">Elegir emoji como imagen</string>
   <string name="dp_remove_image">Eliminar imagen</string>
   <string name="dp_create_folder">Crear página de carpeta…</string>
   <string name="dp_create_folder_title">Crear página de carpeta</string>
@@ -829,7 +833,7 @@ Me gusta y Anadir/Quitar de la lista NO estan disponibles: Spotify bloquea los e
   <string name="dp_delete_page">Eliminar</string>
   <string name="dp_delete_page_title">Eliminar página</string>
   <string name="dp_delete_page_confirm">¿Eliminar la página "{0}"? Cualquier tecla que la abra dejará de funcionar.</string>
-  <string name="dp_add_text">Añadir texto…</string>
+  <string name="dp_add_text">Editar icono</string>
   <string name="txt_dialog_title">Insertar texto</string>
   <string name="txt_label">Texto:</string>
   <string name="txt_font_label">Fuente:</string>
@@ -1005,6 +1009,8 @@ Me gusta y Anadir/Quitar de la lista NO estan disponibles: Spotify bloquea los e
   <string name="act_discord">Discord</string>
   <string name="act_audiodevice">Dispositivo de audio</string>
   <string name="audiodevice_refresh_button">Actualizar dispositivos</string>
+  <string name="act_steamgame">Juego de Steam</string>
+  <string name="steam_game_not_installed">no instalado</string>
   <string name="discord_settings_title">Ajustes de Discord</string>
   <string name="discord_hint">Los comandos de voz controlan la app de ESCRITORIO de Discord a través de su canal RPC local y necesitan tu propia aplicación de Discord; “Enviar mensaje” solo necesita la URL de un webhook de canal.</string>
   <string name="discord_setup_guide">1. Ve a discord.com/developers/applications y haz clic en "New Application".
@@ -2277,4 +2283,40 @@ Las lecturas que lo usan — en esta tecla o en otras — dejarán de mostrar un
   <string name="studio_guide_title">Conexión con Studio Pro</string>
   <string name="studio_guide_steps">K2 habla con Studio Pro como una superficie Mackie Control a través de dos puertos MIDI virtuales.&#10;1. Instala loopMIDI y ábrelo.&#10;2. Crea dos puertos con exactamente estos nombres: K2 to Studio y Studio to K2.&#10;3. En Studio Pro abre Opciones &gt; Dispositivos externos &gt; Añadir y elige Mackie Control.&#10;4. Establece Recibir de = K2 to Studio y Enviar a = Studio to K2, y confirma.&#10;loopMIDI debe estar en ejecución siempre que uses el perfil.</string>
   <string name="studio_guide_download">Descargar loopMIDI</string>
+  <string name="act_wheel">Rueda de acciones</string>
+  <string name="dp_wheel_locked_key">Una rueda de acciones solo puede usar las teclas alrededor de la tecla que la abre.</string>
+  <string name="dp_wheel_anchor_key">Es la tecla que abre la rueda: se convierte en su tecla de volver.</string>
+  <string name="dp_page_kind_page">Página</string>
+  <string name="wheel_border_color_label">Color del borde de la rueda:</string>
+  <string name="wheel_border_color_pick">Elige el color del borde alrededor de los iconos de la rueda</string>
+  <string name="wheel_border_color_default">Predeterminado</string>
+  <string name="trig_summary_suffix">(+ mantener/modificadores)</string>
+  <string name="trig_button">Pulsación larga</string>
+  <string name="trig_button_tooltip">Da a esta tecla otra acción al mantenerla pulsada, o repite su acción mientras se mantiene.</string>
+  <string name="trig_title">Pulsación larga</string>
+  <string name="trig_hold_label">Cuando la tecla se mantiene pulsada</string>
+  <string name="trig_hold_none">Nada</string>
+  <string name="trig_hold_long">Ejecutar otra acción (pulsación larga)</string>
+  <string name="trig_hold_repeat">Repetir la acción</string>
+  <string name="trig_hold_ms">Tiempo de pulsación (ms)</string>
+  <string name="trig_repeat_delay">Repetir tras (ms)</string>
+  <string name="trig_repeat_ms">Repetir cada (ms)</string>
+  <string name="trig_long_action">Acción de pulsación larga</string>
+  <string name="trig_choose">Elegir</string>
+  <string name="trig_clear_hint">Clic derecho para quitar</string>
+  <string name="trig_mod_ctrl">Ctrl</string>
+  <string name="trig_mod_shift">Mayús</string>
+  <string name="trig_mod_alt">Alt</string>
+  <string name="trig_mod_win">Win</string>
+  <string name="trig_mods_note">El modificador sigue pulsado mientras se ejecuta la acción: una combinación de teclas pasa a ser modificador + combinación.</string>
+  <string name="trig_hold_unsupported">Este dispositivo no informa de cuándo se suelta un botón, así que no puede saber cuánto tiempo se mantiene.</string>
+  <string name="trig_type_unsupported">Este tipo de acción no se puede usar aquí.</string>
+  <string name="dp_mod_icons">Modificadores</string>
+  <string name="dp_mod_icons_tooltip">Qué hace esta tecla, y qué imagen muestra, mientras mantienes Ctrl, Mayús, Alt o Win en el teclado.</string>
+  <string name="dp_mod_icons_hint">Marca un modificador para usarlo. Mientras lo mantienes en el teclado, la tecla ejecuta su acción y muestra su imagen en lugar de la suya (hasta que elijas una, la imagen se crea a partir de la acción). Fn no se puede usar: el teclado lo gestiona internamente y Windows nunca lo ve.</string>
+  <string name="dp_mod_icons_clear">Quitar</string>
+  <string name="dp_mod_icons_filter">Imágenes</string>
+  <string name="dp_mod_hint_actions">Marca un modificador para usarlo. Mientras lo mantienes en el teclado, la tecla ejecuta su acción en lugar de la habitual. Fn no se puede usar: el teclado lo gestiona internamente y Windows nunca lo ve.</string>
+  <string name="dp_mod_no_actions">La acción de esta tecla no admite acciones por modificador (sin acción, una página o un mosaico dinámico): solo se pueden poner imágenes.</string>
+  <string name="dp_mod_action">Elegir acción</string>
 </strings>

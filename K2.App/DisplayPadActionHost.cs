@@ -59,6 +59,9 @@ internal sealed class DisplayPadActionHost : IActionHost
 
     void IActionHost.PlayMacro(string macroName) => _win.PlayMacroByName(macroName);
 
+    bool IActionHost.TryRunHostAction(string actionType, string actionValue, int buttonIndex) =>
+        _win._activeDpDeviceId is int id && _win.DpRunPageAction(id, actionType, actionValue, buttonIndex);
+
     IReadOnlyList<(int PageId, string Name)> IActionHost.ListPages() =>
         _win._activeDpDeviceId is int id
             ? _win.DpListPages(id, ((IActionHost)this).CurrentProfile)
@@ -70,6 +73,14 @@ internal sealed class DisplayPadActionHost : IActionHost
             : null;
 
     void IActionHost.RenamePage(int pageId, string name) => _win.DpRenamePage(pageId, name);
+
+    int? IActionHost.GetWheelColor(int pageId) => _win.DpGetWheelColor(pageId);
+
+    void IActionHost.SetWheelColor(int pageId, int? rgb) => _win.DpSetWheelColor(pageId, rgb);
+
+    int IActionHost.DefaultWheelColor => _win.DpDefaultWheelColor();
+
+    bool IActionHost.OnWheelPage => _win.DpEditingWheelPage;
 
     bool IActionHost.SupportsPages => true;
 
@@ -233,6 +244,9 @@ internal sealed class DisplayPadBackgroundActionHost : IActionHost
 
     void IActionHost.PlayMacro(string macroName) => _win.PlayMacroByName(macroName);
 
+    bool IActionHost.TryRunHostAction(string actionType, string actionValue, int buttonIndex) =>
+        _win.DpRunPageAction(_deviceId, actionType, actionValue, buttonIndex);
+
     IReadOnlyList<(int PageId, string Name)> IActionHost.ListPages() =>
         _win.DpListPages(_deviceId, ((IActionHost)this).CurrentProfile);
 
@@ -240,6 +254,12 @@ internal sealed class DisplayPadBackgroundActionHost : IActionHost
         _win.DpCreatePage(_deviceId, ((IActionHost)this).CurrentProfile, name);
 
     void IActionHost.RenamePage(int pageId, string name) => _win.DpRenamePage(pageId, name);
+
+    int? IActionHost.GetWheelColor(int pageId) => _win.DpGetWheelColor(pageId);
+
+    void IActionHost.SetWheelColor(int pageId, int? rgb) => _win.DpSetWheelColor(pageId, rgb);
+
+    int IActionHost.DefaultWheelColor => _win.DpDefaultWheelColor();
 
     bool IActionHost.SupportsPages => true;
 }

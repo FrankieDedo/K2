@@ -344,6 +344,91 @@ public static class ActionExecutor
         log("[EXEC] back -> Alt+Left");
     }
 
+    // ── Paste text via clipboard ───────────────
+
+    /// <summary>How long the pasted text stays on the clipboard before the user's previous
+    /// content is put back. The target reads the clipboard when it handles Ctrl+V, which can
+    /// lag behind SendInput, so restoring right away would paste the OLD content.</summary>
+    private const int ClipboardRestoreDelayMs = 600;
+
+    /// <summary>
+    /// Pastes <paramref name="text"/> in one go — clipboard + Ctrl+V — instead of typing it a
+    /// character at a time. The user's clipboard (text, image or file list) is saved first and
+    /// put back afterwards. MUST BE CALLED ON THE UI THREAD (STA, needed by the clipboard).
+    /// Returns false when the clipboard could not be taken or Ctrl+V could not be sent, so the
+    /// caller can fall back to typing.
+    /// </summary>
+    public static bool PasteText(string text, Action<string> log)
+    {
+        System.Windows.IDataObject? saved = null;
+        try
+        {
+            if (System.Windows.Clipboard.ContainsText())
+                saved = Snapshot(System.Windows.DataFormats.UnicodeText, System.Windows.Clipboard.GetText());
+            else if (System.Windows.Clipboard.ContainsImage())
+                saved = Snapshot(System.Windows.DataFormats.Bitmap, System.Windows.Clipboard.GetImage());
+            else if (System.Windows.Clipboard.ContainsFileDropList())
+            {
+                var files = new string[System.Windows.Clipboard.GetFileDropList().Count];
+                System.Windows.Clipboard.GetFileDropList().CopyTo(files, 0);
+                saved = Snapshot(System.Windows.DataFormats.FileDrop, files);
+            }
+        }
+        catch (Exception ex) { log($"[EXEC] paste: could not save clipboard ({ex.Message})"); }
+
+        if (!TryClipboard(() => System.Windows.Clipboard.SetText(text)))
+        {
+            log("[EXEC] paste: clipboard busy");
+            return false;
+        }
+        if (!HotkeySender.TrySend("Ctrl+V", out var err))
+        {
+            log($"[EXEC] paste: Ctrl+V not sent ({err})");
+            return false;
+        }
+        log($"[EXEC] paste -> \"{text}\"");
+
+        var timer = new System.Windows.Threading.DispatcherTimer
+        { Interval = TimeSpan.FromMilliseconds(ClipboardRestoreDelayMs) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            try
+            {
+                // Something else copied in the meantime — that wins over the old content.
+                if (System.Windows.Clipboard.ContainsText()
+                    && System.Windows.Clipboard.GetText() != text) return;
+                TryClipboard(() =>
+                {
+                    if (saved is null) System.Windows.Clipboard.Clear();
+                    else System.Windows.Clipboard.SetDataObject(saved, copy: true);
+                });
+            }
+            catch (Exception ex) { log($"[EXEC] paste: could not restore clipboard ({ex.Message})"); }
+        };
+        timer.Start();
+        return true;
+
+        static System.Windows.IDataObject Snapshot(string format, object data)
+        {
+            var d = new System.Windows.DataObject();
+            d.SetData(format, data);
+            return d;
+        }
+    }
+
+    /// <summary>The clipboard is a shared lock another process can be holding for a moment
+    /// (CLIPBRD_E_CANT_OPEN) — a few short retries instead of failing on the first try.</summary>
+    private static bool TryClipboard(Action op)
+    {
+        for (int i = 0; i < 5; i++)
+        {
+            try { op(); return true; }
+            catch (COMException) { Thread.Sleep(20); }
+        }
+        return false;
+    }
+
     // ── Unicode text injection ─────────────────
 
     /// <summary>
@@ -372,6 +457,63 @@ public static class ActionExecutor
         else
             log($"[EXEC] unicode text -> \"{text}\"");
     }
+
+    /// <summary>
+    /// Types <paramref name="text"/> as keystrokes in ONE <c>SendInput</c> batch, so it lands in
+    /// one go like a paste but reaches the target as typing (terminals, games, fields that block
+    /// Ctrl+V) and never touches the clipboard. Characters go as <c>KEYEVENTF_UNICODE</c> (layout-
+    /// independent, emoji included); a line break ("\r\n", "\r" or "\n") and a tab go as the real
+    /// Enter/Tab keys, because many targets ignore a Unicode CR.
+    /// </summary>
+    public static void TypeText(string text, Action<string> log)
+    {
+        if (string.IsNullOrEmpty(text)) { log("[EXEC] type text: empty"); return; }
+
+        var inputs = new List<User32.INPUT>(text.Length * 2);
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (c == '\r' || c == '\n')
+            {
+                if (c == '\r' && i + 1 < text.Length && text[i + 1] == '\n') i++;
+                inputs.Add(VirtualKey(0x0D, down: true));
+                inputs.Add(VirtualKey(0x0D, down: false));
+            }
+            else if (c == '\t')
+            {
+                inputs.Add(VirtualKey(0x09, down: true));
+                inputs.Add(VirtualKey(0x09, down: false));
+            }
+            else
+            {
+                inputs.Add(UnicodeKey(c, down: true));
+                inputs.Add(UnicodeKey(c, down: false));
+            }
+        }
+
+        uint sent = User32.SendInput((uint)inputs.Count, inputs.ToArray(),
+                                     Marshal.SizeOf<User32.INPUT>());
+        if (sent != inputs.Count)
+            log($"[EXEC] type text: SendInput sent {sent}/{inputs.Count} (err {Marshal.GetLastWin32Error()})");
+        else
+            log($"[EXEC] type text -> \"{text}\"");
+    }
+
+    private static User32.INPUT VirtualKey(ushort vk, bool down) => new()
+    {
+        type = User32.INPUT_KEYBOARD,
+        u = new User32.InputUnion
+        {
+            ki = new User32.KEYBDINPUT
+            {
+                wVk         = vk,
+                wScan       = 0,
+                dwFlags     = down ? 0 : User32.KEYEVENTF_KEYUP,
+                time        = 0,
+                dwExtraInfo = UIntPtr.Zero,
+            }
+        }
+    };
 
     private static User32.INPUT UnicodeKey(char c, bool down) => new()
     {

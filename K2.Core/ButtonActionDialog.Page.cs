@@ -1,5 +1,7 @@
 using System.Linq;
+using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace K2.Core;
 
@@ -40,7 +42,12 @@ public partial class ButtonActionDialog
     /// </summary>
     private void EnsurePagePanel()
     {
-        if (CbPage.Items.Count > 0) return;
+        if (CbPage.Items.Count > 0) { RefreshWheelColorRow(); return; }
+        try { FillPagePanel(); } finally { RefreshWheelColorRow(); }
+    }
+
+    private void FillPagePanel()
+    {
 
         var newItem = new ComboBoxItem { Content = Loc.Get("page_new_option"), Tag = NewPageTag };
         CbPage.Items.Add(newItem);
@@ -70,6 +77,44 @@ public partial class ButtonActionDialog
     {
         if (CbPage.SelectedItem is not ComboBoxItem ci) return;
         TxtPageName.Text = (string?)ci.Tag == NewPageTag ? "" : ci.Content as string ?? "";
+        RefreshWheelColorRow();
+    }
+
+    // ---- action wheel border colour (dp_wheel only) ----
+
+    /// <summary>Chosen border colour (0xRRGGBB), null = the app's accent.</summary>
+    private int? _wheelColor;
+    /// <summary>Combo tag the colour above was loaded for — a different page reloads it.</summary>
+    private string? _wheelColorFor;
+
+    private void RefreshWheelColorRow()
+    {
+        bool wheel = CurrentTag() == "dp_wheel";
+        WheelColorRow.Visibility = wheel ? Visibility.Visible : Visibility.Collapsed;
+        if (!wheel) return;
+        string? tag = (CbPage.SelectedItem as ComboBoxItem)?.Tag as string;
+        if (tag != _wheelColorFor)
+        {
+            _wheelColorFor = tag;
+            _wheelColor = int.TryParse(tag, out int pid) ? _host?.GetWheelColor(pid) : null;
+        }
+        int rgb = _wheelColor ?? _host?.DefaultWheelColor ?? 0x900000;
+        SwWheelColor.Background = new SolidColorBrush(Color.FromRgb((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb));
+        BtnWheelColorReset.IsEnabled = _wheelColor is not null;
+    }
+
+    private void BtnWheelColor_Click(object sender, RoutedEventArgs e)
+    {
+        int current = _wheelColor ?? _host?.DefaultWheelColor ?? 0x900000;
+        if (ColorPickerDialog.Pick(this, current) is not int rgb) return;
+        _wheelColor = rgb;
+        RefreshWheelColorRow();
+    }
+
+    private void BtnWheelColorReset_Click(object sender, RoutedEventArgs e)
+    {
+        _wheelColor = null;
+        RefreshWheelColorRow();
     }
 
     private string SavePageSpec()
@@ -83,6 +128,7 @@ public partial class ButtonActionDialog
             int pageId = _host?.CreatePage(name) ?? 0;
             ResolvedPageName = name;
             PageIconNeedsRefresh = true;
+            if (CurrentTag() == "dp_wheel") _host?.SetWheelColor(pageId, _wheelColor);
             return pageId.ToString();
         }
 
@@ -94,6 +140,7 @@ public partial class ButtonActionDialog
             PageIconNeedsRefresh = true;
         }
         ResolvedPageName = name;
+        if (CurrentTag() == "dp_wheel") _host?.SetWheelColor(existingId, _wheelColor);
         return existingId.ToString();
     }
 }

@@ -88,11 +88,11 @@ internal static class DiscordVoiceKeyService
     /// <summary>Paints the live tiles for a device that <see cref="Sync"/> has registered —
     /// called at the tail of the repaint batch that page belongs to. No-op for devices with no
     /// live keys.</summary>
-    public static void Repaint(int deviceId)
+    public static void Repaint(int deviceId, int? onlyButton = null)
     {
         DeviceCtx ctx;
         lock (_gate) { if (!_devices.TryGetValue(deviceId, out ctx)) return; }
-        Push(deviceId, ctx);
+        Push(deviceId, ctx, onlyButton);
     }
 
     /// <summary>True when the overlay currently owns that key — the repaint paths use it to
@@ -135,10 +135,12 @@ internal static class DiscordVoiceKeyService
         foreach (var (id, ctx) in targets) Push(id, ctx);
     }
 
-    private static void Push(int deviceId, DeviceCtx ctx)
+    private static void Push(int deviceId, DeviceCtx ctx, int? onlyButton = null)
     {
         foreach (var key in ctx.Keys)
         {
+            if (onlyButton is int only && key.Button != only) continue;
+            if (DpKeyHold.IsHeld(deviceId, key.Button)) continue;   // under the action wheel
             bool state = StateOf(key);
             string? path = EnsureIcon(key, state);
             if (path is null) continue;
